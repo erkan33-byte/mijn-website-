@@ -2,10 +2,10 @@
 <html>
 <head>
   <title>BTC Key Generator + Balance Check</title>
-  <!-- Buffer polyfill voor browser -->
+  <!-- Buffer polyfill -->
   <script src="https://cdn.jsdelivr.net/npm/buffer@6.0.3/index.min.js"></script>
-  <!-- BitcoinJS bundel -->
-  <script src="https://unpkg.com/bitcoinjs-lib@6.1.0/dist/bitcoinjs-lib.min.js"></script>
+  <!-- Oude versie van bitcoinjs-lib die WEL browser werkt -->
+  <script src="https://unpkg.com/bitcoinjs-lib@5.2.0/dist/bitcoinjs-lib.min.js"></script>
 </head>
 <body>
   <h2>BTC Key Generator + Balance Check</h2>
@@ -40,9 +40,9 @@
 
       if (balance > 0) {
         output.textContent += `🎉 FOUND! Address: ${address}\nPrivate Key (WIF): ${wif}\n`;
-        return true; // stoppen
+        return true;
       }
-      return false; // doorgaan
+      return false;
     }
 
     async function startSearching() {
@@ -50,8 +50,7 @@
       let found = false;
       while (!found) {
         found = await generateAndCheck();
-        // kleine pauze zodat de browser niet crasht en API niet overbelast
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 500)); // kleine pauze
       }
     }
 
