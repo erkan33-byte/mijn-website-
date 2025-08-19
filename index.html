@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>BTC Key Generator via Proxy</title>
-<script src="https://unpkg.com/bitcoinjs-lib@6.1.0/dist/bitcoinjs-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bitcoinjs-lib/3.3.2/bitcoinjs.min.js"></script>
 <style>
 body { font-family: Arial; margin: 20px; }
 #status { font-weight: bold; margin-bottom: 10px; }
@@ -40,25 +40,7 @@ let searching = false;
 let counter = 0;
 const MAX_ROWS = 100;
 
-// Genereer willekeurige private key
-function generatePrivateKey() {
-  const array = new Uint8Array(32);
-  window.crypto.getRandomValues(array);
-  return array;
-}
-
-// Private key → public key + keyPair voor WIF
-function privateKeyToKeyPair(privateKey) {
-  return bitcoinjs.ECPair.fromPrivateKey(Buffer.from(privateKey));
-}
-
-// Public key → Bitcoin adres
-function keyPairToAddress(keyPair) {
-  const { address } = bitcoinjs.payments.p2pkh({ pubkey: keyPair.publicKey });
-  return address;
-}
-
-// ✅ Balans check via proxy
+// Balans check via proxy
 async function checkBalance(address) {
   try {
     const res = await fetch(`http://localhost:3000/balance/${address}`);
@@ -70,15 +52,14 @@ async function checkBalance(address) {
   }
 }
 
-// Scan één adres
+// Scan één adres en voeg toe aan tabel
 async function scanOnce() {
+  const keyPair = bitcoin.ECPair.makeRandom();
+  const address = bitcoin.payments.p2pkh({ pubkey: keyPair.getPublicKeyBuffer() }).address;
+  const wif = keyPair.toWIF();
+
   counter++;
   counterEl.textContent = `Aantal gescande adressen: ${counter}`;
-
-  const privKey = generatePrivateKey();
-  const keyPair = privateKeyToKeyPair(privKey);
-  const address = keyPairToAddress(keyPair);
-  const wif = keyPair.toWIF();
 
   const balance = await checkBalance(address);
 
@@ -87,33 +68,23 @@ async function scanOnce() {
   tr.innerHTML = `<td>${counter}</td><td>${address}</td><td>${wif}</td><td>${balance}</td>`;
   tableBody.appendChild(tr);
 
-  // Stop bij saldo > 0
+  if (tableBody.rows.length > MAX_ROWS) tableBody.removeChild(tableBody.firstChild);
+
   if (balance > 0) {
     searching = false;
     statusEl.textContent = `🎉 FOUND! Address ${address} heeft ${balance} satoshi!`;
     return;
   }
 
-  // Tabel reset bij > MAX_ROWS
-  if (tableBody.rows.length > MAX_ROWS) {
-    tableBody.innerHTML = "";
-    counter = 0;
-  }
+  await new Promise(r => setTimeout(r, 1));
+  if (searching) scanOnce();
 }
 
-// Loop functie
-async function loop() {
-  if (!searching) return;
-  await scanOnce();
-  if (searching) setTimeout(loop, 200);
-}
-
-// Knoppen
 document.getElementById("startBtn").addEventListener("click", () => {
   if (!searching) {
     searching = true;
     statusEl.textContent = "🔎 Zoeken gestart…";
-    loop();
+    scanOnce();
   }
 });
 
