@@ -1,29 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BTC Private Key Generator with Balance Check</title>
+<script src="https://cdn.jsdelivr.net/npm/elliptic@6.5.4/dist/elliptic.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bs58@4.0.1/dist/bs58.min.js"></script>
+</head>
+<body>
+<button id="generateBtn">Generate BTC Key</button>
+<pre id="output"></pre>
 
+<script>
+const ec = new elliptic.ec('secp256k1');
 
-import random
-import requests
-from bitcoin import SelectParams
-from bitcoin import random_key, privtopub, history
+function generatePrivateKey() {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
-# Gebruik testnet voor deze voorbeelden
-SelectParams('testnet')
+function privateKeyToPublicKey(privKeyHex) {
+  const key = ec.keyFromPrivate(privKeyHex);
+  const pubPoint = key.getPublic();
+  return '04' + pubPoint.getX().toString('hex').padStart(64, '0') + pubPoint.getY().toString('hex').padStart(64, '0');
+}
 
-def generate_btc_key():
-    while True:
-        private_key = random_key()
-        public_key = privtopub(private_key)
-        address = public_key
-        print(f'Generated Address: {address}')
-        
-        # Controleer het saldo via een API
-        response = requests.get(f'https://api.blockcypher.com/v1/btc/test3/addrs/{address}/balance')
-        balance_info = response.json()
-        balance = balance_info.get('final_balance', 0)
+async function sha256(buffer) {
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  return new Uint8Array(hashBuffer);
+}
 
-        if balance > 0:
-            print(f'Address {address} has a balance of {balance} satoshi. Stopping.')
-            break
+function ripemd160(buffer) {
+  // RIPEMD-160 is not natively supported in Web Crypto API, so use a JS implementation:
+  // Using https://github.com/crypto-browserify/ripemd160 (minified version included here)
+  // For brevity, include a minimal ripemd160 implementation inline:
 
-generate_btc_key()
+  // Minimal ripemd160 implementation (adapted from https://github.com/crypto-browserify/ripemd160)
+  // Due to length, use a CDN or external library in real use.
+  // Here, we use a small ripemd160 function from https://cdn.jsdelivr.net/npm/ripemd160@2.0.2/index.min.js
 
+  // Instead, load ripemd160 from CDN:
+  return new Promise((resolve, reject) => {
+    if (window.RIPEMD160) {
+      const hash = new RIPEMD160().update(buffer).digest();
+      resolve(new Uint8Array(hash));
+    } else {
+      reject('RIPEMD160 not loaded');
+    }
+  });
+}
 
+function concatUint8Arrays(...arrays) {
+  let totalLength = arrays.reduce((acc, val) => acc + val.length, 0);
+  let result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (let arr of arrays) {
+    result.set(arr, offset);
+    offset += arr.length;
+  }
+  return result;
+}
+
+async function publicKeyToAddress(pubKeyHex) {
+  const pubKeyBytes = Uint8Array.from(pubKeyHex.match(/.{2}/g).map(byte => parseInt(byte, 16)));
+  const sha256Hash = await sha256(pubKeyBytes.buffer);
+  const ripemd160Hash = await ripemd160(sha256Hash);
+  const prefix = new Uint8Array([0x00]); // mainnet prefix
+  const prefixed = concatUint8Arrays(prefix, ripemd160Hash);
+  const checksumFull = await sha256(await sha256(prefixed.buffer));
+  const checksum = checksumFull.slice(0, 4);
+  const binaryAddress = concatUint8Arrays(prefixed, checksum);
+  return bs58.encode(binaryAddress);
+}
+
+async function checkBalance(address) {
+  try {
+    const res = await fetch(`https://api.blockcypher.com/v1/btc/main/addrs/${address}/balance`);
+    if (!res.ok) return 0;
+    const data = await res.json();
+    return data.final_balance || 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function generateBtcKeyWithBalanceCheck() {
+  const output = document.getElementById('output');
+  output.textContent = '';
+  while (true) {
+    const privKey = generatePrivateKey();
+    const pubKey = privateKeyToPublicKey(privKey);
+    let address;
+    try {
+      address = await publicKeyToAddress(pubKey);
+    } catch (e) {
+      output.textContent += 'Error generating address: ' + e + '\n';
+      break;
+    }
+    output.textContent += `Generated Address: ${address}\n`;
+    const balance = await checkBalance(address);
+    if (balance > 0) {
+      output.textContent += `Address ${address} has a balance of ${balance} satoshi. Private key: ${privKey}\n`;
+      break;
+    }
+    // To avoid blocking UI, yield control
+    await new Promise(r => setTimeout(r, 100));
+  }
+}
+
+// Load RIPEMD160 library dynamically
+const ripemdScript = document.createElement('script');
+ripemdScript.src = 'https://cdn.jsdelivr.net/npm/ripemd160@2.0.2/index.min.js';
+ripemdScript.onload = () => {
+  document.getElementById('generateBtn').disabled = false;
+};
+ripemdScript.onerror = () => {
+  document.getElementById('output').textContent = 'Failed to load RIPEMD160 library.';
+};
+document.head.appendChild(ripemdScript);
+
+document.getElementById('generateBtn').disabled = true;
+document.getElementById('generateBtn').addEventListener('click', () => {
+  generateBtcKeyWithBalanceCheck();
+});
+</script>
+</body>
+</html>
