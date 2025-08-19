@@ -32,11 +32,11 @@ button { margin-right: 10px; padding: 6px 12px; font-size: 14px; }
 <tbody></tbody>
 </table>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bitcore-lib/0.15.0/bitcore-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bitcoinjs-lib/6.1.0/bitcoinjs.min.js"></script>
 <script>
-const statusEl = document.getElementById("status");
 const counterEl = document.getElementById("counter");
 const tableBody = document.querySelector("#resultsTable tbody");
+const statusEl = document.getElementById("status");
 const startBtn = document.getElementById("startBtn");
 const stopBtn = document.getElementById("stopBtn");
 
@@ -45,17 +45,16 @@ let counter = 0;
 
 // Genereer random BTC keypair
 function generateKeypair() {
-  const pk = new bitcore.PrivateKey();
-  return { address: pk.toAddress().toString(), wif: pk.toWIF() };
+  const keyPair = bitcoin.ECPair.makeRandom();
+  const { address } = bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey });
+  return { address, wif: keyPair.toWIF() };
 }
 
-// Vraag balans op via proxy (of simuleer saldo voor test)
+// Vraag balans op via je proxy
 async function checkBalance(address) {
   try {
     const res = await fetch(`http://localhost:3000/balance/${address}`);
     const data = await res.json();
-    // Voor testen: geef af en toe een random klein saldo
-    if (Math.random() < 0.05) return Math.floor(Math.random() * 10000); 
     return data.balance || 0;
   } catch (err) {
     console.error("Proxy error:", err);
@@ -67,8 +66,6 @@ async function checkBalance(address) {
 async function scanOnce() {
   counter++;
   counterEl.textContent = `Aantal gescande adressen: ${counter}`;
-  statusEl.textContent = `Bezig met scan #${counter}…`;
-
   const { address, wif } = generateKeypair();
   const balance = await checkBalance(address);
 
@@ -83,13 +80,18 @@ async function scanOnce() {
 // Asynchrone loop
 async function loop() {
   if (!searching) return;
-  const found = await scanOnce();
-  if (found) {
-    statusEl.textContent = "🎉 Adres met saldo gevonden (script stopt)";
-    searching = false;
-    return;
+  try {
+    const found = await scanOnce();
+    if (found) {
+      statusEl.textContent = "🎉 Adres met saldo gevonden!";
+      searching = false;
+      return;
+    }
+    setTimeout(loop, 200); // kleine pauze om de browser niet te blokkeren
+  } catch (err) {
+    console.error("Loop error:", err);
+    setTimeout(loop, 200);
   }
-  setTimeout(loop, 200);
 }
 
 // Knoppen
