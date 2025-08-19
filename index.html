@@ -1,31 +1,55 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8">
   <title>BTC Key Generator + Balance Check</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    button { margin: 5px; padding: 8px 12px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+    th { background-color: #f2f2f2; }
+    tr.found { background-color: #d4edda; font-weight: bold; }
+  </style>
 </head>
 <body>
   <h2>BTC Key Generator + Balance Check</h2>
-  <pre id="output"></pre>
-  <button id="startBtn">Start zoeken</button>
-  <button id="stopBtn">Stoppen</button>
+  <button id="startBtn">🚀 Start zoeken</button>
+  <button id="stopBtn">⛔ Stoppen</button>
+  <div id="status">Nog niet gestart...</div>
+  
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Adres</th>
+        <th>Private Key (WIF)</th>
+        <th>Balans (satoshi)</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
 
-  <!-- Browser-compatibele BitcoinJS via ES module -->
   <script type="module">
     import * as bitcoin from "https://esm.sh/bitcoinjs-lib";
 
-    const output = document.getElementById("output");
     const startBtn = document.getElementById("startBtn");
     const stopBtn = document.getElementById("stopBtn");
-    let searching = false;
+    const statusEl = document.getElementById("status");
+    const tableBody = document.getElementById("tableBody");
+
+    let running = false;
+    let counter = 0;
 
     async function checkBalance(address) {
-      const url = `https://api.blockcypher.com/v1/btc/main/addrs/${address}/balance`;
+      const url = `https://blockchain.info/q/getreceivedbyaddress/${address}?cors=true`;
       try {
         const res = await fetch(url);
-        const data = await res.json();
-        return data.final_balance || 0;
-      } catch {
-        return 0;
+        const balance = await res.text();
+        return parseInt(balance) || 0;
+      } catch (e) {
+        console.error("API error:", e);
+        return -1; // foutmelding
       }
     }
 
@@ -34,38 +58,53 @@
       const { address } = bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey });
       const wif = keyPair.toWIF();
 
-      output.textContent += `Address: ${address}\n`;
+      counter++;
+
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${counter}</td>
+        <td>${address}</td>
+        <td>${wif}</td>
+        <td>...</td>
+      `;
+      tableBody.appendChild(row);
 
       const balance = await checkBalance(address);
-      output.textContent += `Balance: ${balance} satoshi\n\n`;
+      row.cells[3].textContent = balance >= 0 ? balance : "API fout";
 
       if (balance > 0) {
-        output.textContent += `🎉 FOUND! Address: ${address}\nPrivate Key (WIF): ${wif}\n`;
-        searching = false;
+        row.classList.add('found');
+        statusEl.textContent = `🎉 GEVONDEN! Adres: ${address} | WIF: ${wif}`;
+        running = false;
         return true;
+      } else {
+        statusEl.textContent = `🔎 Zoeken... (${counter} pogingen)`;
       }
+
       return false;
     }
 
-    async function searchLoop() {
-      if (!searching) return;
+    async function loop() {
+      if (!running) return;
       const found = await generateAndCheck();
-      if (!found && searching) {
-        setTimeout(searchLoop, 500);
+      if (!found && running) {
+        setTimeout(loop, 500); // pauze om browser niet te blokkeren
       }
     }
 
     startBtn.addEventListener("click", () => {
-      if (!searching) {
-        searching = true;
-        output.textContent += "🚀 Start zoeken...\n";
-        searchLoop();
+      if (!running) {
+        running = true;
+        counter = 0;
+        tableBody.innerHTML = "";
+        statusEl.textContent = "🚀 Start zoeken...";
+        loop();
       }
     });
 
     stopBtn.addEventListener("click", () => {
-      searching = false;
-      output.textContent += "⛔ Gestopt door gebruiker.\n";
+      running = false;
+      statusEl.textContent = "⛔ Gestopt door gebruiker.";
     });
   </script>
 </body>
