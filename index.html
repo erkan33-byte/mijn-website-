@@ -1,29 +1,27 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>BTC Key Generator</title>
+  <title>BTC Adres Generator</title>
   <script src="https://unpkg.com/bitcoinjs-lib@6.1.0/dist/bitcoinjs-lib.min.js"></script>
 </head>
 <body>
   <h3>Gegenereerde adressen:</h3>
   <pre id="output"></pre>
+  <button onclick="generate()">Genereer nieuw adres</button>
   <script>
     function generatePrivateKey() {
       const array = new Uint8Array(32);
       window.crypto.getRandomValues(array);
       return array;
     }
-
     function privateKeyToPublicKey(privateKey) {
       const keyPair = bitcoinjs.ECPair.fromPrivateKey(Buffer.from(privateKey));
       return keyPair.publicKey;
     }
-
     function publicKeyToAddress(publicKey) {
       const { address } = bitcoinjs.payments.p2pkh({ pubkey: publicKey });
       return address;
     }
-
     async function checkBalance(address) {
       const url = `https://api.blockcypher.com/v1/btc/main/addrs/${address}/balance`;
       try {
@@ -34,25 +32,15 @@
         return 0;
       }
     }
-
-    async function generateBtcKeyWithBalanceCheck() {
+    async function generate() {
       const output = document.getElementById('output');
-      let count = 0;
-      while (count < 5) { // 5 adressen als voorbeeld
-        const privKey = generatePrivateKey();
-        const pubKey = privateKeyToPublicKey(privKey);
-        const address = publicKeyToAddress(pubKey);
-
-        output.textContent += `Generated Address: ${address}\n`;
-
-        const balance = await checkBalance(address);
-        output.textContent += `Balance: ${balance} satoshi\n\n`;
-
-        count++;
-      }
+      const privKey = generatePrivateKey();
+      const pubKey = privateKeyToPublicKey(privKey);
+      const address = publicKeyToAddress(pubKey);
+      output.textContent += `Adres: ${address}\n`;
+      const balance = await checkBalance(address);
+      output.textContent += `Saldo: ${balance} satoshi\n\n`;
     }
-
-    generateBtcKeyWithBalanceCheck();
   </script>
 </body>
 </html>
