@@ -1,110 +1,82 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
   <title>BTC Key Generator + Balance Check</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    button { margin: 5px; padding: 8px 12px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
-    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
-    th { background-color: #f2f2f2; }
-    tr.found { background-color: #d4edda; font-weight: bold; }
-  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bitcoinjs-lib/3.3.2/bitcoinjs.min.js"></script>
 </head>
 <body>
   <h2>BTC Key Generator + Balance Check</h2>
-  <button id="startBtn">🚀 Start zoeken</button>
-  <button id="stopBtn">⛔ Stoppen</button>
-  <div id="status">Nog niet gestart...</div>
-  
-  <table>
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>Adres</th>
-        <th>Private Key (WIF)</th>
-        <th>Balans (satoshi)</th>
-      </tr>
-    </thead>
-    <tbody id="tableBody"></tbody>
-  </table>
 
-  <script type="module">
-    import * as bitcoin from "https://esm.sh/bitcoinjs-lib";
+  <!-- Teller -->
+  <div id="counter">Aantal gescande adressen: 0</div>
 
+  <!-- Resultaten -->
+  <pre id="output"></pre>
+
+  <!-- Knoppen -->
+  <button id="startBtn">Start zoeken</button>
+  <button id="stopBtn">Stoppen</button>
+
+  <script>
+    const output = document.getElementById("output");
     const startBtn = document.getElementById("startBtn");
     const stopBtn = document.getElementById("stopBtn");
-    const statusEl = document.getElementById("status");
-    const tableBody = document.getElementById("tableBody");
+    const counterDiv = document.getElementById("counter");
 
-    let running = false;
-    let counter = 0;
+    let searching = false;
+    let counter = 0; // teller voor aantal gescande adressen
 
     async function checkBalance(address) {
-      const url = `https://blockchain.info/q/getreceivedbyaddress/${address}?cors=true`;
+      const url = `https://api.blockcypher.com/v1/btc/main/addrs/${address}/balance`;
       try {
         const res = await fetch(url);
-        const balance = await res.text();
-        return parseInt(balance) || 0;
-      } catch (e) {
-        console.error("API error:", e);
-        return -1; // foutmelding
+        const data = await res.json();
+        return data.final_balance || 0;
+      } catch {
+        return 0;
       }
     }
 
     async function generateAndCheck() {
+      counter++; // teller verhogen
+      counterDiv.textContent = `Aantal gescande adressen: ${counter}`;
+
       const keyPair = bitcoin.ECPair.makeRandom();
       const { address } = bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey });
       const wif = keyPair.toWIF();
 
-      counter++;
-
-      const row = document.createElement('tr');
-      row.innerHTML = `
-        <td>${counter}</td>
-        <td>${address}</td>
-        <td>${wif}</td>
-        <td>...</td>
-      `;
-      tableBody.appendChild(row);
+      output.textContent += `#${counter} Address: ${address}\n`;
 
       const balance = await checkBalance(address);
-      row.cells[3].textContent = balance >= 0 ? balance : "API fout";
+      output.textContent += `Balance: ${balance} satoshi\n\n`;
 
       if (balance > 0) {
-        row.classList.add('found');
-        statusEl.textContent = `🎉 GEVONDEN! Adres: ${address} | WIF: ${wif}`;
-        running = false;
+        output.textContent += `🎉 FOUND! Address: ${address}\nPrivate Key (WIF): ${wif}\n`;
+        searching = false;
         return true;
-      } else {
-        statusEl.textContent = `🔎 Zoeken... (${counter} pogingen)`;
       }
-
       return false;
     }
 
-    async function loop() {
-      if (!running) return;
+    async function searchLoop() {
+      if (!searching) return;
       const found = await generateAndCheck();
-      if (!found && running) {
-        setTimeout(loop, 500); // pauze om browser niet te blokkeren
+      if (!found && searching) {
+        setTimeout(searchLoop, 500);
       }
     }
 
     startBtn.addEventListener("click", () => {
-      if (!running) {
-        running = true;
-        counter = 0;
-        tableBody.innerHTML = "";
-        statusEl.textContent = "🚀 Start zoeken...";
-        loop();
+      if (!searching) {
+        searching = true;
+        output.textContent += "🚀 Start zoeken...\n";
+        searchLoop();
       }
     });
 
     stopBtn.addEventListener("click", () => {
-      running = false;
-      statusEl.textContent = "⛔ Gestopt door gebruiker.";
+      searching = false;
+      output.textContent += "⛔ Gestopt door gebruiker.\n";
     });
   </script>
 </body>
