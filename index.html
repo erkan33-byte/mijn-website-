@@ -3,18 +3,41 @@
 <head>
   <title>BTC Key Generator + Balance Check</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/bitcoinjs-lib/3.3.2/bitcoinjs.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; font-size: 14px; }
+    th { background-color: #f2f2f2; }
+    tr.found { background-color: #d4edda; font-weight: bold; }
+    .status { margin-top: 10px; font-weight: bold; }
+    button { margin: 5px; padding: 8px 12px; font-size: 14px; }
+  </style>
 </head>
 <body>
   <h2>BTC Key Generator + Balance Check</h2>
-  <pre id="output"></pre>
-  <button id="startBtn">Start zoeken</button>
-  <button id="stopBtn">Stoppen</button>
+  <button id="startBtn">🚀 Start zoeken</button>
+  <button id="stopBtn">⛔ Stoppen</button>
+  <div class="status" id="status">Nog niet gestart...</div>
+  
+  <table id="resultTable">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Adres</th>
+        <th>Balans (satoshi)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
   <script>
-    const output = document.getElementById("output");
     const startBtn = document.getElementById("startBtn");
     const stopBtn = document.getElementById("stopBtn");
+    const statusEl = document.getElementById("status");
+    const tableBody = document.querySelector("#resultTable tbody");
+
     let searching = false;
+    let counter = 0;
 
     async function checkBalance(address) {
       const url = `https://api.blockcypher.com/v1/btc/main/addrs/${address}/balance`;
@@ -32,13 +55,21 @@
       const { address } = bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey });
       const wif = keyPair.toWIF();
 
-      output.textContent += `Address: ${address}\n`;
-
+      counter++;
       const balance = await checkBalance(address);
-      output.textContent += `Balance: ${balance} satoshi\n\n`;
+
+      // rij toevoegen
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${counter}</td>
+        <td>${address}</td>
+        <td>${balance}</td>
+      `;
+      tableBody.appendChild(row);
 
       if (balance > 0) {
-        output.textContent += `🎉 FOUND! Address: ${address}\nPrivate Key (WIF): ${wif}\n`;
+        row.classList.add("found");
+        statusEl.textContent = `🎉 GEVONDEN! Adres: ${address} | Private Key: ${wif}`;
         searching = false;
         return true;
       }
@@ -47,6 +78,7 @@
 
     async function searchLoop() {
       if (!searching) return;
+      statusEl.textContent = `🔎 Zoeken... (${counter} pogingen gedaan)`;
       const found = await generateAndCheck();
       if (!found && searching) {
         setTimeout(searchLoop, 500);
@@ -56,14 +88,16 @@
     startBtn.addEventListener("click", () => {
       if (!searching) {
         searching = true;
-        output.textContent += "🚀 Start zoeken...\n";
+        counter = 0;
+        tableBody.innerHTML = ""; // tabel leegmaken
+        statusEl.textContent = "🚀 Start zoeken...";
         searchLoop();
       }
     });
 
     stopBtn.addEventListener("click", () => {
       searching = false;
-      output.textContent += "⛔ Gestopt door gebruiker.\n";
+      statusEl.textContent = "⛔ Gestopt door gebruiker.";
     });
   </script>
 </body>
