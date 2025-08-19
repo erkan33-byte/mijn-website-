@@ -43,14 +43,16 @@ const stopBtn = document.getElementById("stopBtn");
 let searching = false;
 let counter = 0;
 
-// Genereer random BTC keypair
+// Genereer random BTC keypair en zorg dat address altijd string is
 function generateKeypair() {
   const keyPair = bitcoin.ECPair.makeRandom();
-  const { address } = bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey });
-  return { address, wif: keyPair.toWIF() };
+  const payment = bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey });
+  const address = payment.address ? payment.address.toString() : "INVALID";
+  const wif = keyPair.toWIF();
+  return { address, wif };
 }
 
-// Vraag balans op via je proxy
+// Vraag balans op via proxy
 async function checkBalance(address) {
   try {
     const res = await fetch(`http://localhost:3000/balance/${address}`);
@@ -87,7 +89,7 @@ async function loop() {
       searching = false;
       return;
     }
-    setTimeout(loop, 200); // kleine pauze om de browser niet te blokkeren
+    setTimeout(loop, 200); // kleine pauze om browser niet te blokkeren
   } catch (err) {
     console.error("Loop error:", err);
     setTimeout(loop, 200);
@@ -98,13 +100,14 @@ async function loop() {
 startBtn.addEventListener("click", () => {
   if (!searching) {
     searching = true;
+    statusEl.textContent = "🔎 Zoeken gestart…";
     loop();
   }
 });
 
 stopBtn.addEventListener("click", () => {
   searching = false;
-  statusEl.textContent = "Gestopt door gebruiker.";
+  statusEl.textContent = "⛔ Gestopt door gebruiker.";
 });
 </script>
 </body>
