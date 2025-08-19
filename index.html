@@ -1,148 +1,107 @@
 <!DOCTYPE html>
-<html>
+<html lang="nl">
 <head>
-  <meta charset="utf-8" />
-  <title>BTC Key Generator + Balance Check</title>
-
-  <!-- Browser-vriendelijke lib -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/bitcore-lib/0.15.0/bitcore-lib.min.js"></script>
-  <script>
-    // Fallback als cdnjs niet laadt
-    if (!window.bitcore) {
-      document.write('<script src="https://unpkg.com/bitcore-lib@0.15.0/dist/bitcore-lib.min.js"><\/script>');
-    }
-  </script>
-
-  <style>
-    body { font-family: system-ui, Arial, sans-serif; margin: 20px; }
-    #status { margin: 8px 0; font-weight: 600; }
-    #counter { margin: 8px 0; font-weight: 600; }
-    table { border-collapse: collapse; width: 100%; margin-top: 12px; }
-    th, td { border: 1px solid #bbb; padding: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
-    th { background: #f3f3f3; }
-    tr.found { background: #c8f7c5; font-weight: 600; }
-    button { padding: 8px 12px; margin-right: 6px; }
-    .wif { filter: blur(3px); cursor: pointer; }
-    .wif.reveal { filter: none; }
-  </style>
+<meta charset="utf-8">
+<title>BTC Key Generator + Balance Check</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bitcore-lib/0.15.0/bitcore-lib.min.js"></script>
+<style>
+body { font-family: Arial; margin: 20px; }
+#status { font-weight: bold; margin-bottom: 10px; }
+#counter { font-weight: bold; margin-bottom: 10px; }
+table { border-collapse: collapse; width: 100%; margin-top: 15px; }
+th, td { border: 1px solid #999; padding: 5px; font-family: monospace; font-size: 13px; }
+th { background: #eee; }
+tr.found { background: #c8f7c5; }
+button { margin-right: 10px; padding: 6px 12px; font-size: 14px; }
+</style>
 </head>
 <body>
-  <h2>BTC Key Generator + Balance Check</h2>
+<h2>BTC Key Generator + Balance Check</h2>
 
-  <div id="status">Nog niet gestart…</div>
-  <div id="counter">Aantal gescande adressen: 0</div>
+<div id="status">Nog niet gestart…</div>
+<div id="counter">Aantal gescande adressen: 0</div>
 
-  <table id="resultsTable">
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>Adres</th>
-        <th>Private Key (WIF)</th>
-        <th>Balance (satoshi)</th>
-        <th>Tijdstip</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+<button id="startBtn">Start zoeken</button>
+<button id="stopBtn">Stoppen</button>
 
-  <div style="margin-top:10px;">
-    <button id="startBtn">🚀 Start zoeken</button>
-    <button id="stopBtn">⛔ Stoppen</button>
-  </div>
+<table id="resultsTable">
+<thead>
+<tr>
+<th>#</th><th>Adres</th><th>Private Key (WIF)</th><th>Balance (satoshi)</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
 
-  <script>
-    const statusEl = document.getElementById("status");
-    const counterEl = document.getElementById("counter");
-    const tableBody = document.querySelector("#resultsTable tbody");
-    const startBtn = document.getElementById("startBtn");
-    const stopBtn = document.getElementById("stopBtn");
+<script>
+const statusEl = document.getElementById("status");
+const counterEl = document.getElementById("counter");
+const tableBody = document.querySelector("#resultsTable tbody");
+const startBtn = document.getElementById("startBtn");
+const stopBtn = document.getElementById("stopBtn");
 
-    let searching = false;
-    let counter = 0;
+let searching = false;
+let counter = 0;
 
-    // ---- Balance check via Blockstream (CORS-vriendelijk) ----
-    async function checkBalance(address) {
-      try {
-        const res = await fetch(`https://blockstream.info/api/address/${address}`);
-        if (!res.ok) throw new Error("API error");
-        const data = await res.json();
-        const confirmed = (data.chain_stats.funded_txo_sum - data.chain_stats.spent_txo_sum) || 0;
-        const mempool  = (data.mempool_stats.funded_txo_sum - data.mempool_stats.spent_txo_sum) || 0;
-        return confirmed + mempool;
-      } catch (e) {
-        console.warn("Balance API mislukt:", e.message);
-        return 0; // fail gracefully; toon 0 en ga door
-      }
-    }
+// Genereer random BTC keypair
+function generateKeypair() {
+  const pk = new bitcore.PrivateKey();
+  return { address: pk.toAddress().toString(), wif: pk.toWIF() };
+}
 
-    function generateKeypair() {
-      // bitcore-lib werkt in de browser
-      const pk = new bitcore.PrivateKey();       // random mainnet key
-      const addr = pk.toAddress().toString();    // P2PKH (begint met '1')
-      const wif  = pk.toWIF();
-      return { address: addr, wif };
-    }
+// Vraag balans op via proxy
+async function checkBalance(address) {
+  try {
+    const res = await fetch(`http://localhost:3000/balance/${address}`);
+    const data = await res.json();
+    return data.balance || 0;
+  } catch (err) {
+    console.error("Proxy error:", err);
+    return 0;
+  }
+}
 
-    function appendRow({ index, address, wif, balance, time, found }) {
-      const tr = document.createElement("tr");
-      if (found) tr.classList.add("found");
-      tr.innerHTML = `
-        <td>${index}</td>
-        <td>${address}</td>
-        <td><span class="wif" title="Klik om te tonen">${wif}</span></td>
-        <td>${balance}</td>
-        <td>${time}</td>
-      `;
-      const wifEl = tr.querySelector(".wif");
-      wifEl.addEventListener("click", () => wifEl.classList.toggle("reveal"));
-      tableBody.appendChild(tr);
+// Scan één adres
+async function scanOnce() {
+  counter++;
+  counterEl.textContent = `Aantal gescande adressen: ${counter}`;
+  statusEl.textContent = `Bezig met scan #${counter}…`;
 
-      // hou DOM licht: verwijder oudste rijen na 500
-      if (tableBody.rows.length > 500) tableBody.deleteRow(0);
-    }
+  const { address, wif } = generateKeypair();
+  const balance = await checkBalance(address);
 
-    async function scanOnce() {
-      counter++;
-      counterEl.textContent = `Aantal gescande adressen: ${counter}`;
-      statusEl.textContent  = `🔎 Zoeken… (poging ${counter})`;
+  const tr = document.createElement("tr");
+  if (balance > 0) tr.classList.add("found");
+  tr.innerHTML = `<td>${counter}</td><td>${address}</td><td>${wif}</td><td>${balance}</td>`;
+  tableBody.appendChild(tr);
 
-      const { address, wif } = generateKeypair();
-      const balance = await checkBalance(address);
-      const time = new Date().toLocaleTimeString();
-      const found = balance > 0;
+  return balance > 0;
+}
 
-      appendRow({ index: counter, address, wif, balance, time, found });
+// Asynchrone loop
+async function loop() {
+  if (!searching) return;
+  const found = await scanOnce();
+  if (found) {
+    statusEl.textContent = "🎉 Adres met saldo gevonden (script stopt)";
+    searching = false;
+    return;
+  }
+  setTimeout(loop, 200);
+}
 
-      if (found) {
-        statusEl.textContent = `🎉 Adres met balans gevonden: ${address} — script stopt.`;
-        searching = false; // stopt automatisch bij gevonden
-        // Opzettelijk geen auto-openbare WIF bij found (veiligheid/ethiek).
-        return true;
-      }
-      return false;
-    }
+// Start & stop knoppen
+startBtn.addEventListener("click", () => {
+  if (!searching) {
+    searching = true;
+    loop();
+  }
+});
 
-    async function searchLoop() {
-      while (searching) {
-        const found = await scanOnce();
-        if (found) break;
-        // kleine pauze om UI soepel te houden
-        await new Promise(r => setTimeout(r, 200));
-      }
-    }
-
-    startBtn.addEventListener("click", () => {
-      if (!searching) {
-        searching = true;
-        statusEl.textContent = "🚀 Start zoeken…";
-        searchLoop();
-      }
-    });
-
-    stopBtn.addEventListener("click", () => {
-      searching = false;
-      statusEl.textContent = "⛔ Gestopt door gebruiker.";
-    });
-  </script>
+stopBtn.addEventListener("click", () => {
+  searching = false;
+  statusEl.textContent = "Gestopt door gebruiker.";
+});
+</script>
 </body>
 </html>
