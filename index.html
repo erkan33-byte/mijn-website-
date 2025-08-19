@@ -3,6 +3,26 @@
 <head>
   <title>BTC Key Generator + Balance Check</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/bitcoinjs-lib/3.3.2/bitcoinjs.min.js"></script>
+  <style>
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 15px;
+    }
+    th, td {
+      border: 1px solid #999;
+      padding: 6px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+    th {
+      background: #f2f2f2;
+    }
+    #counter {
+      font-weight: bold;
+      margin-top: 10px;
+    }
+  </style>
 </head>
 <body>
   <h2>BTC Key Generator + Balance Check</h2>
@@ -10,18 +30,28 @@
   <!-- Teller -->
   <div id="counter">Aantal gescande adressen: 0</div>
 
-  <!-- Resultaten -->
-  <pre id="output"></pre>
+  <!-- Tabel -->
+  <table id="resultsTable">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Adres</th>
+        <th>Private Key (WIF)</th>
+        <th>Balance (satoshi)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
   <!-- Knoppen -->
   <button id="startBtn">Start zoeken</button>
   <button id="stopBtn">Stoppen</button>
 
   <script>
-    const output = document.getElementById("output");
+    const counterDiv = document.getElementById("counter");
+    const tableBody = document.querySelector("#resultsTable tbody");
     const startBtn = document.getElementById("startBtn");
     const stopBtn = document.getElementById("stopBtn");
-    const counterDiv = document.getElementById("counter");
 
     let searching = false;
     let counter = 0; // teller voor aantal gescande adressen
@@ -38,20 +68,27 @@
     }
 
     async function generateAndCheck() {
-      counter++; // teller verhogen
+      counter++;
       counterDiv.textContent = `Aantal gescande adressen: ${counter}`;
 
       const keyPair = bitcoin.ECPair.makeRandom();
       const { address } = bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey });
       const wif = keyPair.toWIF();
 
-      output.textContent += `#${counter} Address: ${address}\n`;
-
       const balance = await checkBalance(address);
-      output.textContent += `Balance: ${balance} satoshi\n\n`;
+
+      // Nieuwe rij in de tabel maken
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${counter}</td>
+        <td>${address}</td>
+        <td>${wif}</td>
+        <td>${balance}</td>
+      `;
+      tableBody.appendChild(row);
 
       if (balance > 0) {
-        output.textContent += `🎉 FOUND! Address: ${address}\nPrivate Key (WIF): ${wif}\n`;
+        row.style.backgroundColor = "#c8f7c5"; // groen highlight bij gevonden
         searching = false;
         return true;
       }
@@ -69,14 +106,12 @@
     startBtn.addEventListener("click", () => {
       if (!searching) {
         searching = true;
-        output.textContent += "🚀 Start zoeken...\n";
         searchLoop();
       }
     });
 
     stopBtn.addEventListener("click", () => {
       searching = false;
-      output.textContent += "⛔ Gestopt door gebruiker.\n";
     });
   </script>
 </body>
