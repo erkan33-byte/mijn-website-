@@ -2,10 +2,7 @@
 <html>
 <head>
   <title>BTC Key Generator + Balance Check</title>
-  <!-- Buffer polyfill -->
-  <script src="https://cdn.jsdelivr.net/npm/buffer@6.0.3/index.min.js"></script>
-  <!-- Werkende bundel van bitcoinjs-lib voor de browser -->
-  <script src="https://cdn.jsdelivr.net/npm/bitcoinjs-lib@5.1.10/dist/bitcoinjs-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bitcoinjs-lib/3.3.2/bitcoinjs.min.js"></script>
 </head>
 <body>
   <h2>BTC Key Generator + Balance Check</h2>
@@ -14,11 +11,9 @@
   <button id="stopBtn">Stoppen</button>
 
   <script>
-    const { Buffer } = window.buffer;
     const output = document.getElementById("output");
     const startBtn = document.getElementById("startBtn");
     const stopBtn = document.getElementById("stopBtn");
-
     let searching = false;
 
     async function checkBalance(address) {
@@ -33,8 +28,8 @@
     }
 
     async function generateAndCheck() {
-      const keyPair = bitcoinjs.ECPair.makeRandom();
-      const { address } = bitcoinjs.payments.p2pkh({ pubkey: keyPair.publicKey });
+      const keyPair = bitcoin.ECPair.makeRandom();
+      const { address } = bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey });
       const wif = keyPair.toWIF();
 
       output.textContent += `Address: ${address}\n`;
@@ -54,7 +49,7 @@
       if (!searching) return;
       const found = await generateAndCheck();
       if (!found && searching) {
-        setTimeout(searchLoop, 500); // recursief i.p.v. while-loop
+        setTimeout(searchLoop, 500);
       }
     }
 
