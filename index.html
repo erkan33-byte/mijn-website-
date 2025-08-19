@@ -36,8 +36,9 @@ const statusEl = document.getElementById("status");
 const tableBody = document.querySelector("#resultsTable tbody");
 let searching = false;
 let counter = 0;
+const MAX_ROWS = 100;
 
-// fallback generator: random strings (browser-compatibel)
+// fallback generator: random strings
 function generateKeypairFallback() {
   const chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
   function randomStr(len) {
@@ -76,19 +77,25 @@ async function scanOnce() {
   tr.innerHTML = `<td>${counter}</td><td>${address}</td><td>${wif}</td><td>${balance}</td>`;
   tableBody.appendChild(tr);
 
-  return balance > 0;
+  // Stop als saldo gevonden
+  if (balance > 0) {
+    searching = false;
+    statusEl.textContent = `🎉 Adres gevonden met saldo ${balance} satoshi!`;
+    return;
+  }
+
+  // Tabel reset bij > MAX_ROWS
+  if (tableBody.rows.length > MAX_ROWS) {
+    tableBody.innerHTML = ""; // tabel leegmaken
+    counter = 0; // teller resetten
+  }
 }
 
 // Asynchrone loop
 async function loop() {
   if (!searching) return;
-  const found = await scanOnce();
-  if (found) {
-    statusEl.textContent = "🎉 Adres met saldo gevonden!";
-    searching = false;
-    return;
-  }
-  setTimeout(loop, 200);
+  await scanOnce();
+  if (searching) setTimeout(loop, 200);
 }
 
 // Knoppen
