@@ -2,33 +2,28 @@
 <html>
 <head>
   <title>BTC Key Generator</title>
-  <!-- bitcoinjs-lib via CDN -->
   <script src="https://unpkg.com/bitcoinjs-lib@6.1.0/dist/bitcoinjs-lib.min.js"></script>
 </head>
 <body>
+  <h2>BTC Key Generator</h2>
   <pre id="output"></pre>
   <script>
-    // Genereer een willekeurige private key
     function generatePrivateKey() {
       const array = new Uint8Array(32);
       window.crypto.getRandomValues(array);
       return array;
     }
 
-    // Private key naar public key
     function privateKeyToPublicKey(privateKey) {
-      // bitcoinjs-lib verwacht een Buffer
       const keyPair = bitcoinjs.ECPair.fromPrivateKey(Buffer.from(privateKey));
       return keyPair.publicKey;
     }
 
-    // Public key naar address
     function publicKeyToAddress(publicKey) {
       const { address } = bitcoinjs.payments.p2pkh({ pubkey: publicKey });
       return address;
     }
 
-    // Balans opvragen
     async function checkBalance(address) {
       const url = `https://api.blockcypher.com/v1/btc/main/addrs/${address}/balance`;
       try {
@@ -40,7 +35,6 @@
       }
     }
 
-    // Main functie
     async function generateBtcKeyWithBalanceCheck() {
       const output = document.getElementById('output');
       while (true) {
@@ -51,8 +45,10 @@
         output.textContent += `Generated Address: ${address}\n`;
 
         const balance = await checkBalance(address);
+        output.textContent += `Balance: ${balance} satoshi\n\n`;
+
         if (balance > 0) {
-          output.textContent += `Address ${address} has a balance of ${balance} satoshi. Private key: ${Array.from(privKey).map(b => b.toString(16).padStart(2, '0')).join('')}\n`;
+          output.textContent += `FOUND! Address ${address} has a balance of ${balance} satoshi.\nPrivate key: ${Array.from(privKey).map(b => b.toString(16).padStart(2, '0')).join('')}\n`;
           break;
         }
       }
