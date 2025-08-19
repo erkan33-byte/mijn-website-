@@ -1,27 +1,22 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>BTC Adres Generator</title>
+  <title>BTC Key Generator + Balance Check</title>
+  <!-- Buffer polyfill voor browser -->
+  <script src="https://cdn.jsdelivr.net/npm/buffer@6.0.3/index.min.js"></script>
+  <!-- BitcoinJS bundel -->
   <script src="https://unpkg.com/bitcoinjs-lib@6.1.0/dist/bitcoinjs-lib.min.js"></script>
 </head>
 <body>
-  <h3>Gegenereerde adressen:</h3>
+  <h2>BTC Key Generator + Balance Check</h2>
   <pre id="output"></pre>
-  <button onclick="generate()">Genereer nieuw adres</button>
+  <button id="startBtn">Start zoeken</button>
+
   <script>
-    function generatePrivateKey() {
-      const array = new Uint8Array(32);
-      window.crypto.getRandomValues(array);
-      return array;
-    }
-    function privateKeyToPublicKey(privateKey) {
-      const keyPair = bitcoinjs.ECPair.fromPrivateKey(Buffer.from(privateKey));
-      return keyPair.publicKey;
-    }
-    function publicKeyToAddress(publicKey) {
-      const { address } = bitcoinjs.payments.p2pkh({ pubkey: publicKey });
-      return address;
-    }
+    const { Buffer } = window.buffer;
+    const output = document.getElementById("output");
+    const startBtn = document.getElementById("startBtn");
+
     async function checkBalance(address) {
       const url = `https://api.blockcypher.com/v1/btc/main/addrs/${address}/balance`;
       try {
@@ -32,15 +27,35 @@
         return 0;
       }
     }
-    async function generate() {
-      const output = document.getElementById('output');
-      const privKey = generatePrivateKey();
-      const pubKey = privateKeyToPublicKey(privKey);
-      const address = publicKeyToAddress(pubKey);
-      output.textContent += `Adres: ${address}\n`;
+
+    async function generateAndCheck() {
+      const keyPair = bitcoinjs.ECPair.makeRandom();
+      const { address } = bitcoinjs.payments.p2pkh({ pubkey: keyPair.publicKey });
+      const wif = keyPair.toWIF();
+
+      output.textContent += `Address: ${address}\n`;
+
       const balance = await checkBalance(address);
-      output.textContent += `Saldo: ${balance} satoshi\n\n`;
+      output.textContent += `Balance: ${balance} satoshi\n\n`;
+
+      if (balance > 0) {
+        output.textContent += `🎉 FOUND! Address: ${address}\nPrivate Key (WIF): ${wif}\n`;
+        return true; // stoppen
+      }
+      return false; // doorgaan
     }
+
+    async function startSearching() {
+      startBtn.disabled = true;
+      let found = false;
+      while (!found) {
+        found = await generateAndCheck();
+        // kleine pauze zodat de browser niet crasht en API niet overbelast
+        await new Promise(r => setTimeout(r, 500));
+      }
+    }
+
+    startBtn.addEventListener("click", startSearching);
   </script>
 </body>
 </html>
