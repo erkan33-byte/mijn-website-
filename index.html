@@ -1,36 +1,37 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8" />
   <title>BTC Key Generator + Balance Check</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/bitcoinjs-lib/3.3.2/bitcoinjs.min.js"></script>
+
+  <!-- Browser-vriendelijke lib -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bitcore-lib/0.15.0/bitcore-lib.min.js"></script>
+  <script>
+    // Fallback als cdnjs niet laadt
+    if (!window.bitcore) {
+      document.write('<script src="https://unpkg.com/bitcore-lib@0.15.0/dist/bitcore-lib.min.js"><\/script>');
+    }
+  </script>
+
   <style>
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      margin-top: 15px;
-    }
-    th, td {
-      border: 1px solid #999;
-      padding: 6px;
-      font-family: monospace;
-      font-size: 14px;
-    }
-    th {
-      background: #f2f2f2;
-    }
-    #counter {
-      font-weight: bold;
-      margin-top: 10px;
-    }
+    body { font-family: system-ui, Arial, sans-serif; margin: 20px; }
+    #status { margin: 8px 0; font-weight: 600; }
+    #counter { margin: 8px 0; font-weight: 600; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+    th, td { border: 1px solid #bbb; padding: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+    th { background: #f3f3f3; }
+    tr.found { background: #c8f7c5; font-weight: 600; }
+    button { padding: 8px 12px; margin-right: 6px; }
+    .wif { filter: blur(3px); cursor: pointer; }
+    .wif.reveal { filter: none; }
   </style>
 </head>
 <body>
   <h2>BTC Key Generator + Balance Check</h2>
 
-  <!-- Teller -->
+  <div id="status">Nog niet gestart…</div>
   <div id="counter">Aantal gescande adressen: 0</div>
 
-  <!-- Tabel -->
   <table id="resultsTable">
     <thead>
       <tr>
@@ -44,60 +45,78 @@
     <tbody></tbody>
   </table>
 
-  <!-- Knoppen -->
-  <button id="startBtn">Start zoeken</button>
-  <button id="stopBtn">Stoppen</button>
+  <div style="margin-top:10px;">
+    <button id="startBtn">🚀 Start zoeken</button>
+    <button id="stopBtn">⛔ Stoppen</button>
+  </div>
 
   <script>
-    const counterDiv = document.getElementById("counter");
+    const statusEl = document.getElementById("status");
+    const counterEl = document.getElementById("counter");
     const tableBody = document.querySelector("#resultsTable tbody");
     const startBtn = document.getElementById("startBtn");
     const stopBtn = document.getElementById("stopBtn");
 
     let searching = false;
-    let counter = 0; // teller voor aantal gescande adressen
+    let counter = 0;
 
-    // Balance check met foutafhandeling
+    // ---- Balance check via Blockstream (CORS-vriendelijk) ----
     async function checkBalance(address) {
       try {
-        const url = `https://api.blockcypher.com/v1/btc/main/addrs/${address}/balance`;
-        const res = await fetch(url);
+        const res = await fetch(`https://blockstream.info/api/address/${address}`);
         if (!res.ok) throw new Error("API error");
         const data = await res.json();
-        return data.final_balance || 0;
-      } catch (err) {
-        console.warn("Balance check mislukt:", err.message);
-        return 0;
+        const confirmed = (data.chain_stats.funded_txo_sum - data.chain_stats.spent_txo_sum) || 0;
+        const mempool  = (data.mempool_stats.funded_txo_sum - data.mempool_stats.spent_txo_sum) || 0;
+        return confirmed + mempool;
+      } catch (e) {
+        console.warn("Balance API mislukt:", e.message);
+        return 0; // fail gracefully; toon 0 en ga door
       }
     }
 
-    async function generateAndCheck() {
-      counter++;
-      counterDiv.textContent = `Aantal gescande adressen: ${counter}`;
+    function generateKeypair() {
+      // bitcore-lib werkt in de browser
+      const pk = new bitcore.PrivateKey();       // random mainnet key
+      const addr = pk.toAddress().toString();    // P2PKH (begint met '1')
+      const wif  = pk.toWIF();
+      return { address: addr, wif };
+    }
 
-      const keyPair = bitcoin.ECPair.makeRandom();
-      const { address } = bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey });
-      const wif = keyPair.toWIF();
-
-      const balance = await checkBalance(address);
-
-      // Tijdstip genereren
-      const now = new Date().toLocaleTimeString();
-
-      // Nieuwe rij in de tabel maken
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td>${counter}</td>
+    function appendRow({ index, address, wif, balance, time, found }) {
+      const tr = document.createElement("tr");
+      if (found) tr.classList.add("found");
+      tr.innerHTML = `
+        <td>${index}</td>
         <td>${address}</td>
-        <td>${wif}</td>
+        <td><span class="wif" title="Klik om te tonen">${wif}</span></td>
         <td>${balance}</td>
-        <td>${now}</td>
+        <td>${time}</td>
       `;
-      tableBody.appendChild(row);
+      const wifEl = tr.querySelector(".wif");
+      wifEl.addEventListener("click", () => wifEl.classList.toggle("reveal"));
+      tableBody.appendChild(tr);
 
-      if (balance > 0) {
-        row.style.backgroundColor = "#c8f7c5"; // groen highlight bij gevonden
-        searching = false;
+      // hou DOM licht: verwijder oudste rijen na 500
+      if (tableBody.rows.length > 500) tableBody.deleteRow(0);
+    }
+
+    async function scanOnce() {
+      counter++;
+      counterEl.textContent = `Aantal gescande adressen: ${counter}`;
+      statusEl.textContent  = `🔎 Zoeken… (poging ${counter})`;
+
+      const { address, wif } = generateKeypair();
+      const balance = await checkBalance(address);
+      const time = new Date().toLocaleTimeString();
+      const found = balance > 0;
+
+      appendRow({ index: counter, address, wif, balance, time, found });
+
+      if (found) {
+        statusEl.textContent = `🎉 Adres met balans gevonden: ${address} — script stopt.`;
+        searching = false; // stopt automatisch bij gevonden
+        // Opzettelijk geen auto-openbare WIF bij found (veiligheid/ethiek).
         return true;
       }
       return false;
@@ -105,21 +124,24 @@
 
     async function searchLoop() {
       while (searching) {
-        const found = await generateAndCheck();
-        if (found) break; // stoppen bij gevonden
-        await new Promise(r => setTimeout(r, 200)); // korte pauze
+        const found = await scanOnce();
+        if (found) break;
+        // kleine pauze om UI soepel te houden
+        await new Promise(r => setTimeout(r, 200));
       }
     }
 
     startBtn.addEventListener("click", () => {
       if (!searching) {
         searching = true;
+        statusEl.textContent = "🚀 Start zoeken…";
         searchLoop();
       }
     });
 
     stopBtn.addEventListener("click", () => {
       searching = false;
+      statusEl.textContent = "⛔ Gestopt door gebruiker.";
     });
   </script>
 </body>
