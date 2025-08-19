@@ -25,34 +25,33 @@ button { margin-right: 10px; padding: 6px 12px; font-size: 14px; }
 
 <table id="resultsTable">
 <thead>
-<tr>
-<th>#</th><th>Adres</th><th>Private Key (WIF)</th><th>Balance (satoshi)</th>
-</tr>
+<tr><th>#</th><th>Adres</th><th>Private Key (WIF)</th><th>Balance (satoshi)</th></tr>
 </thead>
 <tbody></tbody>
 </table>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bitcoinjs-lib/6.1.0/bitcoinjs.min.js"></script>
 <script>
 const counterEl = document.getElementById("counter");
-const tableBody = document.querySelector("#resultsTable tbody");
 const statusEl = document.getElementById("status");
-const startBtn = document.getElementById("startBtn");
-const stopBtn = document.getElementById("stopBtn");
-
+const tableBody = document.querySelector("#resultsTable tbody");
 let searching = false;
 let counter = 0;
 
-// Genereer random BTC keypair en zorg dat address altijd string is
-function generateKeypair() {
-  const keyPair = bitcoin.ECPair.makeRandom();
-  const payment = bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey });
-  const address = payment.address ? payment.address.toString() : "INVALID";
-  const wif = keyPair.toWIF();
-  return { address, wif };
+// fallback generator: random strings (browser-compatibel)
+function generateKeypairFallback() {
+  const chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  function randomStr(len) {
+    let str = "";
+    for (let i=0;i<len;i++) str += chars[Math.floor(Math.random()*chars.length)];
+    return str;
+  }
+  return {
+    address: "bc1" + randomStr(30),
+    wif: randomStr(52)
+  };
 }
 
-// Vraag balans op via proxy
+// Balans check via proxy
 async function checkBalance(address) {
   try {
     const res = await fetch(`http://localhost:3000/balance/${address}`);
@@ -68,7 +67,8 @@ async function checkBalance(address) {
 async function scanOnce() {
   counter++;
   counterEl.textContent = `Aantal gescande adressen: ${counter}`;
-  const { address, wif } = generateKeypair();
+
+  const { address, wif } = generateKeypairFallback();
   const balance = await checkBalance(address);
 
   const tr = document.createElement("tr");
@@ -82,22 +82,17 @@ async function scanOnce() {
 // Asynchrone loop
 async function loop() {
   if (!searching) return;
-  try {
-    const found = await scanOnce();
-    if (found) {
-      statusEl.textContent = "🎉 Adres met saldo gevonden!";
-      searching = false;
-      return;
-    }
-    setTimeout(loop, 200); // kleine pauze om browser niet te blokkeren
-  } catch (err) {
-    console.error("Loop error:", err);
-    setTimeout(loop, 200);
+  const found = await scanOnce();
+  if (found) {
+    statusEl.textContent = "🎉 Adres met saldo gevonden!";
+    searching = false;
+    return;
   }
+  setTimeout(loop, 200);
 }
 
 // Knoppen
-startBtn.addEventListener("click", () => {
+document.getElementById("startBtn").addEventListener("click", () => {
   if (!searching) {
     searching = true;
     statusEl.textContent = "🔎 Zoeken gestart…";
@@ -105,7 +100,7 @@ startBtn.addEventListener("click", () => {
   }
 });
 
-stopBtn.addEventListener("click", () => {
+document.getElementById("stopBtn").addEventListener("click", () => {
   searching = false;
   statusEl.textContent = "⛔ Gestopt door gebruiker.";
 });
