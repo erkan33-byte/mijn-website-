@@ -5,7 +5,7 @@
   <script src="https://unpkg.com/bitcoinjs-lib@6.1.0/dist/bitcoinjs-lib.min.js"></script>
 </head>
 <body>
-  <h2>BTC Key Generator</h2>
+  <h3>Gegenereerde adressen:</h3>
   <pre id="output"></pre>
   <script>
     function generatePrivateKey() {
@@ -37,7 +37,8 @@
 
     async function generateBtcKeyWithBalanceCheck() {
       const output = document.getElementById('output');
-      while (true) {
+      let count = 0;
+      while (count < 5) { // 5 adressen als voorbeeld
         const privKey = generatePrivateKey();
         const pubKey = privateKeyToPublicKey(privKey);
         const address = publicKeyToAddress(pubKey);
@@ -47,10 +48,7 @@
         const balance = await checkBalance(address);
         output.textContent += `Balance: ${balance} satoshi\n\n`;
 
-        if (balance > 0) {
-          output.textContent += `FOUND! Address ${address} has a balance of ${balance} satoshi.\nPrivate key: ${Array.from(privKey).map(b => b.toString(16).padStart(2, '0')).join('')}\n`;
-          break;
-        }
+        count++;
       }
     }
 
