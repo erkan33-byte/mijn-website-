@@ -4,18 +4,22 @@
   <title>BTC Key Generator + Balance Check</title>
   <!-- Buffer polyfill -->
   <script src="https://cdn.jsdelivr.net/npm/buffer@6.0.3/index.min.js"></script>
-  <!-- Oude versie van bitcoinjs-lib die WEL browser werkt -->
-  <script src="https://unpkg.com/bitcoinjs-lib@5.2.0/dist/bitcoinjs-lib.min.js"></script>
+  <!-- Werkende bundel van bitcoinjs-lib voor de browser -->
+  <script src="https://cdn.jsdelivr.net/npm/bitcoinjs-lib@5.1.10/dist/bitcoinjs-lib.min.js"></script>
 </head>
 <body>
   <h2>BTC Key Generator + Balance Check</h2>
   <pre id="output"></pre>
   <button id="startBtn">Start zoeken</button>
+  <button id="stopBtn">Stoppen</button>
 
   <script>
     const { Buffer } = window.buffer;
     const output = document.getElementById("output");
     const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+
+    let searching = false;
 
     async function checkBalance(address) {
       const url = `https://api.blockcypher.com/v1/btc/main/addrs/${address}/balance`;
@@ -40,21 +44,32 @@
 
       if (balance > 0) {
         output.textContent += `🎉 FOUND! Address: ${address}\nPrivate Key (WIF): ${wif}\n`;
+        searching = false;
         return true;
       }
       return false;
     }
 
-    async function startSearching() {
-      startBtn.disabled = true;
-      let found = false;
-      while (!found) {
-        found = await generateAndCheck();
-        await new Promise(r => setTimeout(r, 500)); // kleine pauze
+    async function searchLoop() {
+      if (!searching) return;
+      const found = await generateAndCheck();
+      if (!found && searching) {
+        setTimeout(searchLoop, 500); // recursief i.p.v. while-loop
       }
     }
 
-    startBtn.addEventListener("click", startSearching);
+    startBtn.addEventListener("click", () => {
+      if (!searching) {
+        searching = true;
+        output.textContent += "🚀 Start zoeken...\n";
+        searchLoop();
+      }
+    });
+
+    stopBtn.addEventListener("click", () => {
+      searching = false;
+      output.textContent += "⛔ Gestopt door gebruiker.\n";
+    });
   </script>
 </body>
 </html>
