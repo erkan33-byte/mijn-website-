@@ -38,6 +38,7 @@
         <th>Adres</th>
         <th>Private Key (WIF)</th>
         <th>Balance (satoshi)</th>
+        <th>Tijdstip</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -56,13 +57,16 @@
     let searching = false;
     let counter = 0; // teller voor aantal gescande adressen
 
+    // Balance check met foutafhandeling
     async function checkBalance(address) {
-      const url = `https://api.blockcypher.com/v1/btc/main/addrs/${address}/balance`;
       try {
+        const url = `https://api.blockcypher.com/v1/btc/main/addrs/${address}/balance`;
         const res = await fetch(url);
+        if (!res.ok) throw new Error("API error");
         const data = await res.json();
         return data.final_balance || 0;
-      } catch {
+      } catch (err) {
+        console.warn("Balance check mislukt:", err.message);
         return 0;
       }
     }
@@ -77,6 +81,9 @@
 
       const balance = await checkBalance(address);
 
+      // Tijdstip genereren
+      const now = new Date().toLocaleTimeString();
+
       // Nieuwe rij in de tabel maken
       const row = document.createElement("tr");
       row.innerHTML = `
@@ -84,6 +91,7 @@
         <td>${address}</td>
         <td>${wif}</td>
         <td>${balance}</td>
+        <td>${now}</td>
       `;
       tableBody.appendChild(row);
 
@@ -96,10 +104,10 @@
     }
 
     async function searchLoop() {
-      if (!searching) return;
-      const found = await generateAndCheck();
-      if (!found && searching) {
-        setTimeout(searchLoop, 500);
+      while (searching) {
+        const found = await generateAndCheck();
+        if (found) break; // stoppen bij gevonden
+        await new Promise(r => setTimeout(r, 200)); // korte pauze
       }
     }
 
