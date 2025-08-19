@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <title>BTC Key Generator</title>
+  <!-- bitcoinjs-lib via CDN -->
   <script src="https://unpkg.com/bitcoinjs-lib@6.1.0/dist/bitcoinjs-lib.min.js"></script>
 </head>
 <body>
@@ -15,6 +17,7 @@
 
     // Private key naar public key
     function privateKeyToPublicKey(privateKey) {
+      // bitcoinjs-lib verwacht een Buffer
       const keyPair = bitcoinjs.ECPair.fromPrivateKey(Buffer.from(privateKey));
       return keyPair.publicKey;
     }
@@ -56,7 +59,6 @@
     }
 
     generateBtcKeyWithBalanceCheck();
-
   </script>
 </body>
 </html>
