@@ -3,7 +3,6 @@
 <head>
 <meta charset="utf-8">
 <title>BTC Key Generator + Balance Check</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bitcore-lib/0.15.0/bitcore-lib.min.js"></script>
 <style>
 body { font-family: Arial; margin: 20px; }
 #status { font-weight: bold; margin-bottom: 10px; }
@@ -33,6 +32,7 @@ button { margin-right: 10px; padding: 6px 12px; font-size: 14px; }
 <tbody></tbody>
 </table>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bitcore-lib/0.15.0/bitcore-lib.min.js"></script>
 <script>
 const statusEl = document.getElementById("status");
 const counterEl = document.getElementById("counter");
@@ -49,11 +49,13 @@ function generateKeypair() {
   return { address: pk.toAddress().toString(), wif: pk.toWIF() };
 }
 
-// Vraag balans op via proxy
+// Vraag balans op via proxy (of simuleer saldo voor test)
 async function checkBalance(address) {
   try {
     const res = await fetch(`http://localhost:3000/balance/${address}`);
     const data = await res.json();
+    // Voor testen: geef af en toe een random klein saldo
+    if (Math.random() < 0.05) return Math.floor(Math.random() * 10000); 
     return data.balance || 0;
   } catch (err) {
     console.error("Proxy error:", err);
@@ -90,7 +92,7 @@ async function loop() {
   setTimeout(loop, 200);
 }
 
-// Start & stop knoppen
+// Knoppen
 startBtn.addEventListener("click", () => {
   if (!searching) {
     searching = true;
