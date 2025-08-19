@@ -2,7 +2,8 @@
 <html lang="nl">
 <head>
 <meta charset="utf-8">
-<title>BTC Key Generator + Balance Check</title>
+<title>BTC Key Generator via Proxy</title>
+<script src="https://unpkg.com/bitcoinjs-lib@6.1.0/dist/bitcoinjs-lib.min.js"></script>
 <style>
 body { font-family: Arial; margin: 20px; }
 #status { font-weight: bold; margin-bottom: 10px; }
@@ -15,7 +16,7 @@ button { margin-right: 10px; padding: 6px 12px; font-size: 14px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator + Balance Check</h2>
+<h2>BTC Key Generator via Proxy</h2>
 
 <div id="status">Nog niet gestart…</div>
 <div id="counter">Aantal gescande adressen: 0</div>
@@ -31,28 +32,33 @@ button { margin-right: 10px; padding: 6px 12px; font-size: 14px; }
 </table>
 
 <script>
-const counterEl = document.getElementById("counter");
 const statusEl = document.getElementById("status");
+const counterEl = document.getElementById("counter");
 const tableBody = document.querySelector("#resultsTable tbody");
+
 let searching = false;
 let counter = 0;
 const MAX_ROWS = 100;
 
-// fallback generator: random strings
-function generateKeypairFallback() {
-  const chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  function randomStr(len) {
-    let str = "";
-    for (let i=0;i<len;i++) str += chars[Math.floor(Math.random()*chars.length)];
-    return str;
-  }
-  return {
-    address: "bc1" + randomStr(30),
-    wif: randomStr(52)
-  };
+// Genereer willekeurige private key
+function generatePrivateKey() {
+  const array = new Uint8Array(32);
+  window.crypto.getRandomValues(array);
+  return array;
 }
 
-// Balans check via proxy
+// Private key → public key + keyPair voor WIF
+function privateKeyToKeyPair(privateKey) {
+  return bitcoinjs.ECPair.fromPrivateKey(Buffer.from(privateKey));
+}
+
+// Public key → Bitcoin adres
+function keyPairToAddress(keyPair) {
+  const { address } = bitcoinjs.payments.p2pkh({ pubkey: keyPair.publicKey });
+  return address;
+}
+
+// ✅ Balans check via proxy
 async function checkBalance(address) {
   try {
     const res = await fetch(`http://localhost:3000/balance/${address}`);
@@ -69,7 +75,11 @@ async function scanOnce() {
   counter++;
   counterEl.textContent = `Aantal gescande adressen: ${counter}`;
 
-  const { address, wif } = generateKeypairFallback();
+  const privKey = generatePrivateKey();
+  const keyPair = privateKeyToKeyPair(privKey);
+  const address = keyPairToAddress(keyPair);
+  const wif = keyPair.toWIF();
+
   const balance = await checkBalance(address);
 
   const tr = document.createElement("tr");
@@ -77,21 +87,21 @@ async function scanOnce() {
   tr.innerHTML = `<td>${counter}</td><td>${address}</td><td>${wif}</td><td>${balance}</td>`;
   tableBody.appendChild(tr);
 
-  // Stop als saldo gevonden
+  // Stop bij saldo > 0
   if (balance > 0) {
     searching = false;
-    statusEl.textContent = `🎉 Adres gevonden met saldo ${balance} satoshi!`;
+    statusEl.textContent = `🎉 FOUND! Address ${address} heeft ${balance} satoshi!`;
     return;
   }
 
   // Tabel reset bij > MAX_ROWS
   if (tableBody.rows.length > MAX_ROWS) {
-    tableBody.innerHTML = ""; // tabel leegmaken
-    counter = 0; // teller resetten
+    tableBody.innerHTML = "";
+    counter = 0;
   }
 }
 
-// Asynchrone loop
+// Loop functie
 async function loop() {
   if (!searching) return;
   await scanOnce();
