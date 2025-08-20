@@ -63,7 +63,6 @@
     let totaal = 0;
     let zoeken = false;
     const MAX_VISIBLE = 500;
-    let retryTimeout = null;
     let countdownInterval = null;
 
     async function checkBalance(address) {
@@ -76,7 +75,6 @@
         const spent = Number(data.chain_stats.spent_txo_sum || 0);
         return (funded - spent) / 1e8;
       } catch (err) {
-        console.warn("Saldo check mislukt, geef 'Error'", err);
         return "Error";
       }
     }
@@ -121,7 +119,7 @@
 
       if (saldo === "Error") {
         row.style.backgroundColor = "#f7c5c5"; // rood
-        alert(`Saldo check mislukt! Het zoeken stopt nu.\nWordt over 30 seconden opnieuw gestart...`);
+        document.getElementById("retryMsg").textContent = "Saldo check mislukt. Herstart over 30 seconden...";
         startenCountdown(30);
         stoppen();
         return;
@@ -129,7 +127,7 @@
 
       if (typeof saldo === "number" && saldo > 0) {
         row.style.backgroundColor = "#c8f7c5"; // groen
-        alert(`Adres gevonden met saldo > 0 BTC!\nAdres: ${address}`);
+        document.getElementById("retryMsg").textContent = `Adres gevonden met saldo > 0 BTC! Adres: ${address}`;
         stoppen();
         return;
       }
@@ -157,7 +155,6 @@
     function starten() {
       if (zoeken) return;
       zoeken = true;
-      if (retryTimeout) { clearTimeout(retryTimeout); retryTimeout = null; }
       if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
       document.getElementById("startBtn").disabled = true;
       document.getElementById("stopBtn").disabled = false;
