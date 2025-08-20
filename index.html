@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
   <meta charset="UTF-8">
-  <title>BTC Key Generator + WIF + Saldo</title>
+  <title>BTC Key Generator + WIF + Saldo + Totaal</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
   <style>
@@ -11,11 +11,14 @@
     th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
     th { background: #f2f2f2; }
     button { margin-bottom: 10px; padding: 8px 12px; }
+    #totaal { margin-bottom: 10px; font-weight: bold; }
   </style>
 </head>
 <body>
-  <h2>BTC Key Generator (met WIF + Saldo)</h2>
-  <button id="genBtn">Genereer adres</button>
+  <h2>BTC Key Generator (met WIF + Saldo, max 500 zichtbaar)</h2>
+  <div id="totaal">Totaal gescande adressen: 0</div>
+  <button id="startBtn">Start zoeken</button>
+  <button id="stopBtn" disabled>Stop</button>
 
   <table id="resultTable">
     <thead>
@@ -30,21 +33,19 @@
   </table>
 
   <script>
-    // --- Helpers ---
     function toHex(bytes) {
       return Array.from(bytes).map(b => b.toString(16).padStart(2,"0")).join("");
     }
+
     function hexToBytes(hex) {
       const out = new Uint8Array(hex.length/2);
       for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16);
       return out;
     }
-    function sha256Hex(hex) {
-      return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString();
-    }
-    function doubleSha256Hex(hex) {
-      return sha256Hex(sha256Hex(hex));
-    }
+
+    function sha256Hex(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+    function doubleSha256Hex(hex) { return sha256Hex(sha256Hex(hex)); }
+
     function base58Encode(hex) {
       const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
       const bytes=hexToBytes(hex);
@@ -56,60 +57,95 @@
       return "1".repeat(zeros)+(out||"");
     }
 
-    let counter = 0;
+    let counter = 0;        // zichtbare rijen
+    let totaal = 0;         // totaal gescande adressen
+    let zoeken = false;
+    const MAX_VISIBLE = 500; // <-- aangepast naar 500
 
-    // --- Balance check via Blockstream API ---
+    // --- Veilige saldo-check met CORS-proxy ---
     async function checkBalance(address) {
       try {
-        const resp = await fetch(`https://blockstream.info/api/address/${address}`);
+        const resp = await fetch(`https://corsproxy.io/?url=https://blockstream.info/api/address/${address}`);
+        if (!resp.ok) return "Error";  // netwerkfout
         const data = await resp.json();
-        // saldo = funded - spent
-        const funded = data.chain_stats.funded_txo_sum;
-        const spent = data.chain_stats.spent_txo_sum;
-        return (funded - spent) / 1e8; // omgerekend naar BTC
+        if (!data || !data.chain_stats) return "Error";
+
+        const funded = Number(data.chain_stats.funded_txo_sum || 0);
+        const spent = Number(data.chain_stats.spent_txo_sum || 0);
+        return (funded - spent) / 1e8;  // BTC
       } catch (err) {
-        console.error("Kan saldo niet ophalen:", err);
-        return "Error";
+        console.warn("Saldo check mislukt, geef 'Error'", err);
+        return "Error"; // altijd teruggeven
       }
     }
 
-    // --- Genereer functie ---
     async function genereer() {
+      if (!zoeken) return;
+
       const ec = new elliptic.ec("secp256k1");
       const kp = ec.genKeyPair();
 
-      // Compressed public key
       const pubCompressed = kp.getPublic(true,"array");
       const pubHex = toHex(pubCompressed);
 
-      // HASH160(pubKey)
       const sha = sha256Hex(pubHex);
       const ripemd = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha)).toString();
 
-      // P2PKH adres
       const payload = "00"+ripemd;
       const checksum = doubleSha256Hex(payload).slice(0,8);
       const address = base58Encode(payload+checksum);
 
-      // WIF private key (compressed)
       const privHex = kp.getPrivate("hex").padStart(64,"0");
       const wifPayload = "80"+privHex+"01";
       const wifChecksum = doubleSha256Hex(wifPayload).slice(0,8);
       const wif = base58Encode(wifPayload+wifChecksum);
 
-      // Voeg toe aan tabel
       counter++;
+      totaal++;
+
+      document.getElementById("totaal").textContent = "Totaal gescande adressen: " + totaal;
+
       const tbody = document.querySelector("#resultTable tbody");
       const row = document.createElement("tr");
       row.innerHTML = `<td>${counter}</td><td>${address}</td><td>${wif}</td><td>Loading...</td>`;
       tbody.appendChild(row);
 
-      // saldo ophalen
+      // Verwijder oudere rijen als er meer dan MAX_VISIBLE zijn
+      while (tbody.rows.length > MAX_VISIBLE) {
+        tbody.deleteRow(0);
+        counter--;
+      }
+
       const saldo = await checkBalance(address);
       row.cells[3].textContent = saldo;
+
+      // Groen markeren als saldo > 0
+      if (typeof saldo === "number" && saldo > 0) {
+          row.style.backgroundColor = "#c8f7c5"; // lichtgroen
+          alert(`Adres gevonden met saldo > 0 BTC!\nAdres: ${address}`);
+          stoppen();
+          return;
+      }
+
+      setTimeout(genereer, 50);
     }
 
-    document.getElementById("genBtn").addEventListener("click", genereer);
+    function starten() {
+      if (zoeken) return;
+      zoeken = true;
+      document.getElementById("startBtn").disabled = true;
+      document.getElementById("stopBtn").disabled = false;
+      genereer();
+    }
+
+    function stoppen() {
+      zoeken = false;
+      document.getElementById("startBtn").disabled = false;
+      document.getElementById("stopBtn").disabled = true;
+    }
+
+    document.getElementById("startBtn").addEventListener("click", starten);
+    document.getElementById("stopBtn").addEventListener("click", stoppen);
   </script>
 </body>
 </html>
