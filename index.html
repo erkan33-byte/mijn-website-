@@ -1,97 +1,72 @@
 <!DOCTYPE html>
-<html lang="nl">
+<html>
 <head>
-<meta charset="utf-8">
-<title>BTC Key Generator via Proxy</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bitcoinjs-lib/3.3.2/bitcoinjs.min.js"></script>
-<style>
-body { font-family: Arial; margin: 20px; }
-#status { font-weight: bold; margin-bottom: 10px; }
-#counter { font-weight: bold; margin-bottom: 10px; }
-table { border-collapse: collapse; width: 100%; margin-top: 15px; }
-th, td { border: 1px solid #999; padding: 5px; font-family: monospace; font-size: 13px; }
-th { background: #eee; }
-tr.found { background: #c8f7c5; }
-button { margin-right: 10px; padding: 6px 12px; font-size: 14px; }
-</style>
+  <title>BTC Key Generator + Balance Check</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bitcoinjs-lib/3.3.2/bitcoinjs.min.js"></script>
 </head>
 <body>
-<h2>BTC Key Generator via Proxy</h2>
+  <h2>BTC Key Generator + Balance Check</h2>
+  <pre id="output"></pre>
+  <button id="startBtn">Start zoeken</button>
+  <button id="stopBtn">Stoppen</button>
 
-<div id="status">Nog niet gestart…</div>
-<div id="counter">Aantal gescande adressen: 0</div>
+  <script>
+    const output = document.getElementById("output");
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    let searching = false;
 
-<button id="startBtn">Start zoeken</button>
-<button id="stopBtn">Stoppen</button>
+    // ===============================
+    // Proxy-adres aanpassen hier
+    // ===============================
+    async function checkBalance(address) {
+      try {
+        const res = await fetch(`http://192.168.1.123:3000/api/balance/${address}`);
+        const data = await res.json();
+        return data.final_balance || 0;
+      } catch {
+        return 0;
+      }
+    }
 
-<table id="resultsTable">
-<thead>
-<tr><th>#</th><th>Adres</th><th>Private Key (WIF)</th><th>Balance (satoshi)</th></tr>
-</thead>
-<tbody></tbody>
-</table>
+    async function generateAndCheck() {
+      const keyPair = bitcoin.ECPair.makeRandom();
+      const { address } = bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey });
+      const wif = keyPair.toWIF();
 
-<script>
-const statusEl = document.getElementById("status");
-const counterEl = document.getElementById("counter");
-const tableBody = document.querySelector("#resultsTable tbody");
+      output.textContent += `Address: ${address}\n`;
 
-let searching = false;
-let counter = 0;
-const MAX_ROWS = 100;
+      const balance = await checkBalance(address);
+      output.textContent += `Balance: ${balance} satoshi\n\n`;
 
-// Balans check via proxy
-async function checkBalance(address) {
-  try {
-    const res = await fetch(`http://100.115.92.205:3000/balance/${address}`);
-    const data = await res.json();
-    return data.balance || 0;
-  } catch (err) {
-    console.error("Proxy error:", err);
-    return 0;
-  }
-}
+      if (balance > 0) {
+        output.textContent += `🎉 FOUND! Address: ${address}\nPrivate Key (WIF): ${wif}\n`;
+        searching = false;
+        return true;
+      }
+      return false;
+    }
 
-// Scan één adres en voeg toe aan tabel
-async function scanOnce() {
-  const keyPair = bitcoin.ECPair.makeRandom();
-  const address = bitcoin.payments.p2pkh({ pubkey: keyPair.getPublicKeyBuffer() }).address;
-  const wif = keyPair.toWIF();
+    async function searchLoop() {
+      if (!searching) return;
+      const found = await generateAndCheck();
+      if (!found && searching) {
+        setTimeout(searchLoop, 500);
+      }
+    }
 
-  counter++;
-  counterEl.textContent = `Aantal gescande adressen: ${counter}`;
+    startBtn.addEventListener("click", () => {
+      if (!searching) {
+        searching = true;
+        output.textContent += "🚀 Start zoeken...\n";
+        searchLoop();
+      }
+    });
 
-  const balance = await checkBalance(address);
-
-  const tr = document.createElement("tr");
-  if (balance > 0) tr.classList.add("found");
-  tr.innerHTML = `<td>${counter}</td><td>${address}</td><td>${wif}</td><td>${balance}</td>`;
-  tableBody.appendChild(tr);
-
-  if (tableBody.rows.length > MAX_ROWS) tableBody.removeChild(tableBody.firstChild);
-
-  if (balance > 0) {
-    searching = false;
-    statusEl.textContent = `🎉 FOUND! Address ${address} heeft ${balance} satoshi!`;
-    return;
-  }
-
-  await new Promise(r => setTimeout(r, 1));
-  if (searching) scanOnce();
-}
-
-document.getElementById("startBtn").addEventListener("click", () => {
-  if (!searching) {
-    searching = true;
-    statusEl.textContent = "🔎 Zoeken gestart…";
-    scanOnce();
-  }
-});
-
-document.getElementById("stopBtn").addEventListener("click", () => {
-  searching = false;
-  statusEl.textContent = "⛔ Gestopt door gebruiker.";
-});
-</script>
+    stopBtn.addEventListener("click", () => {
+      searching = false;
+      output.textContent += "⛔ Gestopt door gebruiker.\n";
+    });
+  </script>
 </body>
 </html>
