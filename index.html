@@ -1,72 +1,115 @@
 <!DOCTYPE html>
-<html>
+<html lang="nl">
 <head>
-  <title>BTC Key Generator + Balance Check</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/bitcoinjs-lib/3.3.2/bitcoinjs.min.js"></script>
+  <meta charset="UTF-8">
+  <title>BTC Key Generator + WIF + Saldo</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 15px; }
+    th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
+    th { background: #f2f2f2; }
+    button { margin-bottom: 10px; padding: 8px 12px; }
+  </style>
 </head>
 <body>
-  <h2>BTC Key Generator + Balance Check</h2>
-  <pre id="output"></pre>
-  <button id="startBtn">Start zoeken</button>
-  <button id="stopBtn">Stoppen</button>
+  <h2>BTC Key Generator (met WIF + Saldo)</h2>
+  <button id="genBtn">Genereer adres</button>
+
+  <table id="resultTable">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Adres</th>
+        <th>Private Key (WIF)</th>
+        <th>Saldo (BTC)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
   <script>
-    const output = document.getElementById("output");
-    const startBtn = document.getElementById("startBtn");
-    const stopBtn = document.getElementById("stopBtn");
-    let searching = false;
+    // --- Helpers ---
+    function toHex(bytes) {
+      return Array.from(bytes).map(b => b.toString(16).padStart(2,"0")).join("");
+    }
+    function hexToBytes(hex) {
+      const out = new Uint8Array(hex.length/2);
+      for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16);
+      return out;
+    }
+    function sha256Hex(hex) {
+      return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString();
+    }
+    function doubleSha256Hex(hex) {
+      return sha256Hex(sha256Hex(hex));
+    }
+    function base58Encode(hex) {
+      const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+      const bytes=hexToBytes(hex);
+      let zeros=0;
+      while(zeros<bytes.length && bytes[zeros]===0) zeros++;
+      let num=BigInt("0x"+hex);
+      let out="";
+      while(num>0n){let r=num%58n; num/=58n; out=alphabet[Number(r)]+out;}
+      return "1".repeat(zeros)+(out||"");
+    }
 
-    // ===============================
-    // Proxy-adres aanpassen hier
-    // ===============================
+    let counter = 0;
+
+    // --- Balance check via Blockstream API ---
     async function checkBalance(address) {
       try {
-        const res = await fetch(`http://192.168.1.123:3000/api/balance/${address}`);
-        const data = await res.json();
-        return data.final_balance || 0;
-      } catch {
-        return 0;
+        const resp = await fetch(`https://blockstream.info/api/address/${address}`);
+        const data = await resp.json();
+        // saldo = funded - spent
+        const funded = data.chain_stats.funded_txo_sum;
+        const spent = data.chain_stats.spent_txo_sum;
+        return (funded - spent) / 1e8; // omgerekend naar BTC
+      } catch (err) {
+        console.error("Kan saldo niet ophalen:", err);
+        return "Error";
       }
     }
 
-    async function generateAndCheck() {
-      const keyPair = bitcoin.ECPair.makeRandom();
-      const { address } = bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey });
-      const wif = keyPair.toWIF();
+    // --- Genereer functie ---
+    async function genereer() {
+      const ec = new elliptic.ec("secp256k1");
+      const kp = ec.genKeyPair();
 
-      output.textContent += `Address: ${address}\n`;
+      // Compressed public key
+      const pubCompressed = kp.getPublic(true,"array");
+      const pubHex = toHex(pubCompressed);
 
-      const balance = await checkBalance(address);
-      output.textContent += `Balance: ${balance} satoshi\n\n`;
+      // HASH160(pubKey)
+      const sha = sha256Hex(pubHex);
+      const ripemd = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha)).toString();
 
-      if (balance > 0) {
-        output.textContent += `🎉 FOUND! Address: ${address}\nPrivate Key (WIF): ${wif}\n`;
-        searching = false;
-        return true;
-      }
-      return false;
+      // P2PKH adres
+      const payload = "00"+ripemd;
+      const checksum = doubleSha256Hex(payload).slice(0,8);
+      const address = base58Encode(payload+checksum);
+
+      // WIF private key (compressed)
+      const privHex = kp.getPrivate("hex").padStart(64,"0");
+      const wifPayload = "80"+privHex+"01";
+      const wifChecksum = doubleSha256Hex(wifPayload).slice(0,8);
+      const wif = base58Encode(wifPayload+wifChecksum);
+
+      // Voeg toe aan tabel
+      counter++;
+      const tbody = document.querySelector("#resultTable tbody");
+      const row = document.createElement("tr");
+      row.innerHTML = `<td>${counter}</td><td>${address}</td><td>${wif}</td><td>Loading...</td>`;
+      tbody.appendChild(row);
+
+      // saldo ophalen
+      const saldo = await checkBalance(address);
+      row.cells[3].textContent = saldo;
     }
 
-    async function searchLoop() {
-      if (!searching) return;
-      const found = await generateAndCheck();
-      if (!found && searching) {
-        setTimeout(searchLoop, 500);
-      }
-    }
-
-    startBtn.addEventListener("click", () => {
-      if (!searching) {
-        searching = true;
-        output.textContent += "🚀 Start zoeken...\n";
-        searchLoop();
-      }
-    });
-
-    stopBtn.addEventListener("click", () => {
-      searching = false;
-      output.textContent += "⛔ Gestopt door gebruiker.\n";
-    });
+    document.getElementById("genBtn").addEventListener("click", genereer);
   </script>
 </body>
 </html>
