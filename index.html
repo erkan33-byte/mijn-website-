@@ -60,22 +60,20 @@
     let counter = 0;        // zichtbare rijen
     let totaal = 0;         // totaal gescande adressen
     let zoeken = false;
-    const MAX_VISIBLE = 500; // <-- aangepast naar 500
+    const MAX_VISIBLE = 500; // max zichtbare rijen
 
-    // --- Veilige saldo-check met CORS-proxy ---
     async function checkBalance(address) {
       try {
         const resp = await fetch(`https://corsproxy.io/?url=https://blockstream.info/api/address/${address}`);
-        if (!resp.ok) return "Error";  // netwerkfout
+        if (!resp.ok) return "Error";
         const data = await resp.json();
         if (!data || !data.chain_stats) return "Error";
-
         const funded = Number(data.chain_stats.funded_txo_sum || 0);
         const spent = Number(data.chain_stats.spent_txo_sum || 0);
-        return (funded - spent) / 1e8;  // BTC
+        return (funded - spent) / 1e8;
       } catch (err) {
         console.warn("Saldo check mislukt, geef 'Error'", err);
-        return "Error"; // altijd teruggeven
+        return "Error";
       }
     }
 
@@ -110,7 +108,6 @@
       row.innerHTML = `<td>${counter}</td><td>${address}</td><td>${wif}</td><td>Loading...</td>`;
       tbody.appendChild(row);
 
-      // Verwijder oudere rijen als er meer dan MAX_VISIBLE zijn
       while (tbody.rows.length > MAX_VISIBLE) {
         tbody.deleteRow(0);
         counter--;
@@ -119,12 +116,20 @@
       const saldo = await checkBalance(address);
       row.cells[3].textContent = saldo;
 
+      // Stop bij error
+      if (saldo === "Error") {
+        row.style.backgroundColor = "#f7c5c5"; // lichtrood
+        alert(`Saldo check mislukt! Het zoeken wordt gestopt.`);
+        stoppen();
+        return;
+      }
+
       // Groen markeren als saldo > 0
       if (typeof saldo === "number" && saldo > 0) {
-          row.style.backgroundColor = "#c8f7c5"; // lichtgroen
-          alert(`Adres gevonden met saldo > 0 BTC!\nAdres: ${address}`);
-          stoppen();
-          return;
+        row.style.backgroundColor = "#c8f7c5"; // lichtgroen
+        alert(`Adres gevonden met saldo > 0 BTC!\nAdres: ${address}`);
+        stoppen();
+        return;
       }
 
       setTimeout(genereer, 50);
