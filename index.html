@@ -10,7 +10,7 @@
     table { border-collapse: collapse; width: 100%; margin-top: 15px; }
     th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
     th { background: #f2f2f2; }
-    button { margin-bottom: 10px; padding: 8px 12px; }
+    button, select { margin-bottom: 10px; padding: 8px 12px; }
     #totaal { margin-bottom: 10px; font-weight: bold; }
     #retryMsg { margin-top: 15px; font-weight: bold; color: red; }
   </style>
@@ -18,6 +18,16 @@
 <body>
   <h2>BTC Key Generator (met WIF + Saldo, max 500 zichtbaar)</h2>
   <div id="totaal">Totaal gescande adressen: 0</div>
+
+  <label for="speedSelect">Snelheid: </label>
+  <select id="speedSelect">
+    <option value="1000">1 adres/sec</option>
+    <option value="500">2 adressen/sec</option>
+    <option value="200">5 adressen/sec</option>
+    <option value="100">10 adressen/sec</option>
+  </select>
+  <br>
+
   <button id="startBtn">Start zoeken</button>
   <button id="stopBtn" disabled>Stop</button>
   <button onclick="resetTeller()">Reset teller</button>
@@ -61,28 +71,50 @@
     }
 
     let counter = 0;
-    let totaal = parseInt(localStorage.getItem("totaal") || "0", 10); // haal op uit localStorage
+    let totaal = parseInt(localStorage.getItem("totaal") || "0", 10);
     let zoeken = false;
     const MAX_VISIBLE = 500;
-    let countdownInterval = null;
+    let delay = 1000; // standaard 1/sec
 
-    // toon meteen de huidige teller bij laden
     document.getElementById("totaal").textContent = "Totaal gescande adressen: " + totaal;
 
+    document.getElementById("speedSelect").addEventListener("change", (e) => {
+      delay = parseInt(e.target.value, 10);
+    });
+
+    // -------- Balance check met fallback API’s --------
     async function checkBalance(address) {
-      try {
-        const resp = await fetch(`https://corsproxy.io/?url=https://blockstream.info/api/address/${address}`);
-        if (!resp.ok) return "Error";
-        const data = await resp.json();
-        if (!data || !data.chain_stats) return "Error";
-        const funded = Number(data.chain_stats.funded_txo_sum || 0);
-        const spent = Number(data.chain_stats.spent_txo_sum || 0);
-        return (funded - spent) / 1e8;
-      } catch (err) {
-        return "Error";
+      const apis = [
+        `https://corsproxy.io/?url=https://blockstream.info/api/address/${address}`,
+        `https://corsproxy.io/?url=https://mempool.space/api/address/${address}`,
+        `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${address}?cors=true`
+      ];
+
+      for (let url of apis) {
+        try {
+          const resp = await fetch(url);
+          if (!resp.ok) continue;
+          const data = await resp.json();
+
+          // Blockstream & Mempool
+          if (data.chain_stats) {
+            const funded = Number(data.chain_stats.funded_txo_sum || 0);
+            const spent  = Number(data.chain_stats.spent_txo_sum || 0);
+            return (funded - spent) / 1e8;
+          }
+
+          // Blockchain.info
+          if (typeof data.final_balance !== "undefined") {
+            return data.final_balance / 1e8;
+          }
+        } catch (e) {
+          continue;
+        }
       }
+      return "Error";
     }
 
+    // -------- Generator --------
     async function genereer() {
       if (!zoeken) return;
 
@@ -106,7 +138,7 @@
 
       counter++;
       totaal++;
-      localStorage.setItem("totaal", totaal); // sla op in localStorage
+      localStorage.setItem("totaal", totaal);
       document.getElementById("totaal").textContent = "Totaal gescande adressen: " + totaal;
 
       const tbody = document.querySelector("#resultTable tbody");
@@ -119,48 +151,32 @@
         counter--;
       }
 
-      const saldo = await checkBalance(address);
-      row.cells[3].textContent = saldo;
+      let saldo = await checkBalance(address);
 
+      // Retry bij error
       if (saldo === "Error") {
-        row.style.backgroundColor = "#f7c5c5"; // rood
-        document.getElementById("retryMsg").textContent = "Saldo check mislukt. Herstart over 30 seconden...";
-        startenCountdown(30);
-        stoppen();
-        return;
+        row.cells[3].textContent = "Retrying...";
+        setTimeout(async () => {
+          saldo = await checkBalance(address);
+          row.cells[3].textContent = saldo;
+        }, 3000);
+      } else {
+        row.cells[3].textContent = saldo;
       }
 
       if (typeof saldo === "number" && saldo > 0) {
-        row.style.backgroundColor = "#c8f7c5"; // groen
+        row.style.backgroundColor = "#c8f7c5";
         document.getElementById("retryMsg").textContent = `Adres gevonden met saldo > 0 BTC! Adres: ${address}`;
         stoppen();
         return;
       }
 
-      setTimeout(genereer, 50);
-    }
-
-    function startenCountdown(seconds) {
-      let resterend = seconds;
-      const retryMsg = document.getElementById("retryMsg");
-      retryMsg.textContent = `Herstart in ${resterend} seconden...`;
-
-      countdownInterval = setInterval(() => {
-        resterend--;
-        if (resterend > 0) {
-          retryMsg.textContent = `Herstart in ${resterend} seconden...`;
-        } else {
-          clearInterval(countdownInterval);
-          retryMsg.textContent = "";
-          starten();
-        }
-      }, 1000);
+      setTimeout(genereer, delay);
     }
 
     function starten() {
       if (zoeken) return;
       zoeken = true;
-      if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
       document.getElementById("startBtn").disabled = true;
       document.getElementById("stopBtn").disabled = false;
       document.getElementById("retryMsg").textContent = "";
