@@ -20,6 +20,7 @@
   <div id="totaal">Totaal gescande adressen: 0</div>
   <button id="startBtn">Start zoeken</button>
   <button id="stopBtn" disabled>Stop</button>
+  <button onclick="resetTeller()">Reset teller</button>
   <div id="retryMsg"></div>
 
   <table id="resultTable">
@@ -60,10 +61,13 @@
     }
 
     let counter = 0;
-    let totaal = 0;
+    let totaal = parseInt(localStorage.getItem("totaal") || "0", 10); // haal op uit localStorage
     let zoeken = false;
     const MAX_VISIBLE = 500;
     let countdownInterval = null;
+
+    // toon meteen de huidige teller bij laden
+    document.getElementById("totaal").textContent = "Totaal gescande adressen: " + totaal;
 
     async function checkBalance(address) {
       try {
@@ -102,6 +106,7 @@
 
       counter++;
       totaal++;
+      localStorage.setItem("totaal", totaal); // sla op in localStorage
       document.getElementById("totaal").textContent = "Totaal gescande adressen: " + totaal;
 
       const tbody = document.querySelector("#resultTable tbody");
@@ -166,6 +171,12 @@
       zoeken = false;
       document.getElementById("startBtn").disabled = false;
       document.getElementById("stopBtn").disabled = true;
+    }
+
+    function resetTeller() {
+      totaal = 0;
+      localStorage.setItem("totaal", totaal);
+      document.getElementById("totaal").textContent = "Totaal gescande adressen: 0";
     }
 
     document.getElementById("startBtn").addEventListener("click", starten);
