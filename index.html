@@ -114,16 +114,39 @@
       return "Error";
     }
 
+    // -------- Retry wrapper: blijf proberen tot succes --------
+    function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+    async function checkBalanceUntilOk(address){
+      let attempt = 0;
+      let wait = 2000;        // start 2s
+      const maxWait = 15000;  // max 15s
+
+      while (zoeken) {
+        const saldo = await checkBalance(address);
+        if (saldo !== "Error") {
+          document.getElementById("retryMsg").textContent = "";
+          return saldo;
+        }
+        attempt++;
+        document.getElementById("retryMsg").textContent =
+          `Saldo-check mislukt (poging ${attempt}). Opnieuw proberen over ${(wait/1000)|0}s...`;
+        await sleep(wait);
+        wait = Math.min(Math.floor(wait * 1.5), maxWait); // backoff
+      }
+      return "Aborted"; // als user stopt
+    }
+
     // -------- Generator --------
     async function genereer() {
       if (!zoeken) return;
 
+      // 1) Genereer keypair & adres
       const ec = new elliptic.ec("secp256k1");
       const kp = ec.genKeyPair();
 
       const pubCompressed = kp.getPublic(true,"array");
       const pubHex = toHex(pubCompressed);
-
       const sha = sha256Hex(pubHex);
       const ripemd = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha)).toString();
 
@@ -136,6 +159,11 @@
       const wifChecksum = doubleSha256Hex(wifPayload).slice(0,8);
       const wif = base58Encode(wifPayload+wifChecksum);
 
+      // 2) Blijf proberen tot saldo-check slaagt
+      const saldo = await checkBalanceUntilOk(address);
+      if (saldo === "Aborted") return; // user stopte
+
+      // 3) Pas nu tellers + row toevoegen
       counter++;
       totaal++;
       localStorage.setItem("totaal", totaal);
@@ -143,7 +171,7 @@
 
       const tbody = document.querySelector("#resultTable tbody");
       const row = document.createElement("tr");
-      row.innerHTML = `<td>${counter}</td><td>${address}</td><td>${wif}</td><td>Loading...</td>`;
+      row.innerHTML = `<td>${counter}</td><td>${address}</td><td>${wif}</td><td>${saldo}</td>`;
       tbody.appendChild(row);
 
       while (tbody.rows.length > MAX_VISIBLE) {
@@ -151,26 +179,16 @@
         counter--;
       }
 
-      let saldo = await checkBalance(address);
-
-      // Retry bij error
-      if (saldo === "Error") {
-        row.cells[3].textContent = "Retrying...";
-        setTimeout(async () => {
-          saldo = await checkBalance(address);
-          row.cells[3].textContent = saldo;
-        }, 3000);
-      } else {
-        row.cells[3].textContent = saldo;
-      }
-
+      // 4) Stop als saldo > 0
       if (typeof saldo === "number" && saldo > 0) {
         row.style.backgroundColor = "#c8f7c5";
-        document.getElementById("retryMsg").textContent = `Adres gevonden met saldo > 0 BTC! Adres: ${address}`;
+        document.getElementById("retryMsg").textContent = 
+          `Adres gevonden met saldo > 0 BTC! Adres: ${address}`;
         stoppen();
         return;
       }
 
+      // 5) Volgende adres
       setTimeout(genereer, delay);
     }
 
