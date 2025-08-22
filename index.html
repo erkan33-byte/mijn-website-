@@ -2,164 +2,172 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator + Balance Check</title>
+<title>BTC Key Generator + WIF + Saldo + Totaal</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bs58/5.0.0/bs58.min.js"></script>
 <style>
-body { font-family: Arial, sans-serif; background: #111; color: #eee; text-align: center; }
-h2 { color: #6cf; }
-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
-th, td { border: 1px solid #444; padding: 4px; }
-tr.highlight { background-color: #006400; color: #fff; font-weight: bold; }
-#status { margin: 10px; font-weight: bold; }
+body { font-family: Arial, sans-serif; padding: 20px; }
+table { border-collapse: collapse; width: 100%; margin-top: 15px; }
+th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
+th { background: #f2f2f2; }
+button, select { margin-bottom: 10px; padding: 8px 12px; }
+#totaal, #errors { margin-bottom: 10px; font-weight: bold; }
+#retryMsg { margin-top: 15px; font-weight: bold; color: orange; font-size: 16px; animation: blink 1s infinite; }
+#foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
+@keyframes blink { 0%,50%,100% {opacity:1;} 25%,75% {opacity:0;} }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator + Balance Check</h2>
-<div id="status">Nog niet gestart</div>
-<button onclick="start()">Start zoeken</button>
-<button onclick="stop()">Stop</button>
-<button onclick="resetCount()">Reset teller</button>
-<button onclick="resetErrors()">Reset errors</button>
-<br><br>
-<label>Snelheid:
-<select id="speed">
-<option value="1">1 adres/sec</option>
-<option value="5">5 adressen/sec</option>
-<option value="10">10 adressen/sec</option>
-<option value="50">50 adressen/sec</option>
-<option value="100">100 adressen/sec</option>
+<h2>BTC Key Generator (met WIF + Saldo, max 500 zichtbaar)</h2>
+
+<div id="totaal">Totaal gescande adressen: 0</div>
+<div id="errors">Aantal errors: 0</div>
+
+<label for="speedSelect">Snelheid: </label>
+<select id="speedSelect">
+<option value="1000">1 adres/sec</option>
+<option value="500">2 adressen/sec</option>
+<option value="200">5 adressen/sec</option>
+<option value="100">10 adressen/sec</option>
+<option value="50">20 adressen/sec</option>
+<option value="20">50 adressen/sec</option>
+<option value="10">100 adressen/sec</option>
 </select>
-</label>
-<p>Gescande adressen: <span id="count">0</span> | Errors: <span id="errors">0</span></p>
-<table id="results">
-<tr>
-<th>#</th><th>Adres</th><th>Private Key (WIF)</th><th>Saldo (BTC)</th>
-</tr>
+<br>
+
+<button id="startBtn">Start zoeken</button>
+<button id="stopBtn" disabled>Stop</button>
+<button onclick="resetTeller()">Reset teller</button>
+<button onclick="resetErrors()">Reset errors</button>
+
+<div id="retryMsg"></div>
+<div id="foundMsg"></div>
+
+<table id="resultTable">
+<thead>
+<tr><th>#</th><th>Adres</th><th>Private Key (WIF)</th><th>Saldo (BTC)</th></tr>
+</thead>
+<tbody></tbody>
 </table>
 
 <script>
-let running = false;
-let counter = parseInt(localStorage.getItem("counter")||"0");
-let errors = parseInt(localStorage.getItem("errors")||"0");
-document.getElementById("count").textContent = counter;
-document.getElementById("errors").textContent = errors;
-let loop;
+function toHex(bytes){return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join("");}
+function hexToBytes(hex){const out=new Uint8Array(hex.length/2);for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16);return out;}
+function sha256Hex(hex){return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString();}
+function doubleSha256Hex(hex){return sha256Hex(sha256Hex(hex));}
+function base58Encode(hex){const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";const bytes=hexToBytes(hex);let zeros=0;while(zeros<bytes.length&&bytes[zeros]===0) zeros++;let num=BigInt("0x"+hex);let out="";while(num>0n){let r=num%58n;num/=58n;out=alphabet[Number(r)]+out;}return "1".repeat(zeros)+(out||"");}
 
-// Helper functies
-function sha256(buffer){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(buffer.toString("hex"))); }
-function ripemd160(buffer){ return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(buffer.toString("hex"))); }
-function base58check(payload){ 
-  let hash = sha256(CryptoJS.enc.Hex.parse(payload.toString("hex")));
-  hash = sha256(hash);
-  const checksum = Buffer.from(hash.toString(CryptoJS.enc.Hex),"hex").slice(0,4);
-  return bs58.encode(Buffer.concat([payload, checksum]));
-}
-function privateToWIF(privKey, compressed=true){
-  let prefix = Buffer.from([0x80]);
-  let keyBuffer = Buffer.concat([prefix, privKey]);
-  if(compressed){ keyBuffer = Buffer.concat([keyBuffer, Buffer.from([0x01])]); }
-  return base58check(keyBuffer);
-}
-function pubkeyToAddress(pubkey){
-  let sha = sha256(Buffer.from(pubkey.toString("hex"),"hex"));
-  let ripe = ripemd160(Buffer.from(sha.toString(CryptoJS.enc.Hex),"hex"));
-  let payload = Buffer.concat([Buffer.from([0x00]), Buffer.from(ripe.toString(CryptoJS.enc.Hex),"hex")]);
-  return base58check(payload);
-}
+let counter=0;
+let totaal=parseInt(localStorage.getItem("totaal")||"0",10);
+let fouten=parseInt(localStorage.getItem("fouten")||"0",10);
+let zoeken=false;
+const MAX_VISIBLE=500;
+let delay=1000;
 
-// Balance check met retry
+document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
+document.getElementById("errors").textContent="Aantal errors: "+fouten;
+
+document.getElementById("speedSelect").addEventListener("change",(e)=>{delay=parseInt(e.target.value,10);});
+
+// Balance check met max. 1 seconde per API
 async function checkBalance(address){
-  const urls = [
+  const apis=[
     `https://corsproxy.io/?url=https://blockstream.info/api/address/${address}`,
     `https://corsproxy.io/?url=https://mempool.space/api/address/${address}`,
     `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${address}?cors=true`,
-    `https://corsproxy.io/?url=https://btcscan.org/api/address/${address}`,
-    `https://corsproxy.io/?url=https://api.blockchair.com/bitcoin/dashboards/address/${address}`,
-    `https://api.allorigins.win/raw?url=https://blockstream.info/api/address/${address}`,
-    `https://api.allorigins.win/raw?url=https://mempool.space/api/address/${address}`
+    `https://api.blockchair.com/bitcoin/dashboards/address/${address}`,
+    `https://btcscan.org/api/address/${address}`,
+    `https://sochain.com/api/v2/address/BTC/${address}`,
+    `https://api.smartbit.com.au/v1/blockchain/address/${address}`
   ];
 
-  async function tryOnce(){
-    const promises = urls.map(url =>
-      fetch(url).then(resp=>resp.json()).then(data=>{
-        if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum||0) - Number(data.chain_stats.spent_txo_sum||0))/1e8;
-        if(typeof data.final_balance!=="undefined") return data.final_balance/1e8;
-        if(data.data && data.data[address]) return Number(data.data[address].address.balance||0)/1e8;
-        throw new Error("Onbekend antwoord");
-      })
-    );
-    try { return await Promise.any(promises); }
-    catch(e){ return "Error"; }
-  }
+  for(let url of apis){
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(()=>controller.abort(), 1000); // max 1s per API
+      const resp = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
 
-  let attempt=0;
-  while(running){
-    let balance = await tryOnce();
-    if(balance!=="Error") return balance;
-    attempt++;
-    document.getElementById("status").textContent = `Saldo-check mislukt (poging ${attempt}) voor ${address}. Opnieuw in 1s...`;
-    await new Promise(r=>setTimeout(r,1000));
+      if(!resp.ok) continue;
+      const data = await resp.json();
+
+      if(data.chain_stats){ 
+        const funded=Number(data.chain_stats.funded_txo_sum||0);
+        const spent=Number(data.chain_stats.spent_txo_sum||0);
+        return (funded-spent)/1e8;
+      }
+      if(typeof data.final_balance!=="undefined") return data.final_balance/1e8;
+      if(data.data && data.data[address] && data.data[address].address){
+        return data.data[address].address.balance/1e8;
+      }
+    } catch(e) { continue; }
   }
-  return "Aborted";
+  fouten++;
+  localStorage.setItem("fouten",fouten);
+  document.getElementById("errors").textContent="Aantal errors: "+fouten;
+  return "Error";
 }
 
-// Adres genereren
-async function generate(){
-  const ec = new elliptic.ec("secp256k1");
-  const key = ec.genKeyPair();
-  const priv = key.getPrivate().toArrayLike(Buffer,"be",32);
+async function genereer(){
+if(!zoeken) return;
+const ec=new elliptic.ec("secp256k1"); const kp=ec.genKeyPair();
+const privHex=kp.getPrivate("hex").padStart(64,"0");
 
-  // Compressed
-  const pubC = key.getPublic(true,"array");
-  const addrC = pubkeyToAddress(Buffer.from(pubC));
-  const wifC = privateToWIF(priv,true);
+// Gecomprimeerd
+const pubCompressed=kp.getPublic(true,"array"); const pubHexC=toHex(pubCompressed);
+const shaC=sha256Hex(pubHexC); const ripemdC=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(shaC)).toString();
+const payloadC="00"+ripemdC; const checksumC=doubleSha256Hex(payloadC).slice(0,8);
+const addressC=base58Encode(payloadC+checksumC); const wifPayloadC="80"+privHex+"01";
+const wifChecksumC=doubleSha256Hex(wifPayloadC).slice(0,8); const wifC=base58Encode(wifPayloadC+wifChecksumC);
 
-  // Uncompressed
-  const pubU = key.getPublic(false,"array");
-  const addrU = pubkeyToAddress(Buffer.from(pubU));
-  const wifU = privateToWIF(priv,false);
+// Ongecomprimeerd
+const pubUncompressed=kp.getPublic(false,"array"); const pubHexU=toHex(pubUncompressed);
+const shaU=sha256Hex(pubHexU); const ripemdU=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(shaU)).toString();
+const payloadU="00"+ripemdU; const checksumU=doubleSha256Hex(payloadU).slice(0,8);
+const addressU=base58Encode(payloadU+checksumU); const wifPayloadU="80"+privHex;
+const wifChecksumU=doubleSha256Hex(wifPayloadU).slice(0,8); const wifU=base58Encode(wifPayloadU+wifChecksumU);
 
-  let balanceC = await checkBalance(addrC);
-  let balanceU = await checkBalance(addrU);
+const saldoC=await checkBalance(addressC);
+const saldoU=await checkBalance(addressU);
 
-  counter++; localStorage.setItem("counter",counter); 
-  document.getElementById("count").textContent = counter;
+const tbody=document.querySelector("#resultTable tbody");
+counter++; totaal++; let rowC=document.createElement("tr");
+rowC.innerHTML=`<td>${counter}</td><td>${addressC}</td><td>${wifC}</td><td>${saldoC}</td>`;
+tbody.appendChild(rowC);
 
-  if(balanceC==="Error" && balanceU==="Error"){ errors++; localStorage.setItem("errors",errors); document.getElementById("errors").textContent=errors; }
+counter++; totaal++; let rowU=document.createElement("tr");
+rowU.innerHTML=`<td>${counter}</td><td>${addressU}</td><td>${wifU}</td><td>${saldoU}</td>`;
+tbody.appendChild(rowU);
 
-  const table = document.getElementById("results");
-  function addRow(addr,wif,balance){
-    let row = table.insertRow(1);
-    row.insertCell(0).textContent = counter;
-    row.insertCell(1).textContent = addr;
-    row.insertCell(2).textContent = wif;
-    row.insertCell(3).textContent = balance;
-    if(balance>0){ 
-      row.classList.add("highlight");
-      document.getElementById("status").textContent = `🎉 Adres gevonden met saldo > 0 BTC! WIF: ${wif}`;
-      stop();
-    }
-  }
-
-  addRow(addrC,wifC,balanceC);
-  addRow(addrU,wifU,balanceU);
-
-  while(table.rows.length>501){ table.deleteRow(-1); }
+// Max 500 zichtbaar
+while(tbody.rows.length > MAX_VISIBLE){
+    tbody.deleteRow(0);
 }
 
-// Besturing
-function start(){
-  if(running) return;
-  running = true;
-  document.getElementById("status").textContent = "Zoeken gestart...";
-  let speed = parseInt(document.getElementById("speed").value);
-  loop = setInterval(()=>{ if(running) generate(); },1000/speed);
+localStorage.setItem("totaal",totaal);
+document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
+
+if(typeof saldoC==="number" && saldoC>0){
+    rowC.style.backgroundColor="#c8f7c5";
+    document.getElementById("foundMsg").textContent=`Adres gevonden met saldo > 0 BTC! Adres: ${addressC} | WIF: ${wifC}`;
+    stoppen();
 }
-function stop(){ running=false; clearInterval(loop); document.getElementById("status").textContent="Gestopt"; }
-function resetCount(){ counter=0; localStorage.setItem("counter",0); document.getElementById("count").textContent=0; }
-function resetErrors(){ errors=0; localStorage.setItem("errors",0); document.getElementById("errors").textContent=0; }
+if(typeof saldoU==="number" && saldoU>0){
+    rowU.style.backgroundColor="#c8f7c5";
+    document.getElementById("foundMsg").textContent=`Adres gevonden met saldo > 0 BTC! Adres: ${addressU} | WIF: ${wifU}`;
+    stoppen();
+}
+
+setTimeout(genereer, delay);
+}
+
+function starten(){if(zoeken) return; zoeken=true; document.getElementById("startBtn").disabled=true; document.getElementById("stopBtn").disabled=false; document.getElementById("retryMsg").textContent=""; document.getElementById("foundMsg").textContent=""; genereer();}
+function stoppen(){zoeken=false; document.getElementById("startBtn").disabled=false; document.getElementById("stopBtn").disabled=true;}
+function resetTeller(){totaal=0; localStorage.setItem("totaal",totaal); document.getElementById("totaal").textContent="Totaal gescande adressen: 0";}
+function resetErrors(){fouten=0; localStorage.setItem("fouten",fouten); document.getElementById("errors").textContent="Aantal errors: 0";}
+
+document.getElementById("startBtn").addEventListener("click", starten);
+document.getElementById("stopBtn").addEventListener("click", stoppen);
 </script>
 </body>
 </html>
