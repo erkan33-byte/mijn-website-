@@ -2,208 +2,172 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator Incrementeel + Saldo</title>
+<title>BTC Key Generator + WIF + Saldo + Totaal</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
-body { font-family: Arial; padding: 20px; }
+body { font-family: Arial, sans-serif; padding: 20px; }
 table { border-collapse: collapse; width: 100%; margin-top: 15px; }
-th, td { border: 1px solid #ccc; padding: 6px; font-size: 12px; word-break: break-all; }
+th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
 th { background: #f2f2f2; }
-.success { background-color: #c8f7c5; }
-#error { color: red; font-weight: bold; }
-#foundMsg { color: green; font-weight: bold; }
-#totaal, #errors { font-weight: bold; margin-bottom: 10px; }
+button, select { margin-bottom: 10px; padding: 8px 12px; }
+#totaal, #errors { margin-bottom: 10px; font-weight: bold; }
+#retryMsg { margin-top: 15px; font-weight: bold; color: orange; font-size: 16px; animation: blink 1s infinite; }
+#foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
+@keyframes blink { 0%,50%,100% {opacity:1;} 25%,75% {opacity:0;} }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator Incrementeel + Saldo (max 500 zichtbaar)</h2>
+<h2>BTC Key Generator (met WIF + Saldo, max 500 zichtbaar)</h2>
 
 <div id="totaal">Totaal gescande adressen: 0</div>
 <div id="errors">Aantal errors: 0</div>
 
-<label for="speedSelect">Snelheid:</label>
+<label for="speedSelect">Snelheid: </label>
 <select id="speedSelect">
-<option value="1">1 key per keer</option>
-<option value="10">10 keys per keer</option>
-<option value="50">50 keys per keer</option>
-<option value="100">100 keys per keer</option>
+<option value="1000">1 adres/sec</option>
+<option value="500">2 adressen/sec</option>
+<option value="200">5 adressen/sec</option>
+<option value="100">10 adressen/sec</option>
+<option value="50">20 adressen/sec</option>
+<option value="20">50 adressen/sec</option>
+<option value="10">100 adressen/sec</option>
 </select>
-<br><br>
+<br>
 
 <button id="startBtn">Start zoeken</button>
-<button id="stopBtn" disabled>Stop zoeken</button>
-<button onclick="resetFound()">Reset gevonden</button>
+<button id="stopBtn" disabled>Stop</button>
+<button onclick="resetTeller()">Reset teller</button>
+<button onclick="resetErrors()">Reset errors</button>
 
-<div id="foundMsg"></div>
 <div id="retryMsg"></div>
+<div id="foundMsg"></div>
 
 <table id="resultTable">
 <thead>
-<tr><th>#</th><th>Adres</th><th>Private Key (WIF)</th><th>Saldo</th><th>Type</th></tr>
+<tr><th>#</th><th>Adres</th><th>Private Key (WIF)</th><th>Saldo (BTC)</th></tr>
 </thead>
 <tbody></tbody>
 </table>
 
 <script>
-const ec = new elliptic.ec('secp256k1');
-const MAX_VISIBLE = 500;
+function toHex(bytes){return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join("");}
+function hexToBytes(hex){const out=new Uint8Array(hex.length/2);for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16);return out;}
+function sha256Hex(hex){return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString();}
+function doubleSha256Hex(hex){return sha256Hex(sha256Hex(hex));}
+function base58Encode(hex){const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";const bytes=hexToBytes(hex);let zeros=0;while(zeros<bytes.length&&bytes[zeros]===0) zeros++;let num=BigInt("0x"+hex);let out="";while(num>0n){let r=num%58n;num/=58n;out=alphabet[Number(r)]+out;}return "1".repeat(zeros)+(out||"");}
 
-let zoeken = false;
-let found = false;
-let lastKeyNum;
-let totaal = parseInt(localStorage.getItem("totaal")||"0",10);
-let fouten = parseInt(localStorage.getItem("fouten")||"0",10);
-
-const MAX_KEY = BigInt("115792089237316195423570985008687907852837564279074904382605163141518161494336");
-
-// LocalStorage startpunt
-const savedKey = localStorage.getItem("lastKeyNum");
-if(savedKey){
-    lastKeyNum = BigInt(savedKey);
-} else {
-    const minHigh = MAX_KEY / 2n;
-    const range = MAX_KEY - minHigh;
-    const rand = BigInt("0x"+crypto.getRandomValues(new Uint32Array(8)).reduce((acc,v)=>acc+v.toString(16).padStart(8,'0'),''));
-    lastKeyNum = minHigh + (rand % range);
-}
+let counter=0;
+let totaal=parseInt(localStorage.getItem("totaal")||"0",10);
+let fouten=parseInt(localStorage.getItem("fouten")||"0",10);
+let zoeken=false;
+const MAX_VISIBLE=500;
+let delay=1000;
 
 document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
 document.getElementById("errors").textContent="Aantal errors: "+fouten;
 
-// APIs
-const apis = [
-    addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
-    addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`,
-    addr => `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${addr}?cors=true`,
-    addr => `https://api.blockchair.com/bitcoin/dashboards/address/${addr}`,
-    addr => `https://btcscan.org/api/address/${addr}`,
-    addr => `https://sochain.com/api/v2/address/BTC/${addr}`,
-    addr => `https://api.smartbit.com.au/v1/blockchain/address/${addr}`
-];
+document.getElementById("speedSelect").addEventListener("change",(e)=>{delay=parseInt(e.target.value,10);});
 
-function base58Encode(hex){
-    const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-    let num=BigInt("0x"+hex);
-    let out="";
-    while(num>0n){let r=num%58n;num/=58n;out=alphabet[Number(r)]+out;}
-    for(let i=0;i<hex.length && hex.substr(i,2)=="00";i+=2) out="1"+out;
-    return out;
-}
-
-function privateKeyToWIF(privHex, compressed=true){
-    let payload="80"+privHex+(compressed?"01":"");
-    let hash1=CryptoJS.SHA256(CryptoJS.enc.Hex.parse(payload));
-    let hash2=CryptoJS.SHA256(hash1);
-    let checksum=hash2.toString(CryptoJS.enc.Hex).slice(0,8);
-    return base58Encode(payload+checksum);
-}
-
-function privateKeyToAddress(privHex, compressed=true){
-    let key=ec.keyFromPrivate(privHex,"hex");
-    let pub=compressed?key.getPublic(true,"hex"):key.getPublic(false,"hex");
-    let sha=CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pub));
-    let ripe=CryptoJS.RIPEMD160(sha);
-    let payload="00"+ripe.toString();
-    let hash1=CryptoJS.SHA256(CryptoJS.enc.Hex.parse(payload));
-    let hash2=CryptoJS.SHA256(hash1);
-    let checksum=hash2.toString(CryptoJS.enc.Hex).slice(0,8);
-    return base58Encode(payload+checksum);
-}
-
-// Saldo check met retry
+// Balance check met max. 1 seconde per API
 async function checkBalance(address){
-    for(let urlFunc of apis){
-        try{
-            const controller=new AbortController();
-            const timeout=setTimeout(()=>controller.abort(),1000);
-            const resp=await fetch(urlFunc(address),{signal:controller.signal});
-            clearTimeout(timeout);
-            if(!resp.ok) continue;
-            const data=await resp.json();
-            if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8;
-            if(typeof data.final_balance!=="undefined") return data.final_balance/1e8;
-            if(data.data && data.data[address] && data.data[address].address) return data.data[address].address.balance/1e8;
-        }catch(e){ continue; }
-    }
-    fouten++;
-    localStorage.setItem("fouten",fouten);
-    document.getElementById("errors").textContent="Aantal errors: "+fouten;
-    return "Error";
+  const apis=[
+    `https://corsproxy.io/?url=https://blockstream.info/api/address/${address}`,
+    `https://corsproxy.io/?url=https://mempool.space/api/address/${address}`,
+    `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${address}?cors=true`,
+    `https://api.blockchair.com/bitcoin/dashboards/address/${address}`,
+    `https://btcscan.org/api/address/${address}`,
+    `https://sochain.com/api/v2/address/BTC/${address}`,
+    `https://api.smartbit.com.au/v1/blockchain/address/${address}`
+  ];
+
+  for(let url of apis){
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(()=>controller.abort(), 1000); // max 1s per API
+      const resp = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+
+      if(!resp.ok) continue;
+      const data = await resp.json();
+
+      if(data.chain_stats){ 
+        const funded=Number(data.chain_stats.funded_txo_sum||0);
+        const spent=Number(data.chain_stats.spent_txo_sum||0);
+        return (funded-spent)/1e8;
+      }
+      if(typeof data.final_balance!=="undefined") return data.final_balance/1e8;
+      if(data.data && data.data[address] && data.data[address].address){
+        return data.data[address].address.balance/1e8;
+      }
+    } catch(e) { continue; }
+  }
+  fouten++;
+  localStorage.setItem("fouten",fouten);
+  document.getElementById("errors").textContent="Aantal errors: "+fouten;
+  return "Error";
 }
 
 async function genereer(){
-    if(!zoeken) return;
-    const batchSize=parseInt(document.getElementById("speedSelect").value);
-    const tbody=document.querySelector("#resultTable tbody");
+if(!zoeken) return;
+const ec=new elliptic.ec("secp256k1"); const kp=ec.genKeyPair();
+const privHex=kp.getPrivate("hex").padStart(64,"0");
 
-    for(let i=0;i<batchSize;i++){
-        let privHex=lastKeyNum.toString(16).padStart(64,'0');
-        let wifC=privateKeyToWIF(privHex,true);
-        let wifU=privateKeyToWIF(privHex,false);
-        let addrC=privateKeyToAddress(privHex,true);
-        let addrU=privateKeyToAddress(privHex,false);
+// Gecomprimeerd
+const pubCompressed=kp.getPublic(true,"array"); const pubHexC=toHex(pubCompressed);
+const shaC=sha256Hex(pubHexC); const ripemdC=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(shaC)).toString();
+const payloadC="00"+ripemdC; const checksumC=doubleSha256Hex(payloadC).slice(0,8);
+const addressC=base58Encode(payloadC+checksumC); const wifPayloadC="80"+privHex+"01";
+const wifChecksumC=doubleSha256Hex(wifPayloadC).slice(0,8); const wifC=base58Encode(wifPayloadC+wifChecksumC);
 
-        let saldoC=await checkBalance(addrC);
-        let saldoU=await checkBalance(addrU);
+// Ongecomprimeerd
+const pubUncompressed=kp.getPublic(false,"array"); const pubHexU=toHex(pubUncompressed);
+const shaU=sha256Hex(pubHexU); const ripemdU=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(shaU)).toString();
+const payloadU="00"+ripemdU; const checksumU=doubleSha256Hex(payloadU).slice(0,8);
+const addressU=base58Encode(payloadU+checksumU); const wifPayloadU="80"+privHex;
+const wifChecksumU=doubleSha256Hex(wifPayloadU).slice(0,8); const wifU=base58Encode(wifPayloadU+wifChecksumU);
 
-        // Compressed
-        let rowC=document.createElement("tr");
-        rowC.innerHTML=`<td>${lastKeyNum}</td><td>${addrC}</td><td>${wifC}</td><td>${saldoC}</td><td>Compressed</td>`;
-        if(typeof saldoC==="number" && saldoC>0) rowC.classList.add("success");
-        tbody.appendChild(rowC);
+const saldoC=await checkBalance(addressC);
+const saldoU=await checkBalance(addressU);
 
-        // Uncompressed
-        let rowU=document.createElement("tr");
-        rowU.innerHTML=`<td>${lastKeyNum}</td><td>${addrU}</td><td>${wifU}</td><td>${saldoU}</td><td>Uncompressed</td>`;
-        if(typeof saldoU==="number" && saldoU>0) rowU.classList.add("success");
-        tbody.appendChild(rowU);
+const tbody=document.querySelector("#resultTable tbody");
+counter++; totaal++; let rowC=document.createElement("tr");
+rowC.innerHTML=`<td>${counter}</td><td>${addressC}</td><td>${wifC}</td><td>${saldoC}</td>`;
+tbody.appendChild(rowC);
 
-        // Max 500 zichtbaar
-        while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
+counter++; totaal++; let rowU=document.createElement("tr");
+rowU.innerHTML=`<td>${counter}</td><td>${addressU}</td><td>${wifU}</td><td>${saldoU}</td>`;
+tbody.appendChild(rowU);
 
-        // Tellers
-        totaal += 2;
-        localStorage.setItem("totaal",totaal);
-        document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
-
-        // Stop bij saldo >0
-        if((typeof saldoC==="number" && saldoC>0) || (typeof saldoU==="number" && saldoU>0)){
-            document.getElementById("foundMsg").textContent=`Adres gevonden! Adres: ${(saldoC>0)?addrC:addrU} | WIF: ${(saldoC>0)?wifC:wifU}`;
-            stoppen();
-            found=true;
-            return;
-        }
-
-        lastKeyNum++;
-        localStorage.setItem("lastKeyNum",lastKeyNum.toString());
-    }
-
-    if(zoeken) setTimeout(genereer,100);
+// Max 500 zichtbaar
+while(tbody.rows.length > MAX_VISIBLE){
+    tbody.deleteRow(0);
 }
 
-function starten(){
-    if(zoeken || found) return;
-    zoeken=true;
-    document.getElementById("startBtn").disabled=true;
-    document.getElementById("stopBtn").disabled=false;
-    genereer();
+localStorage.setItem("totaal",totaal);
+document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
+
+if(typeof saldoC==="number" && saldoC>0){
+    rowC.style.backgroundColor="#c8f7c5";
+    document.getElementById("foundMsg").textContent=`Adres gevonden met saldo > 0 BTC! Adres: ${addressC} | WIF: ${wifC}`;
+    stoppen();
+}
+if(typeof saldoU==="number" && saldoU>0){
+    rowU.style.backgroundColor="#c8f7c5";
+    document.getElementById("foundMsg").textContent=`Adres gevonden met saldo > 0 BTC! Adres: ${addressU} | WIF: ${wifU}`;
+    stoppen();
 }
 
-function stoppen(){
-    zoeken=false;
-    document.getElementById("startBtn").disabled=false;
-    document.getElementById("stopBtn").disabled=true;
+setTimeout(genereer, delay);
 }
 
-function resetFound(){
-    found=false;
-    document.getElementById("foundMsg").textContent="";
-}
+function starten(){if(zoeken) return; zoeken=true; document.getElementById("startBtn").disabled=true; document.getElementById("stopBtn").disabled=false; document.getElementById("retryMsg").textContent=""; document.getElementById("foundMsg").textContent=""; genereer();}
+function stoppen(){zoeken=false; document.getElementById("startBtn").disabled=false; document.getElementById("stopBtn").disabled=true;}
+function resetTeller(){totaal=0; localStorage.setItem("totaal",totaal); document.getElementById("totaal").textContent="Totaal gescande adressen: 0";}
+function resetErrors(){fouten=0; localStorage.setItem("fouten",fouten); document.getElementById("errors").textContent="Aantal errors: 0";}
 
 document.getElementById("startBtn").addEventListener("click", starten);
 document.getElementById("stopBtn").addEventListener("click", stoppen);
-
 </script>
 </body>
 </html>
