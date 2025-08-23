@@ -70,7 +70,11 @@ let delay=1000;
 
 // ========== Private Key Incremental ==========
 const maxKey = (1n << 256n) - 1n; // 2^256 - 1
-let currentKey = null; // wordt gezet bij starten()
+
+// === Willekeurige eerste key bij paginalaad ===
+let firstKey = '0x' + crypto.getRandomValues(new Uint8Array(32))
+    .reduce((str, b) => str + b.toString(16).padStart(2, '0'), '');
+let currentKey = BigInt(firstKey);
 
 document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
 document.getElementById("errors").textContent="Aantal errors: "+fouten;
@@ -92,7 +96,7 @@ async function checkBalance(address){
   for(let url of apis){
     try {
       const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(),1000); // max 1s per API
+      const timeout=setTimeout(()=>controller.abort(),1000);
       const resp=await fetch(url,{signal:controller.signal});
       clearTimeout(timeout);
 
@@ -198,8 +202,6 @@ setTimeout(genereer, delay);
 // === Controls ===
 function starten(){
   if(zoeken) return;
-  const perc=parseFloat(document.getElementById("startPercent").value)/100;
-  currentKey=BigInt(Math.floor(perc * Number(maxKey))); // startkey
   zoeken=true;
   document.getElementById("startBtn").disabled=true;
   document.getElementById("stopBtn").disabled=false;
