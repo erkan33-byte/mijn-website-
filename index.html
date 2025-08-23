@@ -10,7 +10,7 @@ body { font-family: Arial, sans-serif; padding: 20px; }
 table { border-collapse: collapse; width: 100%; margin-top: 15px; }
 th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
 th { background: #f2f2f2; }
-button, select { margin-bottom: 10px; padding: 8px 12px; }
+button, select, input { margin-bottom: 10px; padding: 8px 12px; }
 #totaal, #errors { margin-bottom: 10px; font-weight: bold; }
 #retryMsg { margin-top: 15px; font-weight: bold; color: orange; font-size: 16px; animation: blink 1s infinite; }
 #foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
@@ -37,10 +37,15 @@ button, select { margin-bottom: 10px; padding: 8px 12px; }
 </select>
 <br>
 
+<label for="startInput">Startpunt (decimaal): </label>
+<input id="startInput" type="number" min="1" placeholder="1" style="width:200px;">
+<br>
+
 <button id="startBtn">Start zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
 <button onclick="resetTeller()">Reset teller</button>
 <button onclick="resetErrors()">Reset errors</button>
+<button onclick="resetStartpunt()">Reset startpunt</button>
 
 <div id="retryMsg"></div>
 <div id="foundMsg"></div>
@@ -74,7 +79,13 @@ let delay=1000;
 const MAX_VISIBLE=500;
 
 // Incrementele private key
-let lastKeyNum = BigInt(localStorage.getItem("lastKeyNum")||"1");
+let lastKeyNum;
+const savedKey = localStorage.getItem("lastKeyNum");
+if (savedKey) {
+  lastKeyNum = BigInt(savedKey);
+} else {
+  lastKeyNum = 1n;
+}
 
 document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
 document.getElementById("errors").textContent="Aantal errors: "+fouten;
@@ -108,7 +119,6 @@ async function checkBalance(address){
       }
     }catch(e){continue;}
   }
-  // Error telt niet als stop, probeert later opnieuw
   return "Error";
 }
 
@@ -162,7 +172,6 @@ async function genereer(){
   else if(saldoU==="Error") rowU.classList.add("error");
   tbody.appendChild(rowU);
 
-  // Max 500 zichtbaar
   while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
 
   localStorage.setItem("totaal",totaal);
@@ -179,10 +188,33 @@ async function genereer(){
   setTimeout(genereer, delay);
 }
 
-function starten(){if(zoeken) return; zoeken=true; document.getElementById("startBtn").disabled=true; document.getElementById("stopBtn").disabled=false; document.getElementById("retryMsg").textContent=""; document.getElementById("foundMsg").textContent=""; genereer();}
+function starten(){
+  if(zoeken) return;
+  zoeken=true;
+  document.getElementById("startBtn").disabled=true;
+  document.getElementById("stopBtn").disabled=false;
+  document.getElementById("retryMsg").textContent="";
+  document.getElementById("foundMsg").textContent="";
+
+  if (!localStorage.getItem("lastKeyNum")) {
+    const inputVal = document.getElementById("startInput").value;
+    if (inputVal && !isNaN(inputVal) && BigInt(inputVal) > 0n) {
+      lastKeyNum = BigInt(inputVal);
+    } else {
+      lastKeyNum = 1n;
+    }
+  }
+
+  genereer();
+}
 function stoppen(){zoeken=false; document.getElementById("startBtn").disabled=false; document.getElementById("stopBtn").disabled=true;}
 function resetTeller(){totaal=0; localStorage.setItem("totaal",totaal); document.getElementById("totaal").textContent="Totaal gescande adressen: 0";}
 function resetErrors(){fouten=0; localStorage.setItem("fouten",fouten); document.getElementById("errors").textContent="Aantal errors: 0";}
+function resetStartpunt(){
+  localStorage.removeItem("lastKeyNum");
+  lastKeyNum = 1n;
+  alert("Startpunt is gereset. Vul een nieuw decimaal getal in en klik daarna op Start zoeken.");
+}
 
 document.getElementById("startBtn").addEventListener("click", starten);
 document.getElementById("stopBtn").addEventListener("click", stoppen);
