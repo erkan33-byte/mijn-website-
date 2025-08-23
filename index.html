@@ -2,7 +2,6 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<meta charset="UTF-8">
 <title>BTC Key Generator Incrementeel + Saldo</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
@@ -38,15 +37,15 @@ let lastKeyNum;
 // maximale private key (curve limiet)
 const MAX_KEY = BigInt("115792089237316195423570985008687907852837564279074904382605163141518161494336");
 
-// check localStorage
+// Check localStorage voor eerder opgeslagen key
 const savedKey = localStorage.getItem("lastKeyNum");
 if(savedKey){
     lastKeyNum = BigInt(savedKey);
 } else {
-    const minHigh = MAX_KEY / 2n;
-    const range = MAX_KEY - minHigh;
-    const rand = BigInt("0x"+crypto.getRandomValues(new Uint32Array(8)).reduce((acc,v)=>acc+v.toString(16).padStart(8,'0'),''));
-    lastKeyNum = minHigh + (rand % range);
+    // Volledig willekeurig startpunt
+    const randArray = crypto.getRandomValues(new Uint32Array(8));
+    const randHex = Array.from(randArray).map(v=>v.toString(16).padStart(8,'0')).join('');
+    lastKeyNum = BigInt("0x"+randHex) % MAX_KEY;
 }
 
 // APIs voor saldo-check
@@ -122,15 +121,15 @@ async function genereer(){
         let addrC = privateKeyToAddress(privHex,true);
         let addrU = privateKeyToAddress(privHex,false);
 
+        document.getElementById("output").textContent = 
+            `Key #${lastKeyNum}\nPrivate: ${privHex}\nWIF C: ${wifC}\nWIF U: ${wifU}\nAddr C: ${addrC}\nAddr U: ${addrU}`;
+
         let saldoC = await checkBalance(addrC);
         let saldoU = await checkBalance(addrU);
 
-        document.getElementById("output").textContent = 
-            `Key #${lastKeyNum}\nPrivate: ${privHex}\nWIF C: ${wifC}\nWIF U: ${wifU}\nAddr C: ${addrC} | Saldo: ${saldoC}\nAddr U: ${addrU} | Saldo: ${saldoU}`;
-
         if((typeof saldoC==="number" && saldoC>0) || (typeof saldoU==="number" && saldoU>0)){
             document.getElementById("foundMsg").textContent = 
-                `Adres gevonden met saldo! Adres: ${(saldoC>0)?addrC:addrU} | WIF: ${(saldoC>0)?wifC:wifU}`;
+                `Adres gevonden! Adres: ${(saldoC>0)?addrC:addrU} | WIF: ${(saldoC>0)?wifC:wifU}`;
             stoppen();
             found=true;
             return;
