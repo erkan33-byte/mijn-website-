@@ -5,6 +5,12 @@
 <title>BTC Key Generator Incrementeel + Saldo</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+<style>
+table { border-collapse: collapse; width: 100%; margin-top: 15px; }
+th, td { border: 1px solid #ccc; padding: 6px; font-size: 14px; word-break: break-all; }
+th { background: #f2f2f2; }
+.success { background-color: #c8f7c5; }
+</style>
 </head>
 <body>
 <h2>BTC Key Generator Incrementeel + Saldo Check</h2>
@@ -28,7 +34,22 @@
 <div id="foundMsg" style="color:green; font-weight:bold;"></div>
 <div id="totaal" style="font-weight:bold;">Totaal gescande adressen: 0</div>
 <div id="errors" style="font-weight:bold; color:red;">Aantal errors: 0</div>
-<pre id="output"></pre>
+
+<table id="resultTable">
+<thead>
+<tr>
+<th>#</th>
+<th>Private Key (hex)</th>
+<th>WIF Compressed</th>
+<th>WIF Uncompressed</th>
+<th>Address Compressed</th>
+<th>Address Uncompressed</th>
+<th>Saldo C</th>
+<th>Saldo U</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
 
 <script>
 const ec = new elliptic.ec('secp256k1');
@@ -38,23 +59,17 @@ let found = false;
 let lastKeyNum;
 let totaal = parseInt(localStorage.getItem("totaal")||"0",10);
 let fouten = parseInt(localStorage.getItem("fouten")||"0",10);
+const MAX_KEY = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
 
-// maximale private key (curve limiet)
-const MAX_KEY = BigInt("115792089237316195423570985008687907852837564279074904382605163141518161494336");
-
-// Willekeurig startpunt in de bovenste helft
 const savedKey = localStorage.getItem("lastKeyNum");
 if(savedKey){
     lastKeyNum = BigInt(savedKey);
 } else {
-    const minHigh = MAX_KEY / 2n;
-    const range = MAX_KEY - minHigh;
     const randArray = crypto.getRandomValues(new Uint32Array(8));
     const randHex = Array.from(randArray).map(v=>v.toString(16).padStart(8,'0')).join('');
-    lastKeyNum = minHigh + (BigInt("0x"+randHex) % range);
+    lastKeyNum = BigInt("0x"+randHex) % MAX_KEY;
 }
 
-// APIs voor saldo-check
 const apis = [
     addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
     addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`,
@@ -98,7 +113,6 @@ function privateKeyToAddress(privHex, compressed=true){
     return base58Encode(payload+checksum);
 }
 
-// Saldo check met retries
 async function checkBalance(address){
     for(let urlFunc of apis){
         try{
@@ -111,9 +125,7 @@ async function checkBalance(address){
             if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8;
             if(typeof data.final_balance!=="undefined") return data.final_balance/1e8;
             if(data.data && data.data[address] && data.data[address].address) return data.data[address].address.balance/1e8;
-        }catch(e){ 
-            continue; 
-        }
+        }catch(e){ continue; }
     }
     fouten++;
     localStorage.setItem("fouten",fouten);
@@ -124,6 +136,7 @@ async function checkBalance(address){
 async function genereer(){
     if(!zoeken) return;
     let batchSize = parseInt(document.getElementById("speedSelect").value);
+    const tbody = document.querySelector("#resultTable tbody");
 
     for(let i=0;i<batchSize;i++){
         let privHex = lastKeyNum.toString(16).padStart(64,'0');
@@ -136,12 +149,15 @@ async function genereer(){
         let saldoU = await checkBalance(addrU);
 
         // Update teller
-        totaal += 2; // C + U
+        totaal += 2;
         localStorage.setItem("totaal",totaal);
         document.getElementById("totaal").textContent = "Totaal gescande adressen: "+totaal;
 
-        document.getElementById("output").textContent = 
-            `Key #${lastKeyNum}\nPrivate: ${privHex}\nWIF C: ${wifC}\nWIF U: ${wifU}\nAddr C: ${addrC} | Saldo: ${saldoC}\nAddr U: ${addrU} | Saldo: ${saldoU}`;
+        // Voeg toe aan tabel, max 10 rijen
+        let row = tbody.insertRow();
+        row.innerHTML = `<td>${lastKeyNum}</td><td>${privHex}</td><td>${wifC}</td><td>${wifU}</td><td>${addrC}</td><td>${addrU}</td><td>${saldoC}</td><td>${saldoU}</td>`;
+        if((typeof saldoC==="number" && saldoC>0) || (typeof saldoU==="number" && saldoU>0)) row.classList.add("success");
+        if(tbody.rows.length > 10) tbody.deleteRow(0);
 
         if((typeof saldoC==="number" && saldoC>0) || (typeof saldoU==="number" && saldoU>0)){
             document.getElementById("foundMsg").textContent = 
