@@ -11,7 +11,7 @@ table { border-collapse: collapse; width: 100%; margin-top: 15px; }
 th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
 th { background: #f2f2f2; }
 button, select, input { margin-bottom: 10px; padding: 8px 12px; }
-#totaal, #errors { margin-bottom: 10px; font-weight: bold; }
+#totaal, #errors, #progress { margin-bottom: 10px; font-weight: bold; }
 #retryMsg { margin-top: 15px; font-weight: bold; color: orange; font-size: 16px; animation: blink 1s infinite; }
 #foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
 @keyframes blink { 0%,50%,100% {opacity:1;} 25%,75% {opacity:0;} }
@@ -23,6 +23,7 @@ label { display:inline-block; min-width: 210px; }
 
 <div id="totaal">Totaal gescande adressen: 0</div>
 <div id="errors">Aantal errors: 0</div>
+<div id="progress">Voortgang in keyspace: 0%</div>
 
 <label for="modeSelect">Modus:</label>
 <select id="modeSelect" title="Kies hoe keys worden gegenereerd">
@@ -87,8 +88,8 @@ function genRandomKeyBigInt(){
 // percentage (0..100) -> key als BigInt, zonder precisieverlies
 function percentToKey(perc){
   const maxKey=(1n<<256n)-1n;
-  const ppm=Math.round(perc*1e6);           // millionths van percent
-  const denom=100n*1000000n;                // 100 * 1e6
+  const ppm=Math.round(perc*1e6);
+  const denom=100n*1000000n;
   return (maxKey*BigInt(ppm))/denom;
 }
 
@@ -99,24 +100,21 @@ let zoeken=false;
 const MAX_VISIBLE=500;
 let delay=1000;
 
-// ========== Keyspace ==========
 const maxKey=(1n<<256n)-1n;
 let mode="inc-random-start";
-let currentKey=null;      // gebruikt in beide incremental-modi
-let firstKey=null;        // voor 'inc-random-start' bij elke refresh
+let currentKey=null;
+let firstKey=null;
 
-// UI init
 document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
 document.getElementById("errors").textContent="Aantal errors: "+fouten;
 document.getElementById("speedSelect").addEventListener("change",(e)=>{delay=parseInt(e.target.value,10);});
 document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
 
-// default modus + random startkey per refresh
 mode=document.getElementById("modeSelect").value;
-firstKey=genRandomKeyBigInt();  // bij ELKE paginalaad nieuw
+firstKey=genRandomKeyBigInt();
 currentKey=firstKey;
 
-// === Balance check met meerdere API’s ===
+// === Balance check met 7 API’s ===
 async function checkBalance(address){
   const apis=[
     `https://corsproxy.io/?url=https://blockstream.info/api/address/${address}`,
@@ -157,8 +155,6 @@ async function checkBalance(address){
 // === Eén stap genereren (2 adressen) ===
 async function genereer(){
   if(!zoeken) return;
-
-  // Kies private key per modus
   let keyForThisStep;
   if(mode==="random-each-step"){
     keyForThisStep=genRandomKeyBigInt();
@@ -170,7 +166,7 @@ async function genereer(){
   const ec=new elliptic.ec("secp256k1");
   const kp=ec.keyFromPrivate(privHex,"hex");
 
-  // ==== Compressed ====
+  // compressed
   const pubCompressed=kp.getPublic(true,"array");
   const pubHexC=toHex(pubCompressed);
   const shaC=sha256Hex(pubHexC);
@@ -182,7 +178,7 @@ async function genereer(){
   const wifChecksumC=doubleSha256Hex(wifPayloadC).slice(0,8);
   const wifC=base58Encode(wifPayloadC+wifChecksumC);
 
-  // ==== Uncompressed ====
+  // uncompressed
   const pubUncompressed=kp.getPublic(false,"array");
   const pubHexU=toHex(pubUncompressed);
   const shaU=sha256Hex(pubHexU);
@@ -194,31 +190,34 @@ async function genereer(){
   const wifChecksumU=doubleSha256Hex(wifPayloadU).slice(0,8);
   const wifU=base58Encode(wifPayloadU+wifChecksumU);
 
-  // === Check balances ===
   const saldoC=await checkBalance(addressC);
   const saldoU=await checkBalance(addressU);
 
   const tbody=document.querySelector("#resultTable tbody");
-
-  // compressed row
   counter++; totaal++;
   let rowC=document.createElement("tr");
   rowC.innerHTML=`<td>${counter}</td><td>${addressC}</td><td>${wifC}</td><td>${saldoC}</td>`;
   tbody.appendChild(rowC);
 
-  // uncompressed row
   counter++; totaal++;
   let rowU=document.createElement("tr");
   rowU.innerHTML=`<td>${counter}</td><td>${addressU}</td><td>${wifU}</td><td>${saldoU}</td>`;
   tbody.appendChild(rowU);
 
-  // Max 500 zichtbaar
   while(tbody.rows.length>MAX_VISIBLE){ tbody.deleteRow(0); }
 
   localStorage.setItem("totaal",totaal);
   document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
 
-  // === Stop bij saldo > 0 ===
+  // === voortgang in keyspace berekenen ===
+  let perc;
+  if(mode==="random-each-step"){
+    perc = Number(keyForThisStep * 10000n / maxKey) / 100;
+  } else {
+    perc = Number(currentKey * 10000n / maxKey) / 100;
+  }
+  document.getElementById("progress").textContent="Voortgang in keyspace: "+perc.toFixed(6)+" %";
+
   if(typeof saldoC==="number" && saldoC>0){
     rowC.style.backgroundColor="#c8f7c5";
     document.getElementById("foundMsg").textContent=`Adres gevonden met saldo > 0 BTC! Adres: ${addressC} | WIF: ${wifC}`;
@@ -230,7 +229,6 @@ async function genereer(){
     stoppen(); return;
   }
 
-  // volgende sleutel
   if(mode!=="random-each-step"){
     currentKey++;
     if(currentKey>maxKey) currentKey=1n;
@@ -239,25 +237,20 @@ async function genereer(){
   setTimeout(genereer, delay);
 }
 
-// === Controls ===
 function starten(){
   if(zoeken) return;
-
-  // initialiseer startpunt op basis van modus
   const selected=document.getElementById("modeSelect").value;
   mode=selected;
 
   if(mode==="inc-random-start"){
-    firstKey=genRandomKeyBigInt();      // elke start/refresh nieuwe eerste key
+    firstKey=genRandomKeyBigInt();
     currentKey=firstKey;
   }else if(mode==="inc-percent-start"){
     const perc=parseFloat(document.getElementById("startPercent").value)||0;
     const bounded=Math.min(100,Math.max(0,perc));
     currentKey=percentToKey(bounded);
-    if(currentKey===0n) currentKey=1n;  // 0 is ongeldig
+    if(currentKey===0n) currentKey=1n;
   }
-  // bij "random-each-step" is currentKey niet nodig; elke iteratie maakt z'n eigen random
-
   zoeken=true;
   document.getElementById("startBtn").disabled=true;
   document.getElementById("stopBtn").disabled=false;
