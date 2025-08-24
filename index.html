@@ -82,10 +82,9 @@ function genRandomKeyBigInt(){
   crypto.getRandomValues(arr);
   const hex=Array.from(arr,b=>b.toString(16).padStart(2,"0")).join("");
   let k=BigInt("0x"+hex);
-  if(k===0n) k=1n; // key mag niet 0 zijn
+  if(k===0n) k=1n; 
   return k;
 }
-// percentage (0..100) -> key als BigInt, zonder precisieverlies
 function percentToKey(perc){
   const maxKey=(1n<<256n)-1n;
   const ppm=Math.round(perc*1e6);
@@ -114,22 +113,22 @@ mode=document.getElementById("modeSelect").value;
 firstKey=genRandomKeyBigInt();
 currentKey=firstKey;
 
-// === Balance check met 7 API’s ===
+// === Balance check met 7 API’s, 3s timeout, beste volgorde ===
 async function checkBalance(address){
   const apis=[
     `https://corsproxy.io/?url=https://blockstream.info/api/address/${address}`,
     `https://corsproxy.io/?url=https://mempool.space/api/address/${address}`,
     `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${address}?cors=true`,
     `https://api.blockchair.com/bitcoin/dashboards/address/${address}`,
-    `https://btcscan.org/api/address/${address}`,
     `https://sochain.com/api/v2/address/BTC/${address}`,
+    `https://btcscan.org/api/address/${address}`,
     `https://api.smartbit.com.au/v1/blockchain/address/${address}`
   ];
 
   for(let url of apis){
     try{
       const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(),1000);
+      const timeout=setTimeout(()=>controller.abort(),3000); // verhoogd naar 3s
       const resp=await fetch(url,{signal:controller.signal});
       clearTimeout(timeout);
       if(!resp.ok) continue;
@@ -166,7 +165,6 @@ async function genereer(){
   const ec=new elliptic.ec("secp256k1");
   const kp=ec.keyFromPrivate(privHex,"hex");
 
-  // compressed
   const pubCompressed=kp.getPublic(true,"array");
   const pubHexC=toHex(pubCompressed);
   const shaC=sha256Hex(pubHexC);
@@ -178,7 +176,6 @@ async function genereer(){
   const wifChecksumC=doubleSha256Hex(wifPayloadC).slice(0,8);
   const wifC=base58Encode(wifPayloadC+wifChecksumC);
 
-  // uncompressed
   const pubUncompressed=kp.getPublic(false,"array");
   const pubHexU=toHex(pubUncompressed);
   const shaU=sha256Hex(pubHexU);
@@ -209,7 +206,6 @@ async function genereer(){
   localStorage.setItem("totaal",totaal);
   document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
 
-  // === voortgang in keyspace berekenen ===
   let perc;
   if(mode==="random-each-step"){
     perc = Number(keyForThisStep * 10000n / maxKey) / 100;
