@@ -194,7 +194,13 @@ async function genereerBatch(){
   localStorage.setItem("totaal",totaal);
   document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
 
-  let perc=(mode==="random-each-step") ? Number(keys[0]*10000n/maxKey)/100 : Number(currentKey*10000n/maxKey)/100;
+  // ======== NIEUWE EXACTE KEYSPACE PROGRESS ========
+  let perc = 0;
+  if(mode==="random-each-step"){
+    perc = Number((keys[0] * 100000000n) / maxKey) / 1000000;
+  } else {
+    perc = Number((currentKey * 100000000n) / maxKey) / 1000000;
+  }
   document.getElementById("progress").textContent="Voortgang in keyspace: "+perc.toFixed(6)+" %";
 
   const rate=parseInt(document.getElementById("batchRate").value)||5;
