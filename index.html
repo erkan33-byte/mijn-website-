@@ -147,14 +147,15 @@ async function checkBalance(address){
   ];
 
   const results = await Promise.allSettled(
-    apis.map(url => fetch(url, {signal: AbortSignal.timeout(5000)}).then(resp=>resp.ok?resp.json():Promise.reject("HTTP error")))
+    apis.map(url => fetch(url, {signal: AbortSignal.timeout(5000)})
+      .then(resp => resp.ok ? resp.json() : Promise.reject("HTTP error")))
   );
 
   for(let res of results){
     if(res.status==="fulfilled"){
       let data=res.value;
       try{
-        if(data.chain_stats){return (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8;}
+        if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8;
         if(typeof data.final_balance!=="undefined") return data.final_balance/1e8;
         if(data.data && data.data[address] && data.data[address].address) return data.data[address].address.balance/1e8;
         if(data.data && data.data[address] && typeof data.data[address].balance!=="undefined") return data.data[address].balance/1e8;
@@ -163,7 +164,7 @@ async function checkBalance(address){
       }catch(e){continue;}
     }
   }
-  // geen API werkte
+
   fouten++;
   localStorage.setItem("fouten",fouten);
   document.getElementById("errors").textContent="Aantal errors: "+fouten;
