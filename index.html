@@ -26,7 +26,7 @@ label { display:inline-block; min-width: 210px; }
 <div id="progress">Voortgang in keyspace: 0.000%</div>
 
 <label for="modeSelect">Modus:</label>
-<select id="modeSelect" title="Kies hoe keys worden gegenereerd">
+<select id="modeSelect">
   <option value="inc-random-start">Incremental (random start per refresh)</option>
   <option value="inc-percent-start">Incremental (start % van keyspace)</option>
   <option value="random-each-step">Random (elke stap nieuwe key)</option>
@@ -35,6 +35,10 @@ label { display:inline-block; min-width: 210px; }
 
 <label for="startPercent">Start percentage (0–100) — alleen voor 'Incremental (start %)': </label>
 <input type="number" id="startPercent" value="0" min="0" max="100" step="0.0001">
+<br>
+
+<label for="stepPercent">Stap percentage (bijv. 0.001):</label>
+<input type="number" id="stepPercent" value="0.001" min="0.0000001" max="100" step="0.0000001">
 <br>
 
 <label for="batchRate">Batches per seconde:</label>
@@ -71,19 +75,16 @@ function base58Encode(hex){
   return "1".repeat(zeros)+(out||"");
 }
 
-// ======== Echte keyspace (secp256k1 order n) ========
-const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n; // secp256k1
+// ======== Keyspace ========
+const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
 const MIN_KEY = 1n;
-const MAX_VALID_KEY = ORDER_N - 1n;         // hoogste geldige private key
-const KEYSPACE_SIZE = MAX_VALID_KEY;        // aantal geldige keys (1..n-1)
-const STEPS_PER_100_PERCENT = 100000n;      // 0,001% per stap
+const MAX_VALID_KEY = ORDER_N - 1n;
+const KEYSPACE_SIZE = MAX_VALID_KEY;
 
-// Voor exacte 0,001%-stapgrootte per stap gebruiken we een accumulator:
-// na elke stap verhogen we de key met floor(KEYSPACE_SIZE / 100000) en verdelen we de rest exact.
-let carryNum = 0n; // accumulator voor (stappen * KEYSPACE_SIZE) mod 100000
+let STEPS_PER_100_PERCENT = 100000n; // wordt dynamisch aangepast
+let carryNum = 0n;
 
 function genRandomKeyBigInt(){
-  // Uniform-ish in 1..MAX_VALID_KEY (met modulo +1; licht bias is ok voor dit gebruik)
   const arr=new Uint8Array(32);
   crypto.getRandomValues(arr);
   const hex=Array.from(arr,b=>b.toString(16).padStart(2,"0")).join("");
@@ -93,38 +94,25 @@ function genRandomKeyBigInt(){
   return k;
 }
 
-// Map 0..100% (met 0,001%-stappen) naar key op exacte stap-grid
 function percentToKey(perc){
-  const steps = BigInt(Math.round(Math.min(100,Math.max(0,perc)) * 1000)); // 0..100000
-  const delta = (KEYSPACE_SIZE * steps) / STEPS_PER_100_PERCENT;            // floor
-  return MIN_KEY + delta; // in [1..MAX_VALID_KEY]
+  const steps = BigInt(Math.round(Math.min(100,Math.max(0,perc)) * Number(STEPS_PER_100_PERCENT)));
+  const delta = (KEYSPACE_SIZE * steps) / STEPS_PER_100_PERCENT;
+  return MIN_KEY + delta;
 }
 
 // ======== Variabelen ========
-let counter=0;
-let totaal=parseInt(localStorage.getItem("totaal")||"0",10);
-let fouten=parseInt(localStorage.getItem("fouten")||"0",10);
-let zoeken=false;
-const MAX_VISIBLE=50;
-let BATCH_SIZE=2;
+let counter=0, totaal=parseInt(localStorage.getItem("totaal")||"0",10), fouten=parseInt(localStorage.getItem("fouten")||"0",10);
+let zoeken=false, MAX_VISIBLE=50, BATCH_SIZE=2;
+let mode="inc-random-start", currentKey=null, firstKey=null;
+let stepsDone=0n, startSteps=0n;
 
-let mode="inc-random-start";
-let currentKey=null;
-let firstKey=null;
-
-// voortgang in 0,001%-stappen t.o.v. 0% baseline
-let stepsDone = 0n;      // hoeveel 0,001%-stappen sinds start van de run
-let startSteps = 0n;     // start-offset in 0,001%-stappen (bijv. bij start%)
-
-// UI init
+// ======== UI init ========
 document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
 document.getElementById("errors").textContent="Aantal errors: "+fouten;
 document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
 mode=document.getElementById("modeSelect").value;
-firstKey=genRandomKeyBigInt();
-currentKey=firstKey;
 
-// ======== Balance check met 7 API’s ========
+// ======== Balance check ========
 async function checkBalance(address){
   const apis=[
     `https://corsproxy.io/?url=https://blockstream.info/api/address/${address}`,
@@ -135,7 +123,6 @@ async function checkBalance(address){
     `https://btcscan.org/api/address/${address}`,
     `https://api.smartbit.com.au/v1/blockchain/address/${address}`
   ];
-
   for(let url of apis){
     try{
       const controller=new AbortController();
@@ -153,22 +140,18 @@ async function checkBalance(address){
       if(data.data && data.data[address] && data.data[address].address) return data.data[address].address.balance/1e8;
     }catch(e){ continue; }
   }
-  fouten++;
-  localStorage.setItem("fouten",fouten);
+  fouten++; localStorage.setItem("fouten",fouten);
   document.getElementById("errors").textContent="Aantal errors: "+fouten;
   return "Error";
 }
 
-// ======== Helper: volgende incrementele stap = +0,001% ========
+// ======== Incremental step ========
 function doOneIncrementalStep(){
-  // Accumuleer exact: na s stappen is delta = floor(s * KEYSPACE_SIZE / 100000)
   carryNum += KEYSPACE_SIZE;
-  const inc = carryNum / STEPS_PER_100_PERCENT; // BigInt
+  const inc = carryNum / STEPS_PER_100_PERCENT;
   carryNum %= STEPS_PER_100_PERCENT;
-
   currentKey += inc;
-  if(currentKey > MAX_VALID_KEY) currentKey -= KEYSPACE_SIZE; // wrap binnen [1..n-1]
-
+  if(currentKey > MAX_VALID_KEY) currentKey -= KEYSPACE_SIZE;
   stepsDone += 1n;
 }
 
@@ -181,8 +164,8 @@ async function genereerBatch(){
     if(mode==="random-each-step"){
       k = genRandomKeyBigInt();
     }else{
-      k = currentKey;          // pak huidige key
-      doOneIncrementalStep();  // schuif alvast door voor de volgende (0,001%)
+      k = currentKey;
+      doOneIncrementalStep();
     }
     keys.push(k);
   }
@@ -192,7 +175,6 @@ async function genereerBatch(){
     const ec=new elliptic.ec("secp256k1");
     const kp=ec.keyFromPrivate(privHex,"hex");
 
-    // Compressed
     const pubC=toHex(kp.getPublic(true,"array"));
     const ripemdC=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubC))).toString();
     const payloadC="00"+ripemdC;
@@ -200,7 +182,6 @@ async function genereerBatch(){
     const addressC=base58Encode(payloadC+checksumC);
     const wifC=base58Encode("80"+privHex+"01"+doubleSha256Hex("80"+privHex+"01").slice(0,8));
 
-    // Uncompressed
     const pubU=toHex(kp.getPublic(false,"array"));
     const ripemdU=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
     const payloadU="00"+ripemdU;
@@ -231,11 +212,9 @@ async function genereerBatch(){
   localStorage.setItem("totaal",totaal);
   document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
 
-  // ======== Voortgangsupdate ========
-  // We tonen de voortgang binnen 0..100% op een raster van 0,001% (100000 stappen).
-  const stepsDisplay = (startSteps + stepsDone) % STEPS_PER_100_PERCENT; // cyclisch
-  const perc = Number(stepsDisplay) / 1000; // 0,001% per stap
-  document.getElementById("progress").textContent = "Voortgang in keyspace: " + perc.toFixed(3) + " %";
+  const stepsDisplay = (startSteps + stepsDone) % STEPS_PER_100_PERCENT;
+  const perc = Number(stepsDisplay) / Number(STEPS_PER_100_PERCENT) * 100;
+  document.getElementById("progress").textContent = "Voortgang in keyspace: " + perc.toFixed(6) + " %";
 
   const rate=parseInt(document.getElementById("batchRate").value)||5;
   const interval=1000/rate;
@@ -245,29 +224,21 @@ async function genereerBatch(){
 // ======== Start / stop / reset ========
 function starten(){
   if(zoeken) return;
-  const selected=document.getElementById("modeSelect").value; mode=selected;
-
-  // reset stap-accu en voortgang
-  carryNum = 0n;
-  stepsDone = 0n;
-  startSteps = 0n;
+  const stepPerc=parseFloat(document.getElementById("stepPercent").value)||0.001;
+  STEPS_PER_100_PERCENT = BigInt(Math.round(100/stepPerc));
+  carryNum=0n; stepsDone=0n; startSteps=0n;
+  mode=document.getElementById("modeSelect").value;
 
   if(mode==="inc-random-start"){
     firstKey=genRandomKeyBigInt();
     currentKey=firstKey;
-
-    // Stel startSteps gelijk aan de positie van firstKey in 0,001%-grid
-    // steps = floor((k-1)/keyspace * 100000)
     startSteps = ((currentKey - MIN_KEY) * STEPS_PER_100_PERCENT) / KEYSPACE_SIZE;
-
   }else if(mode==="inc-percent-start"){
     const perc=parseFloat(document.getElementById("startPercent").value)||0;
-    // start exact op de 0,001%-grid
-    currentKey = percentToKey(Math.min(100,Math.max(0,perc)));
-    startSteps = BigInt(Math.round(Math.min(100,Math.max(0,perc)) * 1000));
+    currentKey=percentToKey(perc);
+    startSteps=BigInt(Math.round(perc*Number(STEPS_PER_100_PERCENT)/100));
   }else{
-    // random-each-step gebruikt eigen random keys
-    currentKey = genRandomKeyBigInt();
+    currentKey=genRandomKeyBigInt();
   }
 
   zoeken=true;
