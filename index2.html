@@ -17,7 +17,7 @@ label { display:inline-block; min-width: 210px; }
 </style>
 </head>
 <body>
-<h2>Ethereum Key Generator (Sneller & Stabiel met 3 API’s)</h2>
+<h2>Ethereum Key Generator (Sneller & Stabiel met 8 API’s)</h2>
 
 <div id="totaal">Totaal gescande adressen: 0</div>
 <div id="errors">Aantal errors: 0</div>
@@ -105,30 +105,38 @@ let zoeken=false, MAX_VISIBLE=50;
 let mode="inc-random-start", currentKey=null, firstKey=null;
 let stepsDone=0n, startSteps=0n;
 
-// ===== Meerdere API-sleutels =====
-const apiKeys = [
-  "H6QSBI7T9J26IFDBZUFK62VG4BIMJKQZJD",
-  "9THU39Z9BF8Y1GEGIMIE97V1QSRDPQR9EM",
-  "UZ9D683K61A4AYYDQ4D36Q93FR4YNVKI9Z"
+// ===== API Sleutels en Endpoints =====
+const apis = [
+  {name:"Etherscan", url:(addr,key)=>`https://api.etherscan.io/api?module=account&action=balance&address=${addr}&tag=latest&apikey=${key}`, keys:["H6QSBI7T9J26IFDBZUFK62VG4BIMJKQZJD","9THU39Z9BF8Y1GEGIMIE97V1QSRDPQR9EM","UZ9D683K61A4AYYDQ4D36Q93FR4YNVKI9Z"]},
+  {name:"Bitquery", url:(addr,key)=>`https://graphql.bitquery.io/`, keys:[""]}, // GraphQL vereist setup
+  {name:"Moralis", url:(addr,key)=>`https://deep-index.moralis.io/api/v2/${addr}/balance`, keys:[""]},
+  {name:"Ethplorer", url:(addr,key)=>`https://api.ethplorer.io/getAddressInfo/${addr}?apiKey=freekey`, keys:["freekey"]},
+  {name:"Alchemy", url:(addr,key)=>`https://eth-mainnet.alchemyapi.io/v2/${key}`, keys:["demo"]},
+  {name:"NOWNodes", url:(addr,key)=>`https://eth.nownodes.io/api/v1/balance/${addr}?apiKey=${key}`, keys:["demo"]}
 ];
 let apiIndex = 0;
+let keyIndex = 0;
 
 // ===== Balance check met rotatie =====
 async function checkBalance(address){
-  for(let i=0;i<apiKeys.length;i++){
-    const key = apiKeys[apiIndex];
-    apiIndex = (apiIndex + 1) % apiKeys.length;
+  for(let i=0;i<apis.length;i++){
+    const api = apis[apiIndex];
+    const key = api.keys[keyIndex % api.keys.length] || "";
+    apiIndex = (apiIndex +1) % apis.length;
+    keyIndex = (keyIndex +1) % api.keys.length;
     try{
-      const url = `https://api.etherscan.io/api?module=account&action=balance&address=${address}&tag=latest&apikey=${key}`;
-      const resp = await fetch(url);
+      let url = api.url(address,key);
+      let resp = await fetch(url);
       if(!resp.ok) throw "Fetch error";
-      const data = await resp.json();
-      if(data.status=="1" && data.result!==undefined){
-        return Number(data.result)/1e18;
-      }
-    }catch(e){
-      continue;
-    }
+      let data = await resp.json();
+      // Specifieke parsing per API
+      if(api.name==="Etherscan" && data.status=="1" && data.result!==undefined) return Number(data.result)/1e18;
+      if(api.name==="Ethplorer" && data.ETH && data.ETH.balance!==undefined) return Number(data.ETH.balance);
+      if(api.name==="Moralis" && data.balance!==undefined) return Number(data.balance)/1e18;
+      if(api.name==="Alchemy" && data.result!==undefined) return Number(data.result)/1e18;
+      if(api.name==="NOWNodes" && data.balance!==undefined) return Number(data.balance)/1e18;
+      if(api.name==="Bitquery"){ /* Bitquery GraphQL vereist setup */ continue; }
+    }catch(e){ continue; }
   }
   fouten++;
   document.getElementById("errors").textContent="Aantal errors: "+fouten;
@@ -191,7 +199,7 @@ async function genereerBatch(){
   const perc = Number(stepsDisplay) / Number(STEPS_PER_100_PERCENT) * 100;
   document.getElementById("progress").textContent="Voortgang in keyspace: "+perc.toFixed(6)+" %";
 
-  if(zoeken) setTimeout(genereerBatch, 400); // 400ms interval tussen batches
+  if(zoeken) setTimeout(genereerBatch, 400); // interval tussen batches
 }
 
 // ===== Start / Stop / Reset =====
