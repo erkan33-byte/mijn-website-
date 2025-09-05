@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>Ethereum Key Generator Sneller & Stabiel</title>
+<title>Ethereum Key Generator Sneller & Stabiel (GetBlock)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 <style>
@@ -17,7 +17,7 @@ label { display:inline-block; min-width: 210px; }
 </style>
 </head>
 <body>
-<h2>Ethereum Key Generator (Sneller & Stabiel met 8 API’s)</h2>
+<h2>Ethereum Key Generator (Sneller & Stabiel via GetBlock)</h2>
 
 <div id="totaal">Totaal gescande adressen: 0</div>
 <div id="errors">Aantal errors: 0</div>
@@ -39,8 +39,8 @@ label { display:inline-block; min-width: 210px; }
 <input type="number" id="stepPercent" value="0.001" min="0.0000001" max="100" step="0.0000001">
 <br>
 
-<label for="batchSize">Batch grootte (max 3 voor stabiel):</label>
-<input type="number" id="batchSize" value="2" min="1" max="3">
+<label for="batchSize">Batch grootte (max 50 aanbevolen):</label>
+<input type="number" id="batchSize" value="10" min="1" max="50">
 <br>
 
 <button id="startBtn">Start zoeken</button>
@@ -105,42 +105,47 @@ let zoeken=false, MAX_VISIBLE=50;
 let mode="inc-random-start", currentKey=null, firstKey=null;
 let stepsDone=0n, startSteps=0n;
 
-// ===== API Sleutels en Endpoints =====
-const apis = [
-  {name:"Etherscan", url:(addr,key)=>`https://api.etherscan.io/api?module=account&action=balance&address=${addr}&tag=latest&apikey=${key}`, keys:["H6QSBI7T9J26IFDBZUFK62VG4BIMJKQZJD","9THU39Z9BF8Y1GEGIMIE97V1QSRDPQR9EM","UZ9D683K61A4AYYDQ4D36Q93FR4YNVKI9Z"]},
-  {name:"Bitquery", url:(addr,key)=>`https://graphql.bitquery.io/`, keys:[""]}, // GraphQL vereist setup
-  {name:"Moralis", url:(addr,key)=>`https://deep-index.moralis.io/api/v2/${addr}/balance`, keys:[""]},
-  {name:"Ethplorer", url:(addr,key)=>`https://api.ethplorer.io/getAddressInfo/${addr}?apiKey=freekey`, keys:["freekey"]},
-  {name:"Alchemy", url:(addr,key)=>`https://eth-mainnet.alchemyapi.io/v2/${key}`, keys:["demo"]},
-  {name:"NOWNodes", url:(addr,key)=>`https://eth.nownodes.io/api/v1/balance/${addr}?apiKey=${key}`, keys:["demo"]}
-];
-let apiIndex = 0;
-let keyIndex = 0;
+// ===== Balance check via GetBlock (batch met retries) =====
+async function checkBalancesBatch(addresses, retries = 3) {
+  try {
+    const requests = addresses.map((addr, i) => ({
+      jsonrpc: "2.0",
+      method: "eth_getBalance",
+      params: [addr, "latest"],
+      id: i + 1
+    }));
 
-// ===== Balance check met rotatie =====
-async function checkBalance(address){
-  for(let i=0;i<apis.length;i++){
-    const api = apis[apiIndex];
-    const key = api.keys[keyIndex % api.keys.length] || "";
-    apiIndex = (apiIndex +1) % apis.length;
-    keyIndex = (keyIndex +1) % api.keys.length;
-    try{
-      let url = api.url(address,key);
-      let resp = await fetch(url);
-      if(!resp.ok) throw "Fetch error";
-      let data = await resp.json();
-      // Specifieke parsing per API
-      if(api.name==="Etherscan" && data.status=="1" && data.result!==undefined) return Number(data.result)/1e18;
-      if(api.name==="Ethplorer" && data.ETH && data.ETH.balance!==undefined) return Number(data.ETH.balance);
-      if(api.name==="Moralis" && data.balance!==undefined) return Number(data.balance)/1e18;
-      if(api.name==="Alchemy" && data.result!==undefined) return Number(data.result)/1e18;
-      if(api.name==="NOWNodes" && data.balance!==undefined) return Number(data.balance)/1e18;
-      if(api.name==="Bitquery"){ /* Bitquery GraphQL vereist setup */ continue; }
-    }catch(e){ continue; }
+    let resp = await fetch("https://go.getblock.us/9624b720be854e75bcafb1d6040ff2d5", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requests)
+    });
+
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    let data = await resp.json();
+
+    return data.map(r => {
+      if (r && r.result) {
+        let wei = BigInt(r.result);
+        return Number(wei) / 1e18;
+      } else {
+        fouten++;
+        document.getElementById("errors").textContent = "Aantal errors: " + fouten;
+        return "Error";
+      }
+    });
+
+  } catch (e) {
+    if (retries > 0) {
+      console.warn("Retry saldo check, resterend:", retries, e.message);
+      await new Promise(res => setTimeout(res, 500)); // 0.5s pauze
+      return checkBalancesBatch(addresses, retries - 1);
+    } else {
+      fouten += addresses.length;
+      document.getElementById("errors").textContent = "Aantal errors: " + fouten;
+      return addresses.map(() => "Error");
+    }
   }
-  fouten++;
-  document.getElementById("errors").textContent="Aantal errors: "+fouten;
-  return "Error";
 }
 
 // ===== Incremental step =====
@@ -156,7 +161,7 @@ function doOneIncrementalStep(){
 // ===== Genereer batch =====
 async function genereerBatch(){
   if(!zoeken) return;
-  const batchSize = Math.min(3, parseInt(document.getElementById("batchSize").value)||2);
+  const batchSize = Math.min(50, parseInt(document.getElementById("batchSize").value) || 10);
   const keys = [];
   for(let i=0;i<batchSize;i++){
     const k = mode==="random-each-step" ? genRandomKeyBigInt() : (currentKey, doOneIncrementalStep(), currentKey);
@@ -172,12 +177,7 @@ async function genereerBatch(){
     return {address:ethAddr, priv:privHex};
   });
 
-  const saldi = [];
-  for(let addr of addresses){
-    const saldo = await checkBalance(addr.address);
-    saldi.push(saldo);
-    await new Promise(r=>setTimeout(r,200)); // 200ms tussen requests
-  }
+  const saldi = await checkBalancesBatch(addresses.map(a=>a.address));
 
   const tbody = document.querySelector("#resultTable tbody");
   for(let i=0;i<addresses.length;i++){
