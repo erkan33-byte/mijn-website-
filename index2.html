@@ -2,9 +2,9 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator Incremental / Random</title>
+<title>Ethereum Key Generator Sneller & Stabiel</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 <style>
 body { font-family: Arial, sans-serif; padding: 20px; }
 table { border-collapse: collapse; width: 100%; margin-top: 15px; }
@@ -12,21 +12,12 @@ th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: brea
 th { background: #f2f2f2; }
 button, select, input { margin-bottom: 10px; padding: 8px 12px; }
 #totaal, #errors, #progress { margin-bottom: 10px; font-weight: bold; }
-#retryMsg { margin-top: 15px; font-weight: bold; color: orange; font-size: 16px; animation: blink 1s infinite; }
 #foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
-@keyframes blink { 0%,50%,100% {opacity:1;} 25%,75% {opacity:0;} }
 label { display:inline-block; min-width: 210px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator (incremental/random, max 50 zichtbaar)</h2>
-
-<!-- Link naar nieuwe pagina -->
-<p>
-  <a href="index2.html" target="_blank" style="font-weight:bold; font-size:16px; color:blue; text-decoration:underline;">
-    Ga naar de nieuwe pagina
-  </a>
-</p>
+<h2>Ethereum Key Generator (Sneller & Stabiel met 8 API’s)</h2>
 
 <div id="totaal">Totaal gescande adressen: 0</div>
 <div id="errors">Aantal errors: 0</div>
@@ -34,22 +25,22 @@ label { display:inline-block; min-width: 210px; }
 
 <label for="modeSelect">Modus:</label>
 <select id="modeSelect">
-  <option value="inc-random-start">Incremental (random start per refresh)</option>
+  <option value="inc-random-start">Incremental (random start)</option>
   <option value="inc-percent-start">Incremental (start % van keyspace)</option>
   <option value="random-each-step">Random (elke stap nieuwe key)</option>
 </select>
 <br>
 
-<label for="startPercent">Start percentage (0–100) — alleen voor 'Incremental (start %)': </label>
-<input type="text" id="startPercent" value="0">
+<label for="startPercent">Start percentage (0–100):</label>
+<input type="number" id="startPercent" value="0" min="0" max="100" step="0.0001">
 <br>
 
-<label for="stepPercent">Stap percentage (bijv. 0.001):</label>
-<input type="text" id="stepPercent" value="0.001">
+<label for="stepPercent">Stap percentage:</label>
+<input type="number" id="stepPercent" value="0.001" min="0.0000001" max="100" step="0.0000001">
 <br>
 
-<label for="batchRate">Batches per seconde:</label>
-<input type="number" id="batchRate" value="5" min="1" max="100">
+<label for="batchSize">Batch grootte (max 3 voor stabiel):</label>
+<input type="number" id="batchSize" value="2" min="1" max="3">
 <br>
 
 <button id="startBtn">Start zoeken</button>
@@ -57,115 +48,102 @@ label { display:inline-block; min-width: 210px; }
 <button onclick="resetTeller()">Reset teller</button>
 <button onclick="resetErrors()">Reset errors</button>
 
-<div id="retryMsg"></div>
 <div id="foundMsg"></div>
 
 <table id="resultTable">
   <thead>
-    <tr><th>#</th><th>Adres</th><th>Private Key (WIF)</th><th>Saldo (BTC)</th></tr>
+    <tr><th>#</th><th>Adres</th><th>Private Key (HEX)</th><th>Saldo (ETH)</th></tr>
   </thead>
   <tbody></tbody>
 </table>
 
 <script>
-// ======== Helper: BigInt deling naar decimale string ========
-function bigIntDivisionToDecimalString(numerator, denominator, decimals = 80) {
-  let intPart = numerator / denominator;
-  let remainder = numerator % denominator;
-
-  let result = intPart.toString();
-  if (decimals > 0 && remainder !== 0n) {
-    result += ".";
-    for (let i = 0; i < decimals; i++) {
-      remainder *= 10n;
-      let digit = remainder / denominator;
-      remainder %= denominator;
-      result += digit.toString();
-      if (remainder === 0n) break;
-    }
-  }
-  return result;
-}
-
-// ======== Basisfuncties ========
+// ===== Helpers =====
 function toHex(bytes){return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join("");}
 function hexToBytes(hex){const out=new Uint8Array(hex.length/2);for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16);return out;}
-function sha256Hex(hex){return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString();}
-function doubleSha256Hex(hex){return sha256Hex(sha256Hex(hex));}
-function base58Encode(hex){
-  const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  const bytes=hexToBytes(hex);
-  let zeros=0; while(zeros<bytes.length&&bytes[zeros]===0) zeros++;
-  let num=BigInt("0x"+hex);
-  let out=""; while(num>0n){let r=num%58n; num/=58n; out=alphabet[Number(r)]+out;}
-  return "1".repeat(zeros)+(out||"");
+function keccak256(bytes) {return CryptoJS.SHA3(CryptoJS.lib.WordArray.create(bytes), { outputLength: 256 }).toString();}
+function toChecksumAddress(address) {
+  address = address.toLowerCase().replace(/^0x/,"");
+  const hash = keccak256(hexToBytes(address));
+  let ret = "0x";
+  for (let i=0;i<address.length;i++){ret += parseInt(hash[i],16) >= 8 ? address[i].toUpperCase() : address[i];}
+  return ret;
+}
+function pubkeyToEthAddress(pubKeyBytes) {
+  const hashHex = keccak256(pubKeyBytes.slice(1));
+  const addressHex = hashHex.slice(-40);
+  return toChecksumAddress(addressHex);
 }
 
-// ======== Keyspace ========
+// ===== Keyspace =====
 const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
 const MIN_KEY = 1n;
 const MAX_VALID_KEY = ORDER_N - 1n;
 const KEYSPACE_SIZE = MAX_VALID_KEY;
-
 let STEPS_PER_100_PERCENT = 100000n;
 let carryNum = 0n;
 
+// ===== Gen Key =====
 function genRandomKeyBigInt(){
   const arr=new Uint8Array(32);
   crypto.getRandomValues(arr);
-  const hex=Array.from(arr,b=>b.toString(16).padStart(2,"0")).join("");
+  let hex=toHex(arr);
   let k=BigInt("0x"+hex);
   if(k===0n) return 1n;
-  if(k>MAX_VALID_KEY) k = (k % MAX_VALID_KEY) + 1n;
+  if(k>MAX_VALID_KEY) k=(k % MAX_VALID_KEY)+1n;
   return k;
 }
+function percentToKey(perc){
+  const steps = BigInt(Math.round(Math.min(100,Math.max(0,perc)) * Number(STEPS_PER_100_PERCENT)));
+  const delta = (KEYSPACE_SIZE * steps) / STEPS_PER_100_PERCENT;
+  return MIN_KEY + delta;
+}
 
-// ======== Variabelen ========
-let counter=0, totaal=parseInt(localStorage.getItem("totaal")||"0",10), fouten=parseInt(localStorage.getItem("fouten")||"0",10);
-let zoeken=false, MAX_VISIBLE=50, BATCH_SIZE=2;
+// ===== Variabelen =====
+let counter=0, totaal=0, fouten=0;
+let zoeken=false, MAX_VISIBLE=50;
 let mode="inc-random-start", currentKey=null, firstKey=null;
 let stepsDone=0n, startSteps=0n;
 
-// ======== UI init ========
-document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
-document.getElementById("errors").textContent="Aantal errors: "+fouten;
-document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
-mode=document.getElementById("modeSelect").value;
+// ===== API Sleutels en Endpoints =====
+const apis = [
+  {name:"Etherscan", url:(addr,key)=>`https://api.etherscan.io/api?module=account&action=balance&address=${addr}&tag=latest&apikey=${key}`, keys:["H6QSBI7T9J26IFDBZUFK62VG4BIMJKQZJD","9THU39Z9BF8Y1GEGIMIE97V1QSRDPQR9EM","UZ9D683K61A4AYYDQ4D36Q93FR4YNVKI9Z"]},
+  {name:"Bitquery", url:(addr,key)=>`https://graphql.bitquery.io/`, keys:[""]}, // GraphQL vereist setup
+  {name:"Moralis", url:(addr,key)=>`https://deep-index.moralis.io/api/v2/${addr}/balance`, keys:[""]},
+  {name:"Ethplorer", url:(addr,key)=>`https://api.ethplorer.io/getAddressInfo/${addr}?apiKey=freekey`, keys:["freekey"]},
+  {name:"Alchemy", url:(addr,key)=>`https://eth-mainnet.alchemyapi.io/v2/${key}`, keys:["demo"]},
+  {name:"NOWNodes", url:(addr,key)=>`https://eth.nownodes.io/api/v1/balance/${addr}?apiKey=${key}`, keys:["demo"]}
+];
+let apiIndex = 0;
+let keyIndex = 0;
 
-// ======== Balance check ========
+// ===== Balance check met rotatie =====
 async function checkBalance(address){
-  const apis=[
-    `https://corsproxy.io/?url=https://blockstream.info/api/address/${address}`,
-    `https://corsproxy.io/?url=https://mempool.space/api/address/${address}`,
-    `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${address}?cors=true`,
-    `https://api.blockchair.com/bitcoin/dashboards/address/${address}`,
-    `https://sochain.com/api/v2/address/BTC/${address}`,
-    `https://btcscan.org/api/address/${address}`,
-    `https://api.smartbit.com.au/v1/blockchain/address/${address}`
-  ];
-  for(let url of apis){
+  for(let i=0;i<apis.length;i++){
+    const api = apis[apiIndex];
+    const key = api.keys[keyIndex % api.keys.length] || "";
+    apiIndex = (apiIndex +1) % apis.length;
+    keyIndex = (keyIndex +1) % api.keys.length;
     try{
-      const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(),3000);
-      const resp=await fetch(url,{signal:controller.signal});
-      clearTimeout(timeout);
-      if(!resp.ok) continue;
-      const data=await resp.json();
-      if(data.chain_stats){
-        const funded=Number(data.chain_stats.funded_txo_sum||0);
-        const spent=Number(data.chain_stats.spent_txo_sum||0);
-        return (funded-spent)/1e8;
-      }
-      if(typeof data.final_balance!=="undefined") return data.final_balance/1e8;
-      if(data.data && data.data[address] && data.data[address].address) return data.data[address].address.balance/1e8;
+      let url = api.url(address,key);
+      let resp = await fetch(url);
+      if(!resp.ok) throw "Fetch error";
+      let data = await resp.json();
+      // Specifieke parsing per API
+      if(api.name==="Etherscan" && data.status=="1" && data.result!==undefined) return Number(data.result)/1e18;
+      if(api.name==="Ethplorer" && data.ETH && data.ETH.balance!==undefined) return Number(data.ETH.balance);
+      if(api.name==="Moralis" && data.balance!==undefined) return Number(data.balance)/1e18;
+      if(api.name==="Alchemy" && data.result!==undefined) return Number(data.result)/1e18;
+      if(api.name==="NOWNodes" && data.balance!==undefined) return Number(data.balance)/1e18;
+      if(api.name==="Bitquery"){ /* Bitquery GraphQL vereist setup */ continue; }
     }catch(e){ continue; }
   }
-  fouten++; localStorage.setItem("fouten",fouten);
+  fouten++;
   document.getElementById("errors").textContent="Aantal errors: "+fouten;
   return "Error";
 }
 
-// ======== Incremental step ========
+// ===== Incremental step =====
 function doOneIncrementalStep(){
   carryNum += KEYSPACE_SIZE;
   const inc = carryNum / STEPS_PER_100_PERCENT;
@@ -175,124 +153,88 @@ function doOneIncrementalStep(){
   stepsDone += 1n;
 }
 
-// ======== Genereer batch ========
+// ===== Genereer batch =====
 async function genereerBatch(){
   if(!zoeken) return;
-  const keys=[];
-  for(let i=0;i<BATCH_SIZE;i++){
-    let k;
-    if(mode==="random-each-step"){
-      k = genRandomKeyBigInt();
-    }else{
-      k = currentKey;
-      doOneIncrementalStep();
-    }
+  const batchSize = Math.min(3, parseInt(document.getElementById("batchSize").value)||2);
+  const keys = [];
+  for(let i=0;i<batchSize;i++){
+    const k = mode==="random-each-step" ? genRandomKeyBigInt() : (currentKey, doOneIncrementalStep(), currentKey);
     keys.push(k);
   }
 
-  const addresses=keys.flatMap(k=>{
-    const privHex=k.toString(16).padStart(64,"0");
-    const ec=new elliptic.ec("secp256k1");
-    const kp=ec.keyFromPrivate(privHex,"hex");
-
-    const pubC=toHex(kp.getPublic(true,"array"));
-    const ripemdC=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubC))).toString();
-    const payloadC="00"+ripemdC;
-    const checksumC=doubleSha256Hex(payloadC).slice(0,8);
-    const addressC=base58Encode(payloadC+checksumC);
-    const wifC=base58Encode("80"+privHex+"01"+doubleSha256Hex("80"+privHex+"01").slice(0,8));
-
-    const pubU=toHex(kp.getPublic(false,"array"));
-    const ripemdU=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
-    const payloadU="00"+ripemdU;
-    const checksumU=doubleSha256Hex(payloadU).slice(0,8);
-    const addressU=base58Encode(payloadU+checksumU);
-    const wifU=base58Encode("80"+privHex+doubleSha256Hex("80"+privHex).slice(0,8));
-
-    return [{address:addressC,wif:wifC},{address:addressU,wif:wifU}];
+  const addresses = keys.map(k=>{
+    const privHex = k.toString(16).padStart(64,"0");
+    const ec = new elliptic.ec("secp256k1");
+    const kp = ec.keyFromPrivate(privHex,"hex");
+    const pubBytes = new Uint8Array(kp.getPublic(false,"array"));
+    const ethAddr = pubkeyToEthAddress(pubBytes);
+    return {address:ethAddr, priv:privHex};
   });
 
-  const saldi=await Promise.all(addresses.map(a=>checkBalance(a.address)));
+  const saldi = [];
+  for(let addr of addresses){
+    const saldo = await checkBalance(addr.address);
+    saldi.push(saldo);
+    await new Promise(r=>setTimeout(r,200)); // 200ms tussen requests
+  }
 
-  const tbody=document.querySelector("#resultTable tbody");
+  const tbody = document.querySelector("#resultTable tbody");
   for(let i=0;i<addresses.length;i++){
     counter++; totaal++;
-    let saldo=saldi[i];
-    if(saldo==="Error") saldo="Error";
-    let row=document.createElement("tr");
-    row.innerHTML=`<td>${counter}</td><td>${addresses[i].address}</td><td>${addresses[i].wif}</td><td>${saldo}</td>`;
+    const saldo = saldi[i];
+    const row = document.createElement("tr");
+    row.innerHTML = `<td>${counter}</td><td>${addresses[i].address}</td><td>${addresses[i].priv}</td><td>${saldo}</td>`;
     if(typeof saldo==="number" && saldo>0){
       row.style.backgroundColor="#c8f7c5";
-      document.getElementById("foundMsg").textContent=`Adres gevonden met saldo >0 BTC! ${addresses[i].address} | WIF: ${addresses[i].wif}`;
+      document.getElementById("foundMsg").textContent=`Adres gevonden met saldo >0 ETH! ${addresses[i].address}`;
       stoppen();
     }
     tbody.appendChild(row);
   }
   while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
-  localStorage.setItem("totaal",totaal);
+
   document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
-
   const stepsDisplay = (startSteps + stepsDone) % STEPS_PER_100_PERCENT;
-  const numerator = stepsDisplay * 100n;
-  const denominator = STEPS_PER_100_PERCENT;
-  const percStr = bigIntDivisionToDecimalString(numerator, denominator, 80);
-  document.getElementById("progress").textContent =
-    "Voortgang in keyspace: " + percStr + " %";
+  const perc = Number(stepsDisplay) / Number(STEPS_PER_100_PERCENT) * 100;
+  document.getElementById("progress").textContent="Voortgang in keyspace: "+perc.toFixed(6)+" %";
 
-  const rate=parseInt(document.getElementById("batchRate").value)||5;
-  const interval=1000/rate;
-  if(zoeken) setTimeout(genereerBatch,interval);
+  if(zoeken) setTimeout(genereerBatch, 400); // interval tussen batches
 }
 
-// ======== Start / stop / reset ========
+// ===== Start / Stop / Reset =====
 function starten(){
   if(zoeken) return;
-  const stepPercStr=document.getElementById("stepPercent").value.trim();
-  const startPercStr=document.getElementById("startPercent").value.trim();
-
-  const stepPerc=parseFloat(stepPercStr)||0.001;
+  const stepPerc=parseFloat(document.getElementById("stepPercent").value)||0.001;
   STEPS_PER_100_PERCENT = BigInt(Math.round(100/stepPerc));
   carryNum=0n; stepsDone=0n; startSteps=0n;
-  mode=document.getElementById("modeSelect").value;
+  mode = document.getElementById("modeSelect").value;
 
   if(mode==="inc-random-start"){
-    firstKey=genRandomKeyBigInt();
-    currentKey=firstKey;
-    startSteps = ((currentKey - MIN_KEY) * STEPS_PER_100_PERCENT) / KEYSPACE_SIZE;
-  }else if(mode==="inc-percent-start"){
-    const perc=parseFloat(startPercStr)||0;
-    const steps = BigInt(Math.round(perc*Number(STEPS_PER_100_PERCENT)/100));
-    currentKey = MIN_KEY + (KEYSPACE_SIZE * steps) / STEPS_PER_100_PERCENT;
-    startSteps=steps;
-  }else{
-    currentKey=genRandomKeyBigInt();
-  }
+    firstKey = genRandomKeyBigInt();
+    currentKey = firstKey;
+    startSteps = ((currentKey-MIN_KEY)*STEPS_PER_100_PERCENT)/KEYSPACE_SIZE;
+  } else if(mode==="inc-percent-start"){
+    const perc = parseFloat(document.getElementById("startPercent").value)||0;
+    currentKey = percentToKey(perc);
+    startSteps = BigInt(Math.round(perc*Number(STEPS_PER_100_PERCENT)/100));
+  } else currentKey = genRandomKeyBigInt();
 
-  zoeken=true;
-  document.getElementById("startBtn").disabled=true;
-  document.getElementById("stopBtn").disabled=false;
-  document.getElementById("retryMsg").textContent="";
+  zoeken = true;
+  document.getElementById("startBtn").disabled = true;
+  document.getElementById("stopBtn").disabled = false;
   document.getElementById("foundMsg").textContent="";
   genereerBatch();
 }
 
 function stoppen(){
-  zoeken=false;
-  document.getElementById("startBtn").disabled=false;
-  document.getElementById("stopBtn").disabled=true;
+  zoeken = false;
+  document.getElementById("startBtn").disabled = false;
+  document.getElementById("stopBtn").disabled = true;
 }
 
-function resetTeller(){
-  totaal=0;
-  localStorage.setItem("totaal",totaal);
-  document.getElementById("totaal").textContent="Totaal gescande adressen: 0";
-}
-
-function resetErrors(){
-  fouten=0;
-  localStorage.setItem("fouten",fouten);
-  document.getElementById("errors").textContent="Aantal errors: 0";
-}
+function resetTeller(){totaal=0; counter=0; document.getElementById("totaal").textContent="Totaal gescande adressen: 0";}
+function resetErrors(){fouten=0; document.getElementById("errors").textContent="Aantal errors: 0";}
 
 document.getElementById("startBtn").addEventListener("click", starten);
 document.getElementById("stopBtn").addEventListener("click", stoppen);
