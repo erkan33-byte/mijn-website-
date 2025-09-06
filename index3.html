@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>BTC Key Generator Incremental / Random</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; }
+table { border-collapse: collapse; width: 100%; margin-top: 15px; }
+th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
+th { background: #f2f2f2; }
+button, select, input { margin-bottom: 10px; padding: 8px 12px; }
+#totaal, #errors, #progress { margin-bottom: 10px; font-weight: bold; }
+#retryMsg { margin-top: 15px; font-weight: bold; color: orange; font-size: 16px; animation: blink 1s infinite; }
+#foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
+@keyframes blink { 0%,50%,100% {opacity:1;} 25%,75% {opacity:0;} }
+label { display:inline-block; min-width: 210px; }
+</style>
+</head>
+<body>
+<h2>BTC Key Generator (incremental/random, max 50 zichtbaar)</h2>
+
+<p>
+  <a href="index2.html" target="_blank" style="font-weight:bold; font-size:16px; color:blue; text-decoration:underline;">
+    Ga naar de nieuwe pagina
+  </a>
+</p>
+
+<div id="totaal">Totaal gescande adressen: 0</div>
+<div id="errors">Aantal errors: 0</div>
+<div id="progress">Voortgang in keyspace: 0.000%</div>
+
+<label for="modeSelect">Modus:</label>
+<select id="modeSelect">
+  <option value="inc-random-start">Incremental (random start per refresh)</option>
+  <option value="inc-percent-start">Incremental (start % van keyspace)</option>
+  <option value="random-each-step">Random (elke stap nieuwe key)</option>
+</select>
+<br>
+
+<label for="startPercent">Start percentage (0–100) — alleen voor 'Incremental (start %)': </label>
+<input type="text" id="startPercent" value="0">
+<br>
+
+<label for="stepPercent">Stap percentage (bijv. 0.001):</label>
+<input type="text" id="stepPercent" value="0.001">
+<br>
+
+<label for="batchRate">Batches per seconde:</label>
+<input type="number" id="batchRate" value="5" min="1" max="20">
+<br>
+
+<button id="startBtn">Start zoeken</button>
+<button id="stopBtn" disabled>Stop</button>
+<button onclick="resetTeller()">Reset teller</button>
+<button onclick="resetErrors()">Reset errors</button>
+
+<div id="retryMsg"></div>
+<div id="foundMsg"></div>
+
+<table id="resultTable">
+  <thead>
+    <tr><th>#</th><th>Adres</th><th>Private Key (WIF)</th><th>Saldo (BTC)</th></tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<script>
+// ======== Helper: BigInt deling naar decimale string ========
+function bigIntDivisionToDecimalString(numerator, denominator, decimals = 80) {
+  let intPart = numerator / denominator;
+  let remainder = numerator % denominator;
+  let result = intPart.toString();
+  if (decimals > 0 && remainder !== 0n) {
+    result += ".";
+    for (let i = 0; i < decimals; i++) {
+      remainder *= 10n;
+      let digit = remainder / denominator;
+      remainder %= denominator;
+      result += digit.toString();
+      if (remainder === 0n) break;
+    }
+  }
+  return result;
+}
+
+// ======== Basisfuncties ========
+function toHex(bytes){return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join("");}
+function hexToBytes(hex){const out=new Uint8Array(hex.length/2);for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16);return out;}
+function sha256Hex(hex){return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString();}
+function doubleSha256Hex(hex){return sha256Hex(sha256Hex(hex));}
+function base58Encode(hex){
+  const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  const bytes=hexToBytes(hex);
+  let zeros=0; while(zeros<bytes.length&&bytes[zeros]===0) zeros++;
+  let num=BigInt("0x"+hex);
+  let out=""; while(num>0n){let r=num%58n; num/=58n; out=alphabet[Number(r)]+out;}
+  return "1".repeat(zeros)+(out||"");
+}
+
+// ======== Keyspace ========
+const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+const MIN_KEY = 1n;
+const MAX_VALID_KEY = ORDER_N - 1n;
+const KEYSPACE_SIZE = MAX_VALID_KEY;
+let STEPS_PER_100_PERCENT = 100000n;
+let carryNum = 0n;
+
+function genRandomKeyBigInt(){
+  const arr=new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  const hex=Array.from(arr,b=>b.toString(16).padStart(2,"0")).join("");
+  let k=BigInt("0x"+hex);
+  if(k===0n) return 1n;
+  if(k>MAX_VALID_KEY) k = (k % MAX_VALID_KEY) + 1n;
+  return k;
+}
+
+// ======== Variabelen ========
+let counter=0, totaal=parseInt(localStorage.getItem("totaal")||"0",10), fouten=parseInt(localStorage.getItem("fouten")||"0",10);
+let zoeken=false, MAX_VISIBLE=50, BATCH_SIZE=2;
+let mode="inc-random-start", currentKey=null, firstKey=null;
+let stepsDone=0n, startSteps=0n;
+
+// ======== UI init ========
+document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
+document.getElementById("errors").textContent="Aantal errors: "+fouten;
+document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
+mode=document.getElementById("modeSelect").value;
+
+// ======== Verbeterde balance check met meerdere API's ========
+async function checkBalance(address){
+  const apis=[
+    `https://corsproxy.io/?url=https://blockstream.info/api/address/${address}`,
+    `https://corsproxy.io/?url=https://mempool.space/api/address/${address}`,
+    `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${address}?cors=true`,
+    `https://corsproxy.io/?url=https://api.blockchair.com/bitcoin/dashboards/address/${address}`,
+    `https://corsproxy.io/?url=https://sochain.com/api/v2/address/BTC/${address}`,
+    `https://corsproxy.io/?url=https://btcscan.org/api/address/${address}`,
+    `https://corsproxy.io/?url=https://api.smartbit.com.au/v1/blockchain/address/${address}`,
+    `https://corsproxy.io/?url=https://rest.bitcoin.com/v2/address/details/${address}`,
+    `https://corsproxy.io/?url=https://api.bitaps.com/btc/v1/blockchain/address/${address}`
+  ];
+
+  for(let url of apis){
+    try{
+      const controller=new AbortController();
+      const timeout=setTimeout(()=>controller.abort(),5000);
+      const resp=await fetch(url,{signal:controller.signal});
+      clearTimeout(timeout);
+      if(!resp.ok) continue;
+      const data=await resp.json();
+
+      if(data.chain_stats){ // Blockstream/Mempool
+        const funded=Number(data.chain_stats.funded_txo_sum||0);
+        const spent=Number(data.chain_stats.spent_txo_sum||0);
+        return (funded-spent)/1e8;
+      }
+      if(typeof data.final_balance!=="undefined") return data.final_balance/1e8;
+      if(data.data && data.data[address] && data.data[address].address) return data.data[address].address.balance/1e8;
+      if(data.data && data.data.confirmed_balance !== undefined) return Number(data.data.confirmed_balance)/1e8;
+      if(data.address && data.balance !== undefined) return Number(data.balance)/1e8;
+      if(data.response && data.response.balance !== undefined) return Number(data.response.balance)/1e8;
+
+    }catch(e){ continue; }
+  }
+
+  fouten++;
+  localStorage.setItem("fouten",fouten);
+  document.getElementById("errors").textContent="Aantal errors: "+fouten;
+  return "Error";
+}
+
+// ======== Incremental step ========
+function doOneIncrementalStep(){
+  carryNum+=KEYSPACE_SIZE;
+  const inc=carryNum/STEPS_PER_100_PERCENT;
+  carryNum%=STEPS_PER_100_PERCENT;
+  currentKey+=inc;
+  if(currentKey>MAX_VALID_KEY) currentKey-=KEYSPACE_SIZE;
+  stepsDone+=1n;
+}
+
+// ======== Genereer batch ========
+async function genereerBatch(){
+  if(!zoeken) return;
+  const keys=[];
+  for(let i=0;i<BATCH_SIZE;i++){
+    let k;
+    if(mode==="random-each-step"){ k=genRandomKeyBigInt(); }
+    else{ k=currentKey; doOneIncrementalStep(); }
+    keys.push(k);
+  }
+
+  const addresses=keys.flatMap(k=>{
+    const privHex=k.toString(16).padStart(64,"0");
+    const ec=new elliptic.ec("secp256k1");
+    const kp=ec.keyFromPrivate(privHex,"hex");
+
+    const pubC=toHex(kp.getPublic(true,"array"));
+    const ripemdC=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubC))).toString();
+    const payloadC="00"+ripemdC;
+    const checksumC=doubleSha256Hex(payloadC).slice(0,8);
+    const addressC=base58Encode(payloadC+checksumC);
+    const wifC=base58Encode("80"+privHex+"01"+doubleSha256Hex("80"+privHex+"01").slice(0,8));
+
+    const pubU=toHex(kp.getPublic(false,"array"));
+    const ripemdU=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
+    const payloadU="00"+ripemdU;
+    const checksumU=doubleSha256Hex(payloadU).slice(0,8);
+    const addressU=base58Encode(payloadU+checksumU);
+    const wifU=base58Encode("80"+privHex+doubleSha256Hex("80"+privHex).slice(0,8));
+
+    return [{address:addressC,wif:wifC},{address:addressU,wif:wifU}];
+  });
+
+  const saldi=await Promise.all(addresses.map(a=>checkBalance(a.address)));
+
+  const tbody=document.querySelector("#resultTable tbody");
+  for(let i=0;i<addresses.length;i++){
+    counter++; totaal++;
+    let saldo=saldi[i];
+    if(saldo==="Error") saldo="Error";
+    let row=document.createElement("tr");
+    row.innerHTML=`<td>${counter}</td><td>${addresses[i].address}</td><td>${addresses[i].wif}</td><td>${saldo}</td>`;
+    if(typeof saldo==="number" && saldo>0){
+      row.style.backgroundColor="#c8f7c5";
+      document.getElementById("foundMsg").textContent=`Adres gevonden met saldo >0 BTC! ${addresses[i].address} | WIF: ${addresses[i].wif}`;
+      stoppen();
+    }
+    tbody.appendChild(row);
+  }
+  while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
+  localStorage.setItem("totaal",totaal);
+  document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
+
+  const stepsDisplay=(startSteps+stepsDone)%STEPS_PER_100_PERCENT;
+  const percStr=bigIntDivisionToDecimalString(stepsDisplay*100n,STEPS_PER_100_PERCENT,80);
+  document.getElementById("progress").textContent="Voortgang in keyspace: "+percStr+" %";
+
+  const rate=parseInt(document.getElementById("batchRate").value)||5;
+  const interval=1000/rate;
+  if(zoeken) setTimeout(genereerBatch,interval);
+}
+
+// ======== Start / stop / reset ========
+function starten(){
+  if(zoeken) return;
+  const stepPerc=parseFloat(document.getElementById("stepPercent").value)||0.001;
+  const startPerc=parseFloat(document.getElementById("startPercent").value)||0;
+  STEPS_PER_100_PERCENT=BigInt(Math.round(100/stepPerc));
+  carryNum=0n; stepsDone=0n; startSteps=0n;
+  mode=document.getElementById("modeSelect").value;
+
+  if(mode==="inc-random-start"){
+    firstKey=genRandomKeyBigInt();
+    currentKey=firstKey;
+    startSteps=((currentKey-MIN_KEY)*STEPS_PER_100_PERCENT)/KEYSPACE_SIZE;
+  }else if(mode==="inc-percent-start"){
+    const steps=BigInt(Math.round(startPerc*Number(STEPS_PER_100_PERCENT)/100));
+    currentKey=MIN_KEY+(KEYSPACE_SIZE*steps)/STEPS_PER_100_PERCENT;
+    startSteps=steps;
+  }else{ currentKey=genRandomKeyBigInt(); }
+
+  zoeken=true;
+  document.getElementById("startBtn").disabled=true;
+  document.getElementById("stopBtn").disabled=false;
+  document.getElementById("retryMsg").textContent="";
+  document.getElementById("foundMsg").textContent="";
+  genereerBatch();
+}
+
+function stoppen(){
+  zoeken=false;
+  document.getElementById("startBtn").disabled=false;
+  document.getElementById("stopBtn").disabled=true;
+}
+
+function resetTeller(){
+  totaal=0;
+  localStorage.setItem("totaal",totaal);
+  document.getElementById("totaal").textContent="Totaal gescande adressen: 0";
+}
+
+function resetErrors(){
+  fouten=0;
+  localStorage.setItem("fouten",fouten);
+  document.getElementById("errors").textContent="Aantal errors: 0";
+}
+
+document.getElementById("startBtn").addEventListener("click",starten);
+document.getElementById("stopBtn").addEventListener("click",stoppen);
+</script>
+
+<hr>
+<div style="margin-top:20px; padding:10px; border:2px solid red; background:#ffe6e6; color:#a00;">
+<strong>Disclaimer:</strong><br>
+Dit is een educatieve/demo-tool. Het is praktisch onmogelijk om echte Bitcoin-saldi te vinden met deze generator. 
+Gebruik deze pagina alleen voor leer- of hobbydoeleinden. De maker is niet verantwoordelijk voor eventueel 
+misbruik of verloren middelen. Alle gegenereerde sleutels en adressen zijn willekeurig en worden niet opgeslagen op een server.
+</div>
+</body>
+</html>
