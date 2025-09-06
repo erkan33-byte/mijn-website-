@@ -21,7 +21,6 @@ label { display:inline-block; min-width: 210px; }
 <body>
 <h2>BTC Key Generator (incremental/random, max 50 zichtbaar)</h2>
 
-<!-- Links naar nieuwe pagina's -->
 <p>
   <a href="index2.html" target="_blank" style="font-weight:bold; font-size:16px; color:blue; text-decoration:underline;">
     Ga naar de nieuwe pagina
@@ -77,7 +76,6 @@ label { display:inline-block; min-width: 210px; }
 function bigIntDivisionToDecimalString(numerator, denominator, decimals = 80) {
   let intPart = numerator / denominator;
   let remainder = numerator % denominator;
-
   let result = intPart.toString();
   if (decimals > 0 && remainder !== 0n) {
     result += ".";
@@ -115,6 +113,7 @@ const KEYSPACE_SIZE = MAX_VALID_KEY;
 let STEPS_PER_100_PERCENT = 100000n;
 let carryNum = 0n;
 
+// ======== Random key ========
 function genRandomKeyBigInt(){
   const arr=new Uint8Array(32);
   crypto.getRandomValues(arr);
@@ -137,51 +136,32 @@ document.getElementById("errors").textContent="Aantal errors: "+fouten;
 document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
 mode=document.getElementById("modeSelect").value;
 
-// ======== Balance check met retries ========
-async function checkBalance(address, retries = 3) {
+// ======== Check balance parallel ========
+async function checkBalanceParallel(address){
   const apis = [
-    `https://corsproxy.io/?url=https://blockstream.info/api/address/${address}`,
-    `https://corsproxy.io/?url=https://mempool.space/api/address/${address}`,
-    `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${address}?cors=true`,
-    `https://api.blockchair.com/bitcoin/dashboards/address/${address}`,
-    `https://sochain.com/api/v2/address/BTC/${address}`,
-    `https://btcscan.org/api/address/${address}`,
-    `https://api.smartbit.com.au/v1/blockchain/address/${address}`
+    `https://mempool.space/api/address/${address}`,
+    `https://blockstream.info/api/address/${address}`,
+    `https://sochain.com/api/v2/address/BTC/${address}`
   ];
-
-  for (let url of apis) {
-    for (let attempt = 1; attempt <= retries; attempt++) {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000);
-        const resp = await fetch(url, { signal: controller.signal });
-        clearTimeout(timeout);
-
-        if (!resp.ok) continue;
-        const data = await resp.json();
-
-        if (data.chain_stats) {
-          const funded = Number(data.chain_stats.funded_txo_sum || 0);
-          const spent = Number(data.chain_stats.spent_txo_sum || 0);
-          return (funded - spent) / 1e8;
+  return new Promise(resolve=>{
+    let resolved=false;
+    apis.forEach(url=>{
+      if(resolved) return;
+      fetch(url).then(r=>r.json()).then(data=>{
+        if(resolved) return;
+        if(data.chain_stats){
+          const funded = Number(data.chain_stats.funded_txo_sum||0);
+          const spent = Number(data.chain_stats.spent_txo_sum||0);
+          resolved=true; resolve((funded-spent)/1e8);
+        } else if(data.data && data.data.address && data.data.address.balance!==undefined){
+          resolved=true; resolve(Number(data.data.address.balance));
         }
-
-        if (typeof data.final_balance !== "undefined") return data.final_balance / 1e8;
-
-        if (data.data && data.data[address] && data.data[address].address)
-          return data.data[address].address.balance / 1e8;
-
-        break;
-      } catch (e) {
-        if (attempt === retries) break;
-      }
-    }
-  }
-
-  fouten++;
-  localStorage.setItem("fouten", fouten);
-  document.getElementById("errors").textContent = "Aantal errors: " + fouten;
-  return "Error";
+      }).catch(()=>{});
+    });
+    setTimeout(()=>{
+      if(!resolved){fouten++; localStorage.setItem("fouten",fouten); document.getElementById("errors").textContent="Aantal errors: "+fouten; resolve("Error");}
+    },5000);
+  });
 }
 
 // ======== Incremental step ========
@@ -194,22 +174,18 @@ function doOneIncrementalStep(){
   stepsDone += 1n;
 }
 
-// ======== Genereer batch ========
-async function genereerBatch(){
+// ======== Genereer batch parallel ========
+async function genereerBatchParallel(){
   if(!zoeken) return;
+
   const keys=[];
   for(let i=0;i<BATCH_SIZE;i++){
-    let k;
-    if(mode==="random-each-step"){
-      k = genRandomKeyBigInt();
-    }else{
-      k = currentKey;
-      doOneIncrementalStep();
-    }
+    let k = (mode==="random-each-step") ? genRandomKeyBigInt() : currentKey;
+    if(mode!=="random-each-step") doOneIncrementalStep();
     keys.push(k);
   }
 
-  const addresses=keys.flatMap(k=>{
+  const addresses = keys.flatMap(k=>{
     const privHex=k.toString(16).padStart(64,"0");
     const ec=new elliptic.ec("secp256k1");
     const kp=ec.keyFromPrivate(privHex,"hex");
@@ -231,12 +207,12 @@ async function genereerBatch(){
     return [{address:addressC,wif:wifC},{address:addressU,wif:wifU}];
   });
 
-  const saldi=await Promise.all(addresses.map(a=>checkBalance(a.address)));
+  const saldi = await Promise.all(addresses.map(a=>checkBalanceParallel(a.address)));
 
-  const tbody=document.querySelector("#resultTable tbody");
+  const tbody = document.querySelector("#resultTable tbody");
   for(let i=0;i<addresses.length;i++){
     counter++; totaal++;
-    let saldo=saldi[i];
+    let saldo = saldi[i];
     let row=document.createElement("tr");
     row.innerHTML=`<td>${counter}</td><td>${addresses[i].address}</td><td>${addresses[i].wif}</td><td>${saldo}</td>`;
     if(typeof saldo==="number" && saldo>0){
@@ -251,15 +227,15 @@ async function genereerBatch(){
   localStorage.setItem("totaal",totaal);
   document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
 
-  const stepsDisplay = (startSteps + stepsDone) % STEPS_PER_100_PERCENT;
-  const numerator = stepsDisplay * 100n;
-  const denominator = STEPS_PER_100_PERCENT;
-  const percStr = bigIntDivisionToDecimalString(numerator, denominator, 80);
-  document.getElementById("progress").textContent = "Voortgang in keyspace: " + percStr + " %";
+  const stepsDisplay=(startSteps+stepsDone)%STEPS_PER_100_PERCENT;
+  const numerator=stepsDisplay*100n;
+  const denominator=STEPS_PER_100_PERCENT;
+  const percStr=bigIntDivisionToDecimalString(numerator,denominator,8);
+  document.getElementById("progress").textContent="Voortgang in keyspace: "+percStr+" %";
 
   const rate=parseInt(document.getElementById("batchRate").value)||5;
   const interval=1000/rate;
-  if(zoeken) setTimeout(genereerBatch,interval);
+  if(zoeken) setTimeout(genereerBatchParallel,interval);
 }
 
 // ======== Start / stop / reset ========
@@ -269,20 +245,19 @@ function starten(){
   const startPercStr=document.getElementById("startPercent").value.trim();
 
   const stepPerc=parseFloat(stepPercStr)||0.001;
-  STEPS_PER_100_PERCENT = BigInt(Math.round(100/stepPerc));
+  STEPS_PER_100_PERCENT=BigInt(Math.round(100/stepPerc));
   carryNum=0n; stepsDone=0n; startSteps=0n;
   mode=document.getElementById("modeSelect").value;
 
   if(mode==="inc-random-start"){
-    firstKey=genRandomKeyBigInt();
-    currentKey=firstKey;
-    startSteps = ((currentKey - MIN_KEY) * STEPS_PER_100_PERCENT) / KEYSPACE_SIZE;
-  }else if(mode==="inc-percent-start"){
+    firstKey=genRandomKeyBigInt(); currentKey=firstKey;
+    startSteps=((currentKey-MIN_KEY)*STEPS_PER_100_PERCENT)/KEYSPACE_SIZE;
+  } else if(mode==="inc-percent-start"){
     const perc=parseFloat(startPercStr)||0;
-    const steps = BigInt(Math.round(perc*Number(STEPS_PER_100_PERCENT)/100));
-    currentKey = MIN_KEY + (KEYSPACE_SIZE * steps) / STEPS_PER_100_PERCENT;
+    const steps=BigInt(Math.round(perc*Number(STEPS_PER_100_PERCENT)/100));
+    currentKey=MIN_KEY+(KEYSPACE_SIZE*steps)/STEPS_PER_100_PERCENT;
     startSteps=steps;
-  }else{
+  } else {
     currentKey=genRandomKeyBigInt();
   }
 
@@ -291,29 +266,15 @@ function starten(){
   document.getElementById("stopBtn").disabled=false;
   document.getElementById("retryMsg").textContent="";
   document.getElementById("foundMsg").textContent="";
-  genereerBatch();
+  genereerBatchParallel();
 }
 
-function stoppen(){
-  zoeken=false;
-  document.getElementById("startBtn").disabled=false;
-  document.getElementById("stopBtn").disabled=true;
-}
+function stoppen(){zoeken=false; document.getElementById("startBtn").disabled=false; document.getElementById("stopBtn").disabled=true;}
+function resetTeller(){totaal=0; localStorage.setItem("totaal",totaal); document.getElementById("totaal").textContent="Totaal gescande adressen: 0";}
+function resetErrors(){fouten=0; localStorage.setItem("fouten",fouten); document.getElementById("errors").textContent="Aantal errors: 0";}
 
-function resetTeller(){
-  totaal=0;
-  localStorage.setItem("totaal",totaal);
-  document.getElementById("totaal").textContent="Totaal gescande adressen: 0";
-}
-
-function resetErrors(){
-  fouten=0;
-  localStorage.setItem("fouten",fouten);
-  document.getElementById("errors").textContent="Aantal errors: 0";
-}
-
-document.getElementById("startBtn").addEventListener("click", starten);
-document.getElementById("stopBtn").addEventListener("click", stoppen);
+document.getElementById("startBtn").addEventListener("click",starten);
+document.getElementById("stopBtn").addEventListener("click",stoppen);
 </script>
 
 <hr>
@@ -323,6 +284,5 @@ document.getElementById("stopBtn").addEventListener("click", stoppen);
   Gebruik deze pagina alleen voor leer- of hobbydoeleinden. De maker is niet verantwoordelijk voor eventueel 
   misbruik of verloren middelen. Alle gegenereerde sleutels en adressen zijn willekeurig en worden niet opgeslagen op een server.
 </div>
-
 </body>
 </html>
