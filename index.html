@@ -21,10 +21,15 @@ label { display:inline-block; min-width: 210px; }
 <body>
 <h2>BTC Key Generator (incremental/random, max 50 zichtbaar)</h2>
 
-<!-- Link naar nieuwe pagina -->
+<!-- Links naar nieuwe pagina's -->
 <p>
   <a href="index2.html" target="_blank" style="font-weight:bold; font-size:16px; color:blue; text-decoration:underline;">
     Ga naar de nieuwe pagina
+  </a>
+</p>
+<p>
+  <a href="index3.html" target="_blank" style="font-weight:bold; font-size:16px; color:blue; text-decoration:underline;">
+    Ga naar index3.html
   </a>
 </p>
 
@@ -132,9 +137,9 @@ document.getElementById("errors").textContent="Aantal errors: "+fouten;
 document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
 mode=document.getElementById("modeSelect").value;
 
-// ======== Balance check ========
-async function checkBalance(address){
-  const apis=[
+// ======== Balance check met retries ========
+async function checkBalance(address, retries = 3) {
+  const apis = [
     `https://corsproxy.io/?url=https://blockstream.info/api/address/${address}`,
     `https://corsproxy.io/?url=https://mempool.space/api/address/${address}`,
     `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${address}?cors=true`,
@@ -143,25 +148,39 @@ async function checkBalance(address){
     `https://btcscan.org/api/address/${address}`,
     `https://api.smartbit.com.au/v1/blockchain/address/${address}`
   ];
-  for(let url of apis){
-    try{
-      const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(),3000);
-      const resp=await fetch(url,{signal:controller.signal});
-      clearTimeout(timeout);
-      if(!resp.ok) continue;
-      const data=await resp.json();
-      if(data.chain_stats){
-        const funded=Number(data.chain_stats.funded_txo_sum||0);
-        const spent=Number(data.chain_stats.spent_txo_sum||0);
-        return (funded-spent)/1e8;
+
+  for (let url of apis) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const resp = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeout);
+
+        if (!resp.ok) continue;
+        const data = await resp.json();
+
+        if (data.chain_stats) {
+          const funded = Number(data.chain_stats.funded_txo_sum || 0);
+          const spent = Number(data.chain_stats.spent_txo_sum || 0);
+          return (funded - spent) / 1e8;
+        }
+
+        if (typeof data.final_balance !== "undefined") return data.final_balance / 1e8;
+
+        if (data.data && data.data[address] && data.data[address].address)
+          return data.data[address].address.balance / 1e8;
+
+        break;
+      } catch (e) {
+        if (attempt === retries) break;
       }
-      if(typeof data.final_balance!=="undefined") return data.final_balance/1e8;
-      if(data.data && data.data[address] && data.data[address].address) return data.data[address].address.balance/1e8;
-    }catch(e){ continue; }
+    }
   }
-  fouten++; localStorage.setItem("fouten",fouten);
-  document.getElementById("errors").textContent="Aantal errors: "+fouten;
+
+  fouten++;
+  localStorage.setItem("fouten", fouten);
+  document.getElementById("errors").textContent = "Aantal errors: " + fouten;
   return "Error";
 }
 
@@ -218,7 +237,6 @@ async function genereerBatch(){
   for(let i=0;i<addresses.length;i++){
     counter++; totaal++;
     let saldo=saldi[i];
-    if(saldo==="Error") saldo="Error";
     let row=document.createElement("tr");
     row.innerHTML=`<td>${counter}</td><td>${addresses[i].address}</td><td>${addresses[i].wif}</td><td>${saldo}</td>`;
     if(typeof saldo==="number" && saldo>0){
@@ -229,6 +247,7 @@ async function genereerBatch(){
     tbody.appendChild(row);
   }
   while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
+
   localStorage.setItem("totaal",totaal);
   document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
 
@@ -236,8 +255,7 @@ async function genereerBatch(){
   const numerator = stepsDisplay * 100n;
   const denominator = STEPS_PER_100_PERCENT;
   const percStr = bigIntDivisionToDecimalString(numerator, denominator, 80);
-  document.getElementById("progress").textContent =
-    "Voortgang in keyspace: " + percStr + " %";
+  document.getElementById("progress").textContent = "Voortgang in keyspace: " + percStr + " %";
 
   const rate=parseInt(document.getElementById("batchRate").value)||5;
   const interval=1000/rate;
@@ -298,7 +316,6 @@ document.getElementById("startBtn").addEventListener("click", starten);
 document.getElementById("stopBtn").addEventListener("click", stoppen);
 </script>
 
-<!-- ======== Disclaimer ======== -->
 <hr>
 <div style="margin-top:20px; padding:10px; border:2px solid red; background:#ffe6e6; color:#a00;">
   <strong>Disclaimer:</strong><br>
