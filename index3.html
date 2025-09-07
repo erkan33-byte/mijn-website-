@@ -119,7 +119,7 @@ function genRandomKeyBigInt(){
 
 // ======== Variabelen ========
 let counter=0, totaal=parseInt(localStorage.getItem("totaal")||"0",10), fouten=parseInt(localStorage.getItem("fouten")||"0",10);
-let consecutiveErrors=0; // <<<<< nieuw
+let consecutiveErrors=0; // teller
 let zoeken=false, MAX_VISIBLE=50, BATCH_SIZE=2;
 let mode="inc-random-start", currentKey=null, firstKey=null;
 let stepsDone=0n, startSteps=0n;
@@ -130,18 +130,14 @@ document.getElementById("errors").textContent="Aantal errors: "+fouten;
 document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
 mode=document.getElementById("modeSelect").value;
 
-// ======== Verbeterde balance check met meerdere API's ========
+// ======== Balance check ========
 async function checkBalance(address){
   const apis=[
     `https://corsproxy.io/?url=https://blockstream.info/api/address/${address}`,
     `https://corsproxy.io/?url=https://mempool.space/api/address/${address}`,
     `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${address}?cors=true`,
     `https://corsproxy.io/?url=https://api.blockchair.com/bitcoin/dashboards/address/${address}`,
-    `https://corsproxy.io/?url=https://sochain.com/api/v2/address/BTC/${address}`,
-    `https://corsproxy.io/?url=https://btcscan.org/api/address/${address}`,
-    `https://corsproxy.io/?url=https://api.smartbit.com.au/v1/blockchain/address/${address}`,
-    `https://corsproxy.io/?url=https://rest.bitcoin.com/v2/address/details/${address}`,
-    `https://corsproxy.io/?url=https://api.bitaps.com/btc/v1/blockchain/address/${address}`
+    `https://corsproxy.io/?url=https://sochain.com/api/v2/address/BTC/${address}`
   ];
 
   for(let url of apis){
@@ -153,7 +149,7 @@ async function checkBalance(address){
       if(!resp.ok) continue;
       const data=await resp.json();
 
-      if(data.chain_stats){ // Blockstream/Mempool
+      if(data.chain_stats){
         const funded=Number(data.chain_stats.funded_txo_sum||0);
         const spent=Number(data.chain_stats.spent_txo_sum||0);
         consecutiveErrors=0;
@@ -173,14 +169,15 @@ async function checkBalance(address){
   localStorage.setItem("fouten",fouten);
   document.getElementById("errors").textContent="Aantal errors: "+fouten;
 
-  if(consecutiveErrors>=10){
+  // ==== Nieuw: 5 errors → wachten 60 seconden ====
+  if(consecutiveErrors>=5){
     stoppen();
-    document.getElementById("retryMsg").textContent="10 errors achter elkaar. Wachten 30s...";
+    document.getElementById("retryMsg").textContent="5 errors achter elkaar. Wachten 60s...";
     setTimeout(()=>{
       document.getElementById("retryMsg").textContent="";
       consecutiveErrors=0;
       starten();
-    },30000);
+    },60000);
   }
 
   return "Error";
