@@ -123,7 +123,7 @@ document.getElementById("errors").textContent="Aantal errors: "+fouten;
 document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
 mode=document.getElementById("modeSelect").value;
 
-// ======== Verbeterde Balance check met meerdere APIs ========
+// ======== Verbeterde Balance check met throttle ========
 const balanceAPIs=[
   addr=>`https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
   addr=>`https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`,
@@ -134,9 +134,12 @@ const balanceAPIs=[
   addr=>`https://corsproxy.io/?url=https://blockcypher.com/api/v1/btc/main/addrs/${addr}/balance`
 ];
 
+function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
+
 async function checkBalance(address){
   for(let api of balanceAPIs){
     try{
+      await sleep(150); // throttle per API call
       const controller=new AbortController();
       const timeout=setTimeout(()=>controller.abort(),5000);
       const resp=await fetch(api(address), {signal: controller.signal});
@@ -204,6 +207,7 @@ async function genereerBatch(){
     let saldo=saldi[i];
     if(saldo==="Error") saldo="Error";
     let row=document.createElement("tr");
+
     row.innerHTML=`<td>${counter}</td><td>${addresses[i].address}</td><td>${addresses[i].wif}</td><td>${saldo}</td>`;
     
     if(typeof saldo==="number" && saldo>0){
@@ -221,6 +225,7 @@ async function genereerBatch(){
   while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
   localStorage.setItem("totaal",totaal);
   document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
+
   const stepsDisplay=(startSteps+stepsDone)%STEPS_PER_100_PERCENT;
   const percStr=bigIntDivisionToDecimalString(stepsDisplay*100n,STEPS_PER_100_PERCENT,80);
   document.getElementById("progress").textContent="Voortgang in keyspace: "+percStr+" %";
