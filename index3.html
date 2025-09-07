@@ -124,59 +124,54 @@ document.getElementById("errors").textContent="Aantal errors: "+fouten;
 document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
 mode=document.getElementById("modeSelect").value;
 
-// ======== Balance check ========
+// ======== Balance check (meerdere API's, niet stoppen bij errors) ========
 async function checkBalance(address){
   const apis=[
-    `https://corsproxy.io/?url=https://blockstream.info/api/address/${address}`,
-    `https://corsproxy.io/?url=https://mempool.space/api/address/${address}`,
-    `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${address}?cors=true`,
-    `https://corsproxy.io/?url=https://api.blockchair.com/bitcoin/dashboards/address/${address}`,
-    `https://corsproxy.io/?url=https://sochain.com/api/v2/address/BTC/${address}`
+    {
+      url:`https://corsproxy.io/?url=https://blockstream.info/api/address/${address}`,
+      parse: d => (d.chain_stats ? (d.chain_stats.funded_txo_sum - d.chain_stats.spent_txo_sum)/1e8 : null)
+    },
+    {
+      url:`https://corsproxy.io/?url=https://mempool.space/api/address/${address}`,
+      parse: d => (d.chain_stats ? (d.chain_stats.funded_txo_sum - d.chain_stats.spent_txo_sum)/1e8 : null)
+    },
+    {
+      url:`https://corsproxy.io/?url=https://blockchain.info/rawaddr/${address}?cors=true`,
+      parse: d => (typeof d.final_balance !== "undefined" ? d.final_balance/1e8 : null)
+    },
+    {
+      url:`https://corsproxy.io/?url=https://api.blockchair.com/bitcoin/dashboards/address/${address}`,
+      parse: d => (d.data && d.data[address] && d.data[address].address ? d.data[address].address.balance/1e8 : null)
+    },
+    {
+      url:`https://corsproxy.io/?url=https://sochain.com/api/v2/address/BTC/${address}`,
+      parse: d => (d.data && d.data.confirmed_balance !== undefined ? Number(d.data.confirmed_balance) : null)
+    }
   ];
 
-  for(let url of apis){
-    try{
-      const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(),5000);
-      const resp=await fetch(url,{signal:controller.signal});
+  for (let api of apis){
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(()=>controller.abort(),5000);
+      const resp = await fetch(api.url,{signal:controller.signal});
       clearTimeout(timeout);
       if(!resp.ok) continue;
-      const data=await resp.json();
-
-      if(data.chain_stats){
-        const funded=Number(data.chain_stats.funded_txo_sum||0);
-        const spent=Number(data.chain_stats.spent_txo_sum||0);
-        consecutiveErrors=0;
-        return (funded-spent)/1e8;
+      const data = await resp.json();
+      const saldo = api.parse(data);
+      if(saldo !== null && !isNaN(saldo)){
+        consecutiveErrors = 0;
+        return saldo;
       }
-      if(typeof data.final_balance!=="undefined"){ consecutiveErrors=0; return data.final_balance/1e8; }
-      if(data.data && data.data[address] && data.data[address].address){ consecutiveErrors=0; return data.data[address].address.balance/1e8; }
-      if(data.data && data.data.confirmed_balance !== undefined){ consecutiveErrors=0; return Number(data.data.confirmed_balance)/1e8; }
-      if(data.address && data.balance !== undefined){ consecutiveErrors=0; return Number(data.balance)/1e8; }
-      if(data.response && data.response.balance !== undefined){ consecutiveErrors=0; return Number(data.response.balance)/1e8; }
-
-    }catch(e){ continue; }
+    } catch(e) {
+      continue; // volgende API proberen
+    }
   }
 
+  // alleen als alle API's falen → error tellen
   fouten++;
   consecutiveErrors++;
   localStorage.setItem("fouten",fouten);
   document.getElementById("errors").textContent="Aantal errors: "+fouten;
-
-  // ==== Nieuw: 5 errors → wachten 60 seconden ====
-  if(consecutiveErrors>=5){
-    stoppen();
-    document.getElementById("retryMsg").textContent="5 errors achter elkaar. Wachten 60s...";
-    setTimeout(()=>{
-      document.getElementById("retryMsg").textContent="";
-      consecutiveErrors=0;
-      // hervatten zonder opnieuw starten
-      zoeken = true;
-      document.getElementById("startBtn").disabled = true;
-      document.getElementById("stopBtn").disabled = false;
-      genereerBatch();
-    },60000);
-  }
 
   return "Error";
 }
@@ -233,16 +228,15 @@ async function genereerBatch(){
     if(saldo==="Error") saldo="Error";
     let row=document.createElement("tr");
     row.innerHTML=`<td>${counter}</td><td>${addresses[i].address}</td><td>${addresses[i].wif}</td><td>${saldo}</td>`;
-    
-    // ==== Nieuw: stop volledig bij saldo >0 ====
+
     if(typeof saldo==="number" && saldo>0){
       row.style.backgroundColor="#c8f7c5";
       document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${addresses[i].address} | WIF: ${addresses[i].wif}`;
-      zoeken = false; // volledig stoppen
+      zoeken = false;
       document.getElementById("startBtn").disabled = true;
       document.getElementById("stopBtn").disabled = true;
       tbody.appendChild(row);
-      return; // niet verder zoeken
+      return;
     }
 
     tbody.appendChild(row);
