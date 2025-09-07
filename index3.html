@@ -21,12 +21,6 @@ label { display:inline-block; min-width: 210px; }
 <body>
 <h2>BTC Key Generator (incremental/random, max 50 zichtbaar)</h2>
 
-<p>
-  <a href="index2.html" target="_blank" style="font-weight:bold; font-size:16px; color:blue; text-decoration:underline;">
-    Ga naar de nieuwe pagina
-  </a>
-</p>
-
 <div id="totaal">Totaal gescande adressen: 0</div>
 <div id="errors">Aantal errors: 0</div>
 <div id="progress">Voortgang in keyspace: 0.000%</div>
@@ -39,7 +33,7 @@ label { display:inline-block; min-width: 210px; }
 </select>
 <br>
 
-<label for="startPercent">Start percentage (0–100) — alleen voor 'Incremental (start %)': </label>
+<label for="startPercent">Start percentage (0–100): </label>
 <input type="text" id="startPercent" value="0">
 <br>
 
@@ -119,7 +113,7 @@ function genRandomKeyBigInt(){
 
 // ======== Variabelen ========
 let counter=0, totaal=parseInt(localStorage.getItem("totaal")||"0",10), fouten=parseInt(localStorage.getItem("fouten")||"0",10);
-let consecutiveErrors=0; // teller
+let consecutiveErrors=0;
 let zoeken=false, MAX_VISIBLE=50, BATCH_SIZE=2;
 let mode="inc-random-start", currentKey=null, firstKey=null;
 let stepsDone=0n, startSteps=0n;
@@ -176,7 +170,7 @@ async function checkBalance(address){
     setTimeout(()=>{
       document.getElementById("retryMsg").textContent="";
       consecutiveErrors=0;
-      // hervatten zonder opnieuw te initialiseren
+      // hervatten zonder opnieuw starten
       zoeken = true;
       document.getElementById("startBtn").disabled = true;
       document.getElementById("stopBtn").disabled = false;
@@ -239,11 +233,18 @@ async function genereerBatch(){
     if(saldo==="Error") saldo="Error";
     let row=document.createElement("tr");
     row.innerHTML=`<td>${counter}</td><td>${addresses[i].address}</td><td>${addresses[i].wif}</td><td>${saldo}</td>`;
+    
+    // ==== Nieuw: stop volledig bij saldo >0 ====
     if(typeof saldo==="number" && saldo>0){
       row.style.backgroundColor="#c8f7c5";
-      document.getElementById("foundMsg").textContent=`Adres gevonden met saldo >0 BTC! ${addresses[i].address} | WIF: ${addresses[i].wif}`;
-      stoppen();
+      document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${addresses[i].address} | WIF: ${addresses[i].wif}`;
+      zoeken = false; // volledig stoppen
+      document.getElementById("startBtn").disabled = true;
+      document.getElementById("stopBtn").disabled = true;
+      tbody.appendChild(row);
+      return; // niet verder zoeken
     }
+
     tbody.appendChild(row);
   }
   while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
