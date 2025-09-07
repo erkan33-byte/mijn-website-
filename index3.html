@@ -119,6 +119,7 @@ function genRandomKeyBigInt(){
 
 // ======== Variabelen ========
 let counter=0, totaal=parseInt(localStorage.getItem("totaal")||"0",10), fouten=parseInt(localStorage.getItem("fouten")||"0",10);
+let consecutiveErrors=0; // <<<<< nieuw
 let zoeken=false, MAX_VISIBLE=50, BATCH_SIZE=2;
 let mode="inc-random-start", currentKey=null, firstKey=null;
 let stepsDone=0n, startSteps=0n;
@@ -155,20 +156,33 @@ async function checkBalance(address){
       if(data.chain_stats){ // Blockstream/Mempool
         const funded=Number(data.chain_stats.funded_txo_sum||0);
         const spent=Number(data.chain_stats.spent_txo_sum||0);
+        consecutiveErrors=0;
         return (funded-spent)/1e8;
       }
-      if(typeof data.final_balance!=="undefined") return data.final_balance/1e8;
-      if(data.data && data.data[address] && data.data[address].address) return data.data[address].address.balance/1e8;
-      if(data.data && data.data.confirmed_balance !== undefined) return Number(data.data.confirmed_balance)/1e8;
-      if(data.address && data.balance !== undefined) return Number(data.balance)/1e8;
-      if(data.response && data.response.balance !== undefined) return Number(data.response.balance)/1e8;
+      if(typeof data.final_balance!=="undefined"){ consecutiveErrors=0; return data.final_balance/1e8; }
+      if(data.data && data.data[address] && data.data[address].address){ consecutiveErrors=0; return data.data[address].address.balance/1e8; }
+      if(data.data && data.data.confirmed_balance !== undefined){ consecutiveErrors=0; return Number(data.data.confirmed_balance)/1e8; }
+      if(data.address && data.balance !== undefined){ consecutiveErrors=0; return Number(data.balance)/1e8; }
+      if(data.response && data.response.balance !== undefined){ consecutiveErrors=0; return Number(data.response.balance)/1e8; }
 
     }catch(e){ continue; }
   }
 
   fouten++;
+  consecutiveErrors++;
   localStorage.setItem("fouten",fouten);
   document.getElementById("errors").textContent="Aantal errors: "+fouten;
+
+  if(consecutiveErrors>=10){
+    stoppen();
+    document.getElementById("retryMsg").textContent="10 errors achter elkaar. Wachten 30s...";
+    setTimeout(()=>{
+      document.getElementById("retryMsg").textContent="";
+      consecutiveErrors=0;
+      starten();
+    },30000);
+  }
+
   return "Error";
 }
 
@@ -285,6 +299,7 @@ function resetTeller(){
 
 function resetErrors(){
   fouten=0;
+  consecutiveErrors=0;
   localStorage.setItem("fouten",fouten);
   document.getElementById("errors").textContent="Aantal errors: 0";
 }
