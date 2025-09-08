@@ -207,24 +207,55 @@ async function genereerBatch(){
   if(zoeken) setTimeout(genereerBatch,interval);
 }
 
-// ======== Start / Stop / Reset ========
-function starten(){
+// ======== VPN-check functie ========
+async function isVPNActiveAuto(){
+    try {
+        const resp = await fetch("https://api.ipify.org?format=json");
+        const data = await resp.json();
+        const currentIP = data.ip;
+        console.log("Huidig IP:", currentIP);
+
+        // Check of IP al eerder opgeslagen is
+        const lastIP = localStorage.getItem("lastIP") || "";
+
+        if(lastIP && lastIP === currentIP){
+            alert("⚠️ VPN lijkt niet actief! Je IP is hetzelfde als vorige sessie. Zet eerst de VPN aan.");
+            return false;
+        }
+
+        // Sla nieuwe IP op
+        localStorage.setItem("lastIP", currentIP);
+        return true;
+    } catch (e) {
+        alert("Fout bij IP-check. Controleer je internetverbinding of VPN.");
+        return false;
+    }
+}
+
+// ======== Start / Stop / Reset met VPN-check ========
+async function starten(){
   if(zoeken) return;
-  stepKeys=BigInt(document.getElementById("stepKeys").value.trim()||"1000000");
-  batchSize=parseInt(document.getElementById("batchSize").value)||5;
-  currentKey=genRandomKeyBigInt();
-  zoeken=true;
-  document.getElementById("startBtn").disabled=true;
-  document.getElementById("stopBtn").disabled=false;
-  document.getElementById("retryMsg").textContent="";
-  document.getElementById("foundMsg").textContent="";
+
+  const vpnOk = await isVPNActiveAuto();
+  if(!vpnOk) return; // Stop als VPN niet actief
+
+  stepKeys = BigInt(document.getElementById("stepKeys").value.trim() || "1000000");
+  batchSize = parseInt(document.getElementById("batchSize").value) || 5;
+  currentKey = genRandomKeyBigInt();
+  zoeken = true;
+  document.getElementById("startBtn").disabled = true;
+  document.getElementById("stopBtn").disabled = false;
+  document.getElementById("retryMsg").textContent = "";
+  document.getElementById("foundMsg").textContent = "";
   genereerBatch();
 }
+
 function stoppen(){zoeken=false; document.getElementById("startBtn").disabled=false; document.getElementById("stopBtn").disabled=true;}
 function resetTeller(){totaal=0; localStorage.setItem("totaal",totaal); document.getElementById("totaal").textContent="Totaal gescande adressen: 0";}
 function resetErrors(){fouten=0; localStorage.setItem("fouten",fouten); document.getElementById("errors").textContent="Aantal errors: 0";}
-document.getElementById("startBtn").addEventListener("click",starten);
-document.getElementById("stopBtn").addEventListener("click",stoppen);
+
+document.getElementById("startBtn").addEventListener("click", starten);
+document.getElementById("stopBtn").addEventListener("click", stoppen);
 </script>
 
 <hr>
