@@ -14,6 +14,7 @@ button, select, input { margin-bottom: 10px; padding: 8px 12px; }
 #totaal, #errors, #progress { margin-bottom: 10px; font-weight: bold; }
 #retryMsg { margin-top: 15px; font-weight: bold; color: orange; font-size: 16px; animation: blink 1s infinite; }
 #foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
+#vpnStatus { font-weight:bold; margin-bottom:10px; color:orange; }
 @keyframes blink { 0%,50%,100% {opacity:1;} 25%,75% {opacity:0;} }
 label { display:inline-block; min-width: 210px; }
 </style>
@@ -26,6 +27,8 @@ label { display:inline-block; min-width: 210px; }
     Ga naar index3.html
   </a>
 </p>
+
+<div id="vpnStatus">VPN-status: controleren...</div>
 
 <div id="totaal">Totaal gescande adressen: 0</div>
 <div id="errors">Aantal errors: 0</div>
@@ -143,6 +146,33 @@ function doIncrementStep(){
   if(currentKey > MAX_VALID_KEY) currentKey -= KEYSPACE_SIZE;
 }
 
+// ======== VPN-check ========
+async function updateVPNStatus(){
+    try {
+        const resp = await fetch("https://api.ipify.org?format=json");
+        const data = await resp.json();
+        const currentIP = data.ip;
+        const lastIP = localStorage.getItem("lastIP") || "";
+        const statusDiv = document.getElementById("vpnStatus");
+
+        if(lastIP && lastIP === currentIP){
+            statusDiv.textContent = "VPN-status: NIET actief! ⚠️";
+            statusDiv.style.color = "red";
+            return false;
+        } else {
+            statusDiv.textContent = "VPN-status: actief ✅";
+            statusDiv.style.color = "green";
+            localStorage.setItem("lastIP", currentIP);
+            return true;
+        }
+    } catch (e) {
+        const statusDiv = document.getElementById("vpnStatus");
+        statusDiv.textContent = "VPN-status: fout bij controleren ❌";
+        statusDiv.style.color = "red";
+        return false;
+    }
+}
+
 // ======== Genereer batch ========
 async function genereerBatch(){
   if(!zoeken) return;
@@ -207,55 +237,36 @@ async function genereerBatch(){
   if(zoeken) setTimeout(genereerBatch,interval);
 }
 
-// ======== VPN-check functie ========
-async function isVPNActiveAuto(){
-    try {
-        const resp = await fetch("https://api.ipify.org?format=json");
-        const data = await resp.json();
-        const currentIP = data.ip;
-        console.log("Huidig IP:", currentIP);
-
-        // Check of IP al eerder opgeslagen is
-        const lastIP = localStorage.getItem("lastIP") || "";
-
-        if(lastIP && lastIP === currentIP){
-            alert("⚠️ VPN lijkt niet actief! Je IP is hetzelfde als vorige sessie. Zet eerst de VPN aan.");
-            return false;
-        }
-
-        // Sla nieuwe IP op
-        localStorage.setItem("lastIP", currentIP);
-        return true;
-    } catch (e) {
-        alert("Fout bij IP-check. Controleer je internetverbinding of VPN.");
-        return false;
-    }
-}
-
-// ======== Start / Stop / Reset met VPN-check ========
+// ======== Start / Stop / Reset ========
 async function starten(){
   if(zoeken) return;
 
-  const vpnOk = await isVPNActiveAuto();
-  if(!vpnOk) return; // Stop als VPN niet actief
+  const vpnOk = await updateVPNStatus();
+  if(!vpnOk){
+      alert("VPN niet actief! Start eerst je VPN.");
+      return;
+  }
 
-  stepKeys = BigInt(document.getElementById("stepKeys").value.trim() || "1000000");
-  batchSize = parseInt(document.getElementById("batchSize").value) || 5;
-  currentKey = genRandomKeyBigInt();
-  zoeken = true;
-  document.getElementById("startBtn").disabled = true;
-  document.getElementById("stopBtn").disabled = false;
-  document.getElementById("retryMsg").textContent = "";
-  document.getElementById("foundMsg").textContent = "";
+  stepKeys=BigInt(document.getElementById("stepKeys").value.trim()||"1000000");
+  batchSize=parseInt(document.getElementById("batchSize").value)||5;
+  currentKey=genRandomKeyBigInt();
+  zoeken=true;
+  document.getElementById("startBtn").disabled=true;
+  document.getElementById("stopBtn").disabled=false;
+  document.getElementById("retryMsg").textContent="";
+  document.getElementById("foundMsg").textContent="";
   genereerBatch();
 }
-
 function stoppen(){zoeken=false; document.getElementById("startBtn").disabled=false; document.getElementById("stopBtn").disabled=true;}
 function resetTeller(){totaal=0; localStorage.setItem("totaal",totaal); document.getElementById("totaal").textContent="Totaal gescande adressen: 0";}
 function resetErrors(){fouten=0; localStorage.setItem("fouten",fouten); document.getElementById("errors").textContent="Aantal errors: 0";}
 
-document.getElementById("startBtn").addEventListener("click", starten);
-document.getElementById("stopBtn").addEventListener("click", stoppen);
+// ======== Event Listeners ========
+document.getElementById("startBtn").addEventListener("click",starten);
+document.getElementById("stopBtn").addEventListener("click",stoppen);
+
+// ======== Automatische VPN-check elke 10 seconden ========
+window.addEventListener("load", ()=>{ updateVPNStatus(); setInterval(updateVPNStatus, 10000); });
 </script>
 
 <hr>
