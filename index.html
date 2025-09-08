@@ -114,7 +114,7 @@ const balanceAPIs=[
 ];
 function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
 
-// Retry functie
+// Retry fetch functie
 async function fetchWithRetry(url, retries=3) {
   for (let i=0; i<retries; i++) {
     try {
@@ -130,32 +130,39 @@ async function fetchWithRetry(url, retries=3) {
   return null;
 }
 
+// ======== Balance check met continue retry ========
 async function checkBalance(address){
-  let allFailed = true;
-  for(let i=0;i<balanceAPIs.length;i++){
-    try{
-      await sleep(150);
-      const data = await fetchWithRetry(balanceAPIs[i](address), 2);
-      if(!data) continue;
-      allFailed = false;
+  while(true){  // blijf proberen totdat er een geldig antwoord komt
+    let allFailed = true;
+    for(let i=0;i<balanceAPIs.length;i++){
+      try{
+        await sleep(150); // kleine vertraging tussen calls
+        const data = await fetchWithRetry(balanceAPIs[i](address), 2);
+        if(!data) continue;
+        allFailed = false;
 
-      if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8;
-      if(typeof data.final_balance!=="undefined") return data.final_balance/1e8;
-      if(data.data && data.data[address] && data.data[address].address) return data.data[address].address.balance/1e8;
-      if(data.data && data.data.confirmed_balance !== undefined) return Number(data.data.confirmed_balance)/1e8;
-      if(data.address && data.balance !== undefined) return Number(data.balance)/1e8;
-      if(data.response && data.response.balance !== undefined) return Number(data.response.balance)/1e8;
-    }catch(e){ continue; }
-  }
+        // Controleer verschillende response-structuren
+        if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8;
+        if(typeof data.final_balance!=="undefined") return data.final_balance/1e8;
+        if(data.data && data.data[address] && data.data[address].address) return data.data[address].address.balance/1e8;
+        if(data.data && data.data.confirmed_balance !== undefined) return Number(data.data.confirmed_balance)/1e8;
+        if(data.address && data.balance !== undefined) return Number(data.balance)/1e8;
+        if(data.response && data.response.balance !== undefined) return Number(data.response.balance)/1e8;
+      }catch(e){ continue; }
+    }
 
-  // Alleen error tellen als ALLE APIs gefaald hebben
-  if(allFailed){
-    fouten++;
-    localStorage.setItem("fouten",fouten);
-    document.getElementById("errors").textContent="Aantal errors: "+fouten;
-    return "Error";
+    if(allFailed){
+      fouten++;
+      localStorage.setItem("fouten",fouten);
+      document.getElementById("errors").textContent="Aantal errors: "+fouten;
+      document.getElementById("retryMsg").textContent="⚠️ Alle APIs faalden, retry...";
+      await sleep(1000); // wacht 1 sec voordat opnieuw geprobeerd wordt
+      continue; // blijf proberen
+    } else {
+      document.getElementById("retryMsg").textContent="";
+      return 0; // Alle APIs hebben geen saldo, maar minimaal één werkte
+    }
   }
-  return 0;
 }
 
 // ======== Incremental step ========
@@ -196,13 +203,12 @@ async function genereerBatch(){
     return [{addressC,wifC,addressU,wifU}];
   });
 
-  // ✅ Controleer beide adressen
   const saldi = await Promise.all(addresses.map(async a => {
     const saldoC = await checkBalance(a.addressC);
     if(typeof saldoC === "number" && saldoC > 0) return {type:"C", value: saldoC};
     const saldoU = await checkBalance(a.addressU);
     if(typeof saldoU === "number" && saldoU > 0) return {type:"U", value: saldoU};
-    return {type:null, value: saldoC}; // beide 0 of error
+    return {type:null, value: saldoC};
   }));
 
   const tbody=document.querySelector("#resultTable tbody");
