@@ -123,7 +123,7 @@ document.getElementById("errors").textContent="Aantal errors: "+fouten;
 document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
 mode=document.getElementById("modeSelect").value;
 
-// ======== Verbeterde Balance check met throttle ========
+// ======== Balance check ========
 const balanceAPIs=[
   addr=>`https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
   addr=>`https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`,
@@ -139,7 +139,7 @@ function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
 async function checkBalance(address){
   for(let api of balanceAPIs){
     try{
-      await sleep(150); // throttle per API call
+      await sleep(150);
       const controller=new AbortController();
       const timeout=setTimeout(()=>controller.abort(),5000);
       const resp=await fetch(api(address), {signal: controller.signal});
@@ -190,13 +190,7 @@ async function genereerBatch(){
     const checksumC=doubleSha256Hex(payloadC).slice(0,8);
     const addressC=base58Encode(payloadC+checksumC);
     const wifC=base58Encode("80"+privHex+"01"+doubleSha256Hex("80"+privHex+"01").slice(0,8));
-    const pubU=toHex(kp.getPublic(false,"array"));
-    const ripemdU=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
-    const payloadU="00"+ripemdU;
-    const checksumU=doubleSha256Hex(payloadU).slice(0,8);
-    const addressU=base58Encode(payloadU+checksumU);
-    const wifU=base58Encode("80"+privHex+doubleSha256Hex("80"+privHex).slice(0,8));
-    return [{address:addressC,wif:wifC},{address:addressU,wif:wifU}];
+    return [{address:addressC,wif:wifC}];
   });
 
   const saldi=await Promise.all(addresses.map(a=>checkBalance(a.address)));
@@ -211,7 +205,7 @@ async function genereerBatch(){
     row.innerHTML=`<td>${counter}</td><td>${addresses[i].address}</td><td>${addresses[i].wif}</td><td>${saldo}</td>`;
     
     if(typeof saldo==="number" && saldo>0){
-      row.style.backgroundColor="#c8f7c5";
+            row.style.backgroundColor="#c8f7c5";
       document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${addresses[i].address} | WIF: ${addresses[i].wif}`;
       zoeken=false;
       document.getElementById("startBtn").disabled=true;
@@ -235,49 +229,71 @@ async function genereerBatch(){
   if(zoeken) setTimeout(genereerBatch,interval);
 }
 
-// ======== Start / stop / reset ========
-function starten(){
-  if(zoeken) return;
-  const stepPerc=parseFloat(document.getElementById("stepPercent").value)||0.001;
-  const startPerc=parseFloat(document.getElementById("startPercent").value)||0;
-  STEPS_PER_100_PERCENT=BigInt(Math.round(100/stepPerc));
-  carryNum=0n; stepsDone=0n; startSteps=0n;
-  mode=document.getElementById("modeSelect").value;
+// ======== VPN / Buitenland-check ========
+async function isForeignIP(){
+    try{
+        const resp = await fetch("https://ipapi.co/json/");
+        const data = await resp.json();
+        if(data.country_code==="NL"){
+            alert("⚠️ Nederlandse IP gedetecteerd. Starten is geblokkeerd. Gebruik een buitenlands IP (VPN).");
+            return false;
+        }
+        return true;
+    }catch(e){
+        alert("Fout bij IP-check. Controleer je internet of VPN.");
+        return false;
+    }
+}
 
-  if(mode==="inc-random-start"){
-    firstKey=genRandomKeyBigInt();
-    currentKey=firstKey;
-    startSteps=((currentKey-MIN_KEY)*STEPS_PER_100_PERCENT)/KEYSPACE_SIZE;
-  }else if(mode==="inc-percent-start"){
-    const steps=BigInt(Math.round(startPerc*Number(STEPS_PER_100_PERCENT)/100));
-    currentKey=MIN_KEY+(KEYSPACE_SIZE*steps)/STEPS_PER_100_PERCENT;
-    startSteps=steps;
-  }else{ currentKey=genRandomKeyBigInt(); }
+// ======== Start / Stop / Reset met VPN-check ========
+async function starten(){
+    if(zoeken) return;
 
-  zoeken=true;
-  document.getElementById("startBtn").disabled=true;
-  document.getElementById("stopBtn").disabled=false;
-  document.getElementById("retryMsg").textContent="";
-  document.getElementById("foundMsg").textContent="";
-  genereerBatch();
+    const vpnOk = await isForeignIP();
+    if(!vpnOk) return;
+
+    const stepPerc=parseFloat(document.getElementById("stepPercent").value)||0.001;
+    const startPerc=parseFloat(document.getElementById("startPercent").value)||0;
+    STEPS_PER_100_PERCENT=BigInt(Math.round(100/stepPerc));
+    carryNum=0n; stepsDone=0n; startSteps=0n;
+    mode=document.getElementById("modeSelect").value;
+
+    if(mode==="inc-random-start"){
+        firstKey=genRandomKeyBigInt();
+        currentKey=firstKey;
+        startSteps=((currentKey-MIN_KEY)*STEPS_PER_100_PERCENT)/KEYSPACE_SIZE;
+    }else if(mode==="inc-percent-start"){
+        const steps=BigInt(Math.round(startPerc*Number(STEPS_PER_100_PERCENT)/100));
+        currentKey=MIN_KEY+(KEYSPACE_SIZE*steps)/STEPS_PER_100_PERCENT;
+        startSteps=steps;
+    }else{
+        currentKey=genRandomKeyBigInt();
+    }
+
+    zoeken=true;
+    document.getElementById("startBtn").disabled=true;
+    document.getElementById("stopBtn").disabled=false;
+    document.getElementById("retryMsg").textContent="";
+    document.getElementById("foundMsg").textContent="";
+    genereerBatch();
 }
 
 function stoppen(){
-  zoeken=false;
-  document.getElementById("startBtn").disabled=false;
-  document.getElementById("stopBtn").disabled=true;
+    zoeken=false;
+    document.getElementById("startBtn").disabled=false;
+    document.getElementById("stopBtn").disabled=true;
 }
 
 function resetTeller(){
-  totaal=0;
-  localStorage.setItem("totaal",totaal);
-  document.getElementById("totaal").textContent="Totaal gescande adressen: 0";
+    totaal=0;
+    localStorage.setItem("totaal",totaal);
+    document.getElementById("totaal").textContent="Totaal gescande adressen: 0";
 }
 
 function resetErrors(){
-  fouten=0;
-  localStorage.setItem("fouten",fouten);
-  document.getElementById("errors").textContent="Aantal errors: 0";
+    fouten=0;
+    localStorage.setItem("fouten",fouten);
+    document.getElementById("errors").textContent="Aantal errors: 0";
 }
 
 document.getElementById("startBtn").addEventListener("click",starten);
