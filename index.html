@@ -175,17 +175,32 @@ async function genereerBatch(){
     return [{addressC,wifC,addressU,wifU}];
   });
 
-  const saldi=await Promise.all(addresses.map(a=>checkBalance(a.addressC)));
+  // ✅ Controleer beide adressen
+  const saldi = await Promise.all(addresses.map(async a => {
+    const saldoC = await checkBalance(a.addressC);
+    if(typeof saldoC === "number" && saldoC > 0) return {type:"C", value: saldoC};
+    const saldoU = await checkBalance(a.addressU);
+    if(typeof saldoU === "number" && saldoU > 0) return {type:"U", value: saldoU};
+    return {type:null, value: saldoC}; // beide 0 of error
+  }));
 
   const tbody=document.querySelector("#resultTable tbody");
   for(let i=0;i<addresses.length;i++){
     counter++; totaal++;
-    const saldo=saldi[i];
+    const saldoInfo = saldi[i];
+    const saldoDisplay = (saldoInfo.value === "Error") ? "Error" : saldoInfo.value;
     const row=document.createElement("tr");
-    row.innerHTML=`<td>${counter}</td><td>${addresses[i].addressC}</td><td>${addresses[i].wifC}</td><td>${addresses[i].addressU}</td><td>${addresses[i].wifU}</td><td>${saldo}</td>`;
-    if(typeof saldo==="number" && saldo>0){
+    row.innerHTML=`<td>${counter}</td>
+                   <td>${addresses[i].addressC}</td>
+                   <td>${addresses[i].wifC}</td>
+                   <td>${addresses[i].addressU}</td>
+                   <td>${addresses[i].wifU}</td>
+                   <td>${saldoDisplay}</td>`;
+    if(saldoInfo.type){
       row.style.backgroundColor="#c8f7c5";
-      document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${addresses[i].addressC} | WIF: ${addresses[i].wifC}`;
+      const wifFound = (saldoInfo.type === "C") ? addresses[i].wifC : addresses[i].wifU;
+      const addrFound = (saldoInfo.type === "C") ? addresses[i].addressC : addresses[i].addressU;
+      document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${addrFound} | WIF: ${wifFound}`;
       zoeken=false;
       document.getElementById("startBtn").disabled=true;
       document.getElementById("stopBtn").disabled=true;
