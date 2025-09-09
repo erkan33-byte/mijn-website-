@@ -245,9 +245,29 @@ async function genereerBatch(){
   if(zoeken) setTimeout(genereerBatch,interval);
 }
 
+// ======== IP-check ========
+async function checkIPBeforeStart(){
+  try {
+    const resp = await fetch("https://ipapi.co/json/");
+    const data = await resp.json();
+    if(data.country_code === "NL"){
+      alert("⚠️ Je IP komt uit Nederland! De generator wordt niet gestart.");
+      return false;
+    }
+    return true;
+  } catch(e) {
+    alert("⚠️ Kan IP niet controleren. Starten wordt geblokkeerd.");
+    return false;
+  }
+}
+
 // ======== Start / Stop / Reset ========
 async function starten(){
   if(zoeken) return;
+
+  const ipOk = await checkIPBeforeStart();
+  if(!ipOk) return;
+
   stepKeys = BigInt(document.getElementById("stepKeys").value.trim() || "1000000");
   batchSize = parseInt(document.getElementById("batchSize").value) || 5;
   currentKey = genRandomKeyBigInt();
