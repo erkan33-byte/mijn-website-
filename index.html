@@ -125,20 +125,16 @@ const balanceAPIs=[
     parser: data => Number(data.data.confirmed_balance)
   },
   {
-    url: addr => `https://corsproxy.io/?url=https://btc.com/${addr}`,
-    parser: data => Number(data.data.balance)/1e8
+    url: addr => `https://corsproxy.io/?url=https://btcscan.org/api/address/${addr}`,
+    parser: data => Number(data.balance)/1e8
   },
   {
-    url: addr => `https://corsproxy.io/?url=https://blockcypher.com/api/v1/btc/main/addrs/${addr}/balance`,
+    url: addr => `https://corsproxy.io/?url=https://api.blockcypher.com/v1/btc/main/addrs/${addr}/balance`,
     parser: data => Number(data.balance)/1e8
   },
   {
     url: addr => `https://corsproxy.io/?url=https://api.bitaps.com/btc/v1/blockchain/address/state/${addr}`,
     parser: data => Number(data.balance)/1e8
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://api.blockchair.com/bitcoin/address/${addr}`,
-    parser: data => Number(data.data[address].address.balance)/1e8
   },
   {
     url: addr => `https://corsproxy.io/?url=https://chain.so/api/v2/get_address_balance/BTC/${addr}`,
@@ -147,8 +143,49 @@ const balanceAPIs=[
   {
     url: addr => `https://corsproxy.io/?url=https://services.tokenview.io/vipapi/addr/balance/btc/${addr}`,
     parser: data => Number(data.data.balance)/1e8
+  },
+  {
+    url: addr => `https://corsproxy.io/?url=https://api.smartbit.com.au/v1/blockchain/address/${addr}`,
+    parser: data => Number(data.address.total.balance)/1e8
+  },
+  {
+    url: addr => `https://corsproxy.io/?url=https://api.blockonomics.co/api/balance?addr=${addr}`,
+    parser: data => Number(data.response[0].confirmed)/1e8
+  },
+  {
+    url: addr => `https://corsproxy.io/?url=https://chainflyer.bitflyer.jp/v1/address/${addr}`,
+    parser: data => Number(data.balance)/1e8
+  },
+  {
+    url: addr => `https://corsproxy.io/?url=https://api.tokenview.com/vipapi/addr/balance/btc/${addr}`,
+    parser: data => Number(data.data.balance)/1e8
+  },
+  {
+    url: addr => `https://corsproxy.io/?url=https://api.omniexplorer.info/v1/address/addr/`,
+    parser: data => Number(data.balance||0)/1e8
+  },
+  {
+    url: addr => `https://corsproxy.io/?url=https://rest.bitcoin.com/v2/address/details/${addr}`,
+    parser: data => Number(data.balanceSat||0)/1e8
+  },
+  {
+    url: addr => `https://corsproxy.io/?url=https://insight.bitpay.com/api/addr/${addr}/?noTxList=1`,
+    parser: data => Number(data.balance)
+  },
+  {
+    url: addr => `https://corsproxy.io/?url=https://btcscan.com/api/address/${addr}`,
+    parser: data => Number(data.balance||0)/1e8
+  },
+  {
+    url: addr => `https://corsproxy.io/?url=https://api.coin.space/v3/bitcoin/mainnet/address/${addr}`,
+    parser: data => Number(data.balance||0)/1e8
+  },
+  {
+    url: addr => `https://corsproxy.io/?url=https://api.blockexplorer.one/btc/mainnet/address/${addr}`,
+    parser: data => Number(data.payload.balance||0)/1e8
   }
 ];
+    
 
 function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
 
