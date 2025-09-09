@@ -101,154 +101,84 @@ function genRandomKeyBigInt(){
 let counter=0, totaal=parseInt(localStorage.getItem("totaal")||"0",10), fouten=parseInt(localStorage.getItem("fouten")||"0",10);
 let zoeken=false, MAX_VISIBLE=50;
 let currentKey=null, stepKeys=1n, batchSize=5;
+let proxyIndex = 0;
 
-// ======== Balance check met API-specifieke parsers ========
-const balanceAPIs=[
-  {
-    url: addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
-    parser: data => (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`,
-    parser: data => (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${addr}?cors=true`,
-    parser: data => Number(data.final_balance)/1e8
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://api.blockchair.com/bitcoin/dashboards/address/${addr}`,
-    parser: data => Number(data.data[addr].address.balance)/1e8
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://sochain.com/api/v2/address/BTC/${addr}`,
-    parser: data => Number(data.data.confirmed_balance)
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://btcscan.org/api/address/${addr}`,
-    parser: data => Number(data.balance)/1e8
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://api.blockcypher.com/v1/btc/main/addrs/${addr}/balance`,
-    parser: data => Number(data.balance)/1e8
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://api.bitaps.com/btc/v1/blockchain/address/state/${addr}`,
-    parser: data => Number(data.balance)/1e8
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://chain.so/api/v2/get_address_balance/BTC/${addr}`,
-    parser: data => Number(data.data.confirmed_balance)
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://services.tokenview.io/vipapi/addr/balance/btc/${addr}`,
-    parser: data => Number(data.data.balance)/1e8
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://api.smartbit.com.au/v1/blockchain/address/${addr}`,
-    parser: data => Number(data.address.total.balance)/1e8
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://api.blockonomics.co/api/balance?addr=${addr}`,
-    parser: data => Number(data.response[0].confirmed)/1e8
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://chainflyer.bitflyer.jp/v1/address/${addr}`,
-    parser: data => Number(data.balance)/1e8
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://api.tokenview.com/vipapi/addr/balance/btc/${addr}`,
-    parser: data => Number(data.data.balance)/1e8
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://api.omniexplorer.info/v1/address/addr/`,
-    parser: data => Number(data.balance||0)/1e8
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://rest.bitcoin.com/v2/address/details/${addr}`,
-    parser: data => Number(data.balanceSat||0)/1e8
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://insight.bitpay.com/api/addr/${addr}/?noTxList=1`,
-    parser: data => Number(data.balance)
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://btcscan.com/api/address/${addr}`,
-    parser: data => Number(data.balance||0)/1e8
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://api.coin.space/v3/bitcoin/mainnet/address/${addr}`,
-    parser: data => Number(data.balance||0)/1e8
-  },
-  {
-    url: addr => `https://corsproxy.io/?url=https://api.blockexplorer.one/btc/mainnet/address/${addr}`,
-    parser: data => Number(data.payload.balance||0)/1e8
-  }
+// ======== Proxies ========
+const proxies=[
+  "https://corsproxy.io/?url=",
+  "https://api.allorigins.win/raw?url=",
+  "https://thingproxy.freeboard.io/fetch/",
+  "https://cors.bridged.cc/",
+  "https://cors-anywhere.herokuapp.com/"
 ];
-    
 
+// ======== Balance APIs ========
+const balanceAPIs=[
+  {url: addr=>`https://blockstream.info/api/address/${addr}`, parser: data => (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8 },
+  {url: addr=>`https://mempool.space/api/address/${addr}`, parser: data => (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8 },
+  {url: addr=>`https://blockchain.info/rawaddr/${addr}?cors=true`, parser: data => Number(data.final_balance)/1e8 },
+  {url: addr=>`https://api.blockchair.com/bitcoin/dashboards/address/${addr}`, parser: data => Number(data.data[addr].address.balance)/1e8 },
+  {url: addr=>`https://sochain.com/api/v2/address/BTC/${addr}`, parser: data => Number(data.data.confirmed_balance) },
+  {url: addr=>`https://btcscan.org/api/address/${addr}`, parser: data => Number(data.balance)/1e8 },
+  {url: addr=>`https://api.blockcypher.com/v1/btc/main/addrs/${addr}/balance`, parser: data => Number(data.balance)/1e8 },
+  {url: addr=>`https://api.bitaps.com/btc/v1/blockchain/address/state/${addr}`, parser: data => Number(data.balance)/1e8 },
+  {url: addr=>`https://chain.so/api/v2/get_address_balance/BTC/${addr}`, parser: data => Number(data.data.confirmed_balance) },
+  {url: addr=>`https://services.tokenview.io/vipapi/addr/balance/btc/${addr}`, parser: data => Number(data.data.balance)/1e8 },
+  {url: addr=>`https://api.smartbit.com.au/v1/blockchain/address/${addr}`, parser: data => Number(data.address.total.balance)/1e8 },
+  {url: addr=>`https://api.blockonomics.co/api/balance?addr=${addr}`, parser: data => Number(data.response[0].confirmed)/1e8 },
+  {url: addr=>`https://chainflyer.bitflyer.jp/v1/address/${addr}`, parser: data => Number(data.balance)/1e8 },
+  {url: addr=>`https://api.tokenview.com/vipapi/addr/balance/btc/${addr}`, parser: data => Number(data.data.balance)/1e8 },
+  {url: addr=>`https://api.omniexplorer.info/v1/address/addr/`, parser: data => Number(data.balance||0)/1e8 },
+  {url: addr=>`https://rest.bitcoin.com/v2/address/details/${addr}`, parser: data => Number(data.balanceSat||0)/1e8 },
+  {url: addr=>`https://insight.bitpay.com/api/addr/${addr}/?noTxList=1`, parser: data => Number(data.balance) },
+  {url: addr=>`https://btcscan.com/api/address/${addr}`, parser: data => Number(data.balance||0)/1e8 },
+  {url: addr=>`https://api.coin.space/v3/bitcoin/mainnet/address/${addr}`, parser: data => Number(data.balance||0)/1e8 },
+  {url: addr=>`https://api.blockexplorer.one/btc/mainnet/address/${addr}`, parser: data => Number(data.payload.balance||0)/1e8 }
+];
+
+// ======== Sleep & fetch retry ========
 function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
-
-// Retry fetch functie
-async function fetchWithRetry(url, retries=3) {
-  for (let i=0; i<retries; i++) {
-    try {
+async function fetchWithRetry(url,retries=3){
+  for(let i=0;i<retries;i++){
+    try{
       const controller=new AbortController();
       const timeout=setTimeout(()=>controller.abort(),5000);
       const resp=await fetch(url,{signal:controller.signal});
       clearTimeout(timeout);
       if(resp.ok) return await resp.json();
-    } catch(e) {
-      if(i===retries-1) throw e;
-    }
+    }catch(e){ if(i===retries-1) throw e; }
   }
   return null;
 }
 
-// ======== Balance check met continue retry ========
+// ======== Check balance parallel + proxy rotation ========
 async function checkBalance(address){
-  while(true){
-    let allFailed = true;
-    for(let api of balanceAPIs){
+  let saldo=0;
+  const checks = balanceAPIs.map((api,idx)=>{
+    return (async()=>{
       try{
-        await sleep(150);
-        const data = await fetchWithRetry(api.url(address), 2);
-        if(!data) continue;
-        const saldo = api.parser(data);
-        if(!isNaN(saldo)) return saldo;
-        allFailed = false;
-      }catch(e){ continue; }
-    }
-
-    if(allFailed){
-      fouten++;
-      localStorage.setItem("fouten",fouten);
-      document.getElementById("errors").textContent="Aantal errors: "+fouten;
-      document.getElementById("retryMsg").textContent="⚠️ Alle APIs faalden, retry...";
-      await sleep(1000);
-      continue;
-    } else {
-      document.getElementById("retryMsg").textContent="";
-      return 0;
-    }
-  }
+        const proxy = proxies[(proxyIndex + idx) % proxies.length];
+        const data = await fetchWithRetry(proxy + api.url(address),2);
+        if(data){
+          const s = api.parser(data);
+          if(typeof s==="number" && s>0) saldo = s;
+        }
+      }catch(e){}
+    })();
+  });
+  proxyIndex += balanceAPIs.length;
+  await Promise.all(checks);
+  return saldo;
 }
 
 // ======== Incremental step ========
-function doIncrementStep(){
-  currentKey += stepKeys;
-  if(currentKey > MAX_VALID_KEY) currentKey -= KEYSPACE_SIZE;
-}
+function doIncrementStep(){ currentKey += stepKeys; if(currentKey > MAX_VALID_KEY) currentKey -= KEYSPACE_SIZE; }
 
 // ======== Genereer batch ========
 async function genereerBatch(){
   if(!zoeken) return;
-
   const keys=[];
-  for(let i=0;i<batchSize;i++){
-    keys.push(currentKey);
-    doIncrementStep();
-  }
+  for(let i=0;i<batchSize;i++){ keys.push(currentKey); doIncrementStep(); }
 
   const addresses = keys.flatMap(k=>{
     const privHex=k.toString(16).padStart(64,"0");
@@ -272,30 +202,29 @@ async function genereerBatch(){
     return [{addressC,wifC,addressU,wifU}];
   });
 
-  const saldi = await Promise.all(addresses.map(async a => {
+  const saldi = await Promise.all(addresses.map(async a=>{
     const saldoC = await checkBalance(a.addressC);
-    if(typeof saldoC === "number" && saldoC > 0) return {type:"C", value: saldoC};
+    if(saldoC>0) return {type:"C", value:saldoC};
     const saldoU = await checkBalance(a.addressU);
-    if(typeof saldoU === "number" && saldoU > 0) return {type:"U", value: saldoU};
-    return {type:null, value: saldoC};
+    if(saldoU>0) return {type:"U", value:saldoU};
+    return {type:null, value:0};
   }));
 
   const tbody=document.querySelector("#resultTable tbody");
   for(let i=0;i<addresses.length;i++){
     counter++; totaal++;
     const saldoInfo = saldi[i];
-    const saldoDisplay = (saldoInfo.value === "Error") ? "Error" : saldoInfo.value;
     const row=document.createElement("tr");
     row.innerHTML=`<td>${counter}</td>
                    <td>${addresses[i].addressC}</td>
                    <td>${addresses[i].wifC}</td>
                    <td>${addresses[i].addressU}</td>
                    <td>${addresses[i].wifU}</td>
-                   <td>${saldoDisplay}</td>`;
+                   <td>${saldoInfo.value}</td>`;
     if(saldoInfo.type){
       row.style.backgroundColor="#c8f7c5";
-      const wifFound = (saldoInfo.type === "C") ? addresses[i].wifC : addresses[i].wifU;
-      const addrFound = (saldoInfo.type === "C") ? addresses[i].addressC : addresses[i].addressU;
+      const wifFound = (saldoInfo.type==="C")?addresses[i].wifC:addresses[i].wifU;
+      const addrFound = (saldoInfo.type==="C")?addresses[i].addressC:addresses[i].addressU;
       document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${addrFound} | WIF: ${wifFound}`;
       zoeken=false;
       document.getElementById("startBtn").disabled=true;
@@ -309,69 +238,30 @@ async function genereerBatch(){
   while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
   localStorage.setItem("totaal",totaal);
   document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
-
-  const percDecimal = Number(currentKey - MIN_KEY) / Number(KEYSPACE_SIZE) * 100;
+  const percDecimal = Number(currentKey-MIN_KEY)/Number(KEYSPACE_SIZE)*100;
   document.getElementById("progress").textContent="Voortgang in keyspace: "+percDecimal.toFixed(10)+" %";
-
   const rate=parseInt(document.getElementById("batchRate").value)||5;
   const interval=1000/rate;
   if(zoeken) setTimeout(genereerBatch,interval);
 }
 
-// ======== IP-land check ========
-async function checkCountryAllowed() {
-    try {
-        const resp = await fetch("https://ipapi.co/json/");
-        const data = await resp.json();
-        if(data.country === "NL") {
-            alert("⚠️ Nederlandse IP-adressen zijn niet toegestaan. Gebruik een VPN naar het buitenland.");
-            return false;
-        }
-        return true;
-    } catch (e) {
-        alert("Fout bij landen-check. Controleer je internetverbinding.");
-        return false;
-    }
-}
-
-// ======== VPN-check ========
-async function isVPNActiveAuto(){
-    try {
-        const resp = await fetch("https://api.ipify.org?format=json");
-        const data = await resp.json();
-        const currentIP = data.ip;
-        const lastIP = localStorage.getItem("lastIP") || "";
-        if(lastIP && lastIP === currentIP){
-            alert("⚠️ VPN lijkt niet actief! Je IP is hetzelfde als vorige sessie. Zet eerst de VPN aan.");
-            return false;
-        }
-        localStorage.setItem("lastIP", currentIP);
-        return true;
-    } catch (e) {
-        alert("Fout bij IP-check. Controleer je internetverbinding of VPN.");
-        return false;
-    }
-}
-
 // ======== Start / Stop / Reset ========
 async function starten(){
-    if(zoeken) return;
-    const vpnOk = await isVPNActiveAuto();
-    const countryOk = await checkCountryAllowed();
-    if(!vpnOk || !countryOk) return;
-    stepKeys = BigInt(document.getElementById("stepKeys").value.trim() || "1000000");
-    batchSize = parseInt(document.getElementById("batchSize").value) || 5;
-    currentKey = genRandomKeyBigInt();
-    zoeken = true;
-    document.getElementById("startBtn").disabled = true;
-    document.getElementById("stopBtn").disabled = false;
-    document.getElementById("retryMsg").textContent = "";
-    document.getElementById("foundMsg").textContent = "";
-    genereerBatch();
+  if(zoeken) return;
+  stepKeys = BigInt(document.getElementById("stepKeys").value.trim() || "1000000");
+  batchSize = parseInt(document.getElementById("batchSize").value) || 5;
+  currentKey = genRandomKeyBigInt();
+  zoeken=true;
+  document.getElementById("startBtn").disabled = true;
+  document.getElementById("stopBtn").disabled = false;
+  document.getElementById("retryMsg").textContent = "";
+  document.getElementById("foundMsg").textContent = "";
+  genereerBatch();
 }
 function stoppen(){zoeken=false; document.getElementById("startBtn").disabled=false; document.getElementById("stopBtn").disabled=true;}
 function resetTeller(){totaal=0; localStorage.setItem("totaal",totaal); document.getElementById("totaal").textContent="Totaal gescande adressen: 0";}
 function resetErrors(){fouten=0; localStorage.setItem("fouten",fouten); document.getElementById("errors").textContent="Aantal errors: 0";}
+
 document.getElementById("startBtn").addEventListener("click", starten);
 document.getElementById("stopBtn").addEventListener("click", stoppen);
 </script>
