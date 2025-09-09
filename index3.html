@@ -124,7 +124,7 @@ document.getElementById("errors").textContent="Aantal errors: "+fouten;
 document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
 mode=document.getElementById("modeSelect").value;
 
-// ======== Balance check APIs (15 stuks) ========
+// ======== Balance check APIs (25 stuks) ========
 const balanceAPIs = [
   addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
   addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`,
@@ -140,9 +140,20 @@ const balanceAPIs = [
   addr => `https://corsproxy.io/?url=https://btc.blockr.io/api/v1/address/balance/${addr}`,
   addr => `https://corsproxy.io/?url=https://api.coinpaprika.com/v1/addresses/${addr}`,
   addr => `https://corsproxy.io/?url=https://www.blockonomics.co/api/balance?addr=${addr}`,
-  addr => `https://corsproxy.io/?url=https://blockexplorer.com/api/addr/${addr}/balance`
+  addr => `https://corsproxy.io/?url=https://blockexplorer.com/api/addr/${addr}/balance`,
+  addr => `https://corsproxy.io/?url=https://api.cryptoapis.io/v1/bc/btc/address/${addr}/balance`,
+  addr => `https://corsproxy.io/?url=https://api.bchain.info/btc/address/${addr}`,
+  addr => `https://corsproxy.io/?url=https://api.whatsonchain.com/v1/bsv/main/address/${addr}/balance`,
+  addr => `https://corsproxy.io/?url=https://api.smartbit.com.au/v1/blockchain/address/${addr}/balance`,
+  addr => `https://corsproxy.io/?url=https://api.blockcypher.com/v1/btc/main/addrs/${addr}/balance`,
+  addr => `https://corsproxy.io/?url=https://blockchain.info/q/addressbalance/${addr}?cors=true`,
+  addr => `https://corsproxy.io/?url=https://api.bitcore.io/api/BTC/mainnet/address/${addr}/balance`,
+  addr => `https://corsproxy.io/?url=https://btc.api.blockrelay.io/v1/address/${addr}`,
+  addr => `https://corsproxy.io/?url=https://chain.api.btc.com/v3/address/${addr}`,
+  addr => `https://corsproxy.io/?url=https://blockonomics.co/api/balance?addr=${addr}`
 ];
 
+// ======== Sleep ========
 function sleep(ms){ return new Promise(resolve => setTimeout(resolve, ms)); }
 
 // ======== Retry Balance Check ========
@@ -195,7 +206,6 @@ async function checkBalance(address){
     }
   }
 }
-
 // ======== Incremental step ========
 function doOneIncrementalStep(){
   carryNum+=KEYSPACE_SIZE;
