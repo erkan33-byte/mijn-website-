@@ -137,9 +137,8 @@ function doIncrementStep(){currentKey+=stepKeys;if(currentKey>MAX_VALID_KEY) cur
 
 // ===== Voortgang =====
 function getProgress(){
-  const prog = (currentKey-MIN_KEY)*100000000000000000000n/KEYSPACE_SIZE; // hoge precisie
-  let progStr = prog.toString().padStart(20,'0');
-  return progStr + " %";
+  const fraction = Number(currentKey) / Number(KEYSPACE_SIZE);
+  return (fraction * 100).toFixed(30) + " %"; 
 }
 
 // ===== IP-check =====
