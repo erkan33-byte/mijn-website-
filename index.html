@@ -12,9 +12,7 @@ th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: brea
 th { background: #f2f2f2; }
 button, select, input { margin-bottom: 10px; padding: 8px 12px; }
 #totaal, #errors, #progress { margin-bottom: 10px; font-weight: bold; }
-#retryMsg { margin-top: 15px; font-weight: bold; color: orange; font-size: 16px; animation: blink 1s infinite; }
 #foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
-@keyframes blink { 0%,50%,100% {opacity:1;} 25%,75% {opacity:0;} }
 label { display:inline-block; min-width: 210px; }
 </style>
 </head>
@@ -31,150 +29,130 @@ label { display:inline-block; min-width: 210px; }
 <div id="errors">Aantal errors: 0</div>
 <div id="progress">Voortgang in keyspace: 0.0000000000 %</div>
 
-<label for="stepKeys">Stapgrootte (aantal sleutels per stap, bijv. 1000000):</label>
-<input type="text" id="stepKeys" value="1000000">
-<br>
+<label for="stepKeys">Stapgrootte:</label>
+<input type="text" id="stepKeys" value="1000000"><br>
 
-<label for="batchSize">Aantal sleutels per batch (voor UI/API):</label>
-<input type="number" id="batchSize" value="5" min="1" max="20">
-<br>
+<label for="batchSize">Aantal sleutels per batch:</label>
+<input type="number" id="batchSize" value="5" min="1" max="20"><br>
 
 <label for="batchRate">Batches per seconde:</label>
-<input type="number" id="batchRate" value="5" min="1" max="20">
-<br>
+<input type="number" id="batchRate" value="5" min="1" max="20"><br>
 
 <button id="startBtn">Start zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
 <button onclick="resetTeller()">Reset teller</button>
 <button onclick="resetErrors()">Reset errors</button>
 
-<div id="retryMsg"></div>
 <div id="foundMsg"></div>
 
 <table id="resultTable">
-  <thead>
-    <tr>
-      <th>#</th>
-      <th>Compressed Adres</th>
-      <th>Compressed WIF</th>
-      <th>Uncompressed Adres</th>
-      <th>Uncompressed WIF</th>
-      <th>Saldo (BTC)</th>
-    </tr>
-  </thead>
-  <tbody></tbody>
+<thead>
+<tr>
+<th>#</th>
+<th>Compressed Adres</th>
+<th>Compressed WIF</th>
+<th>Uncompressed Adres</th>
+<th>Uncompressed WIF</th>
+<th>Saldo (BTC)</th>
+</tr>
+</thead>
+<tbody></tbody>
 </table>
 
 <script>
-// ======== Helper functies ========
+// ===== Helpers =====
 function toHex(bytes){return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join("");}
 function hexToBytes(hex){const out=new Uint8Array(hex.length/2);for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16);return out;}
 function sha256Hex(hex){return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString();}
 function doubleSha256Hex(hex){return sha256Hex(sha256Hex(hex));}
 function base58Encode(hex){
   const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  const bytes=hexToBytes(hex);
-  let zeros=0; while(zeros<bytes.length&&bytes[zeros]===0) zeros++;
-  let num=BigInt("0x"+hex);
-  let out=""; while(num>0n){let r=num%58n; num/=58n; out=alphabet[Number(r)]+out;}
+  const bytes=hexToBytes(hex);let zeros=0;
+  while(zeros<bytes.length&&bytes[zeros]===0) zeros++;
+  let num=BigInt("0x"+hex);let out="";
+  while(num>0n){let r=num%58n;num/=58n;out=alphabet[Number(r)]+out;}
   return "1".repeat(zeros)+(out||"");
 }
 
-// ======== Keyspace ========
+// ===== Keyspace =====
 const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
 const MIN_KEY = 1n;
-const MAX_VALID_KEY = ORDER_N - 1n;
+const MAX_VALID_KEY = ORDER_N-1n;
 const KEYSPACE_SIZE = MAX_VALID_KEY;
 
-// ======== Random key ========
+// ===== Random key =====
 function genRandomKeyBigInt(){
   const arr=new Uint8Array(32);
   crypto.getRandomValues(arr);
-  const hex=Array.from(arr,b=>b.toString(16).padStart(2,"0")).join("");
-  let k=BigInt("0x"+hex);
+  let k=BigInt("0x"+Array.from(arr,b=>b.toString(16).padStart(2,"0")).join(""));
   if(k===0n) return 1n;
-  if(k>MAX_VALID_KEY) k = (k % MAX_VALID_KEY) + 1n;
+  if(k>MAX_VALID_KEY) k=(k % MAX_VALID_KEY)+1n;
   return k;
 }
 
-// ======== Variabelen ========
-let counter=0, totaal=parseInt(localStorage.getItem("totaal")||"0",10), fouten=parseInt(localStorage.getItem("fouten")||"0",10);
-let zoeken=false, MAX_VISIBLE=250;
-let currentKey=null, stepKeys=1n, batchSize=5;
-let proxyIndex = 0;
+// ===== Variabelen =====
+let counter=0,totaal=0,fouten=0,zoeken=false,MAX_VISIBLE=250,currentKey=null,stepKeys=1n,batchSize=5;
 
-// ======== Proxies ========
+// ===== Proxies =====
 const proxies=[
   "https://corsproxy.io/?url=",
   "https://api.allorigins.win/raw?url=",
   "https://thingproxy.freeboard.io/fetch/",
-  "https://cors.bridged.cc/",
   "https://cors-anywhere.herokuapp.com/"
 ];
 
-// ======== Balance APIs ========
-const balanceAPIs=[
-  {url: addr=>`https://blockstream.info/api/address/${addr}`, parser: data => (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8 },
-  {url: addr=>`https://mempool.space/api/address/${addr}`, parser: data => (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8 },
-  {url: addr=>`https://blockchain.info/rawaddr/${addr}?cors=true`, parser: data => Number(data.final_balance)/1e8 },
-  {url: addr=>`https://api.blockchair.com/bitcoin/dashboards/address/${addr}`, parser: data => Number(data.data[addr].address.balance)/1e8 },
-  {url: addr=>`https://sochain.com/api/v2/address/BTC/${addr}`, parser: data => Number(data.data.confirmed_balance) },
-  {url: addr=>`https://btcscan.org/api/address/${addr}`, parser: data => Number(data.balance)/1e8 },
-  {url: addr=>`https://api.blockcypher.com/v1/btc/main/addrs/${addr}/balance`, parser: data => Number(data.balance)/1e8 },
-  {url: addr=>`https://api.bitaps.com/btc/v1/blockchain/address/state/${addr}`, parser: data => Number(data.balance)/1e8 },
-  {url: addr=>`https://chain.so/api/v2/get_address_balance/BTC/${addr}`, parser: data => Number(data.data.confirmed_balance) },
-  {url: addr=>`https://services.tokenview.io/vipapi/addr/balance/btc/${addr}`, parser: data => Number(data.data.balance)/1e8 },
-  {url: addr=>`https://api.smartbit.com.au/v1/blockchain/address/${addr}`, parser: data => Number(data.address.total.balance)/1e8 },
-  {url: addr=>`https://api.blockonomics.co/api/balance?addr=${addr}`, parser: data => Number(data.response[0].confirmed)/1e8 },
-  {url: addr=>`https://chainflyer.bitflyer.jp/v1/address/${addr}`, parser: data => Number(data.balance)/1e8 },
-  {url: addr=>`https://api.tokenview.com/vipapi/addr/balance/btc/${addr}`, parser: data => Number(data.data.balance)/1e8 },
-  {url: addr=>`https://api.omniexplorer.info/v1/address/addr/`, parser: data => Number(data.balance||0)/1e8 },
-  {url: addr=>`https://rest.bitcoin.com/v2/address/details/${addr}`, parser: data => Number(data.balanceSat||0)/1e8 },
-  {url: addr=>`https://insight.bitpay.com/api/addr/${addr}/?noTxList=1`, parser: data => Number(data.balance) },
-  {url: addr=>`https://btcscan.com/api/address/${addr}`, parser: data => Number(data.balance||0)/1e8 },
-  {url: addr=>`https://api.coin.space/v3/bitcoin/mainnet/address/${addr}`, parser: data => Number(data.balance||0)/1e8 },
-  {url: addr=>`https://api.blockexplorer.one/btc/mainnet/address/${addr}`, parser: data => Number(data.payload.balance||0)/1e8 }
+// ===== Balance APIs =====
+const balanceAPIs = [
+  addr => `https://blockstream.info/api/address/${addr}`,
+  addr => `https://mempool.space/api/address/${addr}`,
+  addr => `https://blockchair.com/bitcoin/address/${addr}?erc=1`,
+  addr => `https://blockchain.info/rawaddr/${addr}?cors=true`,
+  addr => `https://api.blockchair.com/bitcoin/dashboards/address/${addr}`,
+  addr => `https://sochain.com/api/v2/address/BTC/${addr}`,
+  addr => `https://btcscan.org/api/address/${addr}`,
+  addr => `https://api.blockcypher.com/v1/btc/main/addrs/${addr}/balance`
 ];
 
-// ======== Sleep & fetch retry ========
-function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
-async function fetchWithRetry(url,retries=3){
-  for(let i=0;i<retries;i++){
-    try{
-      const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(),5000);
-      const resp=await fetch(url,{signal:controller.signal});
-      clearTimeout(timeout);
-      if(resp.ok) return await resp.json();
-    }catch(e){ if(i===retries-1) throw e; }
+// ===== Proxy fetch met retries =====
+async function fetchWithProxyRetries(url,maxRetries=3){
+  for(let attempt=0; attempt<maxRetries; attempt++){
+    for(let i=0;i<proxies.length;i++){
+      const proxyUrl=proxies[i]+encodeURIComponent(url);
+      try{
+        const controller=new AbortController();
+        const timeout=setTimeout(()=>controller.abort(),8000);
+        const resp=await fetch(proxyUrl,{signal:controller.signal});
+        clearTimeout(timeout);
+        if(resp.ok) return await resp.json();
+      }catch(e){}
+    }
+    await new Promise(r=>setTimeout(r,500));
   }
   return null;
 }
 
-// ======== Check balance parallel + proxy rotation ========
+// ===== Check balance multi-API + retry =====
 async function checkBalance(address){
-  let saldo=0;
-  const checks = balanceAPIs.map((api,idx)=>{
-    return (async()=>{
-      try{
-        const proxy = proxies[(proxyIndex + idx) % proxies.length];
-        const data = await fetchWithRetry(proxy + api.url(address),2);
-        if(data){
-          const s = api.parser(data);
-          if(typeof s==="number" && s>0) saldo = s;
-        }
-      }catch(e){}
-    })();
-  });
-  proxyIndex += balanceAPIs.length;
-  await Promise.all(checks);
-  return saldo;
+  for(let i=0;i<balanceAPIs.length;i++){
+    try{
+      const data = await fetchWithProxyRetries(balanceAPIs[i](address),2);
+      if(data){
+        if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8;
+        if(data.address && data.address.balance) return Number(data.address.balance)/1e8;
+        if(data.data && data.data[address] && data.data[address].address && data.data[address].address.balance) return Number(data.data[address].address.balance)/1e8;
+      }
+    }catch(e){}
+  }
+  // Alle API/proxy combinaties gefaald → geef "?" terug
+  fouten++;
+  document.getElementById("errors").textContent="Aantal errors: "+fouten;
+  return "?";
 }
 
-// ======== Incremental step ========
-function doIncrementStep(){ currentKey += stepKeys; if(currentKey > MAX_VALID_KEY) currentKey -= KEYSPACE_SIZE; }
+// ===== Increment =====
+function doIncrementStep(){currentKey+=stepKeys;if(currentKey>MAX_VALID_KEY) currentKey-=KEYSPACE_SIZE;}
 
-// ======== Genereer batch ========
+// ===== Genereer batch =====
 async function genereerBatch(){
   if(!zoeken) return;
   const keys=[];
@@ -204,16 +182,17 @@ async function genereerBatch(){
 
   const saldi = await Promise.all(addresses.map(async a=>{
     const saldoC = await checkBalance(a.addressC);
-    if(saldoC>0) return {type:"C", value:saldoC};
+    if(saldoC!== "?" && saldoC>0) return {type:"C",value:saldoC};
     const saldoU = await checkBalance(a.addressU);
-    if(saldoU>0) return {type:"U", value:saldoU};
-    return {type:null, value:0};
+    if(saldoU!== "?" && saldoU>0) return {type:"U",value:saldoU};
+    // Mislukte check → "?"; saldo = 0 → gewoon 0
+    return {type:null,value: saldoC==="?" || saldoU==="?" ? "?" : 0};
   }));
 
   const tbody=document.querySelector("#resultTable tbody");
   for(let i=0;i<addresses.length;i++){
     counter++; totaal++;
-    const saldoInfo = saldi[i];
+    const saldoInfo=saldi[i];
     const row=document.createElement("tr");
     row.innerHTML=`<td>${counter}</td>
                    <td>${addresses[i].addressC}</td>
@@ -221,11 +200,9 @@ async function genereerBatch(){
                    <td>${addresses[i].addressU}</td>
                    <td>${addresses[i].wifU}</td>
                    <td>${saldoInfo.value}</td>`;
-    if(saldoInfo.type){
+    if(saldoInfo.type && saldoInfo.value>0){
       row.style.backgroundColor="#c8f7c5";
-      const wifFound = (saldoInfo.type==="C")?addresses[i].wifC:addresses[i].wifU;
-      const addrFound = (saldoInfo.type==="C")?addresses[i].addressC:addresses[i].addressU;
-      document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${addrFound} | WIF: ${wifFound}`;
+      document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC!`;
       zoeken=false;
       document.getElementById("startBtn").disabled=true;
       document.getElementById("stopBtn").disabled=true;
@@ -236,62 +213,48 @@ async function genereerBatch(){
   }
 
   while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
-  localStorage.setItem("totaal",totaal);
   document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
   const percDecimal = Number(currentKey-MIN_KEY)/Number(KEYSPACE_SIZE)*100;
   document.getElementById("progress").textContent="Voortgang in keyspace: "+percDecimal.toFixed(10)+" %";
-  const rate=parseInt(document.getElementById("batchRate").value)||5;
-  const interval=1000/rate;
-  if(zoeken) setTimeout(genereerBatch,interval);
+  if(zoeken){setTimeout(genereerBatch,1000/(parseInt(document.getElementById("batchRate").value)||5));}
 }
 
-// ======== IP-check ========
+// ===== NL IP-beveiliging =====
 async function checkIPBeforeStart(){
-  try {
+  try{
     const resp = await fetch("https://ipapi.co/json/");
     const data = await resp.json();
-    if(data.country_code === "NL"){
+    if(data.country_code==="NL"){
       alert("⚠️ Je IP komt uit Nederland! De generator wordt niet gestart.");
       return false;
     }
     return true;
-  } catch(e) {
+  }catch(e){
     alert("⚠️ Kan IP niet controleren. Starten wordt geblokkeerd.");
     return false;
   }
 }
 
-// ======== Start / Stop / Reset ========
+// ===== Start / Stop / Reset =====
 async function starten(){
   if(zoeken) return;
-
   const ipOk = await checkIPBeforeStart();
   if(!ipOk) return;
 
-  stepKeys = BigInt(document.getElementById("stepKeys").value.trim() || "1000000");
-  batchSize = parseInt(document.getElementById("batchSize").value) || 5;
-  currentKey = genRandomKeyBigInt();
+  stepKeys=BigInt(document.getElementById("stepKeys").value.trim()||"1000000");
+  batchSize=parseInt(document.getElementById("batchSize").value)||5;
+  currentKey=genRandomKeyBigInt();
   zoeken=true;
-  document.getElementById("startBtn").disabled = true;
-  document.getElementById("stopBtn").disabled = false;
-  document.getElementById("retryMsg").textContent = "";
-  document.getElementById("foundMsg").textContent = "";
+  document.getElementById("startBtn").disabled=true;
+  document.getElementById("stopBtn").disabled=false;
   genereerBatch();
 }
-function stoppen(){zoeken=false; document.getElementById("startBtn").disabled=false; document.getElementById("stopBtn").disabled=true;}
-function resetTeller(){totaal=0; localStorage.setItem("totaal",totaal); document.getElementById("totaal").textContent="Totaal gescande adressen: 0";}
-function resetErrors(){fouten=0; localStorage.setItem("fouten",fouten); document.getElementById("errors").textContent="Aantal errors: 0";}
+function stoppen(){zoeken=false;document.getElementById("startBtn").disabled=false;document.getElementById("stopBtn").disabled=true;}
+function resetTeller(){totaal=0;document.getElementById("totaal").textContent="Totaal gescande adressen: 0";}
+function resetErrors(){fouten=0;document.getElementById("errors").textContent="Aantal errors: 0";}
 
-document.getElementById("startBtn").addEventListener("click", starten);
-document.getElementById("stopBtn").addEventListener("click", stoppen);
+document.getElementById("startBtn").addEventListener("click",starten);
+document.getElementById("stopBtn").addEventListener("click",stoppen);
 </script>
-
-<hr>
-<div style="margin-top:20px; padding:10px; border:2px solid red; background:#ffe6e6; color:#a00;">
-<strong>Disclaimer:</strong><br>
-Dit is een educatieve/demo-tool. Het is praktisch onmogelijk om echte Bitcoin-saldi te vinden met deze generator. 
-Gebruik deze pagina alleen voor leer- of hobbydoeleinden. De maker is niet verantwoordelijk voor eventueel 
-misbruik of verloren middelen. Alle gegenereerde sleutels en adressen zijn willekeurig en worden niet opgeslagen op een server.
-</div>
 </body>
 </html>
