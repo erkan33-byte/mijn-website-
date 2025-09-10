@@ -101,21 +101,28 @@ const balanceAPIs=[
 // ===== Sleep =====
 function sleep(ms){return new Promise(res=>setTimeout(res,ms));}
 
-// ===== Check balance =====
+// ===== Check balance met retry =====
 async function checkBalance(address){
-  for(let api of balanceAPIs){
-    try{
-      const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(),5000);
-      const resp=await fetch(api(address),{signal:controller.signal});
-      clearTimeout(timeout);
-      if(resp.ok){
-        const data=await resp.json();
-        if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8;
-      }
-    }catch(e){ continue; }
+  for(let attempt=1; attempt<=3; attempt++){
+    for(let api of balanceAPIs){
+      try{
+        const controller=new AbortController();
+        const timeout=setTimeout(()=>controller.abort(),5000);
+        const resp=await fetch(api(address),{signal:controller.signal});
+        clearTimeout(timeout);
+        if(resp.ok){
+          const data=await resp.json();
+          if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8;
+        }
+      }catch(e){ continue; }
+    }
+    // Als poging mislukt
+    document.getElementById("retryMsg").textContent=`⏳ Probeer saldo opnieuw (${attempt}/3)...`;
+    await sleep(1000);
   }
+  // Na 3 pogingen fout
   fouten++; document.getElementById("errors").textContent="Aantal errors: "+fouten;
+  document.getElementById("retryMsg").textContent="";
   return 0;
 }
 
@@ -165,8 +172,35 @@ async function genereerBatch(){
   if(zoeken) setTimeout(genereerBatch,1000/(parseInt(document.getElementById("batchRate").value)||5));
 }
 
+// ===== VPN / Buitenland-check =====
+async function isForeignIP(){
+    try{
+        const resp = await fetch("https://ipapi.co/json/");
+        const data = await resp.json();
+        if(data.country_code === "NL"){
+            alert("⚠️ Nederlandse IP gedetecteerd. Starten is geblokkeerd. Gebruik een buitenlands IP (VPN).");
+            return false;
+        }
+        return true;
+    } catch(e){
+        alert("Fout bij IP-check. Controleer je internet of VPN.");
+        return false;
+    }
+}
+
 // ===== Start / Stop =====
-function starten(){if(zoeken) return;currentKey=genRandomKeyBigInt();zoeken=true;document.getElementById("startBtn").disabled=true;document.getElementById("stopBtn").disabled=false;genereerBatch();}
+async function starten(){
+    if(zoeken) return;
+    const vpnOk = await isForeignIP();
+    if(!vpnOk) return;
+
+    currentKey = genRandomKeyBigInt();
+    zoeken = true;
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("stopBtn").disabled = false;
+    genereerBatch();
+}
+
 function stoppen(){zoeken=false;document.getElementById("startBtn").disabled=false;document.getElementById("stopBtn").disabled=true;}
 
 document.getElementById("startBtn").addEventListener("click",starten);
