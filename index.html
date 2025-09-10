@@ -84,7 +84,7 @@ function genRandomKeyBigInt(){
 
 // ===== Variabelen =====
 let counter=0, totaal=0, fouten=0, zoeken=false, MAX_VISIBLE=250, currentKey=null;
-let stepKeys=1000000n, batchSize=2, batchRate=5; // 2 private keys per batch => 4 adressen
+let stepKeys=1000000n, batchSize=2, batchRate=5; 
 
 // ===== Balance APIs via corsproxy.io =====
 const balanceAPIs = [
@@ -107,7 +107,7 @@ async function fetchWithRetry(url, retries=3){
   return null;
 }
 
-// ===== Check balance één adres =====
+// ===== Check balance één adres (lineaire backoff) =====
 async function checkBalance(address){
   let attempt=0;
   while(true){
@@ -125,9 +125,9 @@ async function checkBalance(address){
     if(success) return 0;
     else {
       fouten++;
-      document.getElementById("errors").textContent="Aantal errors: "+fouten;
-      document.getElementById("retryMsg").textContent=`⏳ Alle API's faalden, opnieuw proberen (poging ${attempt})...`;
-      await new Promise(r=>setTimeout(r,2000));
+      document.getElementById("errors").textContent = "Aantal errors: "+fouten;
+      document.getElementById("retryMsg").textContent = `⏳ Alle API's faalden, opnieuw proberen in ${attempt} sec...`;
+      await new Promise(r=>setTimeout(r, attempt*1000)); // 1s, 2s, 3s, ...
     }
   }
 }
