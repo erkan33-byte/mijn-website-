@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator Incremental / Random</title>
+<title>BTC Key Generator Incremental / Random (sneller, NL-beveiligd)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
@@ -17,8 +17,9 @@ label { display:inline-block; min-width: 210px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator (random start, incremental, max 50 zichtbaar)</h2>
+<h2>BTC Key Generator (parallel & snel, NL IP beveiligd)</h2>
 
+<!-- Link naar index3.html -->
 <p>
   <a href="index3.html" target="_blank" style="font-weight:bold; font-size:16px; color:blue; text-decoration:underline;">
     Ga naar index3.html
@@ -33,10 +34,10 @@ label { display:inline-block; min-width: 210px; }
 <input type="text" id="stepKeys" value="1000000"><br>
 
 <label for="batchSize">Aantal sleutels per batch:</label>
-<input type="number" id="batchSize" value="5" min="1" max="20"><br>
+<input type="number" id="batchSize" value="5" min="1" max="50"><br>
 
 <label for="batchRate">Batches per seconde:</label>
-<input type="number" id="batchRate" value="5" min="1" max="20"><br>
+<input type="number" id="batchRate" value="5" min="1" max="50"><br>
 
 <button id="startBtn">Start zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
@@ -101,56 +102,78 @@ const proxies=[
   "https://cors-anywhere.herokuapp.com/"
 ];
 
-// ===== Balance APIs =====
+// ===== 20 Balance APIs =====
 const balanceAPIs = [
-  addr => `https://blockstream.info/api/address/${addr}`,
-  addr => `https://mempool.space/api/address/${addr}`,
-  addr => `https://blockchair.com/bitcoin/address/${addr}?erc=1`,
-  addr => `https://blockchain.info/rawaddr/${addr}?cors=true`,
-  addr => `https://api.blockchair.com/bitcoin/dashboards/address/${addr}`,
-  addr => `https://sochain.com/api/v2/address/BTC/${addr}`,
-  addr => `https://btcscan.org/api/address/${addr}`,
-  addr => `https://api.blockcypher.com/v1/btc/main/addrs/${addr}/balance`
+  addr=>`https://blockstream.info/api/address/${addr}`,
+  addr=>`https://mempool.space/api/address/${addr}`,
+  addr=>`https://blockchair.com/bitcoin/address/${addr}?erc=1`,
+  addr=>`https://blockchain.info/rawaddr/${addr}?cors=true`,
+  addr=>`https://api.blockchair.com/bitcoin/dashboards/address/${addr}`,
+  addr=>`https://sochain.com/api/v2/address/BTC/${addr}`,
+  addr=>`https://btcscan.org/api/address/${addr}`,
+  addr=>`https://api.blockcypher.com/v1/btc/main/addrs/${addr}/balance`,
+  addr=>`https://api.chain.so/v2/address/BTC/${addr}`,
+  addr=>`https://blockonomics.co/api/balance?addr=${addr}`,
+  addr=>`https://api.smartbit.com.au/v1/blockchain/address/${addr}`,
+  addr=>`https://api.bitaps.com/btc/v1/blockchain/address/${addr}`,
+  addr=>`https://api.blockcypher.com/v1/btc/main/addrs/${addr}/full`,
+  addr=>`https://blockstream.info/api/address/${addr}`,
+  addr=>`https://api.blockchair.com/bitcoin/dashboards/address/${addr}?limit=1`,
+  addr=>`https://blockchain.info/q/getreceivedbyaddress/${addr}?cors=true`,
+  addr=>`https://chain.so/api/v2/get_address_balance/BTC/${addr}`,
+  addr=>`https://blockonomics.co/api/balance?addr=${addr}`,
+  addr=>`https://btcscan.org/api/address/${addr}`,
+  addr=>`https://sochain.com/api/v2/address/BTC/${addr}`
 ];
 
-// ===== Proxy fetch met retries =====
-async function fetchWithProxyRetries(url,maxRetries=3){
-  for(let attempt=0; attempt<maxRetries; attempt++){
-    for(let i=0;i<proxies.length;i++){
-      const proxyUrl=proxies[i]+encodeURIComponent(url);
+// ===== Fetch met retries =====
+async function fetchWithRetries(url){
+  for(let attempt=0; attempt<3; attempt++){
+    for(const proxy of proxies){
       try{
         const controller=new AbortController();
-        const timeout=setTimeout(()=>controller.abort(),8000);
-        const resp=await fetch(proxyUrl,{signal:controller.signal});
+        const timeout=setTimeout(()=>controller.abort(),3000);
+        const resp=await fetch(proxy+encodeURIComponent(url),{signal:controller.signal});
         clearTimeout(timeout);
         if(resp.ok) return await resp.json();
       }catch(e){}
     }
-    await new Promise(r=>setTimeout(r,500));
+    await new Promise(r=>setTimeout(r,50));
   }
   return null;
 }
 
-// ===== Check balance multi-API + retry =====
+// ===== Check balance =====
 async function checkBalance(address){
-  for(let i=0;i<balanceAPIs.length;i++){
-    try{
-      const data = await fetchWithProxyRetries(balanceAPIs[i](address),2);
-      if(data){
-        if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8;
-        if(data.address && data.address.balance) return Number(data.address.balance)/1e8;
-        if(data.data && data.data[address] && data.data[address].address && data.data[address].address.balance) return Number(data.data[address].address.balance)/1e8;
-      }
-    }catch(e){}
+  for(const api of balanceAPIs){
+    const data = await fetchWithRetries(api(address));
+    if(data){
+      if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8;
+      if(data.address && data.address.balance) return Number(data.address.balance)/1e8;
+      if(data.data && data.data[address] && data.data[address].address && data.data[address].address.balance) return Number(data.data[address].address.balance)/1e8;
+    }
   }
-  // Alle API/proxy combinaties gefaald → geef "?" terug
-  fouten++;
-  document.getElementById("errors").textContent="Aantal errors: "+fouten;
+  fouten++; document.getElementById("errors").textContent="Aantal errors: "+fouten;
   return "?";
 }
 
 // ===== Increment =====
 function doIncrementStep(){currentKey+=stepKeys;if(currentKey>MAX_VALID_KEY) currentKey-=KEYSPACE_SIZE;}
+
+// ===== IP Check tijdens gebruik =====
+let ipCheckInterval=null;
+async function checkIPDuringRun(){
+  try{
+    const resp = await fetch("https://ipapi.co/json/");
+    const data = await resp.json();
+    if(data.country_code === "NL"){
+      alert("⚠️ Je IP is uit Nederland! Generator wordt gestopt voor veiligheid.");
+      stoppen();
+    }
+  }catch(e){
+    console.log("IP check mislukt:", e);
+  }
+}
 
 // ===== Genereer batch =====
 async function genereerBatch(){
@@ -158,7 +181,7 @@ async function genereerBatch(){
   const keys=[];
   for(let i=0;i<batchSize;i++){ keys.push(currentKey); doIncrementStep(); }
 
-  const addresses = keys.flatMap(k=>{
+  await Promise.all(keys.map(async k=>{
     const privHex=k.toString(16).padStart(64,"0");
     const ec=new elliptic.ec("secp256k1");
     const kp=ec.keyFromPrivate(privHex,"hex");
@@ -177,79 +200,56 @@ async function genereerBatch(){
     const addressU=base58Encode(payloadU+checksumU);
     const wifU=base58Encode("80"+privHex+doubleSha256Hex("80"+privHex).slice(0,8));
 
-    return [{addressC,wifC,addressU,wifU}];
-  });
+    const [saldoC, saldoU] = await Promise.all([checkBalance(addressC), checkBalance(addressU)]);
+    const saldo = (saldoC!=="?" && saldoC>0) ? saldoC : (saldoU!=="?" && saldoU>0 ? saldoU : (saldoC==="?"||saldoU==="?" ? "?" : 0));
 
-  const saldi = await Promise.all(addresses.map(async a=>{
-    const saldoC = await checkBalance(a.addressC);
-    if(saldoC!== "?" && saldoC>0) return {type:"C",value:saldoC};
-    const saldoU = await checkBalance(a.addressU);
-    if(saldoU!== "?" && saldoU>0) return {type:"U",value:saldoU};
-    // Mislukte check → "?"; saldo = 0 → gewoon 0
-    return {type:null,value: saldoC==="?" || saldoU==="?" ? "?" : 0};
-  }));
-
-  const tbody=document.querySelector("#resultTable tbody");
-  for(let i=0;i<addresses.length;i++){
+    const tbody=document.querySelector("#resultTable tbody");
     counter++; totaal++;
-    const saldoInfo=saldi[i];
     const row=document.createElement("tr");
     row.innerHTML=`<td>${counter}</td>
-                   <td>${addresses[i].addressC}</td>
-                   <td>${addresses[i].wifC}</td>
-                   <td>${addresses[i].addressU}</td>
-                   <td>${addresses[i].wifU}</td>
-                   <td>${saldoInfo.value}</td>`;
-    if(saldoInfo.type && saldoInfo.value>0){
+                   <td>${addressC}</td>
+                   <td>${wifC}</td>
+                   <td>${addressU}</td>
+                   <td>${wifU}</td>
+                   <td>${saldo}</td>`;
+    if(saldoC>0 || saldoU>0){
       row.style.backgroundColor="#c8f7c5";
-      document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC!`;
-      zoeken=false;
-      document.getElementById("startBtn").disabled=true;
-      document.getElementById("stopBtn").disabled=true;
-      tbody.appendChild(row);
-      return;
+      document.getElementById("foundMsg").textContent="🎉 Adres gevonden met saldo >0 BTC!";
+      zoeken=false; document.getElementById("startBtn").disabled=true; document.getElementById("stopBtn").disabled=true;
     }
     tbody.appendChild(row);
-  }
+  }));
 
-  while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
+  while(document.querySelector("#resultTable tbody").rows.length>MAX_VISIBLE)
+    document.querySelector("#resultTable tbody").deleteRow(0);
+
   document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
-  const percDecimal = Number(currentKey-MIN_KEY)/Number(KEYSPACE_SIZE)*100;
-  document.getElementById("progress").textContent="Voortgang in keyspace: "+percDecimal.toFixed(10)+" %";
-  if(zoeken){setTimeout(genereerBatch,1000/(parseInt(document.getElementById("batchRate").value)||5));}
-}
+  document.getElementById("progress").textContent="Voortgang in keyspace: "+(Number(currentKey-MIN_KEY)/Number(KEYSPACE_SIZE)*100).toFixed(10)+" %";
 
-// ===== NL IP-beveiliging =====
-async function checkIPBeforeStart(){
-  try{
-    const resp = await fetch("https://ipapi.co/json/");
-    const data = await resp.json();
-    if(data.country_code==="NL"){
-      alert("⚠️ Je IP komt uit Nederland! De generator wordt niet gestart.");
-      return false;
-    }
-    return true;
-  }catch(e){
-    alert("⚠️ Kan IP niet controleren. Starten wordt geblokkeerd.");
-    return false;
-  }
+  if(zoeken) setTimeout(genereerBatch,1000/(parseInt(document.getElementById("batchRate").value)||5));
 }
 
 // ===== Start / Stop / Reset =====
 async function starten(){
   if(zoeken) return;
-  const ipOk = await checkIPBeforeStart();
-  if(!ipOk) return;
-
   stepKeys=BigInt(document.getElementById("stepKeys").value.trim()||"1000000");
   batchSize=parseInt(document.getElementById("batchSize").value)||5;
   currentKey=genRandomKeyBigInt();
   zoeken=true;
   document.getElementById("startBtn").disabled=true;
   document.getElementById("stopBtn").disabled=false;
+
+  // Start IP check interval (elke 5 sec)
+  ipCheckInterval=setInterval(checkIPDuringRun,5000);
+
   genereerBatch();
 }
-function stoppen(){zoeken=false;document.getElementById("startBtn").disabled=false;document.getElementById("stopBtn").disabled=true;}
+function stoppen(){
+  zoeken=false;
+  document.getElementById("startBtn").disabled=false;
+  document.getElementById("stopBtn").disabled=true;
+  if(ipCheckInterval){clearInterval(ipCheckInterval); ipCheckInterval=null;}
+}
 function resetTeller(){totaal=0;document.getElementById("totaal").textContent="Totaal gescande adressen: 0";}
 function resetErrors(){fouten=0;document.getElementById("errors").textContent="Aantal errors: 0";}
 
