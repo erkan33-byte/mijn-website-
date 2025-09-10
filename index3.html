@@ -16,10 +16,13 @@ button, select, input { margin-bottom: 10px; padding: 8px 12px; }
 #foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
 @keyframes blink { 0%,50%,100% {opacity:1;} 25%,75% {opacity:0;} }
 label { display:inline-block; min-width: 210px; }
+#ipWarning { margin:15px 0; padding:10px; border:2px solid red; background:#ffe6e6; color:#a00; font-weight:bold; display:none; }
 </style>
 </head>
 <body>
 <h2>BTC Key Generator (incremental/random, max 50 zichtbaar)</h2>
+
+<div id="ipWarning">⚠️ Nederlandse IP gedetecteerd. Starten is geblokkeerd. Gebruik een buitenlands IP (VPN).</div>
 
 <div id="totaal">Totaal gescande adressen: 0</div>
 <div id="errors">Aantal errors: 0</div>
@@ -57,7 +60,20 @@ label { display:inline-block; min-width: 210px; }
 </table>
 
 <script>
-// ======== Helper: BigInt naar decimale string ========
+// ======== Helper functies ========
+function toHex(bytes){return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join("");}
+function hexToBytes(hex){const out=new Uint8Array(hex.length/2);for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16);return out;}
+function sha256Hex(hex){return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString();}
+function doubleSha256Hex(hex){return sha256Hex(sha256Hex(hex));}
+function base58Encode(hex){
+  const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  const bytes=hexToBytes(hex);
+  let zeros=0; while(zeros<bytes.length&&bytes[zeros]===0) zeros++;
+  let num=BigInt("0x"+hex);
+  let out=""; while(num>0n){let r=num%58n; num/=58n; out=alphabet[Number(r)]+out;}
+  return "1".repeat(zeros)+(out||"");
+}
+function sleep(ms){ return new Promise(resolve => setTimeout(resolve, ms)); }
 function bigIntDivisionToDecimalString(numerator, denominator, decimals = 80) {
   let intPart = numerator / denominator;
   let remainder = numerator % denominator;
@@ -73,20 +89,6 @@ function bigIntDivisionToDecimalString(numerator, denominator, decimals = 80) {
     }
   }
   return result;
-}
-
-// ======== Basisfuncties ========
-function toHex(bytes){return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join("");}
-function hexToBytes(hex){const out=new Uint8Array(hex.length/2);for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16);return out;}
-function sha256Hex(hex){return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString();}
-function doubleSha256Hex(hex){return sha256Hex(sha256Hex(hex));}
-function base58Encode(hex){
-  const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  const bytes=hexToBytes(hex);
-  let zeros=0; while(zeros<bytes.length&&bytes[zeros]===0) zeros++;
-  let num=BigInt("0x"+hex);
-  let out=""; while(num>0n){let r=num%58n; num/=58n; out=alphabet[Number(r)]+out;}
-  return "1".repeat(zeros)+(out||"");
 }
 
 // ======== Keyspace ========
@@ -120,17 +122,14 @@ document.getElementById("errors").textContent="Aantal errors: "+fouten;
 document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
 mode=document.getElementById("modeSelect").value;
 
-// ======== Balance check APIs via corsproxy.io ========
+// ======== Balance check APIs ========
 const balanceAPIs = [
   addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
   addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`
 ];
 
-// ======== Sleep ========
-function sleep(ms){ return new Promise(resolve => setTimeout(resolve, ms)); }
-
-// ======== Retry Balance Check ========
-async function fetchWithRetry(url, retries=2){
+// ======== Retry met backoff ========
+async function fetchWithRetry(url, retries = 3, delay = 500){
   for(let i=0;i<retries;i++){
     try{
       const controller = new AbortController();
@@ -139,43 +138,39 @@ async function fetchWithRetry(url, retries=2){
       clearTimeout(timeout);
       if(resp.ok) return await resp.json();
     } catch(e){
-      if(i===retries-1) throw e;
+      if(i < retries-1) await sleep(delay);
+      else throw e;
     }
   }
   return null;
 }
 
 async function checkBalance(address){
-  let attempt=0;
+  let attempt = 0;
+  let waitTime = 1000;
   while(true){
     attempt++;
-    let success=false;
+    let success = false;
     for(let api of balanceAPIs){
       try{
         await sleep(150);
-        const data = await fetchWithRetry(api(address), 2);
+        const data = await fetchWithRetry(api(address), 3, 500);
         if(!data) continue;
-
-        success=true;
-
+        success = true;
         if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum || 0) - Number(data.chain_stats.spent_txo_sum || 0))/1e8;
         if(typeof data.final_balance !== "undefined") return data.final_balance/1e8;
-        if(data.data && data.data[address] && data.data[address].address) return data.data[address].address.balance/1e8;
-        if(data.data && data.data.confirmed_balance !== undefined) return Number(data.data.confirmed_balance)/1e8;
-        if(data.address && data.balance !== undefined) return Number(data.balance)/1e8;
-        if(data.response && data.response.balance !== undefined) return Number(data.response.balance)/1e8;
-
       } catch(e){ continue; }
     }
-    if(!success){
+    if(success){ document.getElementById("retryMsg").textContent=""; return 0; }
+    else {
       fouten++;
       localStorage.setItem("fouten",fouten);
       document.getElementById("errors").textContent="Aantal errors: "+fouten;
-      document.getElementById("retryMsg").textContent=`⏳ Alle APIs faalden, opnieuw proberen (poging ${attempt})...`;
-      await sleep(2000);
-    } else {
-      document.getElementById("retryMsg").textContent="";
-      return 0;
+      for(let t=waitTime/1000; t>0; t--){
+        document.getElementById("retryMsg").textContent=`⏳ Alle APIs faalden, poging ${attempt} over ${t}s...`;
+        await sleep(1000);
+      }
+      waitTime *= 2;
     }
   }
 }
@@ -190,49 +185,37 @@ function doOneIncrementalStep(){
   stepsDone+=1n;
 }
 
-// ======== Auto-batch en snelheid ========
-let dynamicInterval = 200; // startinterval in ms
-
+// ======== Batch generator ========
+let dynamicInterval = 200;
 async function genereerBatch(){
   if(!zoeken) return;
-  const keys=[genRandomKeyBigInt()]; // altijd 1 key per batch
+  const keys=[genRandomKeyBigInt()];
   if(mode!=="random-each-step") doOneIncrementalStep();
-
   const addresses = keys.flatMap(k=>{
     const privHex=k.toString(16).padStart(64,"0");
     const ec = new elliptic.ec("secp256k1");
     const kp = ec.keyFromPrivate(privHex,"hex");
-
     const pubC = toHex(kp.getPublic(true,"array"));
     const ripemdC = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubC))).toString();
     const payloadC = "00"+ripemdC;
     const checksumC = doubleSha256Hex(payloadC).slice(0,8);
     const addressC = base58Encode(payloadC+checksumC);
     const wifC = base58Encode("80"+privHex+"01"+doubleSha256Hex("80"+privHex+"01").slice(0,8));
-
     const pubU = toHex(kp.getPublic(false,"array"));
     const ripemdU = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
     const payloadU = "00"+ripemdU;
     const checksumU = doubleSha256Hex(payloadU).slice(0,8);
     const addressU = base58Encode(payloadU+checksumU);
     const wifU = base58Encode("80"+privHex+doubleSha256Hex("80"+privHex).slice(0,8));
-
     return [
       {address: addressC, wif: wifC},
       {address: addressU, wif: wifU}
     ];
   });
-
   const saldi = await Promise.all(addresses.map(async a => {
-    try{
-      const s = await checkBalance(a.address);
-      if(s === 0) return 0;
-      return s;
-    } catch(e){
-      return "?";
-    }
+    try{ const s = await checkBalance(a.address); if(s === 0) return 0; return s; }
+    catch(e){ return "?"; }
   }));
-
   const tbody = document.querySelector("#resultTable tbody");
   for(let i=0;i<addresses.length;i++){
     counter++; totaal++;
@@ -241,55 +224,58 @@ async function genereerBatch(){
     row.innerHTML=`<td>${counter}</td><td>${addresses[i].address}</td><td>${addresses[i].wif}</td><td>${saldo}</td>`;
     if(typeof saldo==="number" && saldo>0){
       row.style.backgroundColor="#c8f7c5";
-      document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${addresses[i].address} | WIF: ${addresses[i].wif}`;
-      zoeken=false;
-      document.getElementById("startBtn").disabled=true;
-      document.getElementById("stopBtn").disabled=true;
+      document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo! ${addresses[i].address} | WIF: ${addresses[i].wif}`;
+      stoppen();
       tbody.appendChild(row);
       return;
     }
     tbody.appendChild(row);
   }
-
   while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
   localStorage.setItem("totaal",totaal);
   document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
-
   const stepsDisplay=(startSteps+stepsDone)%STEPS_PER_100_PERCENT;
   const percStr=bigIntDivisionToDecimalString(stepsDisplay*100n,STEPS_PER_100_PERCENT,80);
   document.getElementById("progress").textContent="Voortgang in keyspace: "+percStr+" %";
-
   if(zoeken) setTimeout(genereerBatch, dynamicInterval);
 }
 
-// ======== VPN / Buitenland-check ========
+// ======== VPN check ========
 async function isForeignIP(){
     try{
         const resp = await fetch("https://ipapi.co/json/");
         const data = await resp.json();
         if(data.country_code==="NL"){
-            alert("⚠️ Nederlandse IP gedetecteerd. Starten is geblokkeerd. Gebruik een buitenlands IP (VPN).");
+            document.getElementById("ipWarning").style.display="block";
+            document.getElementById("startBtn").disabled = true;
+            if(zoeken){ stoppen(); alert("🔴 Nederlandse IP gedetecteerd. Generator is gestopt."); }
             return false;
         }
+        document.getElementById("ipWarning").style.display="none";
+        document.getElementById("startBtn").disabled = false;
         return true;
     }catch(e){
         alert("Fout bij IP-check. Controleer je internet of VPN.");
+        document.getElementById("startBtn").disabled = true;
+        if(zoeken) stoppen();
         return false;
     }
 }
+window.addEventListener("load", async ()=>{
+    await isForeignIP();
+    setInterval(isForeignIP, 5*60*1000);
+});
 
 // ======== Start / Stop / Reset ========
 async function starten(){
     if(zoeken) return;
     const vpnOk = await isForeignIP();
     if(!vpnOk) return;
-
     const stepPerc=parseFloat(document.getElementById("stepPercent").value)||0.001;
     const startPerc=parseFloat(document.getElementById("startPercent").value)||0;
     STEPS_PER_100_PERCENT=BigInt(Math.round(100/stepPerc));
     carryNum=0n; stepsDone=0n; startSteps=0n;
     mode=document.getElementById("modeSelect").value;
-
     if(mode==="inc-random-start"){
         firstKey=genRandomKeyBigInt();
         currentKey=firstKey;
@@ -301,34 +287,29 @@ async function starten(){
     }else{
         currentKey=genRandomKeyBigInt();
     }
-
     zoeken=true;
-    dynamicInterval = 200; // reset interval
+    dynamicInterval = 200;
     document.getElementById("startBtn").disabled=true;
     document.getElementById("stopBtn").disabled=false;
     document.getElementById("retryMsg").textContent="";
     document.getElementById("foundMsg").textContent="";
     genereerBatch();
 }
-
 function stoppen(){
     zoeken=false;
     document.getElementById("startBtn").disabled=false;
     document.getElementById("stopBtn").disabled=true;
 }
-
 function resetTeller(){
     totaal=0;
     localStorage.setItem("totaal",totaal);
     document.getElementById("totaal").textContent="Totaal gescande adressen: 0";
 }
-
 function resetErrors(){
     fouten=0;
     localStorage.setItem("fouten",fouten);
     document.getElementById("errors").textContent="Aantal errors: 0";
 }
-
 document.getElementById("startBtn").addEventListener("click",starten);
 document.getElementById("stopBtn").addEventListener("click",stoppen);
 </script>
