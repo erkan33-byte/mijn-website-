@@ -122,11 +122,8 @@ document.getElementById("errors").textContent="Aantal errors: "+fouten;
 document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
 mode=document.getElementById("modeSelect").value;
 
-// ======== Balance check APIs direct ========
-const balanceAPIs = [
-  addr => `https://blockstream.info/api/address/${addr}`,
-  addr => `https://mempool.space/api/address/${addr}`
-];
+// ======== Blockchain.com API ========
+const balanceAPI = addr => `https://blockchain.info/rawaddr/${addr}?cors=true`;
 
 // ======== Retry met lineaire backoff ========
 async function fetchWithRetry(url, retries = 3, delay = 500){
@@ -147,31 +144,22 @@ async function fetchWithRetry(url, retries = 3, delay = 500){
 
 async function checkBalance(address){
   let attempt = 0;
-  let waitTime = 1000; // start 1 seconde
+  let waitTime = 1000; // 1 seconde start
   while(true){
     attempt++;
-    let success = false;
-    for(let api of balanceAPIs){
-      try{
-        await sleep(1000); // 1 seconde pauze per API call
-        const data = await fetchWithRetry(api(address), 3, 500);
-        if(!data) continue;
-        success = true;
-        if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum || 0) - Number(data.chain_stats.spent_txo_sum || 0))/1e8;
-        if(typeof data.final_balance !== "undefined") return data.final_balance/1e8;
-      } catch(e){ continue; }
-    }
-    if(success){ document.getElementById("retryMsg").textContent=""; return 0; }
-    else {
+    try{
+      await sleep(1000); // 1 seconde pauze
+      const data = await fetchWithRetry(balanceAPI(address), 3, 500);
+      if(data && typeof data.final_balance !== "undefined") return data.final_balance/1e8;
       fouten++;
       localStorage.setItem("fouten",fouten);
       document.getElementById("errors").textContent="Aantal errors: "+fouten;
       for(let t=waitTime/1000; t>0; t--){
-        document.getElementById("retryMsg").textContent=`⏳ Alle APIs faalden, poging ${attempt} over ${t}s...`;
+        document.getElementById("retryMsg").textContent=`⏳ API faalde, poging ${attempt} over ${t}s...`;
         await sleep(1000);
       }
-      waitTime += 1000; // lineair backoff: 1s → 2s → 3s ...
-    }
+      waitTime += 1000;
+    } catch(e){ continue; }
   }
 }
 
@@ -261,10 +249,6 @@ async function isForeignIP(){
         return false;
     }
 }
-window.addEventListener("load", async ()=>{
-    await isForeignIP();
-    setInterval(isForeignIP, 5*60*1000);
-});
 
 // ======== Start / Stop / Reset ========
 async function starten(){
@@ -317,7 +301,8 @@ document.getElementById("stopBtn").addEventListener("click",stoppen);
 <hr>
 <div style="margin-top:20px; padding:10px; border:2px solid red; background:#ffe6e6; color:#a00;">
 <strong>Disclaimer:</strong><br>
-Dit is een educatieve/demo-tool. Het is praktisch onmogelijk om echte Bitcoin-saldi te vinden met deze generator. 
+Dit is een educatieve/demo-tool. Het is praktisch onmogelijk om echte Bitcoin-saldi te vinden met deze
+generator. 
 Gebruik deze pagina alleen voor leer- of hobbydoeleinden. De maker is niet verantwoordelijk voor eventueel 
 misbruik of verloren middelen. Alle gegenereerde sleutels en adressen zijn willekeurig en worden niet opgeslagen op een server.
 </div>
