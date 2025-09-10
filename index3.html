@@ -77,6 +77,7 @@ const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD03641
 const MIN_KEY = 1n;
 const MAX_VALID_KEY = ORDER_N - 1n;
 const KEYSPACE_SIZE = MAX_VALID_KEY;
+let STEPS_PER_100_PERCENT = 100000n;
 
 // ===== Random key =====
 function genRandomKeyBigInt(){
@@ -91,6 +92,7 @@ function genRandomKeyBigInt(){
 // ===== Variabelen =====
 let counter=0,totaal=0,fouten=0,zoeken=false,MAX_VISIBLE=50,BATCH_SIZE=2;
 let mode="inc-random-start",currentKey=null;
+let stepsDone=0n,startSteps=0n;
 
 // ===== Balance APIs =====
 const balanceAPIs=[
@@ -100,6 +102,24 @@ const balanceAPIs=[
 
 // ===== Sleep =====
 function sleep(ms){return new Promise(res=>setTimeout(res,ms));}
+
+// ===== BigInt naar decimaal voor progress =====
+function bigIntDivisionToDecimalString(numerator, denominator, decimals = 8){
+  let intPart = numerator / denominator;
+  let remainder = numerator % denominator;
+  let result = intPart.toString();
+  if (decimals > 0 && remainder !== 0n) {
+    result += ".";
+    for (let i = 0; i < decimals; i++) {
+      remainder *= 10n;
+      let digit = remainder / denominator;
+      remainder %= denominator;
+      result += digit.toString();
+      if (remainder === 0n) break;
+    }
+  }
+  return result;
+}
 
 // ===== Check balance met retry =====
 async function checkBalance(address){
@@ -116,7 +136,6 @@ async function checkBalance(address){
         }
       }catch(e){ continue; }
     }
-    // Als poging mislukt
     document.getElementById("retryMsg").textContent=`⏳ Probeer saldo opnieuw (${attempt}/3)...`;
     await sleep(1000);
   }
@@ -127,7 +146,7 @@ async function checkBalance(address){
 }
 
 // ===== Increment =====
-function doIncrementStep(){currentKey++;if(currentKey>MAX_VALID_KEY) currentKey-=KEYSPACE_SIZE;}
+function doIncrementStep(){currentKey++;if(currentKey>MAX_VALID_KEY) currentKey-=KEYSPACE_SIZE;stepsDone++;}
 
 // ===== Genereer batch =====
 async function genereerBatch(){
@@ -169,6 +188,10 @@ async function genereerBatch(){
 
   while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
   document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
+
+  const percStr = bigIntDivisionToDecimalString(startSteps+stepsDone*BigInt(parseFloat(document.getElementById("stepPercent").value)||0.001)*STEPS_PER_100_PERCENT, STEPS_PER_100_PERCENT, 6);
+  document.getElementById("progress").textContent = "Voortgang in keyspace: "+percStr+" %";
+
   if(zoeken) setTimeout(genereerBatch,1000/(parseInt(document.getElementById("batchRate").value)||5));
 }
 
@@ -194,7 +217,15 @@ async function starten(){
     const vpnOk = await isForeignIP();
     if(!vpnOk) return;
 
-    currentKey = genRandomKeyBigInt();
+    const startPerc = parseFloat(document.getElementById("startPercent").value)||0;
+    const stepPerc = parseFloat(document.getElementById("stepPercent").value)||0.001;
+
+    STEPS_PER_100_PERCENT = BigInt(Math.round(100/stepPerc));
+    startSteps = BigInt(Math.round(startPerc/stepPerc));
+
+    currentKey = MIN_KEY + (KEYSPACE_SIZE*startSteps)/STEPS_PER_100_PERCENT;
+    stepsDone = 0n;
+
     zoeken = true;
     document.getElementById("startBtn").disabled = true;
     document.getElementById("stopBtn").disabled = false;
