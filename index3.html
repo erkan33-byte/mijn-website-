@@ -122,13 +122,13 @@ document.getElementById("errors").textContent="Aantal errors: "+fouten;
 document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
 mode=document.getElementById("modeSelect").value;
 
-// ======== Balance check APIs ========
+// ======== Balance check APIs direct ========
 const balanceAPIs = [
-  addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
-  addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`
+  addr => `https://blockstream.info/api/address/${addr}`,
+  addr => `https://mempool.space/api/address/${addr}`
 ];
 
-// ======== Retry met backoff ========
+// ======== Retry met lineaire backoff ========
 async function fetchWithRetry(url, retries = 3, delay = 500){
   for(let i=0;i<retries;i++){
     try{
@@ -147,13 +147,13 @@ async function fetchWithRetry(url, retries = 3, delay = 500){
 
 async function checkBalance(address){
   let attempt = 0;
-  let waitTime = 1000;
+  let waitTime = 1000; // start 1 seconde
   while(true){
     attempt++;
     let success = false;
     for(let api of balanceAPIs){
       try{
-        await sleep(150);
+        await sleep(1000); // 1 seconde pauze per API call
         const data = await fetchWithRetry(api(address), 3, 500);
         if(!data) continue;
         success = true;
@@ -170,7 +170,7 @@ async function checkBalance(address){
         document.getElementById("retryMsg").textContent=`⏳ Alle APIs faalden, poging ${attempt} over ${t}s...`;
         await sleep(1000);
       }
-      waitTime *= 2;
+      waitTime += 1000; // lineair backoff: 1s → 2s → 3s ...
     }
   }
 }
