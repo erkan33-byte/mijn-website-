@@ -149,13 +149,14 @@ async function checkBalance(address){
   let attempt=0;
   while(true){
     attempt++;
-    let allFailed=true;
+    let success=false;
     for(let api of balanceAPIs){
       try{
         await sleep(150);
         const data = await fetchWithRetry(api(address), 2);
         if(!data) continue;
-        allFailed=false;
+
+        success=true;
 
         if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum || 0) - Number(data.chain_stats.spent_txo_sum || 0))/1e8;
         if(typeof data.final_balance !== "undefined") return data.final_balance/1e8;
@@ -166,13 +167,12 @@ async function checkBalance(address){
 
       } catch(e){ continue; }
     }
-    if(allFailed){
+    if(!success){
       fouten++;
       localStorage.setItem("fouten",fouten);
       document.getElementById("errors").textContent="Aantal errors: "+fouten;
       document.getElementById("retryMsg").textContent=`⏳ Alle APIs faalden, opnieuw proberen (poging ${attempt})...`;
       await sleep(2000);
-      continue;
     } else {
       document.getElementById("retryMsg").textContent="";
       return 0;
@@ -223,14 +223,12 @@ async function genereerBatch(){
     ];
   });
 
-  let errorCountInBatch = 0;
   const saldi = await Promise.all(addresses.map(async a => {
     try{
       const s = await checkBalance(a.address);
       if(s === 0) return 0;
       return s;
     } catch(e){
-      errorCountInBatch++;
       return "?";
     }
   }));
@@ -260,10 +258,6 @@ async function genereerBatch(){
   const stepsDisplay=(startSteps+stepsDone)%STEPS_PER_100_PERCENT;
   const percStr=bigIntDivisionToDecimalString(stepsDisplay*100n,STEPS_PER_100_PERCENT,80);
   document.getElementById("progress").textContent="Voortgang in keyspace: "+percStr+" %";
-
-  // Snelheid aanpassen afhankelijk van errors
-  if(errorCountInBatch > 3) dynamicInterval += 200;
-  else if(errorCountInBatch === 0 && dynamicInterval > 50) dynamicInterval -= 50;
 
   if(zoeken) setTimeout(genereerBatch, dynamicInterval);
 }
