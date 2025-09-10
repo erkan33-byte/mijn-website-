@@ -41,10 +41,6 @@ label { display:inline-block; min-width: 210px; }
 <input type="text" id="stepPercent" value="0.001">
 <br>
 
-<label for="batchRate">Batches per seconde:</label>
-<input type="number" id="batchRate" value="5" min="1" max="20">
-<br>
-
 <button id="startBtn">Start zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
 <button onclick="resetTeller()">Reset teller</button>
@@ -114,7 +110,7 @@ function genRandomKeyBigInt(){
 
 // ======== Variabelen ========
 let counter=0, totaal=parseInt(localStorage.getItem("totaal")||"0",10), fouten=parseInt(localStorage.getItem("fouten")||"0",10);
-let zoeken=false, MAX_VISIBLE=50, BATCH_SIZE=2;
+let zoeken=false, MAX_VISIBLE=50;
 let mode="inc-random-start", currentKey=null, firstKey=null;
 let stepsDone=0n, startSteps=0n;
 
@@ -124,10 +120,10 @@ document.getElementById("errors").textContent="Aantal errors: "+fouten;
 document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
 mode=document.getElementById("modeSelect").value;
 
-// ======== Balance check APIs (alleen 2 stuks) ========
+// ======== Balance check APIs ========
 const balanceAPIs = [
-  addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
-  addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`
+  addr => `https://blockstream.info/api/address/${addr}`,
+  addr => `https://mempool.space/api/address/${addr}`
 ];
 
 // ======== Sleep ========
@@ -194,15 +190,13 @@ function doOneIncrementalStep(){
   stepsDone+=1n;
 }
 
-// ======== Genereer batch ========
+// ======== Auto-batch en snelheid ========
+let dynamicInterval = 200; // startinterval in ms
+
 async function genereerBatch(){
   if(!zoeken) return;
-  const keys=[];
-  for(let i=0;i<BATCH_SIZE;i++){
-    let k = mode==="random-each-step"?genRandomKeyBigInt():currentKey;
-    if(mode!=="random-each-step") doOneIncrementalStep();
-    keys.push(k);
-  }
+  const keys=[genRandomKeyBigInt()]; // altijd 1 key per batch
+  if(mode!=="random-each-step") doOneIncrementalStep();
 
   const addresses = keys.flatMap(k=>{
     const privHex=k.toString(16).padStart(64,"0");
@@ -229,7 +223,17 @@ async function genereerBatch(){
     ];
   });
 
-  const saldi = await Promise.all(addresses.map(a => checkBalance(a.address)));
+  let errorCountInBatch = 0;
+  const saldi = await Promise.all(addresses.map(async a => {
+    try{
+      const s = await checkBalance(a.address);
+      if(s === 0) return 0;
+      return s;
+    } catch(e){
+      errorCountInBatch++;
+      return "?";
+    }
+  }));
 
   const tbody = document.querySelector("#resultTable tbody");
   for(let i=0;i<addresses.length;i++){
@@ -237,7 +241,6 @@ async function genereerBatch(){
     let saldo = saldi[i];
     let row = document.createElement("tr");
     row.innerHTML=`<td>${counter}</td><td>${addresses[i].address}</td><td>${addresses[i].wif}</td><td>${saldo}</td>`;
-
     if(typeof saldo==="number" && saldo>0){
       row.style.backgroundColor="#c8f7c5";
       document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${addresses[i].address} | WIF: ${addresses[i].wif}`;
@@ -247,7 +250,6 @@ async function genereerBatch(){
       tbody.appendChild(row);
       return;
     }
-
     tbody.appendChild(row);
   }
 
@@ -259,9 +261,11 @@ async function genereerBatch(){
   const percStr=bigIntDivisionToDecimalString(stepsDisplay*100n,STEPS_PER_100_PERCENT,80);
   document.getElementById("progress").textContent="Voortgang in keyspace: "+percStr+" %";
 
-  const rate=parseInt(document.getElementById("batchRate").value)||5;
-  const interval=1000/rate;
-  if(zoeken) setTimeout(genereerBatch,interval);
+  // Snelheid aanpassen afhankelijk van errors
+  if(errorCountInBatch > 3) dynamicInterval += 200;
+  else if(errorCountInBatch === 0 && dynamicInterval > 50) dynamicInterval -= 50;
+
+  if(zoeken) setTimeout(genereerBatch, dynamicInterval);
 }
 
 // ======== VPN / Buitenland-check ========
@@ -305,6 +309,7 @@ async function starten(){
     }
 
     zoeken=true;
+    dynamicInterval = 200; // reset interval
     document.getElementById("startBtn").disabled=true;
     document.getElementById("stopBtn").disabled=false;
     document.getElementById("retryMsg").textContent="";
