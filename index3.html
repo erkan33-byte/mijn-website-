@@ -61,50 +61,8 @@ label { display:inline-block; min-width: 210px; }
 </table>
 
 <script>
-// ===== Helper =====
-function toHex(bytes){return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join("");}
-function hexToBytes(hex){const out=new Uint8Array(hex.length/2);for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16);return out;}
-function sha256Hex(hex){return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString();}
-function doubleSha256Hex(hex){return sha256Hex(sha256Hex(hex));}
-function base58Encode(hex){
-  const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  const bytes=hexToBytes(hex);let zeros=0;while(zeros<bytes.length&&bytes[zeros]===0) zeros++;
-  let num=BigInt("0x"+hex);let out="";while(num>0n){let r=num%58n;num/=58n;out=alphabet[Number(r)]+out;}return "1".repeat(zeros)+(out||"");
-}
-
-// ===== Keyspace =====
-const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
-const MIN_KEY = 1n;
-const MAX_VALID_KEY = ORDER_N - 1n;
-const KEYSPACE_SIZE = MAX_VALID_KEY;
-let STEPS_PER_100_PERCENT = 100000n;
-
-// ===== Random key =====
-function genRandomKeyBigInt(){
-  const arr=new Uint8Array(32);
-  crypto.getRandomValues(arr);
-  let k=BigInt("0x"+Array.from(arr,b=>b.toString(16).padStart(2,"0")).join(""));
-  if(k===0n) return 1n;
-  if(k>MAX_VALID_KEY) k=(k % MAX_VALID_KEY)+1n;
-  return k;
-}
-
-// ===== Variabelen =====
-let counter=0,totaal=0,fouten=0,zoeken=false,MAX_VISIBLE=50,BATCH_SIZE=2;
-let mode="inc-random-start",currentKey=null;
-let stepsDone=0n,startSteps=0n;
-
-// ===== Balance APIs =====
-const balanceAPIs=[
-  addr=>`https://blockstream.info/api/address/${addr}`,
-  addr=>`https://mempool.space/api/address/${addr}`
-];
-
-// ===== Sleep =====
-function sleep(ms){return new Promise(res=>setTimeout(res,ms));}
-
-// ===== BigInt naar decimaal voor progress =====
-function bigIntDivisionToDecimalString(numerator, denominator, decimals = 8){
+// ======== Helper: BigInt naar decimale string ========
+function bigIntDivisionToDecimalString(numerator, denominator, decimals = 80) {
   let intPart = numerator / denominator;
   let remainder = numerator % denominator;
   let result = intPart.toString();
@@ -115,130 +73,273 @@ function bigIntDivisionToDecimalString(numerator, denominator, decimals = 8){
       let digit = remainder / denominator;
       remainder %= denominator;
       result += digit.toString();
-      if (remainder === 0n) break;
+      if (remainder === 0) break;
     }
   }
   return result;
 }
 
-// ===== Check balance met retry =====
-async function checkBalance(address){
-  for(let attempt=1; attempt<=3; attempt++){
-    for(let api of balanceAPIs){
-      try{
-        const controller=new AbortController();
-        const timeout=setTimeout(()=>controller.abort(),5000);
-        const resp=await fetch(api(address),{signal:controller.signal});
-        clearTimeout(timeout);
-        if(resp.ok){
-          const data=await resp.json();
-          if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8;
-        }
-      }catch(e){ continue; }
-    }
-    document.getElementById("retryMsg").textContent=`⏳ Probeer saldo opnieuw (${attempt}/3)...`;
-    await sleep(1000);
-  }
-  // Na 3 pogingen fout
-  fouten++; document.getElementById("errors").textContent="Aantal errors: "+fouten;
-  document.getElementById("retryMsg").textContent="";
-  return 0;
+// ======== Basisfuncties ========
+function toHex(bytes){return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join("");}
+function hexToBytes(hex){const out=new Uint8Array(hex.length/2);for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16);return out;}
+function sha256Hex(hex){return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString();}
+function doubleSha256Hex(hex){return sha256Hex(sha256Hex(hex));}
+function base58Encode(hex){
+  const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  const bytes=hexToBytes(hex);
+  let zeros=0; while(zeros<bytes.length&&bytes[zeros]===0) zeros++;
+  let num=BigInt("0x"+hex);
+  let out=""; while(num>0n){let r=num%58n; num/=58n; out=alphabet[Number(r)]+out;}
+  return "1".repeat(zeros)+(out||"");
 }
 
-// ===== Increment =====
-function doIncrementStep(){currentKey++;if(currentKey>MAX_VALID_KEY) currentKey-=KEYSPACE_SIZE;stepsDone++;}
+// ======== Keyspace ========
+const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+const MIN_KEY = 1n;
+const MAX_VALID_KEY = ORDER_N - 1n;
+const KEYSPACE_SIZE = MAX_VALID_KEY;
+let STEPS_PER_100_PERCENT = 100000n;
+let carryNum = 0n;
 
-// ===== Genereer batch =====
+// ======== Random Key ========
+function genRandomKeyBigInt(){
+  const arr=new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  const hex=Array.from(arr,b=>b.toString(16).padStart(2,"0")).join("");
+  let k=BigInt("0x"+hex);
+  if(k===0n) return 1n;
+  if(k>MAX_VALID_KEY) k = (k % MAX_VALID_KEY) + 1n;
+  return k;
+}
+
+// ======== Variabelen ========
+let counter=0, totaal=parseInt(localStorage.getItem("totaal")||"0",10), fouten=parseInt(localStorage.getItem("fouten")||"0",10);
+let zoeken=false, MAX_VISIBLE=50, BATCH_SIZE=2;
+let mode="inc-random-start", currentKey=null, firstKey=null;
+let stepsDone=0n, startSteps=0n;
+
+// ======== UI init ========
+document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
+document.getElementById("errors").textContent="Aantal errors: "+fouten;
+document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
+mode=document.getElementById("modeSelect").value;
+
+// ======== Balance check APIs (alleen 2 stuks) ========
+const balanceAPIs = [
+  addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
+  addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`
+];
+
+// ======== Sleep ========
+function sleep(ms){ return new Promise(resolve => setTimeout(resolve, ms)); }
+
+// ======== Retry Balance Check ========
+async function fetchWithRetry(url, retries=2){
+  for(let i=0;i<retries;i++){
+    try{
+      const controller = new AbortController();
+      const timeout = setTimeout(()=>controller.abort(),5000);
+      const resp = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+      if(resp.ok) return await resp.json();
+    } catch(e){
+      if(i===retries-1) throw e;
+    }
+  }
+  return null;
+}
+
+async function checkBalance(address){
+  let attempt=0;
+  while(true){
+    attempt++;
+    let allFailed=true;
+    for(let api of balanceAPIs){
+      try{
+        await sleep(150);
+        const data = await fetchWithRetry(api(address), 2);
+        if(!data) continue;
+        allFailed=false;
+
+        if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum || 0) - Number(data.chain_stats.spent_txo_sum || 0))/1e8;
+        if(typeof data.final_balance !== "undefined") return data.final_balance/1e8;
+        if(data.data && data.data[address] && data.data[address].address) return data.data[address].address.balance/1e8;
+        if(data.data && data.data.confirmed_balance !== undefined) return Number(data.data.confirmed_balance)/1e8;
+        if(data.address && data.balance !== undefined) return Number(data.balance)/1e8;
+        if(data.response && data.response.balance !== undefined) return Number(data.response.balance)/1e8;
+
+      } catch(e){ continue; }
+    }
+    if(allFailed){
+      fouten++;
+      localStorage.setItem("fouten",fouten);
+      document.getElementById("errors").textContent="Aantal errors: "+fouten;
+      document.getElementById("retryMsg").textContent=`⏳ Alle APIs faalden, opnieuw proberen (poging ${attempt})...`;
+      await sleep(2000);
+      continue;
+    } else {
+      document.getElementById("retryMsg").textContent="";
+      return 0;
+    }
+  }
+}
+
+// ======== Incremental step ========
+function doOneIncrementalStep(){
+  carryNum+=KEYSPACE_SIZE;
+  const inc=carryNum/STEPS_PER_100_PERCENT;
+  carryNum%=STEPS_PER_100_PERCENT;
+  currentKey+=inc;
+  if(currentKey>MAX_VALID_KEY) currentKey-=KEYSPACE_SIZE;
+  stepsDone+=1n;
+}
+
+// ======== Genereer batch ========
 async function genereerBatch(){
   if(!zoeken) return;
   const keys=[];
-  for(let i=0;i<BATCH_SIZE;i++){ keys.push(currentKey); doIncrementStep(); }
+  for(let i=0;i<BATCH_SIZE;i++){
+    let k = mode==="random-each-step"?genRandomKeyBigInt():currentKey;
+    if(mode!=="random-each-step") doOneIncrementalStep();
+    keys.push(k);
+  }
 
-  const addresses=keys.map(k=>{
+  const addresses = keys.flatMap(k=>{
     const privHex=k.toString(16).padStart(64,"0");
-    const ec=new elliptic.ec("secp256k1");
-    const kp=ec.keyFromPrivate(privHex,"hex");
+    const ec = new elliptic.ec("secp256k1");
+    const kp = ec.keyFromPrivate(privHex,"hex");
 
-    const pubC=toHex(kp.getPublic(true,"array"));
-    const ripemdC=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubC))).toString();
-    const payloadC="00"+ripemdC;
-    const checksumC=doubleSha256Hex(payloadC).slice(0,8);
-    const addressC=base58Encode(payloadC+checksumC);
-    const wifC=base58Encode("80"+privHex+"01"+doubleSha256Hex("80"+privHex+"01").slice(0,8));
+    const pubC = toHex(kp.getPublic(true,"array"));
+    const ripemdC = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubC))).toString();
+    const payloadC = "00"+ripemdC;
+    const checksumC = doubleSha256Hex(payloadC).slice(0,8);
+    const addressC = base58Encode(payloadC+checksumC);
+    const wifC = base58Encode("80"+privHex+"01"+doubleSha256Hex("80"+privHex+"01").slice(0,8));
 
-    return {address: addressC, wif: wifC};
+    const pubU = toHex(kp.getPublic(false,"array"));
+    const ripemdU = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
+    const payloadU = "00"+ripemdU;
+    const checksumU = doubleSha256Hex(payloadU).slice(0,8);
+    const addressU = base58Encode(payloadU+checksumU);
+    const wifU = base58Encode("80"+privHex+doubleSha256Hex("80"+privHex).slice(0,8));
+
+    return [
+      {address: addressC, wif: wifC},
+      {address: addressU, wif: wifU}
+    ];
   });
 
-  const saldi=await Promise.all(addresses.map(a=>checkBalance(a.address)));
+  const saldi = await Promise.all(addresses.map(a => checkBalance(a.address)));
 
-  const tbody=document.querySelector("#resultTable tbody");
+  const tbody = document.querySelector("#resultTable tbody");
   for(let i=0;i<addresses.length;i++){
     counter++; totaal++;
-    const row=document.createElement("tr");
-    row.innerHTML=`<td>${counter}</td><td>${addresses[i].address}</td><td>${addresses[i].wif}</td><td>${saldi[i]}</td>`;
-    if(saldi[i]>0){
+    let saldo = saldi[i];
+    let row = document.createElement("tr");
+    row.innerHTML=`<td>${counter}</td><td>${addresses[i].address}</td><td>${addresses[i].wif}</td><td>${saldo}</td>`;
+
+    if(typeof saldo==="number" && saldo>0){
       row.style.backgroundColor="#c8f7c5";
-      document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${addresses[i].address}`;
+      document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${addresses[i].address} | WIF: ${addresses[i].wif}`;
       zoeken=false;
       document.getElementById("startBtn").disabled=true;
       document.getElementById("stopBtn").disabled=true;
+      tbody.appendChild(row);
+      return;
     }
+
     tbody.appendChild(row);
   }
 
   while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
+  localStorage.setItem("totaal",totaal);
   document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
 
-  const percStr = bigIntDivisionToDecimalString(startSteps+stepsDone*BigInt(parseFloat(document.getElementById("stepPercent").value)||0.001)*STEPS_PER_100_PERCENT, STEPS_PER_100_PERCENT, 6);
-  document.getElementById("progress").textContent = "Voortgang in keyspace: "+percStr+" %";
+  const stepsDisplay=(startSteps+stepsDone)%STEPS_PER_100_PERCENT;
+  const percStr=bigIntDivisionToDecimalString(stepsDisplay*100n,STEPS_PER_100_PERCENT,80);
+  document.getElementById("progress").textContent="Voortgang in keyspace: "+percStr+" %";
 
-  if(zoeken) setTimeout(genereerBatch,1000/(parseInt(document.getElementById("batchRate").value)||5));
+  const rate=parseInt(document.getElementById("batchRate").value)||5;
+  const interval=1000/rate;
+  if(zoeken) setTimeout(genereerBatch,interval);
 }
 
-// ===== VPN / Buitenland-check =====
+// ======== VPN / Buitenland-check ========
 async function isForeignIP(){
     try{
         const resp = await fetch("https://ipapi.co/json/");
         const data = await resp.json();
-        if(data.country_code === "NL"){
+        if(data.country_code==="NL"){
             alert("⚠️ Nederlandse IP gedetecteerd. Starten is geblokkeerd. Gebruik een buitenlands IP (VPN).");
             return false;
         }
         return true;
-    } catch(e){
+    }catch(e){
         alert("Fout bij IP-check. Controleer je internet of VPN.");
         return false;
     }
 }
 
-// ===== Start / Stop =====
+// ======== Start / Stop / Reset ========
 async function starten(){
     if(zoeken) return;
     const vpnOk = await isForeignIP();
     if(!vpnOk) return;
 
-    const startPerc = parseFloat(document.getElementById("startPercent").value)||0;
-    const stepPerc = parseFloat(document.getElementById("stepPercent").value)||0.001;
+    const stepPerc=parseFloat(document.getElementById("stepPercent").value)||0.001;
+    const startPerc=parseFloat(document.getElementById("startPercent").value)||0;
+    STEPS_PER_100_PERCENT=BigInt(Math.round(100/stepPerc));
+    carryNum=0n; stepsDone=0n; startSteps=0n;
+    mode=document.getElementById("modeSelect").value;
 
-    STEPS_PER_100_PERCENT = BigInt(Math.round(100/stepPerc));
-    startSteps = BigInt(Math.round(startPerc/stepPerc));
+    if(mode==="inc-random-start"){
+        firstKey=genRandomKeyBigInt();
+        currentKey=firstKey;
+        startSteps=((currentKey-MIN_KEY)*STEPS_PER_100_PERCENT)/KEYSPACE_SIZE;
+    }else if(mode==="inc-percent-start"){
+        const steps=BigInt(Math.round(startPerc*Number(STEPS_PER_100_PERCENT)/100));
+        currentKey=MIN_KEY+(KEYSPACE_SIZE*steps)/STEPS_PER_100_PERCENT;
+        startSteps=steps;
+    }else{
+        currentKey=genRandomKeyBigInt();
+    }
 
-    currentKey = MIN_KEY + (KEYSPACE_SIZE*startSteps)/STEPS_PER_100_PERCENT;
-    stepsDone = 0n;
-
-    zoeken = true;
-    document.getElementById("startBtn").disabled = true;
-    document.getElementById("stopBtn").disabled = false;
+    zoeken=true;
+    document.getElementById("startBtn").disabled=true;
+    document.getElementById("stopBtn").disabled=false;
+    document.getElementById("retryMsg").textContent="";
+    document.getElementById("foundMsg").textContent="";
     genereerBatch();
 }
 
-function stoppen(){zoeken=false;document.getElementById("startBtn").disabled=false;document.getElementById("stopBtn").disabled=true;}
+function stoppen(){
+    zoeken=false;
+    document.getElementById("startBtn").disabled=false;
+    document.getElementById("stopBtn").disabled=true;
+}
+
+function resetTeller(){
+    totaal=0;
+    localStorage.setItem("totaal",totaal);
+    document.getElementById("totaal").textContent="Totaal gescande adressen: 0";
+}
+
+function resetErrors(){
+    fouten=0;
+    localStorage.setItem("fouten",fouten);
+    document.getElementById("errors").textContent="Aantal errors: 0";
+}
 
 document.getElementById("startBtn").addEventListener("click",starten);
 document.getElementById("stopBtn").addEventListener("click",stoppen);
-
-function resetTeller(){totaal=0;document.getElementById("totaal").textContent="Totaal gescande adressen: 0";}
-function resetErrors(){fouten=0;document.getElementById("errors").textContent="Aantal errors: 0";}
 </script>
+
+<hr>
+<div style="margin-top:20px; padding:10px; border:2px solid red; background:#ffe6e6; color:#a00;">
+<strong>Disclaimer:</strong><br>
+Dit is een educatieve/demo-tool. Het is praktisch onmogelijk om echte Bitcoin-saldi te vinden met deze generator. 
+Gebruik deze pagina alleen voor leer- of hobbydoeleinden. De maker is niet verantwoordelijk voor eventueel 
+misbruik of verloren middelen. Alle gegenereerde sleutels en adressen zijn willekeurig en worden niet opgeslagen op een server.
+</div>
 </body>
 </html>
