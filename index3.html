@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator Incremental / Random (via Proxy)</title>
+<title>BTC Key Generator Incremental / Random</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
@@ -19,7 +19,7 @@ label { display:inline-block; min-width: 210px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator (incremental/random, max 50 zichtbaar) via Proxy</h2>
+<h2>BTC Key Generator (incremental/random, max 50 zichtbaar)</h2>
 
 <div id="totaal">Totaal gescande adressen: 0</div>
 <div id="errors">Aantal errors: 0</div>
@@ -57,9 +57,6 @@ label { display:inline-block; min-width: 210px; }
 </table>
 
 <script>
-// ======== Proxy ========
-const CORS_PROXY = "https://cors-anywhere.herokuapp.com/"; // kan vervangen worden door je eigen proxy
-
 // ======== Helper: BigInt naar decimale string ========
 function bigIntDivisionToDecimalString(numerator, denominator, decimals = 80) {
   let intPart = numerator / denominator;
@@ -123,24 +120,22 @@ document.getElementById("errors").textContent="Aantal errors: "+fouten;
 document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
 mode=document.getElementById("modeSelect").value;
 
-// ======== Balance check APIs ========
+// ======== Balance check APIs via corsproxy.io ========
 const balanceAPIs = [
-  addr => `https://blockstream.info/api/address/${addr}`,
-  addr => `https://mempool.space/api/address/${addr}`
+  addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
+  addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`
 ];
 
 // ======== Sleep ========
 function sleep(ms){ return new Promise(resolve => setTimeout(resolve, ms)); }
 
-// ======== Retry Balance Check via Proxy ========
+// ======== Retry Balance Check ========
 async function fetchWithRetry(url, retries=2){
   for(let i=0;i<retries;i++){
     try{
       const controller = new AbortController();
       const timeout = setTimeout(()=>controller.abort(),5000);
-
-      const proxiedUrl = CORS_PROXY + url;
-      const resp = await fetch(proxiedUrl, { signal: controller.signal });
+      const resp = await fetch(url, { signal: controller.signal });
       clearTimeout(timeout);
       if(resp.ok) return await resp.json();
     } catch(e){
@@ -196,11 +191,11 @@ function doOneIncrementalStep(){
 }
 
 // ======== Auto-batch en snelheid ========
-let dynamicInterval = 200;
+let dynamicInterval = 200; // startinterval in ms
 
 async function genereerBatch(){
   if(!zoeken) return;
-  const keys=[genRandomKeyBigInt()];
+  const keys=[genRandomKeyBigInt()]; // altijd 1 key per batch
   if(mode!=="random-each-step") doOneIncrementalStep();
 
   const addresses = keys.flatMap(k=>{
@@ -266,6 +261,7 @@ async function genereerBatch(){
   const percStr=bigIntDivisionToDecimalString(stepsDisplay*100n,STEPS_PER_100_PERCENT,80);
   document.getElementById("progress").textContent="Voortgang in keyspace: "+percStr+" %";
 
+  // Snelheid aanpassen afhankelijk van errors
   if(errorCountInBatch > 3) dynamicInterval += 200;
   else if(errorCountInBatch === 0 && dynamicInterval > 50) dynamicInterval -= 50;
 
@@ -313,7 +309,7 @@ async function starten(){
     }
 
     zoeken=true;
-    dynamicInterval = 200;
+    dynamicInterval = 200; // reset interval
     document.getElementById("startBtn").disabled=true;
     document.getElementById("stopBtn").disabled=false;
     document.getElementById("retryMsg").textContent="";
