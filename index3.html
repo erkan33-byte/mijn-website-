@@ -158,8 +158,27 @@ function doIncrementStep(){currentKey+=stepKeys;if(currentKey>MAX_VALID_KEY) cur
 // ===== Voortgang =====
 function getProgress(){return ((Number(currentKey)/Number(KEYSPACE_SIZE))*100).toFixed(18)+" %";}
 
+// ===== IP-beveiliging =====
+async function checkIP() {
+  try {
+    const resp = await fetch("https://ipapi.co/json/");
+    const data = await resp.json();
+    if(data.country_code === "NL"){
+      alert("Toegang geweigerd: NL IP-adressen zijn niet toegestaan.");
+      return false;
+    }
+    return true;
+  } catch (e) {
+    alert("Kan IP niet controleren, toegang geweigerd.");
+    return false;
+  }
+}
+
 // ===== Start / Stop =====
 async function starten(){
+  const ipOk = await checkIP();
+  if(!ipOk) return; // Stoppen als NL IP
+
   if(zoeken) return;
   stepKeys=BigInt(document.getElementById("stepKeysInput").value.trim()||"1000000");
   const mode=document.getElementById("modeSelect").value;
