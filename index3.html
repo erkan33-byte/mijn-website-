@@ -122,10 +122,14 @@ document.getElementById("errors").textContent="Aantal errors: "+fouten;
 document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
 mode=document.getElementById("modeSelect").value;
 
-// ======== Blockchain.com API ========
-const balanceAPI = addr => `https://blockchain.info/rawaddr/${addr}?cors=true`;
+// ======== API lijst ========
+const balanceAPIs = [
+  addr => `https://api.blockcypher.com/v1/btc/main/addrs/${addr}/balance`,
+  addr => `https://blockchain.info/rawaddr/${addr}?cors=true`,
+  addr => `https://api.bitaps.com/btc/v1/blockchain/address/state/${addr}`
+];
 
-// ======== Retry met lineaire backoff ========
+// ======== Retry met backoff ========
 async function fetchWithRetry(url, retries = 3, delay = 500){
   for(let i=0;i<retries;i++){
     try{
@@ -142,25 +146,22 @@ async function fetchWithRetry(url, retries = 3, delay = 500){
   return null;
 }
 
+// ======== Multi-API saldo check ========
 async function checkBalance(address){
-  let attempt = 0;
-  let waitTime = 1000; // 1 seconde start
-  while(true){
-    attempt++;
+  for(const makeUrl of balanceAPIs){
     try{
-      await sleep(1000); // 1 seconde pauze
-      const data = await fetchWithRetry(balanceAPI(address), 3, 500);
-      if(data && typeof data.final_balance !== "undefined") return data.final_balance/1e8;
-      fouten++;
-      localStorage.setItem("fouten",fouten);
-      document.getElementById("errors").textContent="Aantal errors: "+fouten;
-      for(let t=waitTime/1000; t>0; t--){
-        document.getElementById("retryMsg").textContent=`⏳ API faalde, poging ${attempt} over ${t}s...`;
-        await sleep(1000);
-      }
-      waitTime += 1000;
-    } catch(e){ continue; }
+      const url = makeUrl(address);
+      const data = await fetchWithRetry(url, 2, 500);
+      if(!data) continue;
+
+      if(typeof data.final_balance !== "undefined") return data.final_balance/1e8; // blockchain.info & blockcypher
+      if(data.data && typeof data.data.balance !== "undefined") return data.data.balance/1e8; // bitaps
+    }catch(e){ continue; }
   }
+  fouten++;
+  localStorage.setItem("fouten",fouten);
+  document.getElementById("errors").textContent="Aantal errors: "+fouten;
+  return "?";
 }
 
 // ======== Incremental step ========
@@ -190,7 +191,7 @@ async function genereerBatch(){
     const addressC = base58Encode(payloadC+checksumC);
     const wifC = base58Encode("80"+privHex+"01"+doubleSha256Hex("80"+privHex+"01").slice(0,8));
     const pubU = toHex(kp.getPublic(false,"array"));
-    const ripemdU = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
+    const ripemdU = CryptoJS.RIPE160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
     const payloadU = "00"+ripemdU;
     const checksumU = doubleSha256Hex(payloadU).slice(0,8);
     const addressU = base58Encode(payloadU+checksumU);
