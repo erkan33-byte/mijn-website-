@@ -38,6 +38,9 @@ label { display:inline-block; min-width:200px; }
 <label for="stepKeysInput">Stapgrootte (sleutels per increment):</label>
 <input type="text" id="stepKeysInput" value="1000000"><br>
 
+<label for="stepsPerCycleInput">Aantal stappen per random start:</label>
+<input type="text" id="stepsPerCycleInput" value="10"><br>
+
 <button id="startBtn">Start zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
 
@@ -95,7 +98,6 @@ const proxies=[
   "https://api.allorigins.win/raw?url=",
   "https://thingproxy.freeboard.io/fetch/"
 ];
-
 const balanceAPIs=[
   addr => `https://blockstream.info/api/address/${addr}`,
   addr => `https://mempool.space/api/address/${addr}`,
@@ -177,28 +179,41 @@ async function checkIP() {
 // ===== Start / Stop =====
 async function starten(){
   const ipOk = await checkIP();
-  if(!ipOk) return; // Stoppen als NL IP
+  if(!ipOk) return;
 
   if(zoeken) return;
+
   stepKeys=BigInt(document.getElementById("stepKeysInput").value.trim()||"1000000");
-  const mode=document.getElementById("modeSelect").value;
-  const percent=parseFloat(document.getElementById("percentInput").value)||0;
-  currentKey=(mode==="random")? genRandomKeyBigInt() : BigInt(Math.floor(Number(KEYSPACE_SIZE)*(percent/100)));
+  const stepsPerCycle = Number(document.getElementById("stepsPerCycleInput").value.trim()||10);
+
   zoeken=true;
   document.getElementById("startBtn").disabled=true;
   document.getElementById("stopBtn").disabled=false;
   document.getElementById("retryMsg").textContent="";
   document.getElementById("foundMsg").textContent="";
-  genereerBatch();
+
+  genereerCycle(stepKeys, stepsPerCycle);
 }
+
 function stoppen(){zoeken=false; document.getElementById("startBtn").disabled=false; document.getElementById("stopBtn").disabled=true;}
 
-// ===== Batch generator =====
-async function genereerBatch(){
-  if(!zoeken) return;
-  const privKeys=[];
-  for(let i=0;i<batchSize;i++){ privKeys.push(currentKey); doIncrementStep(); }
+// ===== Cycle generator =====
+async function genereerCycle(stepSize, stepsPerCycle){
+  while(zoeken){
+    // Random start
+    currentKey = genRandomKeyBigInt();
 
+    for(let i=0; i<stepsPerCycle && zoeken; i++){
+      await genereerBatchStep(currentKey);
+      currentKey += stepSize;
+      if(currentKey > MAX_VALID_KEY) currentKey -= KEYSPACE_SIZE;
+    }
+  }
+}
+
+// ===== Eén batch stap =====
+async function genereerBatchStep(key){
+  const privKeys=[key];
   const addresses=[];
   for(const k of privKeys){
     const privHex=k.toString(16).padStart(64,'0');
@@ -237,8 +252,6 @@ async function genereerBatch(){
   while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
   document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
   document.getElementById("progress").textContent="Voortgang in keyspace: "+getProgress();
-
-  if(zoeken) setTimeout(genereerBatch,1000/batchRate);
 }
 
 document.getElementById("startBtn").addEventListener("click",starten);
