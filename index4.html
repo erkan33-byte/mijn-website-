@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator (Slimme Verwachte Keyspace + IP-check)</title>
+<title>BTC Key Generator (Lage Key Prioriteit 0-0.1%)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
@@ -20,17 +20,14 @@ label { display:inline-block; min-width:200px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator (Slimme Verwachte Keyspace + IP-check)</h2>
+<h2>BTC Key Generator (Lage Key Prioriteit 0-0.1%)</h2>
 
 <label for="activeKeysInput">Aantal verwachte actieve keys:</label>
 <input type="text" id="activeKeysInput" value="1000000000"><br>
 
 <label for="strategySelect">Zoekstrategie:</label>
 <select id="strategySelect">
-  <option value="linear">Lineair (huidige manier)</option>
-  <option value="randomStep">Random variatie</option>
-  <option value="clusters">Clusters</option>
-  <option value="lowRange">Lage ranges prioriteit (0%-0.5%)</option>
+  <option value="lowRange">Lage ranges prioriteit (0%-0.1%)</option>
 </select><br>
 
 <button id="startBtn">Start zoeken</button>
@@ -89,38 +86,11 @@ function genRandomKeyBigInt(){
 // ===== Variabelen =====
 let counter=0, totaal=0, fouten=0, zoeken=false, MAX_VISIBLE=250;
 let currentKey=null, stepKeys=1n, batchSize=2, batchRate=5; 
-let clusterSize=1000n, clusterCount=0n;
 
-// ===== Zoekstrategieën =====
+// ===== Zoekstrategie: Lage range 0-0.1% =====
 function doIncrementStep(){
-  const strategy=document.getElementById("strategySelect").value;
-
-  if(strategy==="linear"){
-    currentKey+=stepKeys;
-
-  } else if(strategy==="randomStep"){
-    let variation = BigInt(Math.floor(Math.random() * 1000));
-    currentKey+=stepKeys+variation;
-
-  } else if(strategy==="clusters"){
-    currentKey++;
-    clusterCount++;
-    if(clusterCount>=clusterSize){
-      currentKey=genRandomKeyBigInt();
-      clusterCount=0n;
-    }
-
-  } else if(strategy==="lowRange"){
-    const lowLimit = KEYSPACE_SIZE / 200n;  // 0% - 0,5% van keyspace
-    const chanceHigh = 0.2;                 // 20% kans om random hoge key te pakken
-    if(Math.random() < chanceHigh){
-        currentKey = genRandomKeyBigInt();  // willekeurige key in hele keyspace
-    } else {
-        currentKey = BigInt(Math.floor(Math.random() * Number(lowLimit))) + 1n;
-    }
-  }
-
-  if(currentKey>MAX_VALID_KEY) currentKey-=KEYSPACE_SIZE;
+  const lowLimit = KEYSPACE_SIZE / 1000n;  // 0% - 0.1% van keyspace
+  currentKey = BigInt(Math.floor(Math.random() * Number(lowLimit))) + 1n;
 }
 
 // ===== Voortgang =====
@@ -196,9 +166,6 @@ async function starten(){
   if(zoeken) return;
   const ok = await checkIP();
   if(!ok) return;
-
-  const activeKeys = BigInt(document.getElementById("activeKeysInput").value.trim()||"1000000000");
-  stepKeys = KEYSPACE_SIZE / activeKeys;
 
   currentKey=genRandomKeyBigInt(); // random start
   zoeken=true;
