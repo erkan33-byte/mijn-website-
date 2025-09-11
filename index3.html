@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator (Random of Procentueel starten + Slimme Batch)</title>
+<title>BTC Key Generator (Slimme Random + Theoretische Stappen)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
@@ -10,7 +10,7 @@ body { font-family: Arial, sans-serif; padding: 20px; }
 table { border-collapse: collapse; width: 100%; margin-top: 15px; }
 th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
 th { background: #f2f2f2; }
-button, input, select { margin-bottom: 10px; padding: 8px 12px; }
+input, button { margin-bottom: 10px; padding: 8px 12px; }
 #totaal, #errors, #progress { margin-bottom: 10px; font-weight: bold; }
 #foundMsg, #retryMsg { margin-top: 15px; font-weight: bold; font-size: 16px; }
 #foundMsg { color: green; }
@@ -20,29 +20,14 @@ label { display:inline-block; min-width:200px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator (Random of Procentueel starten + Slimme Batch)</h2>
-
-<div id="totaal">Totaal gescande adressen: 0</div>
-<div id="errors">Aantal errors: 0</div>
-<div id="progress">Voortgang in keyspace: 0.000%</div>
-
-<label for="modeSelect">Startmodus:</label>
-<select id="modeSelect">
-  <option value="random">Random start</option>
-  <option value="percent">Start op % van keyspace</option>
-</select><br>
-
-<label for="percentInput">Startpercentage van keyspace (%):</label>
-<input type="text" id="percentInput" value="0.000004"><br>
-
-<label for="stepKeysInput">Stapgrootte (sleutels per increment):</label>
-<input type="text" id="stepKeysInput" value="1000000"><br>
-
-<label for="stepsPerCycleInput">Aantal stappen per random start:</label>
-<input type="text" id="stepsPerCycleInput" value="10"><br>
+<h2>BTC Key Generator (Slimme Random + Theoretische Stappen)</h2>
 
 <button id="startBtn">Start zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
+
+<div id="totaal">Totaal gescande adressen: 0</div>
+<div id="errors">Aantal errors: 0</div>
+<div id="progress">Voortgang in keyspace: 0.000000000000 %</div>
 
 <div id="retryMsg"></div>
 <div id="foundMsg"></div>
@@ -61,11 +46,6 @@ label { display:inline-block; min-width:200px; }
 </table>
 
 <script>
-// ===== Keyspace =====
-const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
-const MAX_VALID_KEY = ORDER_N-1n;
-const KEYSPACE_SIZE = MAX_VALID_KEY;
-
 // ===== Helpers =====
 function toHex(bytes){return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join("");}
 function hexToBytes(hex){const out=new Uint8Array(hex.length/2);for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16);return out;}
@@ -79,145 +59,105 @@ function base58Encode(hex){
   while(num>0n){let r=num%58n;num/=58n;out=alphabet[Number(r)]+out;}
   return "1".repeat(zeros)+(out||"");
 }
-function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+// ===== Keyspace =====
+const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+const MAX_VALID_KEY = ORDER_N-1n;
+const KEYSPACE_SIZE = MAX_VALID_KEY;
+
+// ===== Generator variabelen =====
+let counter=0, totaal=0, fouten=0, zoeken=false, MAX_VISIBLE=250;
+let currentKey=null, batchSize=2, batchRate=5, incrementalCount=0, INCREMENTAL_MAX=100000n;
+const N_ACTIVE = 1000000000n; // Aantal verwachte actieve keys
+const STEP_TO_NEXT_ACTIVE = KEYSPACE_SIZE / N_ACTIVE;
+
+// ===== Random start =====
 function genRandomKeyBigInt(){
-  const arr=new Uint8Array(32); crypto.getRandomValues(arr);
+  const arr=new Uint8Array(32);
+  crypto.getRandomValues(arr);
   let k=BigInt("0x"+Array.from(arr,b=>b.toString(16).padStart(2,"0")).join(""));
   if(k===0n) return 1n;
-  if(k>MAX_VALID_KEY) k=(k%MAX_VALID_KEY)+1n;
+  if(k>MAX_VALID_KEY) k=(k % MAX_VALID_KEY)+1n;
   return k;
 }
 
-// ===== Variabelen =====
-let counter=0, totaal=0, fouten=0, zoeken=false, MAX_VISIBLE=250, currentKey=null;
-let stepKeys=1000000n, batchSize=2, batchMax=10, batchMin=1, batchRate=5;
-
-// ===== Proxy-lijst en APIs =====
-const proxies=[
-  "https://corsproxy.io/?url=",
-  "https://api.allorigins.win/raw?url=",
-  "https://thingproxy.freeboard.io/fetch/"
+// ===== Balance APIs =====
+const balanceAPIs = [
+  addr=>`https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
+  addr=>`https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`
 ];
-const balanceAPIs=[
-  addr => `https://blockstream.info/api/address/${addr}`,
-  addr => `https://mempool.space/api/address/${addr}`,
-  addr => `https://api.blockcypher.com/v1/btc/main/addrs/${addr}/balance`
-];
-
-// ===== Fetch met proxy-fallback =====
-async function fetchWithProxies(apiFunc,address){
-  for(const proxy of proxies){
-    const url=proxy+encodeURIComponent(apiFunc(address));
-    try{
-      const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(),5000);
-      const resp=await fetch(url,{signal:controller.signal});
-      clearTimeout(timeout);
-      if(resp.ok) return await resp.json();
-    }catch(e){/* probeer volgende proxy */ }
-  }
+async function fetchWithRetry(url){
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),5000);
+  try{const resp=await fetch(url,{signal:controller.signal});clearTimeout(timeout);if(resp.ok) return await resp.json();}catch(e){}
+  clearTimeout(timeout);
   return null;
 }
-
-// ===== Check balance =====
 async function checkBalance(address){
   let attempt=0;
   while(true){
     attempt++;
     let success=false;
     for(const api of balanceAPIs){
-      const startTime=performance.now();
-      const data=await fetchWithProxies(api,address);
-      const duration=performance.now()-startTime;
+      const data = await fetchWithRetry(api(address));
       if(data){
         success=true;
-        adjustBatch(true,duration);
         if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8;
         if(data.address && data.address.balance) return Number(data.address.balance)/1e8;
         if(data.data && data.data[address] && data.data[address].address && data.data[address].address.balance) return Number(data.data[address].address.balance)/1e8;
       }
     }
     if(success) return 0;
-    else{
+    else {
+      const waitTime = Math.min(attempt,30);
       fouten++;
-      adjustBatch(false,5000);
-      document.getElementById("errors").textContent="Aantal errors: "+fouten;
-      document.getElementById("retryMsg").textContent=`⏳ Alle proxies/API's faalden, opnieuw proberen in ${attempt} sec...`;
-      await sleep(attempt*1000);
+      document.getElementById("errors").textContent = "Aantal errors: "+fouten;
+      document.getElementById("retryMsg").textContent = `⏳ Alle API's faalden, opnieuw proberen in ${waitTime} sec...`;
+      await new Promise(r=>setTimeout(r, waitTime*1000));
     }
   }
 }
-
-// ===== Dynamische batch aanpassing =====
-function adjustBatch(success,duration){
-  if(success){if(duration<1000 && batchSize<batchMax) batchSize++;}
-  else{if(batchSize>batchMin) batchSize--;}
-}
-
-// ===== Increment =====
-function doIncrementStep(){currentKey+=stepKeys;if(currentKey>MAX_VALID_KEY) currentKey-=KEYSPACE_SIZE;}
 
 // ===== Voortgang =====
-function getProgress(){return ((Number(currentKey)/Number(KEYSPACE_SIZE))*100).toFixed(18)+" %";}
-
-// ===== IP-beveiliging =====
-async function checkIP() {
-  try {
-    const resp = await fetch("https://ipapi.co/json/");
-    const data = await resp.json();
-    if(data.country_code === "NL"){
-      alert("Toegang geweigerd: NL IP-adressen zijn niet toegestaan.");
-      return false;
-    }
-    return true;
-  } catch (e) {
-    alert("Kan IP niet controleren, toegang geweigerd.");
-    return false;
-  }
+function getProgress(){
+  return (Number(currentKey)/Number(KEYSPACE_SIZE)*100).toFixed(12) + " %";
 }
 
 // ===== Start / Stop =====
 async function starten(){
-  const ipOk = await checkIP();
-  if(!ipOk) return;
-
   if(zoeken) return;
-
-  stepKeys=BigInt(document.getElementById("stepKeysInput").value.trim()||"1000000");
-  const stepsPerCycle = Number(document.getElementById("stepsPerCycleInput").value.trim()||10);
-
+  currentKey = genRandomKeyBigInt();
+  incrementalCount = 0n;
   zoeken=true;
   document.getElementById("startBtn").disabled=true;
   document.getElementById("stopBtn").disabled=false;
   document.getElementById("retryMsg").textContent="";
   document.getElementById("foundMsg").textContent="";
-
-  genereerCycle(stepKeys, stepsPerCycle);
+  genereerBatch();
 }
-
 function stoppen(){zoeken=false; document.getElementById("startBtn").disabled=false; document.getElementById("stopBtn").disabled=true;}
 
-// ===== Cycle generator =====
-async function genereerCycle(stepSize, stepsPerCycle){
-  while(zoeken){
-    // Random start
-    currentKey = genRandomKeyBigInt();
+// ===== Batch genereren =====
+async function genereerBatch(){
+  if(!zoeken) return;
 
-    for(let i=0; i<stepsPerCycle && zoeken; i++){
-      await genereerBatchStep(currentKey);
-      currentKey += stepSize;
-      if(currentKey > MAX_VALID_KEY) currentKey -= KEYSPACE_SIZE;
+  const privKeys=[];
+  for(let i=0;i<batchSize;i++){
+    privKeys.push(currentKey);
+    // Incremental telling
+    currentKey += 1n;
+    incrementalCount += 1n;
+    if(incrementalCount >= INCREMENTAL_MAX){
+      // Na 100.000 stappen: random + theoretische sprong
+      currentKey = genRandomKeyBigInt() + STEP_TO_NEXT_ACTIVE;
+      incrementalCount = 0n;
     }
   }
-}
 
-// ===== Eén batch stap =====
-async function genereerBatchStep(key){
-  const privKeys=[key];
   const addresses=[];
   for(const k of privKeys){
     const privHex=k.toString(16).padStart(64,'0');
-    const ec=new elliptic.ec("secp256k1"); 
+    const ec=new elliptic.ec("secp256k1");
     const kp=ec.keyFromPrivate(privHex,"hex");
 
     // Compressed
@@ -239,23 +179,32 @@ async function genereerBatchStep(key){
     addresses.push({address:addressU,wif:wifU,type:'Uncompressed'});
   }
 
-  const tbody=document.querySelector("#resultTable tbody");
   for(const a of addresses){
-    const saldo=await checkBalance(a.address);
+    const saldo = await checkBalance(a.address);
     counter++; totaal++;
-    const row=document.createElement('tr');
+    const row = document.createElement('tr');
     row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>${a.type}</td><td>${saldo}</td>`;
-    if(saldo>0){row.style.backgroundColor="#c8f7c5"; document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${a.address}`; stoppen();}
-    tbody.appendChild(row);
+    if(saldo > 0){
+      row.style.backgroundColor="#c8f7c5";
+      document.getElementById("foundMsg").textContent = `🎉 Adres gevonden met saldo >0 BTC! ${a.address}`;
+      zoeken=false;
+      document.getElementById("startBtn").disabled=false;
+      document.getElementById("stopBtn").disabled=true;
+    }
+    document.querySelector("#resultTable tbody").appendChild(row);
   }
 
-  while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
-  document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
-  document.getElementById("progress").textContent="Voortgang in keyspace: "+getProgress();
+  const tbody = document.querySelector("#resultTable tbody");
+  while(tbody.rows.length > MAX_VISIBLE) tbody.deleteRow(0);
+
+  document.getElementById("totaal").textContent = "Totaal gescande adressen: "+totaal;
+  document.getElementById("progress").textContent = "Voortgang in keyspace: "+getProgress();
+
+  if(zoeken) setTimeout(genereerBatch, 1000/batchRate);
 }
 
-document.getElementById("startBtn").addEventListener("click",starten);
-document.getElementById("stopBtn").addEventListener("click",stoppen);
+document.getElementById("startBtn").addEventListener("click", starten);
+document.getElementById("stopBtn").addEventListener("click", stoppen);
 </script>
 </body>
 </html>
