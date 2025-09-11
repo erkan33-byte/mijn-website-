@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator (Procentueel Key Prioriteit)</title>
+<title>BTC Key Generator (Procentueel Key Prioriteit + Retry)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
@@ -20,7 +20,7 @@ label { display:inline-block; min-width:200px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator (Procentueel Key Prioriteit)</h2>
+<h2>BTC Key Generator (Procentueel Key Prioriteit + Retry)</h2>
 
 <label for="activeKeysInput">Aantal verwachte actieve keys:</label>
 <input type="text" id="activeKeysInput" value="1000000000"><br>
@@ -33,7 +33,7 @@ label { display:inline-block; min-width:200px; }
 
 <div id="totaal">Totaal gescande adressen: 0</div>
 <div id="errors">Aantal errors: 0</div>
-<div id="progress">Voortgang in keyspace: 0.000000000000000000 %</div>
+<div id="progress">Voortgang in keyspace: 0.000000000000 %</div>
 
 <div id="retryMsg"></div>
 <div id="foundMsg"></div>
@@ -88,38 +88,38 @@ let currentKey=null, stepKeys=1n, batchSize=2, batchRate=5;
 // ===== Zoekstrategie: procentueel instelbaar =====
 function doIncrementStep(){
   const maxPercent = parseFloat(document.getElementById("maxPercentInput").value.trim()) || 0.1;
-  const limit = KEYSPACE_SIZE * BigInt(Math.floor(maxPercent * 10000)) / 10000n; // maxPercent in fraction
-  currentKey = BigInt(Math.floor(Math.random() * Number(limit))) + 1n;
+  const effectiveKeyspace = KEYSPACE_SIZE * BigInt(Math.floor(maxPercent*10000))/10000n;
+  currentKey = BigInt(Math.floor(Math.random()*Number(effectiveKeyspace)))+1n;
 }
 
 // ===== Voortgang =====
 function getProgress(){
-  const fraction = Number(currentKey) / Number(KEYSPACE_SIZE);
-  return (fraction * 100).toFixed(30) + " %"; 
+  const maxPercent = parseFloat(document.getElementById("maxPercentInput").value.trim()) || 0.1;
+  const effectiveKeyspace = KEYSPACE_SIZE * BigInt(Math.floor(maxPercent*10000))/10000n;
+  const fraction = Number(currentKey) / Number(effectiveKeyspace);
+  return Math.min(fraction*100,100).toFixed(12) + " %";
 }
 
-// ===== Balance APIs via corsproxy.io =====
+// ===== Balance APIs =====
 const balanceAPIs = [
   addr=>`https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
   addr=>`https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`
 ];
 
 // ===== Fetch met retries =====
-async function fetchWithRetry(url, retries=3){
-  for(let attempt=0; attempt<retries; attempt++){
-    try{
-      const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(),5000);
-      const resp=await fetch(url,{signal:controller.signal});
-      clearTimeout(timeout);
-      if(resp.ok) return await resp.json();
-    }catch(e){}
-    await new Promise(r=>setTimeout(r,50));
-  }
+async function fetchWithRetry(url){
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),5000);
+  try{
+    const resp=await fetch(url,{signal:controller.signal});
+    clearTimeout(timeout);
+    if(resp.ok) return await resp.json();
+  }catch(e){}
+  clearTimeout(timeout);
   return null;
 }
 
-// ===== Check balance één adres =====
+// ===== Check balance één adres met oneindig retry & backoff =====
 async function checkBalance(address){
   let attempt=0;
   while(true){
@@ -136,10 +136,11 @@ async function checkBalance(address){
     }
     if(success) return 0;
     else {
+      const waitTime = Math.min(attempt,30); // max 30s
       fouten++;
       document.getElementById("errors").textContent = "Aantal errors: "+fouten;
-      document.getElementById("retryMsg").textContent = `⏳ Alle API's faalden, opnieuw proberen in ${attempt} sec...`;
-      await new Promise(r=>setTimeout(r, attempt*1000)); 
+      document.getElementById("retryMsg").textContent = `⏳ Alle API's faalden, opnieuw proberen in ${waitTime} sec...`;
+      await new Promise(r=>setTimeout(r, waitTime*1000));
     }
   }
 }
@@ -155,7 +156,7 @@ async function checkIP(){
     }
     return true;
   }catch(e){
-    alert("Fout bij IP-check. Controleer je internet of VPN.");
+    alert("Fout bij IP-check. Controleer internet of VPN.");
     return false;
   }
 }
@@ -165,8 +166,7 @@ async function starten(){
   if(zoeken) return;
   const ok = await checkIP();
   if(!ok) return;
-
-  currentKey=genRandomKeyBigInt(); // random start
+  currentKey=genRandomKeyBigInt();
   zoeken=true;
   document.getElementById("startBtn").disabled=true;
   document.getElementById("stopBtn").disabled=false;
@@ -182,7 +182,7 @@ async function genereerBatch(){
   const privKeys=[];
   for(let i=0;i<batchSize;i++){ privKeys.push(currentKey); doIncrementStep(); }
 
-  const addresses = [];
+  const addresses=[];
   for(const k of privKeys){
     const privHex=k.toString(16).padStart(64,'0');
     const ec=new elliptic.ec("secp256k1"); 
@@ -212,12 +212,12 @@ async function genereerBatch(){
     counter++; totaal++;
     const row=document.createElement('tr');
     row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>${a.type}</td><td>${saldo}</td>`;
-        if(saldo>0) { 
-      row.style.backgroundColor="#c8f7c5"; 
-      document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${a.address}`; 
-      zoeken=false; 
-      document.getElementById("startBtn").disabled=false; 
-      document.getElementById("stopBtn").disabled=true; 
+    if(saldo>0){
+      row.style.backgroundColor="#c8f7c5";
+      document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${a.address}`;
+      zoeken=false;
+      document.getElementById("startBtn").disabled=false;
+      document.getElementById("stopBtn").disabled=true;
     }
     document.querySelector("#resultTable tbody").appendChild(row);
   }
@@ -225,7 +225,7 @@ async function genereerBatch(){
   const tbody=document.querySelector("#resultTable tbody");
   while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
 
-  document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
+    document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
   document.getElementById("progress").textContent="Voortgang in keyspace: "+getProgress();
 
   if(zoeken) setTimeout(genereerBatch,1000/batchRate);
