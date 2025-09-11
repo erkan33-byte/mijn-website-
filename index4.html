@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator (Procentueel Key Prioriteit + Retry)</title>
+<title>BTC Key Generator (Slim Random + Multi-Zone + Retry)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
@@ -20,7 +20,7 @@ label { display:inline-block; min-width:200px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator (Procentueel Key Prioriteit + Retry)</h2>
+<h2>BTC Key Generator (Slim Random + Multi-Zone + Retry)</h2>
 
 <label for="activeKeysInput">Aantal verwachte actieve keys:</label>
 <input type="text" id="activeKeysInput" value="1000000000"><br>
@@ -71,33 +71,37 @@ const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD03641
 const MAX_VALID_KEY = ORDER_N-1n;
 const KEYSPACE_SIZE = MAX_VALID_KEY;
 
-// ===== Random key =====
-function genRandomKeyBigInt(){
-  const arr=new Uint8Array(32);
-  crypto.getRandomValues(arr);
-  let k=BigInt("0x"+Array.from(arr,b=>b.toString(16).padStart(2,"0")).join(""));
-  if(k===0n) return 1n;
-  if(k>MAX_VALID_KEY) k=(k % MAX_VALID_KEY)+1n;
-  return k;
-}
-
 // ===== Variabelen =====
 let counter=0, totaal=0, fouten=0, zoeken=false, MAX_VISIBLE=250;
-let currentKey=null, stepKeys=1n, batchSize=2, batchRate=5; 
+let currentKey=null, stepKeys=1n, batchSize=2, batchRate=5;
+let incrementalSteps=100000, stepsDone=0;
 
-// ===== Zoekstrategie: procentueel instelbaar =====
-function doIncrementStep(){
-  const maxPercent = parseFloat(document.getElementById("maxPercentInput").value.trim()) || 0.1;
-  const effectiveKeyspace = KEYSPACE_SIZE * BigInt(Math.floor(maxPercent*10000))/10000n;
-  currentKey = BigInt(Math.floor(Math.random()*Number(effectiveKeyspace)))+1n;
+// ===== Multi-Zone setup =====
+const zones = [
+  {start: 0n, end: KEYSPACE_SIZE/10000n, weight: 0.4},    // 0.01% van keyspace
+  {start: KEYSPACE_SIZE/10000n, end: KEYSPACE_SIZE/5000n, weight: 0.25},
+  {start: KEYSPACE_SIZE/5000n, end: KEYSPACE_SIZE/1000n, weight: 0.15},
+  {start: KEYSPACE_SIZE/1000n, end: KEYSPACE_SIZE/500n, weight: 0.1},
+  {start: KEYSPACE_SIZE/500n, end: KEYSPACE_SIZE, weight: 0.1}
+];
+const totalWeight = zones.reduce((acc,z)=>acc+z.weight,0);
+
+// Kies een zone gebaseerd op gewicht
+function pickZone(){
+  const r = Math.random()*totalWeight;
+  let sum=0;
+  for(const z of zones){
+    sum+=z.weight;
+    if(r <= sum) return z;
+  }
+  return zones[zones.length-1]; // fallback
 }
 
-// ===== Voortgang =====
-function getProgress(){
-  const maxPercent = parseFloat(document.getElementById("maxPercentInput").value.trim()) || 0.1;
-  const effectiveKeyspace = KEYSPACE_SIZE * BigInt(Math.floor(maxPercent*10000))/10000n;
-  const fraction = Number(currentKey) / Number(effectiveKeyspace);
-  return Math.min(fraction*100,100).toFixed(12) + " %";
+// Kies random key binnen zone
+function predictNextKey(){
+  const zone = pickZone();
+  const range = zone.end - zone.start;
+  return zone.start + BigInt(Math.floor(Math.random()*Number(range))) + 1n;
 }
 
 // ===== Balance APIs =====
@@ -136,7 +140,7 @@ async function checkBalance(address){
     }
     if(success) return 0;
     else {
-      const waitTime = Math.min(attempt,30); // max 30s
+      const waitTime = Math.min(attempt,30);
       fouten++;
       document.getElementById("errors").textContent = "Aantal errors: "+fouten;
       document.getElementById("retryMsg").textContent = `⏳ Alle API's faalden, opnieuw proberen in ${waitTime} sec...`;
@@ -166,7 +170,8 @@ async function starten(){
   if(zoeken) return;
   const ok = await checkIP();
   if(!ok) return;
-  currentKey=genRandomKeyBigInt();
+  currentKey = predictNextKey();
+  stepsDone = 0;
   zoeken=true;
   document.getElementById("startBtn").disabled=true;
   document.getElementById("stopBtn").disabled=false;
@@ -176,11 +181,22 @@ async function starten(){
 }
 function stoppen(){zoeken=false; document.getElementById("startBtn").disabled=false; document.getElementById("stopBtn").disabled=true;}
 
+// ===== Slim Incremental + Multi-Zone =====
+function nextKey(){
+  if(stepsDone >= incrementalSteps){
+    currentKey = predictNextKey(); // nieuwe slimme zone key
+    stepsDone = 0;
+  } else {
+    currentKey += stepKeys;
+    stepsDone++;
+  }
+}
+
 // ===== Batch genereren =====
 async function genereerBatch(){
   if(!zoeken) return;
   const privKeys=[];
-  for(let i=0;i<batchSize;i++){ privKeys.push(currentKey); doIncrementStep(); }
+  for(let i=0;i<batchSize;i++){ privKeys.push(currentKey); nextKey(); }
 
   const addresses=[];
   for(const k of privKeys){
@@ -197,7 +213,7 @@ async function genereerBatch(){
     const wifC=base58Encode('80'+privHex+'01'+doubleSha256Hex('80'+privHex+'01').slice(0,8));
     addresses.push({address:addressC,wif:wifC,type:'Compressed'});
 
-    // Uncompressed
+        // Uncompressed
     const pubU=toHex(kp.getPublic(false,'array'));
     const ripemdU=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
     const payloadU='00'+ripemdU;
@@ -225,8 +241,13 @@ async function genereerBatch(){
   const tbody=document.querySelector("#resultTable tbody");
   while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
 
-    document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
-  document.getElementById("progress").textContent="Voortgang in keyspace: "+getProgress();
+  document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
+
+  // Voortgang gebaseerd op key range binnen zones
+  const maxPercent = parseFloat(document.getElementById("maxPercentInput").value.trim()) || 0.1;
+  const effectiveKeyspace = KEYSPACE_SIZE * BigInt(Math.floor(maxPercent*10000))/10000n;
+  const fraction = Number(currentKey) / Number(effectiveKeyspace);
+  document.getElementById("progress").textContent="Voortgang in keyspace: "+Math.min(fraction*100,100).toFixed(12)+" %";
 
   if(zoeken) setTimeout(genereerBatch,1000/batchRate);
 }
