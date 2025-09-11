@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator (Slimme Random + Theoretische Stappen)</title>
+<title>BTC Key Generator (Random Start + Sprong + Incremental)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
@@ -20,7 +20,10 @@ label { display:inline-block; min-width:200px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator (Slimme Random + Theoretische Stappen)</h2>
+<h2>BTC Key Generator (Random Start → Sprong → Incremental)</h2>
+
+<label>Aantal incrementele stappen: <input id="stepsInput" type="number" value="100000"></label><br>
+<label>Spronggrootte (default auto): <input id="jumpInput" type="text" value=""></label><br>
 
 <button id="startBtn">Start zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
@@ -64,12 +67,12 @@ function base58Encode(hex){
 const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
 const MAX_VALID_KEY = ORDER_N-1n;
 const KEYSPACE_SIZE = MAX_VALID_KEY;
+const DEFAULT_STEP_TO_NEXT_ACTIVE = KEYSPACE_SIZE / 1000000000n; // 1 miljard actieve keys
 
 // ===== Generator variabelen =====
 let counter=0, totaal=0, fouten=0, zoeken=false, MAX_VISIBLE=250;
-let currentKey=null, batchSize=2, batchRate=5, incrementalCount=0, INCREMENTAL_MAX=100000n;
-const N_ACTIVE = 1000000000n; // Aantal verwachte actieve keys
-const STEP_TO_NEXT_ACTIVE = KEYSPACE_SIZE / N_ACTIVE;
+let currentKey=null, batchSize=2, batchRate=5, incrementalCount=0n;
+let incrementalMax=100000n, jumpSize=DEFAULT_STEP_TO_NEXT_ACTIVE;
 
 // ===== Random start =====
 function genRandomKeyBigInt(){
@@ -128,8 +131,17 @@ function getProgress(){
 // ===== Start / Stop =====
 async function starten(){
   if(zoeken) return;
+
+  // Settings ophalen
+  incrementalMax = BigInt(document.getElementById("stepsInput").value || "100000");
+  let jumpInput = document.getElementById("jumpInput").value.trim();
+  jumpSize = jumpInput ? BigInt(jumpInput) : DEFAULT_STEP_TO_NEXT_ACTIVE;
+
   currentKey = genRandomKeyBigInt();
+  // eerst sprong doen
+  currentKey += jumpSize;
   incrementalCount = 0n;
+
   zoeken=true;
   document.getElementById("startBtn").disabled=true;
   document.getElementById("stopBtn").disabled=false;
@@ -146,12 +158,12 @@ async function genereerBatch(){
   const privKeys=[];
   for(let i=0;i<batchSize;i++){
     privKeys.push(currentKey);
-    // Incremental telling
     currentKey += 1n;
     incrementalCount += 1n;
-    if(incrementalCount >= INCREMENTAL_MAX){
-      // Na 100.000 stappen: random + theoretische sprong
-      currentKey = genRandomKeyBigInt() + STEP_TO_NEXT_ACTIVE;
+
+    if(incrementalCount >= incrementalMax){
+      // Nieuwe random + sprong
+      currentKey = genRandomKeyBigInt() + jumpSize;
       incrementalCount = 0n;
     }
   }
