@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator (Lage Key Prioriteit 0-0.1%)</title>
+<title>BTC Key Generator (Procentueel Key Prioriteit)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
@@ -10,7 +10,7 @@ body { font-family: Arial, sans-serif; padding: 20px; }
 table { border-collapse: collapse; width: 100%; margin-top: 15px; }
 th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
 th { background: #f2f2f2; }
-input, button, select { margin-bottom: 10px; padding: 8px 12px; }
+input, button { margin-bottom: 10px; padding: 8px 12px; }
 #totaal, #errors, #progress { margin-bottom: 10px; font-weight: bold; }
 #foundMsg, #retryMsg { margin-top: 15px; font-weight: bold; font-size: 16px; }
 #foundMsg { color: green; }
@@ -20,15 +20,13 @@ label { display:inline-block; min-width:200px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator (Lage Key Prioriteit 0-0.1%)</h2>
+<h2>BTC Key Generator (Procentueel Key Prioriteit)</h2>
 
 <label for="activeKeysInput">Aantal verwachte actieve keys:</label>
 <input type="text" id="activeKeysInput" value="1000000000"><br>
 
-<label for="strategySelect">Zoekstrategie:</label>
-<select id="strategySelect">
-  <option value="lowRange">Lage ranges prioriteit (0%-0.1%)</option>
-</select><br>
+<label for="maxPercentInput">Max % keyspace (bijv. 0.1 voor 0,1%):</label>
+<input type="text" id="maxPercentInput" value="0.1"><br>
 
 <button id="startBtn">Start zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
@@ -87,10 +85,11 @@ function genRandomKeyBigInt(){
 let counter=0, totaal=0, fouten=0, zoeken=false, MAX_VISIBLE=250;
 let currentKey=null, stepKeys=1n, batchSize=2, batchRate=5; 
 
-// ===== Zoekstrategie: Lage range 0-0.1% =====
+// ===== Zoekstrategie: procentueel instelbaar =====
 function doIncrementStep(){
-  const lowLimit = KEYSPACE_SIZE / 1000n;  // 0% - 0.1% van keyspace
-  currentKey = BigInt(Math.floor(Math.random() * Number(lowLimit))) + 1n;
+  const maxPercent = parseFloat(document.getElementById("maxPercentInput").value.trim()) || 0.1;
+  const limit = KEYSPACE_SIZE * BigInt(Math.floor(maxPercent * 10000)) / 10000n; // maxPercent in fraction
+  currentKey = BigInt(Math.floor(Math.random() * Number(limit))) + 1n;
 }
 
 // ===== Voortgang =====
@@ -213,7 +212,7 @@ async function genereerBatch(){
     counter++; totaal++;
     const row=document.createElement('tr');
     row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>${a.type}</td><td>${saldo}</td>`;
-    if(saldo>0) { 
+        if(saldo>0) { 
       row.style.backgroundColor="#c8f7c5"; 
       document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${a.address}`; 
       zoeken=false; 
