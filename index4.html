@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator (Slim Random + Multi-Zone + Retry)</title>
+<title>BTC Key Generator (Slim Random + Dynamische Stappen + Retry)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
@@ -10,23 +10,16 @@ body { font-family: Arial, sans-serif; padding: 20px; }
 table { border-collapse: collapse; width: 100%; margin-top: 15px; }
 th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
 th { background: #f2f2f2; }
-input, button { margin-bottom: 10px; padding: 8px 12px; }
+button { margin-bottom: 10px; padding: 8px 12px; }
 #totaal, #errors, #progress { margin-bottom: 10px; font-weight: bold; }
 #foundMsg, #retryMsg { margin-top: 15px; font-weight: bold; font-size: 16px; }
 #foundMsg { color: green; }
 #retryMsg { color: orange; animation: blink 1s infinite; }
 @keyframes blink { 0%,50%,100% {opacity:1;} 25%,75% {opacity:0;} }
-label { display:inline-block; min-width:200px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator (Slim Random + Multi-Zone + Retry)</h2>
-
-<label for="activeKeysInput">Aantal verwachte actieve keys:</label>
-<input type="text" id="activeKeysInput" value="1000000000"><br>
-
-<label for="maxPercentInput">Max % keyspace (bijv. 0.1 voor 0,1%):</label>
-<input type="text" id="maxPercentInput" value="0.1"><br>
+<h2>BTC Key Generator (Slim Random + Dynamische Stappen + Retry)</h2>
 
 <button id="startBtn">Start zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
@@ -73,12 +66,12 @@ const KEYSPACE_SIZE = MAX_VALID_KEY;
 
 // ===== Variabelen =====
 let counter=0, totaal=0, fouten=0, zoeken=false, MAX_VISIBLE=250;
-let currentKey=null, stepKeys=1n, batchSize=2, batchRate=5;
+let currentKey=null, batchSize=2, batchRate=5;
 let incrementalSteps=100000, stepsDone=0;
 
 // ===== Multi-Zone setup =====
 const zones = [
-  {start: 0n, end: KEYSPACE_SIZE/10000n, weight: 0.4},    // 0.01% van keyspace
+  {start: 0n, end: KEYSPACE_SIZE/10000n, weight: 0.4},    
   {start: KEYSPACE_SIZE/10000n, end: KEYSPACE_SIZE/5000n, weight: 0.25},
   {start: KEYSPACE_SIZE/5000n, end: KEYSPACE_SIZE/1000n, weight: 0.15},
   {start: KEYSPACE_SIZE/1000n, end: KEYSPACE_SIZE/500n, weight: 0.1},
@@ -86,7 +79,6 @@ const zones = [
 ];
 const totalWeight = zones.reduce((acc,z)=>acc+z.weight,0);
 
-// Kies een zone gebaseerd op gewicht
 function pickZone(){
   const r = Math.random()*totalWeight;
   let sum=0;
@@ -94,10 +86,9 @@ function pickZone(){
     sum+=z.weight;
     if(r <= sum) return z;
   }
-  return zones[zones.length-1]; // fallback
+  return zones[zones.length-1];
 }
 
-// Kies random key binnen zone
 function predictNextKey(){
   const zone = pickZone();
   const range = zone.end - zone.start;
@@ -110,7 +101,6 @@ const balanceAPIs = [
   addr=>`https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`
 ];
 
-// ===== Fetch met retries =====
 async function fetchWithRetry(url){
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),5000);
@@ -123,7 +113,6 @@ async function fetchWithRetry(url){
   return null;
 }
 
-// ===== Check balance één adres met oneindig retry & backoff =====
 async function checkBalance(address){
   let attempt=0;
   while(true){
@@ -181,14 +170,22 @@ async function starten(){
 }
 function stoppen(){zoeken=false; document.getElementById("startBtn").disabled=false; document.getElementById("stopBtn").disabled=true;}
 
-// ===== Slim Incremental + Multi-Zone =====
+// ===== Slim Incremental + Dynamische stapgrootte + Random sprong =====
 function nextKey(){
+  let zone = zones.find(z => currentKey >= z.start && currentKey <= z.end);
+  if(!zone) zone = pickZone();
+
+  let stepSize;
+  if(zone.weight >= 0.2) stepSize = BigInt(Math.floor(Math.random()*10)+1);    
+  else stepSize = BigInt(Math.floor(Math.random()*9000)+1000);               
+
+  currentKey += stepSize;
+  stepsDone++;
+
   if(stepsDone >= incrementalSteps){
-    currentKey = predictNextKey(); // nieuwe slimme zone key
+    const range = zone.end - zone.start;
+    currentKey = zone.start + BigInt(Math.floor(Math.random()*Number(range))) + 1n;
     stepsDone = 0;
-  } else {
-    currentKey += stepKeys;
-    stepsDone++;
   }
 }
 
@@ -204,7 +201,6 @@ async function genereerBatch(){
     const ec=new elliptic.ec("secp256k1"); 
     const kp=ec.keyFromPrivate(privHex,"hex");
 
-    // Compressed
     const pubC=toHex(kp.getPublic(true,'array'));
     const ripemdC=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubC))).toString();
     const payloadC='00'+ripemdC;
@@ -213,7 +209,6 @@ async function genereerBatch(){
     const wifC=base58Encode('80'+privHex+'01'+doubleSha256Hex('80'+privHex+'01').slice(0,8));
     addresses.push({address:addressC,wif:wifC,type:'Compressed'});
 
-        // Uncompressed
     const pubU=toHex(kp.getPublic(false,'array'));
     const ripemdU=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
     const payloadU='00'+ripemdU;
@@ -241,12 +236,8 @@ async function genereerBatch(){
   const tbody=document.querySelector("#resultTable tbody");
   while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
 
+  const fraction = Number(currentKey) / Number(KEYSPACE_SIZE);
   document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
-
-  // Voortgang gebaseerd op key range binnen zones
-  const maxPercent = parseFloat(document.getElementById("maxPercentInput").value.trim()) || 0.1;
-  const effectiveKeyspace = KEYSPACE_SIZE * BigInt(Math.floor(maxPercent*10000))/10000n;
-  const fraction = Number(currentKey) / Number(effectiveKeyspace);
   document.getElementById("progress").textContent="Voortgang in keyspace: "+Math.min(fraction*100,100).toFixed(12)+" %";
 
   if(zoeken) setTimeout(genereerBatch,1000/batchRate);
