@@ -97,8 +97,10 @@ function predictNextKey(){
 
 // ===== Balance APIs =====
 const balanceAPIs = [
-  addr=>`https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
-  addr=>`https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`
+  addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
+  addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`,
+  addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}/utxo`,
+  addr => `https://corsproxy.io/?url=https://api.blockcypher.com/v1/btc/main/addrs/${addr}/full`
 ];
 
 async function fetchWithRetry(url){
