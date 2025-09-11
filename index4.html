@@ -10,7 +10,7 @@ body { font-family: Arial, sans-serif; padding: 20px; }
 table { border-collapse: collapse; width: 100%; margin-top: 15px; }
 th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
 th { background: #f2f2f2; }
-input, button { margin-bottom: 10px; padding: 8px 12px; }
+input, button, select { margin-bottom: 10px; padding: 8px 12px; }
 #totaal, #errors, #progress { margin-bottom: 10px; font-weight: bold; }
 #foundMsg, #retryMsg { margin-top: 15px; font-weight: bold; font-size: 16px; }
 #foundMsg { color: green; }
@@ -24,6 +24,13 @@ label { display:inline-block; min-width:200px; }
 
 <label for="activeKeysInput">Aantal verwachte actieve keys:</label>
 <input type="text" id="activeKeysInput" value="1000000000"><br>
+
+<label for="strategySelect">Zoekstrategie:</label>
+<select id="strategySelect">
+  <option value="linear">Lineair (huidige manier)</option>
+  <option value="randomStep">Random variatie</option>
+  <option value="clusters">Clusters</option>
+</select><br>
 
 <button id="startBtn">Start zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
@@ -81,6 +88,36 @@ function genRandomKeyBigInt(){
 // ===== Variabelen =====
 let counter=0, totaal=0, fouten=0, zoeken=false, MAX_VISIBLE=250;
 let currentKey=null, stepKeys=1n, batchSize=2, batchRate=5; 
+let clusterSize=1000n, clusterCount=0n;
+
+// ===== Zoekstrategieën =====
+function doIncrementStep(){
+  const strategy=document.getElementById("strategySelect").value;
+
+  if(strategy==="linear"){
+    currentKey+=stepKeys;
+
+  } else if(strategy==="randomStep"){
+    let variation = BigInt(Math.floor(Math.random() * 1000));
+    currentKey+=stepKeys+variation;
+
+  } else if(strategy==="clusters"){
+    currentKey++;
+    clusterCount++;
+    if(clusterCount>=clusterSize){
+      currentKey=genRandomKeyBigInt();
+      clusterCount=0n;
+    }
+  }
+
+  if(currentKey>MAX_VALID_KEY) currentKey-=KEYSPACE_SIZE;
+}
+
+// ===== Voortgang =====
+function getProgress(){
+  const fraction = Number(currentKey) / Number(KEYSPACE_SIZE);
+  return (fraction * 100).toFixed(30) + " %"; 
+}
 
 // ===== Balance APIs via corsproxy.io =====
 const balanceAPIs = [
@@ -126,15 +163,6 @@ async function checkBalance(address){
       await new Promise(r=>setTimeout(r, attempt*1000)); 
     }
   }
-}
-
-// ===== Increment =====
-function doIncrementStep(){currentKey+=stepKeys;if(currentKey>MAX_VALID_KEY) currentKey-=KEYSPACE_SIZE;}
-
-// ===== Voortgang =====
-function getProgress(){
-  const fraction = Number(currentKey) / Number(KEYSPACE_SIZE);
-  return (fraction * 100).toFixed(30) + " %"; 
 }
 
 // ===== IP-check =====
