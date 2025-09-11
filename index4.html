@@ -30,7 +30,7 @@ label { display:inline-block; min-width:200px; }
   <option value="linear">Lineair (huidige manier)</option>
   <option value="randomStep">Random variatie</option>
   <option value="clusters">Clusters</option>
-  <option value="lowRange">Lage ranges prioriteit</option>
+  <option value="lowRange">Lage ranges prioriteit (0%-0.5%)</option>
 </select><br>
 
 <button id="startBtn">Start zoeken</button>
@@ -111,12 +111,12 @@ function doIncrementStep(){
     }
 
   } else if(strategy==="lowRange"){
-    const lowLimit = 100000000000n;  // laagste 1 miljoen keys
-    const chanceHigh = 0.2;     // 20% kans om random hoge key te pakken
+    const lowLimit = KEYSPACE_SIZE / 200n;  // 0% - 0,5% van keyspace
+    const chanceHigh = 0.2;                 // 20% kans om random hoge key te pakken
     if(Math.random() < chanceHigh){
-      currentKey = genRandomKeyBigInt();  // willekeurige key in hele keyspace
+        currentKey = genRandomKeyBigInt();  // willekeurige key in hele keyspace
     } else {
-      currentKey = BigInt(Math.floor(Math.random() * Number(lowLimit))) + 1n;
+        currentKey = BigInt(Math.floor(Math.random() * Number(lowLimit))) + 1n;
     }
   }
 
