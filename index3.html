@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator (Random → Sprong → Incrementeel)</title>
+<title>BTC Key Generator (Random + Sprong + Incremental)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
@@ -16,16 +16,14 @@ input, button { margin-bottom: 10px; padding: 8px 12px; }
 #foundMsg { color: green; }
 #retryMsg { color: orange; animation: blink 1s infinite; }
 @keyframes blink { 0%,50%,100% {opacity:1;} 25%,75% {opacity:0;} }
-label { display:inline-block; min-width:220px; }
+label { display:inline-block; min-width:200px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator (Random → Sprong → Incrementeel)</h2>
+<h2>BTC Key Generator (Random + Sprong + Incremental)</h2>
 
-<label>Incrementele stappen:</label>
-<input id="incSteps" type="number" value="100000"><br>
-<label>Spronggrootte (keys, leeg = auto):</label>
-<input id="stepSize" type="text" placeholder="Laat leeg voor default"><br>
+<label>Incrementele stappen per cyclus: <input id="incrementalInput" type="number" value="100000"></label><br>
+<label>Aantal keys per sprong (bijv. theoretische actieve keys): <input id="stepInput" type="number" value="1000000000"></label><br>
 
 <button id="startBtn">Start zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
@@ -33,7 +31,6 @@ label { display:inline-block; min-width:220px; }
 <div id="totaal">Totaal gescande adressen: 0</div>
 <div id="errors">Aantal errors: 0</div>
 <div id="progress">Voortgang in keyspace: 0.000000000000 %</div>
-<div id="sprongInfo"></div>
 
 <div id="retryMsg"></div>
 <div id="foundMsg"></div>
@@ -70,12 +67,11 @@ function base58Encode(hex){
 const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
 const MAX_VALID_KEY = ORDER_N-1n;
 const KEYSPACE_SIZE = MAX_VALID_KEY;
-const N_ACTIVE = 1000000000n; // 1 miljard actieve keys
-const DEFAULT_STEP = KEYSPACE_SIZE / N_ACTIVE;
 
-// ===== Generator variabelen =====
+// ===== Variabelen =====
 let counter=0, totaal=0, fouten=0, zoeken=false, MAX_VISIBLE=250;
-let currentKey=null, batchSize=2, batchRate=5, incrementalCount=0n, INCREMENTAL_MAX=100000n;
+let currentKey=null, batchSize=2, batchRate=5;
+let incrementalCount=0n, INCREMENTAL_MAX=100000n, STEP_TO_NEXT_ACTIVE=1000000000n;
 
 // ===== Random start =====
 function genRandomKeyBigInt(){
@@ -94,6 +90,7 @@ const balanceAPIs = [
   addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}/utxo`,
   addr => `https://corsproxy.io/?url=https://api.blockcypher.com/v1/btc/main/addrs/${addr}/full`
 ];
+
 async function fetchWithRetry(url){
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),5000);
@@ -101,6 +98,7 @@ async function fetchWithRetry(url){
   clearTimeout(timeout);
   return null;
 }
+
 async function checkBalance(address){
   let attempt=0;
   while(true){
@@ -127,46 +125,38 @@ async function checkBalance(address){
 }
 
 // ===== Voortgang =====
-function getProgress(){
-  return (Number(currentKey)/Number(KEYSPACE_SIZE)*100).toFixed(12) + " %";
-}
+function getProgress(){ return (Number(currentKey)/Number(KEYSPACE_SIZE)*100).toFixed(12) + " %"; }
 
 // ===== Start / Stop =====
 async function starten(){
   if(zoeken) return;
-
-  const userStep = document.getElementById("stepSize").value.trim();
-  const stepSize = userStep ? BigInt(userStep) : DEFAULT_STEP;
-  const incSteps = BigInt(document.getElementById("incSteps").value || "100000");
-
-  document.getElementById("sprongInfo").textContent = userStep
-    ? `➡️ Spronggrootte ingesteld op ${stepSize.toString()} keys`
-    : `➡️ Standaard spronggrootte: ${DEFAULT_STEP.toString()} keys (keyspace ÷ ${N_ACTIVE})`;
-
-  currentKey = genRandomKeyBigInt() + stepSize;
+  // Lees inputvelden
+  INCREMENTAL_MAX = BigInt(document.getElementById("incrementalInput").value || 100000);
+  STEP_TO_NEXT_ACTIVE = BigInt(document.getElementById("stepInput").value || 1000000000);
+  currentKey = genRandomKeyBigInt();
   incrementalCount = 0n;
-  INCREMENTAL_MAX = incSteps;
-
   zoeken=true;
   document.getElementById("startBtn").disabled=true;
   document.getElementById("stopBtn").disabled=false;
   document.getElementById("retryMsg").textContent="";
   document.getElementById("foundMsg").textContent="";
-  genereerBatch(stepSize, incSteps);
+  genereerBatch();
 }
 function stoppen(){zoeken=false; document.getElementById("startBtn").disabled=false; document.getElementById("stopBtn").disabled=true;}
 
 // ===== Batch genereren =====
-async function genereerBatch(stepSize, incSteps){
+async function genereerBatch(){
   if(!zoeken) return;
 
   const privKeys=[];
   for(let i=0;i<batchSize;i++){
     privKeys.push(currentKey);
+    // Incremental telling
     currentKey += 1n;
     incrementalCount += 1n;
-    if(incrementalCount >= incSteps){
-      currentKey = genRandomKeyBigInt() + stepSize;
+    if(incrementalCount >= INCREMENTAL_MAX){
+      // Nieuwe cyclus: random start + sprong
+      currentKey = genRandomKeyBigInt() + STEP_TO_NEXT_ACTIVE;
       incrementalCount = 0n;
     }
   }
@@ -217,7 +207,7 @@ async function genereerBatch(stepSize, incSteps){
   document.getElementById("totaal").textContent = "Totaal gescande adressen: "+totaal;
   document.getElementById("progress").textContent = "Voortgang in keyspace: "+getProgress();
 
-  if(zoeken) setTimeout(()=>genereerBatch(stepSize, incSteps), 1000/batchRate);
+  if(zoeken) setTimeout(genereerBatch, 1000/batchRate);
 }
 
 document.getElementById("startBtn").addEventListener("click", starten);
