@@ -72,7 +72,7 @@ function bigIntDivisionToDecimalString(numerator, denominator, decimals = 80) {
       let digit = remainder / denominator;
       remainder %= denominator;
       result += digit.toString();
-      if (remainder === 0n) break;
+      if (remainder === 0) break;
     }
   }
   return result;
@@ -122,7 +122,7 @@ document.getElementById("errors").textContent="Aantal errors: "+fouten;
 document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
 mode=document.getElementById("modeSelect").value;
 
-// ======== Verbeterde Balance check met parallelle API's en retries ========
+// ======== Verbeterde Balance check met parallel + exponential backoff ========
 const balanceAPIs=[
    addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
    addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`,
@@ -133,53 +133,45 @@ const balanceAPIs=[
 function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
 
 async function checkBalance(address){
-  let totalAttempts = 0;
+  let attempts = 0;
   const baseDelay = 1000;
   const maxDelay = 60000;
 
   while(zoeken){
-    totalAttempts++;
-    const apiPromises = balanceAPIs.map(api => 
-      (async () => {
+    attempts++;
+    try{
+      // Parallel requests
+      const apiPromises = balanceAPIs.map(api => (async ()=>{
         try{
           const controller = new AbortController();
           const timeout = setTimeout(()=>controller.abort(),10000);
           const resp = await fetch(api(address), {signal: controller.signal});
           clearTimeout(timeout);
-          if(!resp.ok) throw new Error("HTTP Error");
+          if(!resp.ok) throw new Error("HTTP error");
           const data = await resp.json();
 
           if(data.chain_stats){ 
-            const funded = Number(data.chain_stats.funded_txo_sum||0);
-            const spent = Number(data.chain_stats.spent_txo_sum||0);
-            return (funded - spent)/1e8;
+            return (Number(data.chain_stats.funded_txo_sum||0) - Number(data.chain_stats.spent_txo_sum||0))/1e8;
           }
           if(typeof data.final_balance!=="undefined") return data.final_balance/1e8;
           if(data.data && data.data[address] && data.data[address].address) return data.data[address].address.balance/1e8;
           if(data.data && data.data.confirmed_balance !== undefined) return Number(data.data.confirmed_balance)/1e8;
           if(data.address && data.balance !== undefined) return Number(data.balance)/1e8;
           if(data.response && data.response.balance !== undefined) return Number(data.response.balance)/1e8;
-          if(Array.isArray(data)) {
-            if(data.length === 0) return 0;
-            let sum = 0;
-            for(const item of data){
-              if(item.value !== undefined) sum += Number(item.value);
-              else if(item.amount !== undefined) sum += Number(item.amount);
-            }
-            if(sum !== 0) return sum / 1e8;
-            return 0;
+          if(Array.isArray(data)){
+            if(data.length===0) return 0;
+            return data.reduce((sum,it)=>(sum+(it.value||it.amount||0)),0)/1e8;
           }
           throw new Error("No valid balance");
         }catch(e){ throw e; }
-      })()
-    );
+      })());
 
-    try{
       const saldo = await Promise.any(apiPromises);
       return saldo;
+
     }catch(e){
-      document.getElementById("retryMsg").textContent = `Proberen: ${address} — pogingen: ${totalAttempts} (alle APIs faalden, retry...)`;
-      let delay = Math.min(baseDelay * totalAttempts, maxDelay);
+      const delay = Math.min(baseDelay * 2**(attempts-1), maxDelay);
+      document.getElementById("retryMsg").textContent=`Proberen: ${address} — poging ${attempts}, wacht ${delay}ms...`;
       await sleep(delay);
       continue;
     }
@@ -215,6 +207,7 @@ async function genereerBatch(){
     const privHex=k.toString(16).padStart(64,"0");
     const ec=new elliptic.ec("secp256k1");
     const kp=ec.keyFromPrivate(privHex,"hex");
+
     const pubC=toHex(kp.getPublic(true,"array"));
     const ripemdC=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubC))).toString();
     const payloadC="00"+ripemdC;
@@ -239,7 +232,7 @@ async function genereerBatch(){
     const addrObj = keyData[i];
     const saldo = await checkBalance(addrObj.address);
     let displaySaldo = saldo;
-    if(saldo === "Error") displaySaldo = "Error";
+    if(saldo==="Error") displaySaldo="Error";
     let row=document.createElement("tr");
     row.innerHTML=`<td>${counter}</td><td>${addrObj.address}</td><td>${addrObj.wif}</td><td>${displaySaldo}</td>`;
     if(typeof saldo==="number" && saldo>0){
