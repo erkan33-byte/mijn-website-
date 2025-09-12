@@ -122,90 +122,69 @@ document.getElementById("errors").textContent="Aantal errors: "+fouten;
 document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
 mode=document.getElementById("modeSelect").value;
 
-// ======== Verbeterde Balance check met persistente retries ========
+// ======== Verbeterde Balance check met parallelle API's en retries ========
 const balanceAPIs=[
    addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
-  addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`,
-  addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}/utxo`,
-  addr => `https://corsproxy.io/?url=https://api.blockcypher.com/v1/btc/main/addrs/${addr}/full`
+   addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`,
+   addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}/utxo`,
+   addr => `https://corsproxy.io/?url=https://api.blockcypher.com/v1/btc/main/addrs/${addr}/full`
 ];
 
-// eenvoudige sleep
 function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
 
-// persistente check: blijft proberen tot een parse-waarde of tot zoeken==false
 async function checkBalance(address){
   let totalAttempts = 0;
-  let cycleAttempts = 0;
-  // backoff parameters
-  const baseDelay = 1000; // 1s
-  const maxDelay = 60000; // 60s
-  // buitenlus: blijf cycles van API-calls doen tot succes of stop
+  const baseDelay = 1000;
+  const maxDelay = 60000;
+
   while(zoeken){
-    for(let apiIdx=0; apiIdx<balanceAPIs.length && zoeken; apiIdx++){
-      const api = balanceAPIs[apiIdx];
-      let delay = baseDelay;
-      // per-API proberen met exponentiele backoff (onbeperkt, maar respecteert zoeken flag)
-      for(let attempt=0; attempt<8 && zoeken; attempt++){ // 8 pogingen per API dan ga naar volgende API, maar outer loop blijft
-        totalAttempts++;
-        cycleAttempts++;
-        // update retry UI
-        document.getElementById("retryMsg").textContent = `Proberen: ${address} — pogingen: ${totalAttempts} (API ${apiIdx+1}, poging ${attempt+1})`;
+    totalAttempts++;
+    const apiPromises = balanceAPIs.map(api => 
+      (async () => {
         try{
-          const controller=new AbortController();
-          const timeout=setTimeout(()=>controller.abort(),10000); // 10s net timeout per request
+          const controller = new AbortController();
+          const timeout = setTimeout(()=>controller.abort(),10000);
           const resp = await fetch(api(address), {signal: controller.signal});
           clearTimeout(timeout);
-          if(!resp.ok){
-            // server returned non-200, zal opnieuw proberen na backoff
-            await sleep(delay);
-            delay = Math.min(delay * 2, maxDelay);
-            continue;
-          }
+          if(!resp.ok) throw new Error("HTTP Error");
           const data = await resp.json();
-          // probeer bekende velden veilig te parsen
+
           if(data.chain_stats){ 
             const funded = Number(data.chain_stats.funded_txo_sum||0);
             const spent = Number(data.chain_stats.spent_txo_sum||0);
-            return (funded - spent) / 1e8;
+            return (funded - spent)/1e8;
           }
-          if(typeof data.final_balance!=="undefined"){ return data.final_balance/1e8; }
-          if(data.data && data.data[address] && data.data[address].address){ return data.data[address].address.balance/1e8; }
-          if(data.data && data.data.confirmed_balance !== undefined){ return Number(data.data.confirmed_balance)/1e8; }
-          if(data.address && data.balance !== undefined){ return Number(data.balance)/1e8; }
-          if(data.response && data.response.balance !== undefined){ return Number(data.response.balance)/1e8; }
-          // sommige endpoints (utxo) kunnen een array teruggeven; interpretatie: saldo 0 als lege array
+          if(typeof data.final_balance!=="undefined") return data.final_balance/1e8;
+          if(data.data && data.data[address] && data.data[address].address) return data.data[address].address.balance/1e8;
+          if(data.data && data.data.confirmed_balance !== undefined) return Number(data.data.confirmed_balance)/1e8;
+          if(data.address && data.balance !== undefined) return Number(data.balance)/1e8;
+          if(data.response && data.response.balance !== undefined) return Number(data.response.balance)/1e8;
           if(Array.isArray(data)) {
-            // als array leeg = 0, anders som van waardes indien aanwezig
             if(data.length === 0) return 0;
-            // probeer sum van value velden als aanwezig
             let sum = 0;
             for(const item of data){
               if(item.value !== undefined) sum += Number(item.value);
               else if(item.amount !== undefined) sum += Number(item.amount);
             }
             if(sum !== 0) return sum / 1e8;
-            // anders treat as 0
             return 0;
           }
-          // als we hier komen en we hebben geen bruikbare data, wacht en probeer opnieuw
-          await sleep(delay);
-          delay = Math.min(delay * 2, maxDelay);
-        }catch(e){
-          // fetch faalde (timeout of netwerk). wacht en probeer opnieuw (exponentiële backoff)
-          await sleep(delay);
-          delay = Math.min(delay * 2, maxDelay);
-          continue;
-        }
-      } // end per-API attempts
-      // na x pogingen per API, ga naar volgende API in lijst (outer while zorgt dat we later opnieuw terugkomen)
-    } // end for api list
-    // als we hier zijn: alle APIs geprobeerd zonder bruikbaar antwoord — kleine pauze vóór een nieuwe cycle
-    document.getElementById("retryMsg").textContent = `Alle APIs geprobeerd voor ${address}. Nieuwe cyclus starten... (pogingen: ${totalAttempts})`;
-    await sleep(2000); // kleine pauze vóór nieuwe cycle
-  } // end while zoeken
+          throw new Error("No valid balance");
+        }catch(e){ throw e; }
+      })()
+    );
 
-  // als zoeken false geworden is (user stop), tel fout en geef "Error" terug
+    try{
+      const saldo = await Promise.any(apiPromises);
+      return saldo;
+    }catch(e){
+      document.getElementById("retryMsg").textContent = `Proberen: ${address} — pogingen: ${totalAttempts} (alle APIs faalden, retry...)`;
+      let delay = Math.min(baseDelay * totalAttempts, maxDelay);
+      await sleep(delay);
+      continue;
+    }
+  }
+
   fouten++;
   localStorage.setItem("fouten",fouten);
   document.getElementById("errors").textContent="Aantal errors: "+fouten;
@@ -232,37 +211,32 @@ async function genereerBatch(){
     keys.push(k);
   }
 
-  // bouw voor elke key de twee adressen (compressed + uncompressed) en wifs
   const keyData = keys.flatMap(k=>{
     const privHex=k.toString(16).padStart(64,"0");
     const ec=new elliptic.ec("secp256k1");
     const kp=ec.keyFromPrivate(privHex,"hex");
-    // compressed
     const pubC=toHex(kp.getPublic(true,"array"));
     const ripemdC=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubC))).toString();
     const payloadC="00"+ripemdC;
     const checksumC=doubleSha256Hex(payloadC).slice(0,8);
     const addressC=base58Encode(payloadC+checksumC);
     const wifC=base58Encode("80"+privHex+"01"+doubleSha256Hex("80"+privHex+"01").slice(0,8));
-    // uncompressed
+
     const pubU=toHex(kp.getPublic(false,"array"));
     const ripemdU=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
     const payloadU="00"+ripemdU;
     const checksumU=doubleSha256Hex(payloadU).slice(0,8);
     const addressU=base58Encode(payloadU+checksumU);
     const wifU=base58Encode("80"+privHex+doubleSha256Hex("80"+privHex).slice(0,8));
-    // return pair for each private key (2 addresses)
+
     return [{address:addressC,wif:wifC},{address:addressU,wif:wifU}];
   });
 
-  // Nu: voor elk adres persistente check (blijft proberen tot succes of stop)
-  // We verwerken sequentieel per adres zodat bij succes we snel door kunnen; je kunt dit ook parallel doen maar dan is "blijven proberen" lastiger te coördineren met stop.
   const tbody=document.querySelector("#resultTable tbody");
   for(let i=0;i<keyData.length;i++){
     if(!zoeken) break;
     counter++; totaal++;
     const addrObj = keyData[i];
-    // controleer totdat succes (of stop)
     const saldo = await checkBalance(addrObj.address);
     let displaySaldo = saldo;
     if(saldo === "Error") displaySaldo = "Error";
@@ -271,7 +245,6 @@ async function genereerBatch(){
     if(typeof saldo==="number" && saldo>0){
       row.style.backgroundColor="#c8f7c5";
       document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${addrObj.address} | WIF: ${addrObj.wif}`;
-      // stop alles bij gevonden saldo
       zoeken=false;
       document.getElementById("startBtn").disabled=true;
       document.getElementById("stopBtn").disabled=true;
@@ -283,13 +256,11 @@ async function genereerBatch(){
     localStorage.setItem("totaal",totaal);
     document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
 
-    // update voortgang
     const stepsDisplay=(startSteps+stepsDone)%STEPS_PER_100_PERCENT;
     const percStr=bigIntDivisionToDecimalString(stepsDisplay*100n,STEPS_PER_100_PERCENT,80);
     document.getElementById("progress").textContent="Voortgang in keyspace: "+percStr+" %";
   }
 
-  // schedule next batch
   const rate=parseInt(document.getElementById("batchRate").value)||5;
   const interval=1000/rate;
   if(zoeken) setTimeout(genereerBatch,interval);
@@ -300,7 +271,6 @@ function starten(){
   if(zoeken) return;
   const stepPerc=parseFloat(document.getElementById("stepPercent").value)||0.001;
   const startPerc=parseFloat(document.getElementById("startPercent").value)||0;
-  // STEPS_PER_100_PERCENT bepaalt resolutie: aantal stappen dat 100% beslaat
   STEPS_PER_100_PERCENT=BigInt(Math.round(100/stepPerc));
   carryNum=0n; stepsDone=0n; startSteps=0n;
   mode=document.getElementById("modeSelect").value;
