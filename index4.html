@@ -72,7 +72,7 @@ function bigIntDivisionToDecimalString(numerator, denominator, decimals = 80) {
       let digit = remainder / denominator;
       remainder %= denominator;
       result += digit.toString();
-      if (remainder === 0) break;
+      if (remainder === 0n) break;
     }
   }
   return result;
@@ -122,7 +122,7 @@ document.getElementById("errors").textContent="Aantal errors: "+fouten;
 document.getElementById("modeSelect").addEventListener("change",(e)=>{mode=e.target.value;});
 mode=document.getElementById("modeSelect").value;
 
-// ======== Verbeterde Balance check met parallel + exponential backoff ========
+// ======== Balance check: sequentieel, blijf proberen tot antwoord ========
 const balanceAPIs=[
    addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
    addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`,
@@ -139,42 +139,37 @@ async function checkBalance(address){
 
   while(zoeken){
     attempts++;
-    try{
-      // Parallel requests
-      const apiPromises = balanceAPIs.map(api => (async ()=>{
-        try{
-          const controller = new AbortController();
-          const timeout = setTimeout(()=>controller.abort(),10000);
-          const resp = await fetch(api(address), {signal: controller.signal});
-          clearTimeout(timeout);
-          if(!resp.ok) throw new Error("HTTP error");
-          const data = await resp.json();
+    for(let api of balanceAPIs){
+      try{
+        const controller = new AbortController();
+        const timeout = setTimeout(()=>controller.abort(),10000);
+        const resp = await fetch(api(address), {signal: controller.signal});
+        clearTimeout(timeout);
+        if(!resp.ok) throw new Error("HTTP error");
+        const data = await resp.json();
 
-          if(data.chain_stats){ 
-            return (Number(data.chain_stats.funded_txo_sum||0) - Number(data.chain_stats.spent_txo_sum||0))/1e8;
-          }
-          if(typeof data.final_balance!=="undefined") return data.final_balance/1e8;
-          if(data.data && data.data[address] && data.data[address].address) return data.data[address].address.balance/1e8;
-          if(data.data && data.data.confirmed_balance !== undefined) return Number(data.data.confirmed_balance)/1e8;
-          if(data.address && data.balance !== undefined) return Number(data.balance)/1e8;
-          if(data.response && data.response.balance !== undefined) return Number(data.response.balance)/1e8;
-          if(Array.isArray(data)){
-            if(data.length===0) return 0;
-            return data.reduce((sum,it)=>(sum+(it.value||it.amount||0)),0)/1e8;
-          }
-          throw new Error("No valid balance");
-        }catch(e){ throw e; }
-      })());
-
-      const saldo = await Promise.any(apiPromises);
-      return saldo;
-
-    }catch(e){
-      const delay = Math.min(baseDelay * 2**(attempts-1), maxDelay);
-      document.getElementById("retryMsg").textContent=`Proberen: ${address} — poging ${attempts}, wacht ${delay}ms...`;
-      await sleep(delay);
-      continue;
+        if(data.chain_stats){ 
+          return (Number(data.chain_stats.funded_txo_sum||0) - Number(data.chain_stats.spent_txo_sum||0))/1e8;
+        }
+        if(typeof data.final_balance!=="undefined") return data.final_balance/1e8;
+        if(data.data && data.data[address] && data.data[address].address) return data.data[address].address.balance/1e8;
+        if(data.data && data.data.confirmed_balance !== undefined) return Number(data.data.confirmed_balance)/1e8;
+        if(data.address && data.balance !== undefined) return Number(data.balance)/1e8;
+        if(data.response && data.response.balance !== undefined) return Number(data.response.balance)/1e8;
+        if(Array.isArray(data)){
+          if(data.length===0) return 0;
+          return data.reduce((sum,it)=>(sum+(it.value||it.amount||0)),0)/1e8;
+        }
+        throw new Error("No valid balance");
+      }catch(e){
+        // volgende API proberen
+        continue;
+      }
     }
+    // alle 4 mislukt, exponentiële wachttijd en opnieuw
+    const delay = Math.min(baseDelay * 2**(attempts-1), maxDelay);
+    document.getElementById("retryMsg").textContent=`Proberen: ${address} — poging ${attempts}, wacht ${delay}ms...`;
+    await sleep(delay);
   }
 
   fouten++;
