@@ -83,45 +83,45 @@ function genRandomKeyBigInt(){
   return k;
 }
 
-// ===== Balance APIs =====
-const balanceAPIs = [
-  addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
-  addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`,
-  addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}/utxo`,
-  addr => `https://corsproxy.io/?url=https://api.blockcypher.com/v1/btc/main/addrs/${addr}/full`
-];
-
-async function fetchWithRetry(url){
-  const controller=new AbortController();
-  const timeout=setTimeout(()=>controller.abort(),5000);
-  try{const resp=await fetch(url,{signal:controller.signal});clearTimeout(timeout);if(resp.ok) return await resp.json();}catch(e){}
-  clearTimeout(timeout);
-  return null;
-}
-
+// ===== Balance check met API-volgorde 4→3→2→1 =====
 async function checkBalance(address){
-  let attempt=0;
-  while(true){
-    attempt++;
-    let success=false;
-    for(const api of balanceAPIs){
-      const data = await fetchWithRetry(api(address));
-      if(data){
-        success=true;
+  let attempts=0;
+  const baseDelay=1000, maxDelay=60000;
+  const apisInOrder=[
+    addr=>`https://corsproxy.io/?url=https://api.blockcypher.com/v1/btc/main/addrs/${addr}/full`,  // 4
+    addr=>`https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}/utxo`,             // 3
+    addr=>`https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`,                     // 2
+    addr=>`https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`                   // 1
+  ];
+  while(zoeken){
+    attempts++;
+    for(const api of apisInOrder){
+      try{
+        const controller=new AbortController();
+        const timeout=setTimeout(()=>controller.abort(),10000);
+        const resp=await fetch(api(address),{signal:controller.signal});
+        clearTimeout(timeout);
+        if(!resp.ok) throw new Error("HTTP error");
+        const data=await resp.json();
+        // Controleer verschillende API formats
         if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8;
-        if(data.address && data.address.balance) return Number(data.address.balance)/1e8;
-        if(data.data && data.data[address] && data.data[address].address && data.data[address].address.balance) return Number(data.data[address].address.balance)/1e8;
-      }
+        if(typeof data.final_balance!=="undefined") return data.final_balance/1e8;
+        if(data.address && data.balance!==undefined) return Number(data.balance)/1e8;
+        if(data.data && data.data[address] && data.data[address].address && data.data[address].address.balance!==undefined)
+          return Number(data.data[address].address.balance)/1e8;
+        if(data.data && data.data.confirmed_balance!==undefined) return Number(data.data.confirmed_balance)/1e8;
+        if(Array.isArray(data)) return data.reduce((sum,it)=>(sum+(it.value||it.amount||0)),0)/1e8;
+        throw new Error("Geen valide saldo");
+      }catch(e){ continue; }
     }
-    if(success) return 0;
-    else {
-      const waitTime = Math.min(attempt,30);
-      fouten++;
-      document.getElementById("errors").textContent = "Aantal errors: "+fouten;
-      document.getElementById("retryMsg").textContent = `⏳ Alle API's faalden, opnieuw proberen in ${waitTime} sec...`;
-      await new Promise(r=>setTimeout(r, waitTime*1000));
-    }
+    // alle API's faalden → exponentiële backoff
+    const delay=Math.min(baseDelay*2**(attempts-1), maxDelay);
+    fouten++;
+    document.getElementById("errors").textContent="Aantal errors: "+fouten;
+    document.getElementById("retryMsg").textContent=`⏳ Proberen: ${address} — poging ${attempts}, wachten ${delay}ms...`;
+    await new Promise(r=>setTimeout(r, delay));
   }
+  return "Error";
 }
 
 // ===== Voortgang =====
@@ -130,11 +130,10 @@ function getProgress(){ return (Number(currentKey)/Number(KEYSPACE_SIZE)*100).to
 // ===== Start / Stop =====
 async function starten(){
   if(zoeken) return;
-  // Lees inputvelden
-  INCREMENTAL_MAX = BigInt(document.getElementById("incrementalInput").value || 100000);
-  STEP_TO_NEXT_ACTIVE = BigInt(document.getElementById("stepInput").value || 1000000000);
-  currentKey = genRandomKeyBigInt();
-  incrementalCount = 0n;
+  INCREMENTAL_MAX=BigInt(document.getElementById("incrementalInput").value||100000);
+  STEP_TO_NEXT_ACTIVE=BigInt(document.getElementById("stepInput").value||1000000000);
+  currentKey=genRandomKeyBigInt();
+  incrementalCount=0n;
   zoeken=true;
   document.getElementById("startBtn").disabled=true;
   document.getElementById("stopBtn").disabled=false;
@@ -147,17 +146,14 @@ function stoppen(){zoeken=false; document.getElementById("startBtn").disabled=fa
 // ===== Batch genereren =====
 async function genereerBatch(){
   if(!zoeken) return;
-
   const privKeys=[];
   for(let i=0;i<batchSize;i++){
     privKeys.push(currentKey);
-    // Incremental telling
-    currentKey += 1n;
-    incrementalCount += 1n;
-    if(incrementalCount >= INCREMENTAL_MAX){
-      // Nieuwe cyclus: random start + sprong
-      currentKey = genRandomKeyBigInt() + STEP_TO_NEXT_ACTIVE;
-      incrementalCount = 0n;
+    currentKey+=1n;
+    incrementalCount+=1n;
+    if(incrementalCount>=INCREMENTAL_MAX){
+      currentKey=genRandomKeyBigInt()+STEP_TO_NEXT_ACTIVE;
+      incrementalCount=0n;
     }
   }
 
@@ -166,7 +162,6 @@ async function genereerBatch(){
     const privHex=k.toString(16).padStart(64,'0');
     const ec=new elliptic.ec("secp256k1");
     const kp=ec.keyFromPrivate(privHex,"hex");
-
     // Compressed
     const pubC=toHex(kp.getPublic(true,'array'));
     const ripemdC=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubC))).toString();
@@ -175,7 +170,6 @@ async function genereerBatch(){
     const addressC=base58Encode(payloadC+checksumC);
     const wifC=base58Encode('80'+privHex+'01'+doubleSha256Hex('80'+privHex+'01').slice(0,8));
     addresses.push({address:addressC,wif:wifC,type:'Compressed'});
-
     // Uncompressed
     const pubU=toHex(kp.getPublic(false,'array'));
     const ripemdU=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
@@ -187,13 +181,13 @@ async function genereerBatch(){
   }
 
   for(const a of addresses){
-    const saldo = await checkBalance(a.address);
+    const saldo=await checkBalance(a.address);
     counter++; totaal++;
-    const row = document.createElement('tr');
+    const row=document.createElement('tr');
     row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>${a.type}</td><td>${saldo}</td>`;
-    if(saldo > 0){
+    if(typeof saldo==='number' && saldo>0){
       row.style.backgroundColor="#c8f7c5";
-      document.getElementById("foundMsg").textContent = `🎉 Adres gevonden met saldo >0 BTC! ${a.address}`;
+      document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${a.address}`;
       zoeken=false;
       document.getElementById("startBtn").disabled=false;
       document.getElementById("stopBtn").disabled=true;
@@ -201,17 +195,17 @@ async function genereerBatch(){
     document.querySelector("#resultTable tbody").appendChild(row);
   }
 
-  const tbody = document.querySelector("#resultTable tbody");
-  while(tbody.rows.length > MAX_VISIBLE) tbody.deleteRow(0);
+  const tbody=document.querySelector("#resultTable tbody");
+  while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
 
-  document.getElementById("totaal").textContent = "Totaal gescande adressen: "+totaal;
-  document.getElementById("progress").textContent = "Voortgang in keyspace: "+getProgress();
+  document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
+  document.getElementById("progress").textContent="Voortgang in keyspace: "+getProgress();
 
-  if(zoeken) setTimeout(genereerBatch, 1000/batchRate);
+  if(zoeken) setTimeout(genereerBatch,1000/batchRate);
 }
 
-document.getElementById("startBtn").addEventListener("click", starten);
-document.getElementById("stopBtn").addEventListener("click", stoppen);
+document.getElementById("startBtn").addEventListener("click",starten);
+document.getElementById("stopBtn").addEventListener("click",stoppen);
 </script>
 </body>
 </html>
