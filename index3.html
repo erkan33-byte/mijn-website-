@@ -83,7 +83,7 @@ function genRandomKeyBigInt(){
   return k;
 }
 
-// ===== Balance check (schoon & betrouwbaar) =====
+// ===== Balance check (schoon & betrouwbaar, volgorde 1→2→3→4→5→6→6) =====
 async function checkBalance(address) {
   let attempts = 0;
   const baseDelay = 1000, maxDelay = 60000;
@@ -121,10 +121,10 @@ async function checkBalance(address) {
                   ? d.data[address].address.balance/1e8 : null)
     },
     {
-      name: "SoChain",
-      url: addr => `https://corsproxy.io/?url=https://sochain.com/api/v2/get_address_balance/BTC/${addr}`,
-      parse: d => (d.status === "success" && d.data && typeof d.data.confirmed_balance !== "undefined"
-                  ? Number(d.data.confirmed_balance) : null)
+      name: "Blockchair (tweede poging)",
+      url: addr => `https://corsproxy.io/?url=https://api.blockchair.com/bitcoin/dashboards/address/${addr}`,
+      parse: d => (d.data && d.data[address] && d.data[address].address && typeof d.data[address].address.balance !== "undefined"
+                  ? d.data[address].address.balance/1e8 : null)
     }
   ];
 
@@ -149,7 +149,6 @@ async function checkBalance(address) {
       }
     }
 
-    // geen enkele API gaf iets bruikbaars → retry met backoff
     fouten++;
     document.getElementById("errors").textContent = "Aantal errors: " + fouten;
     const delay = Math.min(baseDelay * 2 ** (attempts - 1), maxDelay);
