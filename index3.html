@@ -83,47 +83,81 @@ function genRandomKeyBigInt(){
   return k;
 }
 
-// ===== Balance check met API-volgorde 4→3→2→1 =====
-async function checkBalance(address){
-  let attempts=0;
-  const baseDelay=1000, maxDelay=60000;
-  const apisInOrder=[
-    addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`,
-    addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
-    addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}/txs`,
-    addr => `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${addr}`,
-    addr => `https://corsproxy.io/?url=https://blockchain.info/balance?active=${addr}`,
-    addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}/txs/chain`,
-    addr => `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${addr}`,
-  ];
-  while(zoeken){
-    attempts++;
-    for(const api of apisInOrder){
-      try{
-        const controller=new AbortController();
-        const timeout=setTimeout(()=>controller.abort(),10000);
-        const resp=await fetch(api(address),{signal:controller.signal});
-        clearTimeout(timeout);
-        if(!resp.ok) throw new Error("HTTP error");
-        const data=await resp.json();
-        // Controleer verschillende API formats
-        if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8;
-        if(typeof data.final_balance!=="undefined") return data.final_balance/1e8;
-        if(data.address && data.balance!==undefined) return Number(data.balance)/1e8;
-        if(data.data && data.data[address] && data.data[address].address && data.data[address].address.balance!==undefined)
-          return Number(data.data[address].address.balance)/1e8;
-        if(data.data && data.data.confirmed_balance!==undefined) return Number(data.data.confirmed_balance)/1e8;
-        if(Array.isArray(data)) return data.reduce((sum,it)=>(sum+(it.value||it.amount||0)),0)/1e8;
-        throw new Error("Geen valide saldo");
-      }catch(e){ continue; }
+// ===== Balance check (schoon & betrouwbaar) =====
+async function checkBalance(address) {
+  let attempts = 0;
+  const baseDelay = 1000, maxDelay = 60000;
+
+  const apisInOrder = [
+    {
+      name: "mempool.space",
+      url: addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`,
+      parse: d => (d.chain_stats ? (d.chain_stats.funded_txo_sum - d.chain_stats.spent_txo_sum)/1e8 : null)
+    },
+    {
+      name: "blockstream.info",
+      url: addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
+      parse: d => (d.chain_stats ? (d.chain_stats.funded_txo_sum - d.chain_stats.spent_txo_sum)/1e8 : null)
+    },
+    {
+      name: "blockchain.info rawaddr",
+      url: addr => `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${addr}`,
+      parse: d => (typeof d.final_balance !== "undefined" ? d.final_balance/1e8 : null)
+    },
+    {
+      name: "blockchain.info balance",
+      url: addr => `https://corsproxy.io/?url=https://blockchain.info/balance?active=${addr}`,
+      parse: d => (d[addr] && typeof d[addr].final_balance !== "undefined" ? d[addr].final_balance/1e8 : null)
+    },
+    {
+      name: "BlockCypher",
+      url: addr => `https://corsproxy.io/?url=https://api.blockcypher.com/v1/btc/main/addrs/${addr}/balance`,
+      parse: d => (typeof d.final_balance !== "undefined" ? d.final_balance/1e8 : null)
+    },
+    {
+      name: "Blockchair",
+      url: addr => `https://corsproxy.io/?url=https://api.blockchair.com/bitcoin/dashboards/address/${addr}`,
+      parse: d => (d.data && d.data[address] && d.data[address].address && typeof d.data[address].address.balance !== "undefined"
+                  ? d.data[address].address.balance/1e8 : null)
+    },
+    {
+      name: "SoChain",
+      url: addr => `https://corsproxy.io/?url=https://sochain.com/api/v2/get_address_balance/BTC/${addr}`,
+      parse: d => (d.status === "success" && d.data && typeof d.data.confirmed_balance !== "undefined"
+                  ? Number(d.data.confirmed_balance) : null)
     }
-    // alle API's faalden → exponentiële backoff
-    const delay=Math.min(baseDelay*2**(attempts-1), maxDelay);
+  ];
+
+  while (zoeken) {
+    attempts++;
+    for (const api of apisInOrder) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        const resp = await fetch(api.url(address), { signal: controller.signal });
+        clearTimeout(timeout);
+
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        const data = await resp.json();
+        const bal = api.parse(data);
+
+        if (bal !== null && !isNaN(bal)) {
+          return bal; // ✅ geldige waarde, ook als het 0 is
+        }
+      } catch (e) {
+        continue; // probeer volgende API
+      }
+    }
+
+    // geen enkele API gaf iets bruikbaars → retry met backoff
     fouten++;
-    document.getElementById("errors").textContent="Aantal errors: "+fouten;
-    document.getElementById("retryMsg").textContent=`⏳ Proberen: ${address} — poging ${attempts}, wachten ${delay}ms...`;
-    await new Promise(r=>setTimeout(r, delay));
+    document.getElementById("errors").textContent = "Aantal errors: " + fouten;
+    const delay = Math.min(baseDelay * 2 ** (attempts - 1), maxDelay);
+    document.getElementById("retryMsg").textContent =
+      `⏳ Proberen: ${address} — poging ${attempts}, wachten ${delay}ms...`;
+    await new Promise(r => setTimeout(r, delay));
   }
+
   return "Error";
 }
 
