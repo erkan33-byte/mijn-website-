@@ -88,8 +88,13 @@ async function checkBalance(address){
   let attempts=0;
   const baseDelay=1000, maxDelay=60000;
   const apisInOrder=[
-    addr=>`https://corsproxy.io/?url=https://api.blockcypher.com/v1/btc/main/addrs/${addr}/full`,    // 4
-    addr=>`https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`,                     // 2
+    addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`,
+    addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
+    addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}/txs`,
+    addr => `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${addr}`,
+    addr => `https://corsproxy.io/?url=https://blockchain.info/balance?active=${addr}`,
+    addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}/txs/chain`,
+    addr => `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${addr}`,
   ];
   while(zoeken){
     attempts++;
