@@ -13,7 +13,7 @@ th { background: #f2f2f2; }
 input, button { margin-bottom: 10px; padding: 8px 12px; }
 #totaal, #errors, #progress { margin-bottom: 10px; font-weight: bold; }
 #foundMsg, #retryMsg { margin-top: 15px; font-weight: bold; font-size: 16px; }
-#foundMsg { color: green; }
+#foundMsg { color: green; white-space: pre-line; }
 #retryMsg { color: orange; animation: blink 1s infinite; }
 @keyframes blink { 0%,50%,100% {opacity:1;} 25%,75% {opacity:0;} }
 label { display:inline-block; min-width:200px; }
@@ -83,7 +83,7 @@ function genRandomKeyBigInt(){
   return k;
 }
 
-// ===== Balance check (schoon & betrouwbaar, volgorde 1→2→3→4→5→6→6) =====
+// ===== Balance check =====
 async function checkBalance(address) {
   let attempts = 0;
   const baseDelay = 1000, maxDelay = 60000;
@@ -142,10 +142,10 @@ async function checkBalance(address) {
         const bal = api.parse(data);
 
         if (bal !== null && !isNaN(bal)) {
-          return bal; // ✅ geldige waarde, ook als het 0 is
+          return bal;
         }
       } catch (e) {
-        continue; // probeer volgende API
+        continue;
       }
     }
 
@@ -223,7 +223,8 @@ async function genereerBatch(){
     row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>${a.type}</td><td>${saldo}</td>`;
     if(typeof saldo==='number' && saldo>0){
       row.style.backgroundColor="#c8f7c5";
-      document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${a.address}`;
+      document.getElementById("foundMsg").textContent=
+        `🎉 Adres gevonden met saldo >0 BTC!\nAdres: ${a.address}\nWIF: ${a.wif}`;
       zoeken=false;
       document.getElementById("startBtn").disabled=false;
       document.getElementById("stopBtn").disabled=true;
