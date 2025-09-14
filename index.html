@@ -11,7 +11,7 @@ table { border-collapse: collapse; width: 100%; margin-top: 15px; }
 th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
 th { background: #f2f2f2; }
 button, input { margin-bottom: 10px; padding: 8px 12px; }
-#totaal, #errors, #progress { margin-bottom: 10px; font-weight: bold; }
+#totaal, #errors, #progressAbs, #progressRel { margin-bottom: 10px; font-weight: bold; }
 #foundMsg, #retryMsg { margin-top: 15px; font-weight: bold; font-size: 16px; }
 #foundMsg { color: green; }
 #retryMsg { color: orange; animation: blink 1s infinite; }
@@ -36,7 +36,8 @@ a { display:inline-block; margin-top:10px; font-weight:bold; font-size:16px; col
 
 <div id="totaal">Totaal gescande adressen: 0</div>
 <div id="errors">Aantal errors: 0</div>
-<div id="progress">Voortgang in keyspace: 0.00000000 %</div>
+<div id="progressAbs">Voortgang in keyspace: 0.000000000000000000000000000000 %</div>
+<div id="progressRel">Voortgang in interval: 0.000000000000000000000000000000 %</div>
 
 <div id="retryMsg"></div>
 <div id="foundMsg"></div>
@@ -128,10 +129,15 @@ async function checkBalance(address){
   return 0;
 }
 
-// ===== Voortgang ABSOLUUT in totale keyspace =====
-function getProgress(currentKey){
+// ===== Voortgang =====
+function getProgressAbsolute(currentKey){
   const fraction = Number(currentKey) / Number(KEYSPACE_SIZE) * 100;
-  return fraction.toFixed(8) + " %";
+  return fraction.toFixed(30) + " %";
+}
+function getProgressRelative(currentKey){
+  const fraction = Number(currentKey) / Number(KEYSPACE_SIZE) * 100;
+  const relative = ((fraction - startPercent) / (endPercent - startPercent)) * 100;
+  return relative.toFixed(30) + " %";
 }
 
 // ===== IP-check =====
@@ -205,8 +211,9 @@ async function genereerBatch(){
     }
     document.querySelector("#resultTable tbody").appendChild(row);
 
-    // update voortgang absoluut in keyspace
-    document.getElementById("progress").textContent="Voortgang in keyspace: "+getProgress(a.priv);
+    // update voortgang
+    document.getElementById("progressAbs").textContent="Voortgang in keyspace: "+getProgressAbsolute(a.priv);
+    document.getElementById("progressRel").textContent="Voortgang in interval: "+getProgressRelative(a.priv);
   }
 
   const tbody=document.querySelector("#resultTable tbody");
