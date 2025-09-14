@@ -117,16 +117,28 @@ async function fetchWithRetry(url, retries=3){
   return null;
 }
 
-// ===== Check balance één adres =====
+// ===== Check balance met backoff =====
 async function checkBalance(address){
-  for(const api of balanceAPIs){
-    const data = await fetchWithRetry(api(address));
-    if(data){
-      if(data.chain_stats) return (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8;
-      if(data.address && data.address.balance) return Number(data.address.balance)/1e8;
+  let delay = 1000; // start bij 1s
+  while(true){
+    for(const api of balanceAPIs){
+      const data = await fetchWithRetry(api(address));
+      if(data){
+        // Reset melding
+        document.getElementById("retryMsg").textContent = "";
+        if(data.chain_stats){
+          return (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8;
+        }
+        if(data.address && data.address.balance){
+          return Number(data.address.balance)/1e8;
+        }
+      }
     }
+    document.getElementById("retryMsg").textContent =
+      `⚠️ Alle API's faalden, opnieuw proberen in ${delay/1000} seconden...`;
+    await new Promise(r => setTimeout(r, delay));
+    delay = Math.min(delay * 2, 60000); // exponentieel tot max 60s
   }
-  return 0;
 }
 
 // ===== Voortgang =====
