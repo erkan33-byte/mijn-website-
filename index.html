@@ -36,7 +36,7 @@ a { display:inline-block; margin-top:10px; font-weight:bold; font-size:16px; col
 
 <div id="totaal">Totaal gescande adressen: 0</div>
 <div id="errors">Aantal errors: 0</div>
-<div id="progress">Voortgang in interval: 0.00000000 %</div>
+<div id="progress">Voortgang in keyspace: 0.00000000 %</div>
 
 <div id="retryMsg"></div>
 <div id="foundMsg"></div>
@@ -128,11 +128,10 @@ async function checkBalance(address){
   return 0;
 }
 
-// ===== Voortgang RELATIEF in gekozen interval =====
+// ===== Voortgang ABSOLUUT in totale keyspace =====
 function getProgress(currentKey){
   const fraction = Number(currentKey) / Number(KEYSPACE_SIZE) * 100;
-  const relative = ((fraction - startPercent) / (endPercent - startPercent)) * 100;
-  return relative.toFixed(8) + " %";
+  return fraction.toFixed(8) + " %";
 }
 
 // ===== IP-check =====
@@ -206,8 +205,8 @@ async function genereerBatch(){
     }
     document.querySelector("#resultTable tbody").appendChild(row);
 
-    // update voortgang relatief binnen interval
-    document.getElementById("progress").textContent="Voortgang in interval: "+getProgress(a.priv);
+    // update voortgang absoluut in keyspace
+    document.getElementById("progress").textContent="Voortgang in keyspace: "+getProgress(a.priv);
   }
 
   const tbody=document.querySelector("#resultTable tbody");
