@@ -204,12 +204,19 @@ async function genereerBatch(){
     counter++; totaal++;
     const row=document.createElement('tr');
     row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>${a.type}</td><td>${saldo}</td>`;
+    document.querySelector("#resultTable tbody").appendChild(row);
+
     if(saldo>0) { 
       row.style.backgroundColor="#c8f7c5"; 
-      document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${a.address}`; 
-      stoppen(); 
+      document.getElementById("foundMsg").textContent =
+        `🎉 Adres gevonden met saldo >0 BTC!\nAdres: ${a.address}\nWIF: ${a.wif}`;
+
+      // Definitief stoppen
+      zoeken = false;
+      document.getElementById("startBtn").disabled = true;
+      document.getElementById("stopBtn").disabled = true;
+      return; // batch verlaten
     }
-    document.querySelector("#resultTable tbody").appendChild(row);
 
     // update voortgang
     document.getElementById("progressAbs").textContent="Voortgang in keyspace: "+getProgressAbsolute(a.priv);
