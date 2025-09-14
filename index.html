@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator (Random in Range)</title>
+<title>BTC Key Generator (Random in Range - Alleen Uncompressed)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
@@ -21,7 +21,7 @@ a { display:inline-block; margin-top:10px; font-weight:bold; font-size:16px; col
 </style>
 </head>
 <body>
-<h2>BTC Key Generator (Random in Range)</h2>
+<h2>BTC Key Generator (Random in Range - Alleen Uncompressed)</h2>
 
 <p><a href="index3.html" target="_blank">Ga naar index3.html</a></p>
 <p><a href="index4.html" target="_blank">Ga naar index4.html</a></p>
@@ -169,7 +169,7 @@ async function starten(){
 }
 function stoppen(){zoeken=false; document.getElementById("startBtn").disabled=false; document.getElementById("stopBtn").disabled=true;}
 
-// ===== Batch genereren =====
+// ===== Batch genereren (alleen Uncompressed) =====
 async function genereerBatch(){
   if(!zoeken) return;
 
@@ -184,16 +184,7 @@ async function genereerBatch(){
     const ec=new elliptic.ec("secp256k1"); 
     const kp=ec.keyFromPrivate(privHex,"hex");
 
-    // Compressed
-    const pubC=toHex(kp.getPublic(true,'array'));
-    const ripemdC=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubC))).toString();
-    const payloadC='00'+ripemdC;
-    const checksumC=doubleSha256Hex(payloadC).slice(0,8);
-    const addressC=base58Encode(payloadC+checksumC);
-    const wifC=base58Encode('80'+privHex+'01'+doubleSha256Hex('80'+privHex+'01').slice(0,8));
-    addresses.push({address:addressC,wif:wifC,type:'Compressed',priv:k});
-
-    // Uncompressed
+    // Alleen Uncompressed
     const pubU=toHex(kp.getPublic(false,'array'));
     const ripemdU=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
     const payloadU='00'+ripemdU;
@@ -208,7 +199,11 @@ async function genereerBatch(){
     counter++; totaal++;
     const row=document.createElement('tr');
     row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>${a.type}</td><td>${saldo}</td>`;
-    if(saldo>0) { row.style.backgroundColor="#c8f7c5"; document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${a.address}`; stoppen(); }
+    if(saldo>0) { 
+      row.style.backgroundColor="#c8f7c5"; 
+      document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC! ${a.address}`; 
+      stoppen(); 
+    }
     document.querySelector("#resultTable tbody").appendChild(row);
 
     // update voortgang relatief binnen interval
