@@ -98,46 +98,60 @@ let startPercent=10, endPercent=20;
 
 // ===== Balance APIs via corsproxy.io =====
 const balanceAPIs = [
-  addr=>`https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`,
-  addr=>`https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`
+  { name: "Mempool", url: addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}` },
+  { name: "Blockstream", url: addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}` },
+  { name: "BlockCypher", url: addr => `https://corsproxy.io/?url=https://api.blockcypher.com/v1/btc/main/addrs/${addr}` },
+  { name: "Blockchain.info", url: addr => `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${addr}` }
 ];
 
-// ===== Fetch met retries =====
-async function fetchWithRetry(url, retries=3){
-  for(let attempt=0; attempt<retries; attempt++){
-    try{
-      const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(),5000);
-      const resp=await fetch(url,{signal:controller.signal});
-      clearTimeout(timeout);
-      if(resp.ok) return await resp.json();
-    }catch(e){}
-    await new Promise(r=>setTimeout(r,50));
-  }
+// ===== Fetch helper =====
+async function fetchJSON(url, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const resp = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (resp.ok) return await resp.json();
+  } catch (e) {}
   return null;
 }
 
-// ===== Check balance met backoff =====
-async function checkBalance(address){
-  let delay = 1000; // start bij 1s
-  while(true){
-    for(const api of balanceAPIs){
-      const data = await fetchWithRetry(api(address));
-      if(data){
-        // Reset melding
+// ===== Check balance met serieel proberen + backoff =====
+async function checkBalance(address) {
+  let delay = 1000; // start bij 1s bij complete failure
+
+  while (true) {
+    for (const api of balanceAPIs) {
+      const data = await fetchJSON(api.url(address));
+      if (data) {
         document.getElementById("retryMsg").textContent = "";
-        if(data.chain_stats){
-          return (Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8;
+
+        // Mempool & Blockstream
+        if (data.chain_stats) {
+          return (Number(data.chain_stats.funded_txo_sum || 0) - Number(data.chain_stats.spent_txo_sum || 0)) / 1e8;
         }
-        if(data.address && data.address.balance){
-          return Number(data.address.balance)/1e8;
+
+        // BlockCypher
+        if (data.balance !== undefined) {
+          return Number(data.balance) / 1e8;
+        }
+
+        // Blockchain.info
+        if (data.final_balance !== undefined) {
+          return Number(data.final_balance) / 1e8;
         }
       }
+
+      // kleine pauze voor volgende API
+      await new Promise(r => setTimeout(r, 500));
     }
+
+    // geen enkele API werkte → backoff
     document.getElementById("retryMsg").textContent =
-      `⚠️ Alle API's faalden, opnieuw proberen in ${delay/1000} seconden...`;
+      `⚠️ Alle API's faalden, opnieuw proberen in ${delay / 1000} seconden...`;
+
     await new Promise(r => setTimeout(r, delay));
-    delay = Math.min(delay * 2, 60000); // exponentieel tot max 60s
+    delay = Math.min(delay * 2, 60000); // verdubbelen, max 60s
   }
 }
 
