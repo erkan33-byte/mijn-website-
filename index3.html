@@ -17,14 +17,10 @@ button, input, select { margin-bottom: 10px; padding: 8px 12px; }
 #retryMsg { color: orange; animation: blink 1s infinite; }
 @keyframes blink { 0%,50%,100% {opacity:1;} 25%,75% {opacity:0;} }
 label { display:inline-block; min-width:150px; }
-a { display:inline-block; margin-top:10px; font-weight:bold; font-size:16px; color:blue; text-decoration:underline; }
 </style>
 </head>
 <body>
 <h2>BTC Key Generator (Random + Incremental - Alleen Uncompressed)</h2>
-
-<p><a href="index3.html" target="_blank">Ga naar index3.html</a></p>
-<p><a href="index4.html" target="_blank">Ga naar index4.html</a></p>
 
 <label for="mode">Modus:</label>
 <select id="mode">
@@ -37,8 +33,8 @@ a { display:inline-block; margin-top:10px; font-weight:bold; font-size:16px; col
 <label for="endPercent">Eind (%) :</label>
 <input type="number" id="endPercent" value="20" min="0" max="100" step="0.0001"><br>
 
-<label for="stepSize">Stapgrootte (alleen Incremental):</label>
-<input type="number" id="stepSize" value="1" min="1"><br>
+<label for="numSteps">Aantal stappen (alleen gebruikt voor berekening):</label>
+<input type="number" id="numSteps" value="1000000" min="1"><br>
 
 <button id="startBtn">Start zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
@@ -103,7 +99,8 @@ function genRandomKeyInRange(startPercent, endPercent) {
 // ===== Variabelen =====
 let counter=0, totaal=0, fouten=0, zoeken=false, MAX_VISIBLE=250;
 let batchSize=2, batchRate=5;
-let startPercent=10, endPercent=20, mode="random", stepSize=1;
+let startPercent=10, endPercent=20, mode="random";
+let stepSize=1, numSteps=1000000;
 let currentKey=null; // voor incremental
 
 // ===== Balance APIs via corsproxy.io =====
@@ -191,11 +188,14 @@ async function starten(){
   startPercent = parseFloat(document.getElementById("startPercent").value);
   endPercent   = parseFloat(document.getElementById("endPercent").value);
   mode         = document.getElementById("mode").value;
-  stepSize     = parseInt(document.getElementById("stepSize").value);
+  numSteps     = parseInt(document.getElementById("numSteps").value);
 
   if (mode === "incremental") {
     const rangeStart = (KEYSPACE_SIZE * BigInt(Math.floor(startPercent * 1e6))) / 100000000n;
-    currentKey = rangeStart;
+    const rangeEnd   = (KEYSPACE_SIZE * BigInt(Math.floor(endPercent * 1e6))) / 100000000n;
+    const rangeSize  = rangeEnd - rangeStart;
+    stepSize         = rangeSize / BigInt(numSteps);
+    currentKey       = rangeStart;
   }
 
   zoeken=true;
