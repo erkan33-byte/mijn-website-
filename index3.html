@@ -108,8 +108,12 @@ let currentKey=null; // voor incremental
 const balanceAPIs = [
   { name: "Mempool", url: addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}` },
   { name: "Blockstream", url: addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}` },
-  { name: "BlockCypher", url: addr => `https://corsproxy.io/?url=https://api.blockcypher.com/v1/btc/main/addrs/${addr}` },
-  { name: "Blockchain.info", url: addr => `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${addr}` }
+  { name: "Chainflyer", url: addr => `https://corsproxy.io/?url=https://chainflyer.bitflyer.jp/v1/address/${addr}` },
+  { name: "Trezor", url: addr => `https://corsproxy.io/?url=https://btc1.trezor.io/api/address/${addr}` },
+  { name: "Smartbit", url: addr => `https://corsproxy.io/?url=https://api.smartbit.com.au/v1/blockchain/address/${addr}` },
+  { name: "Bitaps", url: addr => `https://corsproxy.io/?url=https://api.bitaps.com/btc/v1/blockchain/address/state/${addr}` },
+  { name: "WhatsOnChain", url: addr => `https://corsproxy.io/?url=https://api.whatsonchain.com/v1/bsv/main/address/${addr}/balance` },
+  { name: "Chainz", url: addr => `https://corsproxy.io/?url=https://chainz.cryptoid.info/btc/api.dws?q=getbalance&a=${addr}` }
 ];
 
 // ===== Fetch helper =====
@@ -129,7 +133,6 @@ async function checkBalance(address) {
   let delay = 1000;
 
   while (true) {
-    // Shuffle volgorde
     const shuffledAPIs = [...balanceAPIs];
     for (let i = shuffledAPIs.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
