@@ -12,7 +12,7 @@ th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: brea
 th { background: #f2f2f2; }
 button, input, select { margin-bottom: 10px; padding: 8px 12px; }
 #totaal, #errors, #progressAbs, #progressRel { margin-bottom: 10px; font-weight: bold; }
-#foundMsg, #retryMsg { margin-top: 15px; font-weight: bold; font-size: 16px; }
+#foundMsg, #retryMsg, #currentApi { margin-top: 15px; font-weight: bold; font-size: 16px; }
 #foundMsg { color: green; }
 #retryMsg { color: orange; animation: blink 1s infinite; }
 @keyframes blink { 0%,50%,100% {opacity:1;} 25%,75% {opacity:0;} }
@@ -46,6 +46,7 @@ label { display:inline-block; min-width:150px; }
 
 <div id="retryMsg"></div>
 <div id="foundMsg"></div>
+<div id="currentApi">Huidige API: geen</div>
 
 <table id="resultTable">
 <thead>
@@ -102,7 +103,7 @@ let counter=0, totaal=0, fouten=0, zoeken=false, MAX_VISIBLE=250;
 let batchSize=2, batchRate=5;
 let startPercent=10, endPercent=20, mode="random";
 let stepSize=1, numSteps=1000000;
-let currentKey=null; // voor incremental
+let currentKey=null;
 
 // ===== Balance APIs via corsproxy.io =====
 const balanceAPIs = [
@@ -128,33 +129,33 @@ async function fetchJSON(url, timeoutMs = 8000) {
   return null;
 }
 
-// ===== Check balance met random volgorde + backoff =====
+// ===== Check balance met slimme API keuze =====
 async function checkBalance(address) {
   let delay = 1000;
+  let lastSuccessfulAPIIndex = 0;
 
   while (true) {
-    const shuffledAPIs = [...balanceAPIs];
-    for (let i = shuffledAPIs.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffledAPIs[i], shuffledAPIs[j]] = [shuffledAPIs[j], shuffledAPIs[i]];
+    const orderedAPIs = [...balanceAPIs];
+    if (lastSuccessfulAPIIndex > 0) {
+      const fastestAPI = orderedAPIs.splice(lastSuccessfulAPIIndex, 1)[0];
+      orderedAPIs.unshift(fastestAPI);
     }
 
-    for (const api of shuffledAPIs) {
+    for (let i = 0; i < orderedAPIs.length; i++) {
+      const api = orderedAPIs[i];
+      document.getElementById("currentApi").textContent = "Huidige API: " + api.name;
+
       const data = await fetchJSON(api.url(address));
       if (data) {
         document.getElementById("retryMsg").textContent = "";
+        lastSuccessfulAPIIndex = i;
 
-        if (data.chain_stats) {
-          return { saldo: (Number(data.chain_stats.funded_txo_sum || 0) - Number(data.chain_stats.spent_txo_sum || 0)) / 1e8, bron: api.name };
-        }
-        if (data.balance !== undefined) {
-          return { saldo: Number(data.balance) / 1e8, bron: api.name };
-        }
-        if (data.final_balance !== undefined) {
-          return { saldo: Number(data.final_balance) / 1e8, bron: api.name };
-        }
+        if (data.chain_stats) return { saldo: (Number(data.chain_stats.funded_txo_sum || 0) - Number(data.chain_stats.spent_txo_sum || 0)) / 1e8, bron: api.name };
+        if (data.balance !== undefined) return { saldo: Number(data.balance) / 1e8, bron: api.name };
+        if (data.final_balance !== undefined) return { saldo: Number(data.final_balance) / 1e8, bron: api.name };
+      } else {
+        await new Promise(r => setTimeout(r, 500));
       }
-      await new Promise(r => setTimeout(r, 500));
     }
 
     document.getElementById("retryMsg").textContent =
