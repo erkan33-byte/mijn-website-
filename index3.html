@@ -55,6 +55,7 @@ label { display:inline-block; min-width:150px; }
 <th>WIF</th>
 <th>Type</th>
 <th>Saldo (BTC)</th>
+<th>API-bron</th>
 </tr>
 </thead>
 <tbody></tbody>
@@ -123,28 +124,36 @@ async function fetchJSON(url, timeoutMs = 8000) {
   return null;
 }
 
-// ===== Check balance met serieel proberen + backoff =====
+// ===== Check balance met random volgorde + backoff =====
 async function checkBalance(address) {
-  let delay = 1000; // start bij 1s bij complete failure
+  let delay = 1000;
 
   while (true) {
-    for (const api of balanceAPIs) {
+    // Shuffle volgorde
+    const shuffledAPIs = [...balanceAPIs];
+    for (let i = shuffledAPIs.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledAPIs[i], shuffledAPIs[j]] = [shuffledAPIs[j], shuffledAPIs[i]];
+    }
+
+    for (const api of shuffledAPIs) {
       const data = await fetchJSON(api.url(address));
       if (data) {
         document.getElementById("retryMsg").textContent = "";
 
         if (data.chain_stats) {
-          return (Number(data.chain_stats.funded_txo_sum || 0) - Number(data.chain_stats.spent_txo_sum || 0)) / 1e8;
+          return { saldo: (Number(data.chain_stats.funded_txo_sum || 0) - Number(data.chain_stats.spent_txo_sum || 0)) / 1e8, bron: api.name };
         }
         if (data.balance !== undefined) {
-          return Number(data.balance) / 1e8;
+          return { saldo: Number(data.balance) / 1e8, bron: api.name };
         }
         if (data.final_balance !== undefined) {
-          return Number(data.final_balance) / 1e8;
+          return { saldo: Number(data.final_balance) / 1e8, bron: api.name };
         }
       }
       await new Promise(r => setTimeout(r, 500));
     }
+
     document.getElementById("retryMsg").textContent =
       `⚠️ Alle API's faalden, opnieuw proberen in ${delay / 1000} seconden...`;
     await new Promise(r => setTimeout(r, delay));
@@ -237,16 +246,19 @@ async function genereerBatch(){
   }
 
   for(const a of addresses){
-    const saldo=await checkBalance(a.address);
+    const result=await checkBalance(a.address);
+    const saldo=result.saldo;
+    const bron=result.bron;
+
     counter++; totaal++;
     const row=document.createElement('tr');
-    row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>${a.type}</td><td>${saldo}</td>`;
+    row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>${a.type}</td><td>${saldo}</td><td>${bron}</td>`;
     document.querySelector("#resultTable tbody").appendChild(row);
 
     if(saldo>0) { 
       row.style.backgroundColor="#c8f7c5"; 
       document.getElementById("foundMsg").textContent =
-        `🎉 Adres gevonden met saldo >0 BTC!\nAdres: ${a.address}\nWIF: ${a.wif}`;
+        `🎉 Adres gevonden met saldo >0 BTC!\nAdres: ${a.address}\nWIF: ${a.wif}\nBron: ${bron}`;
       zoeken = false;
       document.getElementById("startBtn").disabled = true;
       document.getElementById("stopBtn").disabled = true;
