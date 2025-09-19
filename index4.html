@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator (Random + Incremental - Alleen Uncompressed)</title>
+<title>BTC Key Generator (Random Oplopend)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
@@ -10,7 +10,7 @@ body { font-family: Arial, sans-serif; padding: 20px; }
 table { border-collapse: collapse; width: 100%; margin-top: 15px; }
 th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
 th { background: #f2f2f2; }
-button, input, select { margin-bottom: 10px; padding: 8px 12px; }
+button, input { margin-bottom: 10px; padding: 8px 12px; }
 #totaal, #errors, #progressAbs, #progressRel, #personStatus { margin-bottom: 10px; font-weight: bold; }
 #foundMsg, #retryMsg, #rangeMsg { margin-top: 15px; font-weight: bold; font-size: 16px; }
 #foundMsg { color: green; }
@@ -21,32 +21,23 @@ label { display:inline-block; min-width:150px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator (Random + Incremental - Alleen Uncompressed)</h2>
-
-<label for="mode">Modus:</label>
-<select id="mode">
-  <option value="random" selected>Random</option>
-  <option value="incremental">Incremental</option>
-</select><br>
+<h2>BTC Key Generator (Random Oplopend - Alleen Uncompressed)</h2>
 
 <label for="startPercent">Start (%) :</label>
-<input type="number" id="startPercent" value="10" min="0" max="100" step="0.000001"><br>
+<input type="number" id="startPercent" value="10" min="0" max="100" step="0.000000000001"><br>
 <label for="endPercent">Eind (%) :</label>
-<input type="number" id="endPercent" value="20" min="0" max="100" step="0.000001"><br>
+<input type="number" id="endPercent" value="20" min="0" max="100" step="0.000000000001"><br>
 
-<label for="numPeople">Aantal mensen (verdelen):</label>
-<input type="number" id="numPeople" value="1" min="1"><br>
-
-<label for="numSteps">Aantal stappen (alleen gebruikt voor berekening):</label>
-<input type="number" id="numSteps" value="1000000" min="1"><br>
+<label for="numPoints">Aantal punten (random verdeling):</label>
+<input type="number" id="numPoints" value="100" min="1"><br>
 
 <button id="startBtn">Start zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
 
 <div id="totaal">Totaal gescande adressen: 0</div>
 <div id="errors">Aantal errors: 0</div>
-<div id="progressAbs">Voortgang in keyspace: 0.000000000000000000000000000000 %</div>
-<div id="progressRel">Voortgang in interval: 0.000000000000000000000000000000 %</div>
+<div id="progressAbs">Voortgang in keyspace: 0 %</div>
+<div id="progressRel">Voortgang in interval: 0 %</div>
 <div id="personStatus">Nog niet gestart.</div>
 
 <div id="retryMsg"></div>
@@ -61,6 +52,7 @@ label { display:inline-block; min-width:150px; }
 <th>WIF</th>
 <th>Type</th>
 <th>Saldo (BTC)</th>
+<th>API-bron</th>
 </tr>
 </thead>
 <tbody></tbody>
@@ -88,8 +80,8 @@ const KEYSPACE_SIZE = MAX_VALID_KEY;
 
 // ===== Random key in percentage-range =====
 function genRandomKeyInRange(startPercent, endPercent) {
-  const rangeStart = (KEYSPACE_SIZE * BigInt(Math.floor(startPercent * 1e6))) / 100000000n;
-  const rangeEnd   = (KEYSPACE_SIZE * BigInt(Math.floor(endPercent * 1e6))) / 100000000n;
+  const rangeStart = (KEYSPACE_SIZE * BigInt(Math.floor(startPercent * 1e12))) / 1e14n;
+  const rangeEnd   = (KEYSPACE_SIZE * BigInt(Math.floor(endPercent * 1e12))) / 1e14n;
   const rangeSize = rangeEnd - rangeStart;
 
   let rand;
@@ -103,21 +95,20 @@ function genRandomKeyInRange(startPercent, endPercent) {
 }
 
 // ===== Variabelen =====
-let counter=0, totaal=0, fouten=0, zoeken=false, MAX_VISIBLE=250;
-let batchSize=1;        
-let batchRate=0.5;      
-let startPercent=10, endPercent=20, mode="random";
-let stepSize=1, numSteps=1000000;
-let currentKey=null; 
-let randomPoints=[];
-let currentIndex=0;
+let counter=0, totaal=0, zoeken=false, MAX_VISIBLE=250;
+let batchSize=1, batchRate=0.5;
+let randomPoints=[], currentIndex=0;
 
 // ===== Balance APIs =====
 const balanceAPIs = [
-  { name: "Mempool", url: addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`, cooldownUntil: 0 },
-  { name: "Blockstream", url: addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`, cooldownUntil: 0 },
-  { name: "BlockCypher", url: addr => `https://corsproxy.io/?url=https://api.blockcypher.com/v1/btc/main/addrs/${addr}`, cooldownUntil: 0 },
-  { name: "Blockchain.info", url: addr => `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${addr}`, cooldownUntil: 0 }
+  { name: "Mempool", url: addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}`, cooldownUntil:0 },
+  { name: "Blockstream", url: addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}`, cooldownUntil:0 },
+  { name: "Chainflyer", url: addr => `https://corsproxy.io/?url=https://chainflyer.bitflyer.jp/v1/address/${addr}`, cooldownUntil:0 },
+  { name: "Trezor", url: addr => `https://corsproxy.io/?url=https://btc1.trezor.io/api/address/${addr}`, cooldownUntil:0 },
+  { name: "Smartbit", url: addr => `https://corsproxy.io/?url=https://api.smartbit.com.au/v1/blockchain/address/${addr}`, cooldownUntil:0 },
+  { name: "Bitaps", url: addr => `https://corsproxy.io/?url=https://api.bitaps.com/btc/v1/blockchain/address/state/${addr}`, cooldownUntil:0 },
+  { name: "WhatsOnChain", url: addr => `https://corsproxy.io/?url=https://api.whatsonchain.com/v1/bsv/main/address/${addr}/balance`, cooldownUntil:0 },
+  { name: "Chainz", url: addr => `https://corsproxy.io/?url=https://chainz.cryptoid.info/btc/api.dws?q=getbalance&a=${addr}`, cooldownUntil:0 }
 ];
 
 // ===== Fetch helper =====
@@ -127,120 +118,95 @@ async function fetchJSON(url, timeoutMs = 8000) {
   try {
     const resp = await fetch(url, { signal: controller.signal });
     clearTimeout(timeout);
-    if (resp.status === 429) {
-      throw { rateLimit: true };
-    }
-    if (resp.ok) return await resp.json();
-  } catch (e) {
-    throw e;
-  }
+    if(resp.status===429) throw {rateLimit:true};
+    if(resp.ok) return await resp.json();
+  } catch(e) { throw e; }
   return null;
 }
 
 // ===== Check balance =====
 async function checkBalance(address) {
-  let delay = 1000; 
-  while (true) {
-    for (const api of balanceAPIs) {
-      if (Date.now() < api.cooldownUntil) continue;
-      try {
+  let delay = 1000;
+  while(true){
+    for(const api of balanceAPIs){
+      if(Date.now()<api.cooldownUntil) continue;
+      try{
         const data = await fetchJSON(api.url(address));
-        if (data) {
+        if(data){
           document.getElementById("retryMsg").textContent = "";
-          if (data.chain_stats) {
-            return (Number(data.chain_stats.funded_txo_sum || 0) - Number(data.chain_stats.spent_txo_sum || 0)) / 1e8;
-          }
-          if (data.balance !== undefined) return Number(data.balance) / 1e8;
-          if (data.final_balance !== undefined) return Number(data.final_balance) / 1e8;
+          if(data.chain_stats) return {saldo:(Number(data.chain_stats.funded_txo_sum||0)-Number(data.chain_stats.spent_txo_sum||0))/1e8, bron:api.name};
+          if(data.balance!==undefined) return {saldo:Number(data.balance)/1e8, bron:api.name};
+          if(data.final_balance!==undefined) return {saldo:Number(data.final_balance)/1e8, bron:api.name};
         }
-      } catch (err) {
-        if (err && err.rateLimit) {
-          api.cooldownUntil = Date.now() + 30000; 
-        }
+      }catch(err){
+        if(err && err.rateLimit) api.cooldownUntil = Date.now()+30000;
       }
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r=>setTimeout(r,200));
     }
-    document.getElementById("retryMsg").textContent =
-      `⚠️ Alle API's faalden, opnieuw proberen in ${delay / 1000} seconden...`;
-    await new Promise(r => setTimeout(r, delay));
-    delay = Math.min(delay * 2, 60000);
+    document.getElementById("retryMsg").textContent=`⚠️ Alle API's faalden, opnieuw proberen in ${delay/1000} seconden...`;
+    await new Promise(r=>setTimeout(r,delay));
+    delay = Math.min(delay*2,60000);
   }
 }
 
-// ===== Voortgang =====
-function getProgressAbsolute(currentKey){
-  const fraction = Number(currentKey) / Number(KEYSPACE_SIZE) * 100;
-  return fraction.toFixed(30) + " %";
-}
-function getProgressRelative(currentKey){
-  const fraction = Number(currentKey) / Number(KEYSPACE_SIZE) * 100;
-  const relative = ((fraction - startPercent) / (endPercent - startPercent)) * 100;
-  return relative.toFixed(30) + " %";
-}
-
-// ===== Random sorted points =====
-function generateRandomSortedPoints(start, end, numPeople) {
-  const arr = [];
-  for (let i = 0; i < numPeople; i++) {
-    const r = Math.random() * (end - start) + start;
+// ===== Random oplopend punten =====
+function generateRandomSortedPoints(start, end, numPoints){
+  const arr=[];
+  for(let i=0;i<numPoints;i++){
+    const r = Math.random()*(end-start)+start;
     arr.push(r);
   }
-  arr.sort((a,b) => a-b);
+  arr.sort((a,b)=>a-b);
   return arr;
 }
 
 // ===== Start / Stop =====
 async function starten(){
   if(zoeken) return;
-  const sPercent = parseFloat(document.getElementById("startPercent").value);
-  const ePercent = parseFloat(document.getElementById("endPercent").value);
-  const numPeople = parseInt(document.getElementById("numPeople").value);
 
-  randomPoints = generateRandomSortedPoints(sPercent, ePercent, numPeople);
-  currentIndex = 0;
+  const sPercent=parseFloat(document.getElementById("startPercent").value);
+  const ePercent=parseFloat(document.getElementById("endPercent").value);
+  const numPoints=parseInt(document.getElementById("numPoints").value);
+
+  randomPoints = generateRandomSortedPoints(sPercent,ePercent,numPoints);
+  currentIndex=0;
 
   document.getElementById("rangeMsg").textContent =
-    `🔢 Willekeurige oplopende verdeling gegenereerd voor ${numPeople} mensen tussen ${sPercent}% en ${ePercent}%.`;
+    `🔢 Willekeurige oplopende verdeling gegenereerd voor ${numPoints} punten tussen ${sPercent}% en ${ePercent}%.`;
 
   zoeken=true;
   document.getElementById("startBtn").disabled=true;
-  document.getElementById("stopBtn").disabled=false;
-  document.getElementById("retryMsg").textContent="";
+  document.getElementById("stopBtn").disabled=false;  document.getElementById("retryMsg").textContent="";
   document.getElementById("foundMsg").textContent="";
   genereerBatch();
 }
+
 function stoppen(){
-  zoeken=false; 
-  document.getElementById("startBtn").disabled=false; 
+  zoeken=false;
+  document.getElementById("startBtn").disabled=false;
   document.getElementById("stopBtn").disabled=true;
 }
 
 // ===== Batch genereren =====
 async function genereerBatch(){
-  if(!zoeken || currentIndex >= randomPoints.length) return;
+  if(!zoeken || currentIndex>=randomPoints.length) return;
 
   const myPercent = randomPoints[currentIndex];
-  startPercent = myPercent;
-  endPercent   = myPercent + 0.000001;
+  const startPercent = myPercent;
+  const endPercent = myPercent + 0.000000000001; // minimaal interval
 
-  // Statusregel tonen
   document.getElementById("personStatus").textContent =
-    `👤 Nu bezig met persoon ${currentIndex+1} van ${randomPoints.length} (percentage ≈ ${myPercent.toFixed(6)}%)`;
+    `👤 Nu bezig met punt ${currentIndex+1} van ${randomPoints.length} (≈ ${myPercent.toFixed(12)}%)`;
 
   const privKeys=[];
-  for(let i=0;i<batchSize;i++){ 
-    if (mode === "random") {
-      privKeys.push(genRandomKeyInRange(startPercent,endPercent)); 
-    } else {
-      privKeys.push(currentKey);
-      currentKey += BigInt(stepSize);
-    }
+  for(let i=0;i<batchSize;i++){
+    privKeys.push(genRandomKeyInRange(startPercent,endPercent));
   }
 
-  const addresses = [];
+  const addresses=[];
   for(const k of privKeys){
     const privHex=k.toString(16).padStart(64,'0');
-    const ec=new elliptic.ec("secp256k1"); 
+    const ec=new elliptic.ec("secp256k1");
     const kp=ec.keyFromPrivate(privHex,"hex");
     const pubU=toHex(kp.getPublic(false,'array'));
     const ripemdU=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
@@ -252,24 +218,27 @@ async function genereerBatch(){
   }
 
   for(const a of addresses){
-    const saldo=await checkBalance(a.address);
+    const result=await checkBalance(a.address);
+    const saldo=result.saldo;
+    const bron=result.bron;
+
     counter++; totaal++;
     const row=document.createElement('tr');
-    row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>${a.type}</td><td>${saldo}</td>`;
+    row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>${a.type}</td><td>${saldo}</td><td>${bron}</td>`;
     document.querySelector("#resultTable tbody").appendChild(row);
 
-    if(saldo>0) { 
-      row.style.backgroundColor="#c8f7c5"; 
+    if(saldo>0){
+      row.style.backgroundColor="#c8f7c5";
       document.getElementById("foundMsg").textContent =
-        `🎉 Adres gevonden met saldo >0 BTC!\nAdres: ${a.address}\nWIF: ${a.wif}`;
-      zoeken = false;
-      document.getElementById("startBtn").disabled = true;
-      document.getElementById("stopBtn").disabled = true;
+        `🎉 Adres gevonden met saldo >0 BTC!\nAdres: ${a.address}\nWIF: ${a.wif}\nBron: ${bron}`;
+      zoeken=false;
+      document.getElementById("startBtn").disabled=true;
+      document.getElementById("stopBtn").disabled=true;
       return;
     }
 
-    document.getElementById("progressAbs").textContent="Voortgang in keyspace: "+getProgressAbsolute(a.priv);
-    document.getElementById("progressRel").textContent="Voortgang in interval: "+getProgressRelative(a.priv);
+    document.getElementById("progressAbs").textContent="Voortgang in keyspace: "+((Number(a.priv)/Number(KEYSPACE_SIZE)*100).toFixed(12))+" %";
+    document.getElementById("progressRel").textContent="Voortgang in interval: "+((Number(a.priv)/Number(KEYSPACE_SIZE)*100).toFixed(12))+" %";
   }
 
   const tbody=document.querySelector("#resultTable tbody");
