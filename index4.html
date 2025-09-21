@@ -113,16 +113,14 @@ let currentKey=null;
 let apiMode="random";
 let lastSuccessfulAPIIndex=0;
 
-// ===== Balance APIs via corsproxy.io =====
+// ===== Balance APIs =====
 const balanceAPIs = [
-  { name: "Mempool", url: addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}` },
   { name: "Blockstream", url: addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}` },
-  { name: "Chainflyer", url: addr => `https://corsproxy.io/?url=https://chainflyer.bitflyer.jp/v1/address/${addr}` },
+  { name: "Mempool", url: addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}` },
   { name: "Trezor", url: addr => `https://corsproxy.io/?url=https://btc1.trezor.io/api/address/${addr}` },
-  { name: "Smartbit", url: addr => `https://corsproxy.io/?url=https://api.smartbit.com.au/v1/blockchain/address/${addr}` },
-  { name: "Bitaps", url: addr => `https://corsproxy.io/?url=https://api.bitaps.com/btc/v1/blockchain/address/state/${addr}` },
-  { name: "WhatsOnChain", url: addr => `https://corsproxy.io/?url=https://api.whatsonchain.com/v1/bsv/main/address/${addr}/balance` },
-  { name: "Chainz", url: addr => `https://corsproxy.io/?url=https://chainz.cryptoid.info/btc/api.dws?q=getbalance&a=${addr}` }
+  { name: "Blockchain.com", url: addr => `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${addr}` },
+  { name: "BlockCypher", url: addr => `https://corsproxy.io/?url=https://api.blockcypher.com/v1/btc/main/addrs/${addr}/balance` },
+  { name: "Public Esplora", url: addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}` }
 ];
 
 // ===== Fetch helper =====
