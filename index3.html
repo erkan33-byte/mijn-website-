@@ -53,7 +53,6 @@ label { display:inline-block; min-width:200px; }
 
 <div id="retryMsg"></div>
 <div id="foundMsg"></div>
-<div id="currentApi">Huidige API: geen</div>
 
 <table id="resultTable">
 <thead>
@@ -62,8 +61,6 @@ label { display:inline-block; min-width:200px; }
 <th>Adres</th>
 <th>WIF</th>
 <th>Type</th>
-<th>Saldo (BTC)</th>
-<th>API-bron</th>
 </tr>
 </thead>
 <tbody></tbody>
@@ -110,61 +107,19 @@ let startPercent=10, endPercent=20, mode="random";
 let stepSize=1, numSteps=1000000, currentKey=null;
 let incrementCount=0, expectedStep=0n, jumpAfter=1000, activeKeys=1000;
 
-// ===== Balance APIs =====
-const balanceAPIs = [
-  { name: "Blockstream", url: addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}` },
-  { name: "Mempool", url: addr => `https://corsproxy.io/?url=https://mempool.space/api/address/${addr}` },
-  { name: "Trezor", url: addr => `https://corsproxy.io/?url=https://btc1.trezor.io/api/address/${addr}` },
-  { name: "Blockchain.com", url: addr => `https://corsproxy.io/?url=https://blockchain.info/rawaddr/${addr}` },
-  { name: "BlockCypher", url: addr => `https://corsproxy.io/?url=https://api.blockcypher.com/v1/btc/main/addrs/${addr}/balance` },
-  { name: "Public Esplora", url: addr => `https://corsproxy.io/?url=https://blockstream.info/api/address/${addr}` }
-];
-
-// ===== Fetch helper =====
-async function fetchJSON(url, timeoutMs = 8000) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try { const resp = await fetch(url, { signal: controller.signal }); clearTimeout(timeout); if (resp.ok) return await resp.json(); } 
-  catch (e) {} 
-  return null;
-}
-
-// ===== Check balance met slimme API keuze =====
-async function checkBalance(address) {
-  let delay = 1000;
-  let lastSuccessfulAPIIndex = 0;
-  while (true) {
-    const orderedAPIs = [...balanceAPIs];
-    if (lastSuccessfulAPIIndex > 0) { const fastestAPI = orderedAPIs.splice(lastSuccessfulAPIIndex, 1)[0]; orderedAPIs.unshift(fastestAPI); }
-    for (let i = 0; i < orderedAPIs.length; i++) {
-      const api = orderedAPIs[i];
-      document.getElementById("currentApi").textContent = "Huidige API: " + api.name;
-      const data = await fetchJSON(api.url(address));
-      if (data) {
-        document.getElementById("retryMsg").textContent = "";
-        lastSuccessfulAPIIndex = i;
-        if (data.chain_stats) return { saldo: (Number(data.chain_stats.funded_txo_sum || 0) - Number(data.chain_stats.spent_txo_sum || 0)) / 1e8, bron: api.name };
-        if (data.balance !== undefined) return { saldo: Number(data.balance) / 1e8, bron: api.name };
-        if (data.final_balance !== undefined) return { saldo: Number(data.final_balance) / 1e8, bron: api.name };
-      } else { await new Promise(r => setTimeout(r, 500)); }
-    }
-    document.getElementById("retryMsg").textContent = `⚠️ Alle API's faalden, opnieuw proberen in ${delay/1000} seconden...`;
-    await new Promise(r => setTimeout(r, delay));
-    delay = Math.min(delay*2, 60000);
-  }
-}
+// ===== Target adressen ====
+const TARGET_ADDRESSES = new Set([
+  "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+  "1HLoD9E4SDFFPDiYfNYnkBLQ85Y51J3Zb1"
+]);
 
 // ===== Progress =====
 function getProgressAbsolute(currentKey){ return (Number(currentKey)/Number(KEYSPACE_SIZE)*100).toFixed(30)+" %"; }
 function getProgressRelative(currentKey){ return (((Number(currentKey)/Number(KEYSPACE_SIZE)*100)-startPercent)/(endPercent-startPercent)*100).toFixed(30)+" %"; }
 
-// ===== IP-check =====
-async function checkIP(){ try{ const resp = await fetch("https://ipapi.co/json/"); const data = await resp.json(); if(data.country_code==="NL"){ alert("⚠️ Nederlandse IP gedetecteerd. Starten geblokkeerd."); return false;} return true;} catch(e){ alert("Fout bij IP-check. Controleer je internet of VPN."); return false;} }
-
 // ===== Start / Stop =====
 async function starten(){
   if(zoeken) return;
-  const ok = await checkIP(); if(!ok) return;
 
   startPercent = parseFloat(document.getElementById("startPercent").value);
   endPercent   = parseFloat(document.getElementById("endPercent").value);
@@ -183,18 +138,15 @@ async function starten(){
     jumpAfter = parseInt(document.getElementById("jumpAfter").value);
     activeKeys = parseInt(document.getElementById("activeKeys").value);
     incrementCount = 0;
-
     const stepPerActive = (KEYSPACE_SIZE * BigInt(Math.floor((endPercent-startPercent)*1e6))/100000000n)/BigInt(activeKeys);
     const startRandomOffset = BigInt(Math.floor(Math.random()*Number(stepPerActive)));
     currentKey = ((KEYSPACE_SIZE * BigInt(Math.floor(startPercent*1e6)))/100000000n) + startRandomOffset;
-
     expectedStep = stepPerActive;
   }
 
   zoeken=true;
   document.getElementById("startBtn").disabled=true;
   document.getElementById("stopBtn").disabled=false;
-  document.getElementById("retryMsg").textContent="";
   document.getElementById("foundMsg").textContent="";
   if(mode==="hybrid") genereerHybrid();
   else genereerBatch();
@@ -202,7 +154,7 @@ async function starten(){
 
 function stoppen(){zoeken=false; document.getElementById("startBtn").disabled=false; document.getElementById("stopBtn").disabled=true; }
 
-// ===== Batch genereren =====
+// ===== Batch generator =====
 async function genereerBatch(){
   if(!zoeken) return;
   const privKeys=[];
@@ -222,20 +174,22 @@ async function genereerBatch(){
     const checksumU=doubleSha256Hex(payloadU).slice(0,8);
     const addressU=base58Encode(payloadU+checksumU);
     const wifU=base58Encode('80'+privHex+doubleSha256Hex('80'+privHex).slice(0,8));
-        addresses.push({address:addressU,wif:wifU,type:'Uncompressed',priv:k});
+    addresses.push({address:addressU,wif:wifU,type:'Uncompressed',priv:k});
   }
 
   for(const a of addresses){
-    const result = await checkBalance(a.address);
     counter++; totaal++;
     const row=document.createElement('tr');
-    row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>${a.type}</td><td>${result.saldo}</td><td>${result.bron}</td>`;
+    row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>${a.type}</td>`;
     document.querySelector("#resultTable tbody").appendChild(row);
 
-    if(result.saldo>0){
+    // Stop bij target adres
+    if(TARGET_ADDRESSES.has(a.address)){
       row.style.backgroundColor="#c8f7c5";
-      document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC!\nAdres: ${a.address}\nWIF: ${a.wif}\nBron: ${result.bron}`;
-      zoeken=false; document.getElementById("startBtn").disabled=true; document.getElementById("stopBtn").disabled=true;
+      document.getElementById("foundMsg").textContent=`🎉 Target adres gevonden!\nAdres: ${a.address}\nWIF: ${a.wif}`;
+      zoeken=false; 
+      document.getElementById("startBtn").disabled=true;
+      document.getElementById("stopBtn").disabled=true;
       return;
     }
 
@@ -254,7 +208,6 @@ async function genereerBatch(){
 async function genereerHybrid(){
   if(!zoeken) return;
 
-  // Genereer key en adres
   const privHex=currentKey.toString(16).padStart(64,'0');
   const ec=new elliptic.ec("secp256k1"); 
   const kp=ec.keyFromPrivate(privHex,"hex");
@@ -265,16 +218,18 @@ async function genereerHybrid(){
   const addressU=base58Encode(payloadU+checksumU);
   const wifU=base58Encode('80'+privHex+doubleSha256Hex('80'+privHex).slice(0,8));
 
-  const result = await checkBalance(addressU);
   counter++; totaal++;
-  const row=document.createElement('tr');
-  row.innerHTML=`<td>${counter}</td><td>${addressU}</td><td>${wifU}</td><td>Uncompressed</td><td>${result.saldo}</td><td>${result.bron}</td>`;
+    const row=document.createElement('tr');
+  row.innerHTML=`<td>${counter}</td><td>${addressU}</td><td>${wifU}</td><td>Uncompressed</td>`;
   document.querySelector("#resultTable tbody").appendChild(row);
 
-  if(result.saldo>0){
+  // Stop bij target adres
+  if(TARGET_ADDRESSES.has(addressU)){
     row.style.backgroundColor="#c8f7c5";
-    document.getElementById("foundMsg").textContent=`🎉 Adres gevonden met saldo >0 BTC!\nAdres: ${addressU}\nWIF: ${wifU}\nBron: ${result.bron}`;
-    zoeken=false; document.getElementById("startBtn").disabled=true; document.getElementById("stopBtn").disabled=true;
+    document.getElementById("foundMsg").textContent=`🎉 Target adres gevonden!\nAdres: ${addressU}\nWIF: ${wifU}`;
+    zoeken=false; 
+    document.getElementById("startBtn").disabled=true;
+    document.getElementById("stopBtn").disabled=true;
     return;
   }
 
