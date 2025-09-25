@@ -13,7 +13,7 @@ th { background: #f2f2f2; }
 button, input, select { margin-bottom: 10px; padding: 8px 12px; }
 #totaal, #errors, #progressAbs, #progressRel { margin-bottom: 10px; font-weight: bold; }
 #foundMsg, #retryMsg { margin-top: 15px; font-weight: bold; font-size: 16px; }
-#foundMsg { color: green; }
+#foundMsg { color: green; white-space: pre-line; }
 #retryMsg { color: orange; animation: blink 1s infinite; }
 @keyframes blink { 0%,50%,100% {opacity:1;} 25%,75% {opacity:0;} }
 label { display:inline-block; min-width:200px; }
@@ -71,18 +71,22 @@ label { display:inline-block; min-width:200px; }
 </table>
 
 <script>
+/* === Config: doel-adressen (voor demo) === */
 const TARGET_ADDRESSES = new Set([
   "1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF",
   "1GUNPhjykrBdET5sauhahRoN6Xb9pACs5j"
 ]);
 
+/* === Globals === */
 let workers = [];
 let zoeken = false;
 let totaal = 0;
 const MAX_VISIBLE = 2500;
+let totalScannedAcrossWorkers = 0n;
+const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
 
-// ===== UI helpers =====
-function updateTable(batch){
+/* === UI helpers === */
+function addRowsToTable(batch){
     const tbody = document.querySelector("#resultTable tbody");
     for(let i=0;i<batch.length;i++){
         const a = batch[i];
@@ -94,19 +98,34 @@ function updateTable(batch){
             row.style.backgroundColor="#c8f7c5";
             document.getElementById("foundMsg").textContent = `🎉 Target adres gevonden!\nAdres: ${a.address}\nWIF: ${a.wif}`;
             stopWorkers();
-            return;
+            return true;
         }
     }
     while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
     document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
+    return false;
 }
 
-// ===== Start / Stop =====
+/* BigInt percentage helper: geeft string met opgegeven decimals */
+function bigIntPercent(numer, denom, decimals=6){
+    if(denom===0n) return "0";
+    const scale = 10n ** BigInt(decimals+2); // extra 2 voor percent
+    const value = (numer * scale * 100n) / denom; // percentage scaled by 10^(decimals+2)
+    const integerPart = value / (10n**BigInt(decimals+2));
+    const fracPart = value % (10n**BigInt(decimals+2));
+    // Build fraction with leading zeros
+    const fracStr = fracPart.toString().padStart(decimals+2,'0').slice(0,decimals);
+    return `${integerPart.toString()}.${fracStr}`;
+}
+
+/* === Start / Stop workers === */
 function startWorkers(){
     if(zoeken) return;
     zoeken=true;
     totaal=0;
+    totalScannedAcrossWorkers = 0n;
     document.querySelector("#resultTable tbody").innerHTML="";
+    document.getElementById("foundMsg").textContent="";
     document.getElementById("startBtn").disabled=true;
     document.getElementById("stopBtn").disabled=false;
 
@@ -119,6 +138,7 @@ function startWorkers(){
     const jumpAfter = parseInt(document.getElementById("jumpAfter").value);
     const activeKeys = parseInt(document.getElementById("activeKeys").value);
 
+    /* Worker code string */
     const workerCode = `
         self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js');
         self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
@@ -139,67 +159,179 @@ function startWorkers(){
           return "1".repeat(zeros)+(out||"");
         }
 
-        function genRandomKeyInRange(startPercent,endPercent){
-          const rangeStart = (ORDER_N*BigInt(Math.floor(startPercent*1e6)))/100000000n;
-          const rangeEnd = (ORDER_N*BigInt(Math.floor(endPercent*1e6)))/100000000n;
-          const rangeSize = rangeEnd-rangeStart;
-          let rand;
-          do{
-            const arr=new Uint8Array(32);
-            crypto.getRandomValues(arr);
-            rand=BigInt("0x"+Array.from(arr,b=>b.toString(16).padStart(2,"0")).join(""));
-          }while(rand>ORDER_N-1n);
-          return (rand%rangeSize)+rangeStart;
+        // Gen random bigint in [0, max)
+        function randBelow(max){
+          if(max<=0n) return 0n;
+          // generate 32 random bytes -> bigint, then mod max (not perfectly uniform but ok for this use)
+          const arr = new Uint8Array(32);
+          crypto.getRandomValues(arr);
+          let s = "0x"+Array.from(arr).map(b=>b.toString(16).padStart(2,"0")).join("");
+          let r = BigInt(s);
+          return r % max;
         }
 
-        onmessage=function(e){
+        onmessage = function(e){
           const {batchSize,mode,startPercent,endPercent,numSteps,jumpAfter,activeKeys} = e.data;
-          let currentKey = (mode==="incremental"||mode==="hybrid") ? (ORDER_N*BigInt(Math.floor(startPercent*1e6)))/100000000n : 0n;
-          let stepSize = (mode==="incremental"||mode==="hybrid") ? ((ORDER_N-1n)*BigInt(Math.floor((endPercent-startPercent)*1e6))/100000000n)/numSteps : 1n;
-          let incrementCount=0;
-          let expectedStep = stepSize * BigInt(activeKeys);
+
+          // scale: use 1e6 to capture fractional percent (parts per million of percent)
+          const SCALE = 1000000n;
+          const DEN = 100n * SCALE; // 100 * 1e6 = 100000000n
+
+          const startScaled = BigInt(Math.floor(startPercent * 1e6));
+          const endScaled   = BigInt(Math.floor(endPercent * 1e6));
+
+          const rangeStart = (ORDER_N * startScaled) / DEN;
+          const rangeEnd   = (ORDER_N * endScaled) / DEN;
+          const rangeSize  = (rangeEnd > rangeStart) ? (rangeEnd - rangeStart) : 0n;
+
+          let currentKey;
+          if(mode==="incremental" || mode==="hybrid"){
+            currentKey = rangeStart;
+          } else {
+            currentKey = 0n;
+          }
+
+          let stepSize = 1n;
+          if((mode==="incremental" || mode==="hybrid") && numSteps>0){
+            stepSize = rangeSize / BigInt(numSteps);
+            if(stepSize < 1n) stepSize = 1n;
+          }
+
+          let incrementCount = 0;
+          let expectedStep = stepSize * BigInt(Math.max(1, activeKeys || 1));
+
+          let scanned = 0n;
 
           function generateBatch(){
-            const batch=[];
+            const batch = [];
             for(let i=0;i<batchSize;i++){
               let k;
-              if(mode==="random") k=genRandomKeyInRange(startPercent,endPercent);
-              else{
-                k=currentKey;
-                currentKey+=stepSize;
+              if(mode==="random"){
+                if(rangeSize<=0n){
+                  // fallback to full range
+                  k = randBelow(ORDER_N-1n);
+                } else {
+                  k = rangeStart + randBelow(rangeSize);
+                }
+              } else {
+                k = currentKey;
+                currentKey = currentKey + stepSize;
                 incrementCount++;
-                if(mode==="hybrid" && incrementCount>=jumpAfter){
-                  const halfStep = expectedStep/2n;
-                  const randOffset = BigInt(Math.floor(Math.random()*Number(expectedStep)))-halfStep;
-                  currentKey=currentKey+expectedStep+randOffset;
-                  incrementCount=0;
+                // hybrid jump:
+                if(mode==="hybrid" && incrementCount >= (jumpAfter || 1)){
+                  // jump forward expectedStep plus small random offset centered
+                  const half = expectedStep/2n;
+                  let ro = 0n;
+                  if(expectedStep > 1n) ro = randBelow(expectedStep) - half;
+                  currentKey = currentKey + expectedStep + ro;
+                  incrementCount = 0;
+                }
+                // clamp inside range if possible
+                if(rangeSize>0n){
+                  // ensure currentKey stays inside [rangeStart, rangeEnd)
+                  if(currentKey < rangeStart) currentKey = rangeStart;
+                  if(currentKey >= rangeEnd) {
+                    // wrap or clamp: wrap to rangeStart to keep searching in interval
+                    currentKey = rangeStart + ((currentKey - rangeStart) % rangeSize);
+                  }
+                } else {
+                  // if no range, ensure < ORDER_N
+                  if(currentKey >= (ORDER_N-1n)) currentKey = currentKey % (ORDER_N-1n);
                 }
               }
-              const privHex=k.toString(16).padStart(64,'0');
-              const kp=ec.keyFromPrivate(privHex,"hex");
-              const pubU=toHex(kp.getPublic(false,'array'));
-                            const ripemdU=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
-              const payloadU='00'+ripemdU;
-              const checksumU=doubleSha256Hex(payloadU).slice(0,8);
-              const addressU=base58Encode(payloadU+checksumU);
-              const wifU=base58Encode('80'+privHex+doubleSha256Hex('80'+privHex).slice(0,8));
-              batch.push({address:addressU,wif:wifU});
+
+              // produce address from private key k
+              const privHex = k.toString(16).padStart(64,'0');
+              const kp = ec.keyFromPrivate(privHex,"hex");
+              const pubU = toHex(kp.getPublic(false,'array'));
+              const ripemdU = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
+              const payloadU = '00' + ripemdU;
+              const checksumU = doubleSha256Hex(payloadU).slice(0,8);
+              const addressU = base58Encode(payloadU + checksumU);
+              const wifU = base58Encode('80' + privHex + doubleSha256Hex('80' + privHex).slice(0,8));
+
+              batch.push({address: addressU, wif: wifU});
+              scanned++;
             }
-            postMessage(batch);
-            setTimeout(generateBatch,0);
+
+            // send batch + progress info
+            postMessage({
+              batch: batch,
+              scanned: scanned.toString(),
+              currentKey: currentKey.toString(),
+              rangeStart: rangeStart.toString(),
+              rangeSize: rangeSize.toString()
+            });
+
+            // schedule next batch
+            setTimeout(generateBatch, 0);
           }
 
           generateBatch();
-        }
+        };
     `;
 
     const blob = new Blob([workerCode], {type:'application/javascript'});
     const blobURL = URL.createObjectURL(blob);
 
+    // create workers
     for(let i=0;i<numWorkers;i++){
         const worker = new Worker(blobURL);
-        worker.postMessage({batchSize,mode,startPercent,endPercent,numSteps,jumpAfter,activeKeys});
-        worker.onmessage=function(e){updateTable(e.data);}
+        worker.onmessage = function(e){
+            try {
+                const data = e.data;
+                const batch = data.batch || [];
+                const found = addRowsToTable(batch);
+                // update scanned totals
+                const scannedThis = BigInt(data.scanned || "0");
+                // we don't sum scanned from all messages (would double-count), instead store latest per-worker:
+                // to keep it simple, maintain a total counter incrementally:
+                totalScannedAcrossWorkers += scannedThis;
+                document.getElementById("errors").textContent = "Aantal errors: 0";
+                // update progress using currentKey, rangeStart, rangeSize
+                const currentKey = BigInt(data.currentKey || "0");
+                const rangeStart = BigInt(data.rangeStart || "0");
+                const rangeSize = BigInt(data.rangeSize || "0");
+
+                // Compute absolute percent (currentKey / ORDER_N *100)
+                // Clamp currentKey within [0, ORDER_N]
+                let ck = currentKey;
+                if(ck < 0n) ck = 0n;
+                if(ck > ORDER_N) ck = ORDER_N;
+                const absPct = bigIntPercent(ck, ORDER_N, 6);
+
+                // Compute relative percent inside interval:
+                let relPct = "0.000000";
+                if(rangeSize > 0n){
+                  // position = currentKey - rangeStart (clamped)
+                  let pos = currentKey - rangeStart;
+                  if(pos < 0n) pos = 0n;
+                  if(pos > rangeSize) pos = rangeSize;
+                  relPct = bigIntPercent(pos, rangeSize, 6);
+                } else {
+                  relPct = "0.000000";
+                }
+
+                document.getElementById("progressAbs").textContent = "Voortgang in keyspace: " + absPct + " %";
+                document.getElementById("progressRel").textContent = "Voortgang in interval: " + relPct + " %";
+
+                // If found, stop called in addRowsToTable already
+                if(found){
+                    // nothing further
+                }
+            } catch(err){
+                console.error("Worker message error:", err);
+                document.getElementById("errors").textContent = "Aantal errors: 1";
+            }
+        };
+
+        worker.onerror = function(ev){
+            console.error("Worker error", ev);
+            document.getElementById("errors").textContent = "Aantal errors: 1";
+        };
+
+        // send startup params
+        worker.postMessage({batchSize, mode, startPercent, endPercent, numSteps, jumpAfter, activeKeys});
         workers.push(worker);
     }
 }
@@ -212,9 +344,10 @@ function stopWorkers(){
     workers=[];
 }
 
-document.getElementById("startBtn").addEventListener("click",startWorkers);
-document.getElementById("stopBtn").addEventListener("click",stopWorkers);
-document.getElementById("mode").addEventListener("change",()=>{
+/* === Event handlers === */
+document.getElementById("startBtn").addEventListener("click", startWorkers);
+document.getElementById("stopBtn").addEventListener("click", stopWorkers);
+document.getElementById("mode").addEventListener("change", ()=>{
     document.getElementById("hybridSettings").style.display = document.getElementById("mode").value==="hybrid" ? "block" : "none";
 });
 </script>
