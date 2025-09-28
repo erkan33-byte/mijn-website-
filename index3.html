@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator (Alleen target tonen)</title>
+<title>BTC Key Generator (Alleen target tonen) - Smart alle targets</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
@@ -15,18 +15,27 @@ button, select { margin-bottom: 10px; padding: 8px 12px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator (Alleen target tonen)</h2>
+<h2>BTC Key Generator (Alleen target tonen) - Smart: controleer alle targets</h2>
 
 <label for="mode">Modus:</label>
 <select id="mode">
-  <option value="random" selected>Random (systematisch verdeeld)</option>
+  <option value="random" >Random (systematisch verdeeld)</option>
   <option value="incremental">Incremental</option>
+  <option value="smart" selected>Slimme Random Zoeker (controleer alle targets)</option>
 </select><br>
 
 <label for="startPercent">Start (%) :</label>
 <input type="number" id="startPercent" value="10" min="0" max="100" step="0.0001"><br>
 <label for="endPercent">Eind (%) :</label>
 <input type="number" id="endPercent" value="20" min="0" max="100" step="0.0001"><br>
+
+<!-- extra instellingen voor smart mode -->
+<label for="smartPrefixThreshold">Smart: minimale prefix-lengte om in te zoomen (chars):</label>
+<input type="number" id="smartPrefixThreshold" value="3" min="1" max="10" step="1"><br>
+<label for="localRadius">Smart: lokale radius (±n keys) tijdens inzoomen:</label>
+<input type="number" id="localRadius" value="256" min="1" max="100000" step="1"><br>
+<label for="localLimit">Smart: max aantal lokale stappen per inzoom:</label>
+<input type="number" id="localLimit" value="2048" min="1" max="200000" step="1"><br>
 
 <button id="startBtn">Start automatisch zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
@@ -11392,7 +11401,7 @@ const TARGET_ADDRESSES = new Set([
   "1M5aojQPWaWFGKr9PZhA9nF8SZvahVWgHr",
   "1M5TCaLbChT7iwpzdYgwh5YNtzFCR26sUy",
   "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
-]);
+];
 
 let workers = [];
 let zoeken = false;
@@ -11423,6 +11432,11 @@ function startWorkers(){
     const startPercent = parseFloat(document.getElementById("startPercent").value);
     const endPercent = parseFloat(document.getElementById("endPercent").value);
 
+    // smart instellingen
+    const smartPrefixThreshold = parseInt(document.getElementById("smartPrefixThreshold").value,10);
+    const localRadius = parseInt(document.getElementById("localRadius").value,10);
+    const localLimit = parseInt(document.getElementById("localLimit").value,10);
+
     const workerCode = `
         self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js');
         self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
@@ -11443,9 +11457,16 @@ function startWorkers(){
           return "1".repeat(zeros)+(out||"");
         }
 
+        function commonPrefixLen(a,b){
+          const L = Math.min(a.length,b.length);
+          let i=0;
+          for(;i<L;i++){ if(a[i]!==b[i]) break; }
+          return i;
+        }
+
         onmessage = function(e){
-          const {mode,startPercent,endPercent,workerId,numWorkers,targetList} = e.data;
-          const targets = new Set(targetList);
+          const {mode,startPercent,endPercent,workerId,numWorkers,targetList,smartPrefixThreshold,localRadius,localLimit} = e.data;
+          const targets = Array.isArray(targetList) ? targetList : [];
           const SCALE = 1000000n;
           const DEN = 100n * SCALE;
           const startScaled = BigInt(Math.floor(startPercent * 1e6));
@@ -11456,9 +11477,62 @@ function startWorkers(){
 
           let currentKey = (mode==="incremental") ? rangeStart : BigInt(workerId);
           let scannedInRange = 0n;
-          let batchSize = 500;
+          let batchSize = 300;
+          // beste prefix per target (init 0)
+          let bestPrefixes = new Array(targets.length).fill(0);
+          // local search state (per worker we only handle één lokale zoom tegelijk)
+          let localMode = false;
+          let localCenter = 0n;
+          let localOffset = 0n;
+          let localStepsDone = 0;
+          let localTargetIndex = -1;
+
+          function computeAddressFromK(k){
+            const privHex = k.toString(16).padStart(64,'0');
+            const kp = ec.keyFromPrivate(privHex,"hex");
+            const pubU = toHex(kp.getPublic(false,'array'));
+            const ripemdU = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
+            const payloadU = '00' + ripemdU;
+            const checksumU = doubleSha256Hex(payloadU).slice(0,8);
+            const addressU = base58Encode(payloadU + checksumU);
+            const wifU = base58Encode('80' + privHex + doubleSha256Hex('80' + privHex).slice(0,8));
+            return {address: addressU, wif: wifU};
+          }
 
           function generateBatch(){
+            // lokale zoomfase
+            if(localMode){
+              if(localStepsDone >= localLimit){
+                localMode = false;
+                localStepsDone = 0;
+                localTargetIndex = -1;
+              } else {
+                let k = localCenter + localOffset;
+                if(k < rangeStart) k = ((k - rangeStart) % rangeSize + rangeSize) % rangeSize + rangeStart;
+                if(k >= rangeEnd) k = rangeStart + ((k - rangeStart) % rangeSize + rangeSize) % rangeSize;
+
+                const {address,wif} = computeAddressFromK(k);
+                // check all targets (we zoomed vanwege één target, maar blijf checken alle targets)
+                for(let t of targets){
+                  if(address === t){
+                    postMessage({found:true, address:address, wif:wif});
+                    return;
+                  }
+                }
+
+                // spiral offset update
+                if(localOffset === 0n) localOffset = 1n;
+                else if(localOffset > 0n) localOffset = -localOffset;
+                else localOffset = -localOffset + 1n;
+
+                localStepsDone++;
+                postMessage({found:false, batchSize:1, currentKey:k.toString(), rangeStart:rangeStart.toString(), rangeSize:rangeSize.toString(), scannedInRange:scannedInRange.toString(), bestPrefixes: bestPrefixes, zooming:true, zoomTarget: localTargetIndex});
+                setTimeout(generateBatch, 0);
+                return;
+              }
+            }
+
+            // normale batch
             const batch = [];
             for(let i=0;i<batchSize;i++){
               let k;
@@ -11476,20 +11550,37 @@ function startWorkers(){
                 if(currentKey >= rangeEnd) currentKey = rangeStart;
               }
 
-              const privHex = k.toString(16).padStart(64,'0');
-              const kp = ec.keyFromPrivate(privHex,"hex");
-              const pubU = toHex(kp.getPublic(false,'array'));
-              const ripemdU = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
-              const payloadU = '00' + ripemdU;
-              const checksumU = doubleSha256Hex(payloadU).slice(0,8);
-              const addressU = base58Encode(payloadU + checksumU);
-              const wifU = base58Encode('80' + privHex + doubleSha256Hex('80' + privHex).slice(0,8));
+              const {address,wif} = computeAddressFromK(k);
 
-              if(targets.has(addressU)){
-                postMessage({found:true, address:addressU, wif:wifU});
-                return; // stoppen bij target
+              // exact match check
+              let exact = false;
+              for(let t of targets){
+                if(address === t){
+                  postMessage({found:true, address:address, wif:wif});
+                  return;
+                }
               }
-              batch.push(1); // alleen voor telling
+
+              // prefix check: compare met elk target en update bestPrefixes
+              for(let ti=0; ti<targets.length; ti++){
+                const prefixLen = commonPrefixLen(address, targets[ti]);
+                if(prefixLen > bestPrefixes[ti]){
+                  bestPrefixes[ti] = prefixLen;
+                  // trigger lokale zoom als drempel gehaald
+                  if(prefixLen >= smartPrefixThreshold){
+                    localMode = true;
+                    localCenter = k;
+                    localOffset = 0n;
+                    localStepsDone = 0;
+                    localTargetIndex = ti;
+                    postMessage({found:false, batchSize: i+1, currentKey: k.toString(), rangeStart: rangeStart.toString(), rangeSize: rangeSize.toString(), scannedInRange: scannedInRange.toString(), bestPrefixes: bestPrefixes, zoom:true, zoomTarget: ti});
+                    setTimeout(generateBatch, 0);
+                    return;
+                  }
+                }
+              }
+
+              batch.push(1);
             }
 
             postMessage({
@@ -11498,7 +11589,8 @@ function startWorkers(){
                 currentKey: currentKey.toString(),
                 rangeStart: rangeStart.toString(),
                 rangeSize: rangeSize.toString(),
-                scannedInRange: scannedInRange.toString()
+                scannedInRange: scannedInRange.toString(),
+                bestPrefixes: bestPrefixes
             });
 
             setTimeout(generateBatch, 0);
@@ -11544,6 +11636,22 @@ function startWorkers(){
                 document.getElementById("progressAbsBar").style.width = absPct + "%";
                 document.getElementById("progressRelBar").style.width = relPct + "%";
 
+                // Toon beste prefix informatie (alle targets) indien aanwezig
+                if(Array.isArray(data.bestPrefixes)){
+                  // vind index met maximale prefix
+                  let bestIdx = -1;
+                  let bestLen = -1;
+                  for(let i=0;i<data.bestPrefixes.length;i++){
+                    const v = Number(data.bestPrefixes[i] || 0);
+                    if(v > bestLen){ bestLen = v; bestIdx = i; }
+                  }
+                  if(bestIdx >= 0 && bestLen > 0){
+                    const targetAddr = TARGET_ADDRESSES[bestIdx] || "(unknown)";
+                    const zoomText = (data.zoom ? " → inzoomen op target index " + data.zoomTarget : "");
+                    document.getElementById("foundMsg").textContent = `Beste prefix match: target #${bestIdx} (${targetAddr}) — prefix-lengte: ${bestLen}` + zoomText;
+                  }
+                }
+
             } catch(err){
                 console.error(err);
                 document.getElementById("errors").textContent = "Aantal errors: 1";
@@ -11555,7 +11663,17 @@ function startWorkers(){
             document.getElementById("errors").textContent = "Aantal errors: 1";
         };
 
-        worker.postMessage({mode,startPercent,endPercent,workerId:i,numWorkers,targetList:Array.from(TARGET_ADDRESSES)});
+        worker.postMessage({
+            mode,
+            startPercent,
+            endPercent,
+            workerId:i,
+            numWorkers,
+            targetList: TARGET_ADDRESSES,
+            smartPrefixThreshold,
+            localRadius,
+            localLimit
+        });
         workers.push(worker);
     }
 }
