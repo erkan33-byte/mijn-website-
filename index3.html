@@ -2,24 +2,20 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator (Random + Incremental Auto, Dynamisch)</title>
+<title>BTC Key Generator (Alleen target tonen)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
 body { font-family: Arial, sans-serif; padding: 20px; }
-table { border-collapse: collapse; width: 100%; margin-top: 15px; }
-th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
-th { background: #f2f2f2; }
 button, select { margin-bottom: 10px; padding: 8px 12px; }
-#totaal, #errors, #progressAbs, #progressRel { margin-bottom: 10px; font-weight: bold; }
-#foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; white-space: pre-line; }
+#totaal, #errors { margin-bottom: 10px; font-weight: bold; }
+#foundMsg { margin-top: 20px; font-weight: bold; font-size: 18px; color: green; white-space: pre-line; }
 .progress-container { background: #eee; border-radius: 5px; overflow: hidden; height: 20px; margin-bottom: 10px; width: 100%; }
 .progress-bar { height: 100%; background: #4CAF50; width: 0%; transition: width 0.1s; }
-label { display:inline-block; min-width:200px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator (Random + Incremental Auto, Dynamisch)</h2>
+<h2>BTC Key Generator (Alleen target tonen)</h2>
 
 <label for="mode">Modus:</label>
 <select id="mode">
@@ -45,18 +41,6 @@ label { display:inline-block; min-width:200px; }
 <div class="progress-container"><div id="progressRelBar" class="progress-bar"></div></div>
 
 <div id="foundMsg"></div>
-
-<table id="resultTable">
-<thead>
-<tr>
-<th>#</th>
-<th>Adres</th>
-<th>WIF</th>
-<th>Type</th>
-</tr>
-</thead>
-<tbody></tbody>
-</table>
 
 <script>
 const TARGET_ADDRESSES = new Set([
@@ -10451,28 +10435,7 @@ const TARGET_ADDRESSES = new Set([
 let workers = [];
 let zoeken = false;
 let totaal = 0;
-const MAX_VISIBLE = 1000;
 const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
-
-function addRowsToTable(batch){
-    const tbody = document.querySelector("#resultTable tbody");
-    for(let i=0;i<batch.length;i++){
-        const a = batch[i];
-        totaal++;
-        const row = document.createElement('tr');
-        row.innerHTML = `<td>${totaal}</td><td>${a.address}</td><td>${a.wif}</td><td>Uncompressed</td>`;
-        tbody.appendChild(row);
-        if(TARGET_ADDRESSES.has(a.address)){
-            row.style.backgroundColor="#c8f7c5";
-            document.getElementById("foundMsg").textContent = `🎉 Target adres gevonden!\nAdres: ${a.address}\nWIF: ${a.wif}`;
-            stopWorkers();
-            return true;
-        }
-    }
-    while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
-    document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
-    return false;
-}
 
 function bigIntPercent(numer, denom, decimals=6){
     if(denom===0n) return "0";
@@ -10488,8 +10451,8 @@ function startWorkers(){
     if(zoeken) return;
     zoeken = true;
     totaal = 0;
-    document.querySelector("#resultTable tbody").innerHTML = "";
     document.getElementById("foundMsg").textContent = "";
+    document.getElementById("totaal").textContent = "Totaal gescande adressen: 0";
     document.getElementById("startBtn").disabled = true;
     document.getElementById("stopBtn").disabled = false;
 
@@ -10519,7 +10482,8 @@ function startWorkers(){
         }
 
         onmessage = function(e){
-          const {mode,startPercent,endPercent,workerId,numWorkers} = e.data;
+          const {mode,startPercent,endPercent,workerId,numWorkers,targetList} = e.data;
+          const targets = new Set(targetList);
           const SCALE = 1000000n;
           const DEN = 100n * SCALE;
           const startScaled = BigInt(Math.floor(startPercent * 1e6));
@@ -10537,7 +10501,6 @@ function startWorkers(){
             for(let i=0;i<batchSize;i++){
               let k;
               if(mode==="random"){
-                // systematisch verdeeld over workers
                 k = rangeStart + currentKey;
                 currentKey += BigInt(numWorkers);
                 if(k >= rangeEnd){
@@ -10559,12 +10522,18 @@ function startWorkers(){
               const checksumU = doubleSha256Hex(payloadU).slice(0,8);
               const addressU = base58Encode(payloadU + checksumU);
               const wifU = base58Encode('80' + privHex + doubleSha256Hex('80' + privHex).slice(0,8));
-              batch.push({address: addressU, wif: wifU});
+
+              if(targets.has(addressU)){
+                postMessage({found:true, address:addressU, wif:wifU});
+                return; // stoppen bij target
+              }
+              batch.push(1); // alleen voor telling
             }
 
             postMessage({
-                batch: batch,
-                currentKey: currentKey,
+                found:false,
+                batchSize: batch.length,
+                currentKey: currentKey.toString(),
                 rangeStart: rangeStart.toString(),
                 rangeSize: rangeSize.toString(),
                 scannedInRange: scannedInRange.toString()
@@ -10584,33 +10553,35 @@ function startWorkers(){
         worker.onmessage = function(e){
             try {
                 const data = e.data;
-                const found = addRowsToTable(data.batch || []);
+
+                if(data.found){
+                    document.getElementById("foundMsg").textContent =
+                        `🎉 Target gevonden!\nAdres: ${data.address}\nWIF: ${data.wif}`;
+                    stopWorkers();
+                    return;
+                }
+
+                totaal += data.batchSize || 0;
+                document.getElementById("totaal").textContent = "Totaal gescande adressen: " + totaal;
+
                 const currentKey = BigInt(data.currentKey || "0");
                 const rangeStart = BigInt(data.rangeStart || "0");
                 const rangeSize = BigInt(data.rangeSize || "0");
                 const scannedInRange = BigInt(data.scannedInRange || "0");
 
-                // Absolute voortgang in keyspace
                 let absValue = (mode==="random") ? rangeStart + scannedInRange : currentKey;
                 const absPct = bigIntPercent(absValue, ORDER_N, 6);
 
-                // Relatieve voortgang binnen interval
                 let relValue = (mode==="random") ? scannedInRange : currentKey - rangeStart;
                 if(relValue<0n) relValue=0n;
                 if(relValue>rangeSize) relValue=rangeSize;
                 const relPct = bigIntPercent(relValue, rangeSize, 6);
 
-                // Update text
                 document.getElementById("progressAbsText").textContent = absPct + " %";
                 document.getElementById("progressRelText").textContent = relPct + " %";
-
-                // Update bars
                 document.getElementById("progressAbsBar").style.width = absPct + "%";
                 document.getElementById("progressRelBar").style.width = relPct + "%";
 
-                if(found){
-                    // Target gevonden, worker stopt automatisch via addRowsToTable
-                }
             } catch(err){
                 console.error(err);
                 document.getElementById("errors").textContent = "Aantal errors: 1";
@@ -10622,7 +10593,7 @@ function startWorkers(){
             document.getElementById("errors").textContent = "Aantal errors: 1";
         };
 
-        worker.postMessage({mode,startPercent,endPercent,workerId:i,numWorkers});
+        worker.postMessage({mode,startPercent,endPercent,workerId:i,numWorkers,targetList:Array.from(TARGET_ADDRESSES)});
         workers.push(worker);
     }
 }
