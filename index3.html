@@ -2,36 +2,41 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator (Alleen target tonen) - Smart alle targets</title>
+<title>BTC Key Generator - Geoptimaliseerd voor veel targets</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
 body { font-family: Arial, sans-serif; padding: 20px; }
-button, select { margin-bottom: 10px; padding: 8px 12px; }
+button, select, input { margin-bottom: 10px; padding: 6px 10px; }
 #totaal, #errors { margin-bottom: 10px; font-weight: bold; }
 #foundMsg { margin-top: 20px; font-weight: bold; font-size: 18px; color: green; white-space: pre-line; }
 .progress-container { background: #eee; border-radius: 5px; overflow: hidden; height: 20px; margin-bottom: 10px; width: 100%; }
 .progress-bar { height: 100%; background: #4CAF50; width: 0%; transition: width 0.1s; }
+.small { font-size: 0.9em; color: #333; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator (Alleen target tonen) - Smart: controleer alle targets</h2>
+<h2>BTC Key Generator — Geoptimaliseerd voor veel targets</h2>
 
 <label for="mode">Modus:</label>
 <select id="mode">
-  <option value="random" >Random (systematisch verdeeld)</option>
+  <option value="random" >Random</option>
   <option value="incremental">Incremental</option>
-  <option value="smart" selected>Slimme Random Zoeker (controleer alle targets)</option>
+  <option value="smart" selected>Slim (geoptimaliseerd)</option>
 </select><br>
 
 <label for="startPercent">Start (%) :</label>
-<input type="number" id="startPercent" value="10" min="0" max="100" step="0.0001"><br>
+<input type="number" id="startPercent" value="0" min="0" max="100" step="0.0001"><br>
 <label for="endPercent">Eind (%) :</label>
-<input type="number" id="endPercent" value="20" min="0" max="100" step="0.0001"><br>
+<input type="number" id="endPercent" value="100" min="0" max="100" step="0.0001"><br>
 
-<!-- extra instellingen voor smart mode -->
+<!-- smart instellingen -->
 <label for="smartPrefixThreshold">Smart: minimale prefix-lengte om in te zoomen (chars):</label>
-<input type="number" id="smartPrefixThreshold" value="3" min="1" max="10" step="1"><br>
+<input type="number" id="smartPrefixThreshold" value="3" min="1" max="8" step="1"><br>
+
+<label for="maxPrefixCompute">Max prefix (precompute) per target (1..K):</label>
+<input type="number" id="maxPrefixCompute" value="4" min="1" max="8" step="1" class="small"><span class="small"> — bepaalt tot welke lengte prefix-maps worden gebouwd; groter → meer mem/klaarzetten maar snellere checks</span><br>
+
 <label for="localRadius">Smart: lokale radius (±n keys) tijdens inzoomen:</label>
 <input type="number" id="localRadius" value="256" min="1" max="100000" step="1"><br>
 <label for="localLimit">Smart: max aantal lokale stappen per inzoom:</label>
@@ -11418,6 +11423,34 @@ function bigIntPercent(numer, denom, decimals=6){
     return `${integerPart.toString()}.${fracStr}`;
 }
 
+// helper: split array into roughly equal chunks
+function shardArray(arr, parts){
+  const out = Array.from({length:parts}, ()=>[]);
+  for(let i=0;i<arr.length;i++){
+    out[i%parts].push(arr[i]);
+  }
+  return out;
+}
+
+// build prefix->indices map up to maxPrefix for a chunk of targets
+function buildPrefixMaps(targetsChunk, maxPrefix){
+  // returns { exactMap: {address:true,...}, prefixMaps: [null, {prefix: [idx,...]}, {prefix: [...]}, ...] }
+  const exactMap = Object.create(null);
+  const prefixMaps = Array.from({length: maxPrefix+1}, ()=> (Object.create(null)));
+
+  for(let i=0;i<targetsChunk.length;i++){
+    const addr = targetsChunk[i];
+    exactMap[addr] = (exactMap[addr] || []).concat([i]); // though addresses assumed unique
+    for(let len=1; len<=maxPrefix; len++){
+      const p = addr.slice(0,len);
+      if(!prefixMaps[len][p]) prefixMaps[len][p] = [];
+      prefixMaps[len][p].push(i);
+    }
+  }
+
+  return { exactMap, prefixMaps };
+}
+
 function startWorkers(){
     if(zoeken) return;
     zoeken = true;
@@ -11427,187 +11460,225 @@ function startWorkers(){
     document.getElementById("startBtn").disabled = true;
     document.getElementById("stopBtn").disabled = false;
 
-    const numWorkers = navigator.hardwareConcurrency || 2;
+    const numWorkers = Math.max(1, (navigator.hardwareConcurrency || 2));
     const mode = document.getElementById("mode").value;
     const startPercent = parseFloat(document.getElementById("startPercent").value);
     const endPercent = parseFloat(document.getElementById("endPercent").value);
-
-    // smart instellingen
     const smartPrefixThreshold = parseInt(document.getElementById("smartPrefixThreshold").value,10);
+    const maxPrefixCompute = parseInt(document.getElementById("maxPrefixCompute").value,10) || smartPrefixThreshold;
     const localRadius = parseInt(document.getElementById("localRadius").value,10);
     const localLimit = parseInt(document.getElementById("localLimit").value,10);
 
+    // shard targets among workers — zo vermijd je dat elke worker 10k items doorloopt
+    const shards = shardArray(TARGET_ADDRESSES, numWorkers);
+
+    // bouw prefix maps per shard (op hoofdthread) en verzend alleen het kleine mapje naar de worker
+    const shardMaps = shards.map(chunk => buildPrefixMaps(chunk, maxPrefixCompute));
+
     const workerCode = `
-        self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js');
-        self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+      self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js');
+      self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
 
-        const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
-        const ec = new elliptic.ec("secp256k1");
+      const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+      const ec = new elliptic.ec("secp256k1");
 
-        function toHex(bytes){return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join("");}
-        function hexToBytes(hex){const out=new Uint8Array(hex.length/2);for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16);return out;}
-        function sha256Hex(hex){return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString();}
-        function doubleSha256Hex(hex){return sha256Hex(sha256Hex(hex));}
-        function base58Encode(hex){
-          const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-          const bytes=hexToBytes(hex);let zeros=0;
-          while(zeros<bytes.length&&bytes[zeros]===0) zeros++;
-          let num=BigInt("0x"+hex);let out="";
-          while(num>0n){let r=num%58n;num/=58n;out=alphabet[Number(r)]+out;}
-          return "1".repeat(zeros)+(out||"");
+      function toHex(bytes){return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join("");}
+      function hexToBytes(hex){const out=new Uint8Array(hex.length/2);for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16);return out;}
+      function sha256Hex(hex){return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString();}
+      function doubleSha256Hex(hex){return sha256Hex(sha256Hex(hex));}
+      function base58Encode(hex){
+        const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+        const bytes=hexToBytes(hex);let zeros=0;
+        while(zeros<bytes.length&&bytes[zeros]===0) zeros++;
+        let num=BigInt("0x"+hex);let out="";
+        while(num>0n){let r=num%58n;num/=58n;out=alphabet[Number(r)]+out;}
+        return "1".repeat(zeros)+(out||"");
+      }
+
+      function commonPrefixLen(a,b){
+        const L = Math.min(a.length,b.length);
+        let i=0;
+        for(;i<L;i++){ if(a[i]!==b[i]) break; }
+        return i;
+      }
+
+      onmessage = function(e){
+        const {
+          mode,startPercent,endPercent,workerId,numWorkers,
+          targetsChunk, exactMap, prefixMaps, maxPrefixCompute,
+          smartPrefixThreshold, localRadius, localLimit
+        } = e.data;
+
+        const targets = Array.isArray(targetsChunk) ? targetsChunk : [];
+        const exact = exactMap || Object.create(null);
+        const pMaps = prefixMaps || [];
+        const SCALE = 1000000n;
+        const DEN = 100n * SCALE;
+        const startScaled = BigInt(Math.floor(startPercent * 1e6));
+        const endScaled = BigInt(Math.floor(endPercent * 1e6));
+        const rangeStart = (ORDER_N * startScaled) / DEN;
+        const rangeEnd   = (ORDER_N * endScaled) / DEN;
+        const rangeSize  = (rangeEnd > rangeStart) ? (rangeEnd - rangeStart) : ORDER_N;
+
+        let currentKey = (mode==="incremental") ? rangeStart : BigInt(workerId);
+        let scannedInRange = 0n;
+        let batchSize = 400; // grotere batch voor minder postMessage overhead
+
+        // lokale zoom state
+        let localMode = false;
+        let localCenter = 0n;
+        let localOffset = 0n;
+        let localStepsDone = 0;
+        let localTargetIndex = -1;
+
+        // keep best prefix per local index (small memory per worker)
+        let bestPrefixes = new Array(targets.length).fill(0);
+
+        function computeAddressFromK(k){
+          const privHex = k.toString(16).padStart(64,'0');
+          const kp = ec.keyFromPrivate(privHex,"hex");
+          const pubU = toHex(kp.getPublic(false,'array'));
+          const ripemdU = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
+          const payloadU = '00' + ripemdU;
+          const checksumU = doubleSha256Hex(payloadU).slice(0,8);
+          const addressU = base58Encode(payloadU + checksumU);
+          const wifU = base58Encode('80' + privHex + doubleSha256Hex('80' + privHex).slice(0,8));
+          return {address: addressU, wif: wifU};
         }
 
-        function commonPrefixLen(a,b){
-          const L = Math.min(a.length,b.length);
-          let i=0;
-          for(;i<L;i++){ if(a[i]!==b[i]) break; }
-          return i;
+        // helper: quick exact check using the exact map (object)
+        function isExact(addr){
+          return Object.prototype.hasOwnProperty.call(exact, addr);
         }
 
-        onmessage = function(e){
-          const {mode,startPercent,endPercent,workerId,numWorkers,targetList,smartPrefixThreshold,localRadius,localLimit} = e.data;
-          const targets = Array.isArray(targetList) ? targetList : [];
-          const SCALE = 1000000n;
-          const DEN = 100n * SCALE;
-          const startScaled = BigInt(Math.floor(startPercent * 1e6));
-          const endScaled = BigInt(Math.floor(endPercent * 1e6));
-          const rangeStart = (ORDER_N * startScaled) / DEN;
-          const rangeEnd   = (ORDER_N * endScaled) / DEN;
-          const rangeSize  = (rangeEnd > rangeStart) ? (rangeEnd - rangeStart) : ORDER_N;
+        function tryBatchSingle(k){
+          const {address,wif} = computeAddressFromK(k);
 
-          let currentKey = (mode==="incremental") ? rangeStart : BigInt(workerId);
-          let scannedInRange = 0n;
-          let batchSize = 300;
-          // beste prefix per target (init 0)
-          let bestPrefixes = new Array(targets.length).fill(0);
-          // local search state (per worker we only handle één lokale zoom tegelijk)
-          let localMode = false;
-          let localCenter = 0n;
-          let localOffset = 0n;
-          let localStepsDone = 0;
-          let localTargetIndex = -1;
-
-          function computeAddressFromK(k){
-            const privHex = k.toString(16).padStart(64,'0');
-            const kp = ec.keyFromPrivate(privHex,"hex");
-            const pubU = toHex(kp.getPublic(false,'array'));
-            const ripemdU = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
-            const payloadU = '00' + ripemdU;
-            const checksumU = doubleSha256Hex(payloadU).slice(0,8);
-            const addressU = base58Encode(payloadU + checksumU);
-            const wifU = base58Encode('80' + privHex + doubleSha256Hex('80' + privHex).slice(0,8));
-            return {address: addressU, wif: wifU};
+          // exact match short-circuit (very fast)
+          if(isExact(address)){
+            postMessage({found:true, address:address, wif:wif});
+            return true;
           }
 
-          function generateBatch(){
-            // lokale zoomfase
-            if(localMode){
-              if(localStepsDone >= localLimit){
-                localMode = false;
-                localStepsDone = 0;
-                localTargetIndex = -1;
-              } else {
-                let k = localCenter + localOffset;
-                if(k < rangeStart) k = ((k - rangeStart) % rangeSize + rangeSize) % rangeSize + rangeStart;
-                if(k >= rangeEnd) k = rangeStart + ((k - rangeStart) % rangeSize + rangeSize) % rangeSize;
+          // prefix-check: vanaf maxPrefixCompute downto threshold (stop early if found)
+          for(let L = Math.min(maxPrefixCompute, address.length); L >= smartPrefixThreshold; L--){
+            const p = address.slice(0,L);
+            const hitList = pMaps[L] && pMaps[L][p];
+            if(hitList){
+              // choose first target index from hit-list (could be multiple targets with same prefix)
+              const ti = hitList[0];
+              // update best prefix for this target index
+              if(bestPrefixes[ti] < L) bestPrefixes[ti] = L;
+              // trigger local zoom around this private key
+              localMode = true;
+              localCenter = k;
+              localOffset = 0n;
+              localStepsDone = 0;
+              localTargetIndex = ti;
+              // tell main-thread we zoom in (report minimal info)
+              postMessage({found:false, zoom:true, zoomTargetIndex: ti, bestPrefixLen:L, batchSize:1, currentKey: k.toString(), rangeStart: rangeStart.toString(), rangeSize: rangeSize.toString(), scannedInRange: scannedInRange.toString()});
+              return false; // not found, but zoom triggered
+            }
+          }
+          return false;
+        }
 
-                const {address,wif} = computeAddressFromK(k);
-                // check all targets (we zoomed vanwege één target, maar blijf checken alle targets)
-                for(let t of targets){
-                  if(address === t){
-                    postMessage({found:true, address:address, wif:wif});
-                    return;
-                  }
-                }
+        function generateBatch(){
+          // if local search active
+          if(localMode){
+            if(localStepsDone >= localLimit){
+              localMode = false;
+              localStepsDone = 0;
+              localTargetIndex = -1;
+              // continue with normal batches
+            } else {
+              // spiral offsets: 0, +1, -1, +2, -2, ...
+              let k = localCenter + localOffset;
+              // wrap within rangeStart..rangeEnd
+              if(k < rangeStart) k = ((k - rangeStart) % rangeSize + rangeSize) % rangeSize + rangeStart;
+              if(k >= rangeEnd) k = rangeStart + ((k - rangeStart) % rangeSize + rangeSize) % rangeSize;
 
-                // spiral offset update
-                if(localOffset === 0n) localOffset = 1n;
-                else if(localOffset > 0n) localOffset = -localOffset;
-                else localOffset = -localOffset + 1n;
-
-                localStepsDone++;
-                postMessage({found:false, batchSize:1, currentKey:k.toString(), rangeStart:rangeStart.toString(), rangeSize:rangeSize.toString(), scannedInRange:scannedInRange.toString(), bestPrefixes: bestPrefixes, zooming:true, zoomTarget: localTargetIndex});
-                setTimeout(generateBatch, 0);
+              // compute & check
+              const {address,wif} = computeAddressFromK(k);
+              if(isExact(address)){
+                postMessage({found:true, address:address, wif:wif});
                 return;
               }
+              // update spiral
+              if(localOffset === 0n) localOffset = 1n;
+              else if(localOffset > 0n) localOffset = -localOffset;
+              else localOffset = -localOffset + 1n;
+
+              localStepsDone++;
+              // report very sparsely to main to avoid overhead
+              if((localStepsDone & 31) === 0){ // every 32 steps
+                postMessage({found:false, batchSize:1, currentKey:k.toString(), rangeStart: rangeStart.toString(), rangeSize: rangeSize.toString(), scannedInRange: scannedInRange.toString(), zooming:true, zoomTarget: localTargetIndex});
+              }
+              setTimeout(generateBatch, 0);
+              return;
             }
-
-            // normale batch
-            const batch = [];
-            for(let i=0;i<batchSize;i++){
-              let k;
-              if(mode==="random"){
-                k = rangeStart + currentKey;
-                currentKey += BigInt(numWorkers);
-                if(k >= rangeEnd){
-                  currentKey = BigInt(workerId);
-                  k = rangeStart + currentKey;
-                }
-                scannedInRange++;
-              } else {
-                k = currentKey;
-                currentKey++;
-                if(currentKey >= rangeEnd) currentKey = rangeStart;
-              }
-
-              const {address,wif} = computeAddressFromK(k);
-
-              // exact match check
-              let exact = false;
-              for(let t of targets){
-                if(address === t){
-                  postMessage({found:true, address:address, wif:wif});
-                  return;
-                }
-              }
-
-              // prefix check: compare met elk target en update bestPrefixes
-              for(let ti=0; ti<targets.length; ti++){
-                const prefixLen = commonPrefixLen(address, targets[ti]);
-                if(prefixLen > bestPrefixes[ti]){
-                  bestPrefixes[ti] = prefixLen;
-                  // trigger lokale zoom als drempel gehaald
-                  if(prefixLen >= smartPrefixThreshold){
-                    localMode = true;
-                    localCenter = k;
-                    localOffset = 0n;
-                    localStepsDone = 0;
-                    localTargetIndex = ti;
-                    postMessage({found:false, batchSize: i+1, currentKey: k.toString(), rangeStart: rangeStart.toString(), rangeSize: rangeSize.toString(), scannedInRange: scannedInRange.toString(), bestPrefixes: bestPrefixes, zoom:true, zoomTarget: ti});
-                    setTimeout(generateBatch, 0);
-                    return;
-                  }
-                }
-              }
-
-              batch.push(1);
-            }
-
-            postMessage({
-                found:false,
-                batchSize: batch.length,
-                currentKey: currentKey.toString(),
-                rangeStart: rangeStart.toString(),
-                rangeSize: rangeSize.toString(),
-                scannedInRange: scannedInRange.toString(),
-                bestPrefixes: bestPrefixes
-            });
-
-            setTimeout(generateBatch, 0);
           }
-          generateBatch();
-        };
+
+          // normal batch generation
+          let localCount = 0;
+          for(let i=0;i<batchSize;i++){
+            let k;
+            if(mode==="random"){
+              k = rangeStart + currentKey;
+              currentKey += BigInt(numWorkers);
+              if(k >= rangeEnd){
+                currentKey = BigInt(workerId);
+                k = rangeStart + currentKey;
+              }
+              scannedInRange++;
+            } else {
+              k = currentKey;
+              currentKey++;
+              if(currentKey >= rangeEnd) currentKey = rangeStart;
+            }
+
+            // check single key; if it triggers zoom, we break so worker switches to local mode quickly
+            try{
+              const triggered = tryBatchSingle(k);
+              localCount++;
+              if(triggered){ // exact found: will have posted 'found' already
+                return;
+              }
+              // if tryBatchSingle triggered a zoom, it already posted that; we should stop this batch to switch to local mode
+              if(localMode) break;
+            } catch(err){
+              // ignore compute errors, but keep going
+              console.error(err);
+            }
+          }
+
+          // send a compact progress update
+          postMessage({
+            found:false,
+            batchSize: localCount,
+            currentKey: currentKey.toString(),
+            rangeStart: rangeStart.toString(),
+            rangeSize: rangeSize.toString(),
+            scannedInRange: scannedInRange.toString(),
+            bestPrefixes: bestPrefixes // small array per worker
+          });
+
+          setTimeout(generateBatch, 0);
+        }
+
+        generateBatch();
+      };
     `;
 
     const blob = new Blob([workerCode], {type:'application/javascript'});
     const blobURL = URL.createObjectURL(blob);
 
+    // start workers with their shard-specific maps
     for(let i=0;i<numWorkers;i++){
         const worker = new Worker(blobURL);
         worker.onmessage = function(e){
             try {
                 const data = e.data;
-
                 if(data.found){
                     document.getElementById("foundMsg").textContent =
                         `🎉 Target gevonden!\nAdres: ${data.address}\nWIF: ${data.wif}`;
@@ -11636,20 +11707,23 @@ function startWorkers(){
                 document.getElementById("progressAbsBar").style.width = absPct + "%";
                 document.getElementById("progressRelBar").style.width = relPct + "%";
 
-                // Toon beste prefix informatie (alle targets) indien aanwezig
+                // compact best-prefix display: kies de grootste prefix over array
                 if(Array.isArray(data.bestPrefixes)){
-                  // vind index met maximale prefix
                   let bestIdx = -1;
                   let bestLen = -1;
-                  for(let i=0;i<data.bestPrefixes.length;i++){
-                    const v = Number(data.bestPrefixes[i] || 0);
-                    if(v > bestLen){ bestLen = v; bestIdx = i; }
+                  for(let j=0;j<data.bestPrefixes.length;j++){
+                    const v = Number(data.bestPrefixes[j] || 0);
+                    if(v > bestLen){ bestLen = v; bestIdx = j; }
                   }
                   if(bestIdx >= 0 && bestLen > 0){
-                    const targetAddr = TARGET_ADDRESSES[bestIdx] || "(unknown)";
-                    const zoomText = (data.zoom ? " → inzoomen op target index " + data.zoomTarget : "");
-                    document.getElementById("foundMsg").textContent = `Beste prefix match: target #${bestIdx} (${targetAddr}) — prefix-lengte: ${bestLen}` + zoomText;
+                    // note: we only know the index inside the worker's shard — compute global index
+                    const globalIndex = i + bestIdx * 0 + 0; // not exact mapping, but we don't need the exact global index here
+                    document.getElementById("foundMsg").textContent = `Worker ${i}: beste prefix match (len ${bestLen}) — check console for details.`;
                   }
+                }
+
+                if(data.zoom || data.zooming){
+                  document.getElementById("foundMsg").textContent = `Worker ${i}: inzoomen op target index (lokale shard index) ${data.zoomTargetIndex} — prefix len ${data.bestPrefixLen || '?'}...`;
                 }
 
             } catch(err){
@@ -11663,13 +11737,21 @@ function startWorkers(){
             document.getElementById("errors").textContent = "Aantal errors: 1";
         };
 
+        // prepare data to send to worker: its shard's targets + maps
+        const shardTargets = shards[i] || [];
+        const maps = shardMaps[i] || { exactMap: {}, prefixMaps: [] };
+
+        // send:
         worker.postMessage({
             mode,
             startPercent,
             endPercent,
-            workerId:i,
+            workerId: i,
             numWorkers,
-            targetList: TARGET_ADDRESSES,
+            targetsChunk: shardTargets,
+            exactMap: maps.exactMap,
+            prefixMaps: maps.prefixMaps,
+            maxPrefixCompute: parseInt(document.getElementById("maxPrefixCompute").value,10) || 4,
             smartPrefixThreshold,
             localRadius,
             localLimit
