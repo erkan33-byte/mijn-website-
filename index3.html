@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator (Alleen target tonen)</title>
+<title>BTC Key Generator (Random Subset Targets)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
@@ -15,7 +15,7 @@ button, select { margin-bottom: 10px; padding: 8px 12px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator (Alleen target tonen)</h2>
+<h2>BTC Key Generator (Random Subset Targets)</h2>
 
 <label for="mode">Modus:</label>
 <select id="mode">
@@ -24,9 +24,9 @@ button, select { margin-bottom: 10px; padding: 8px 12px; }
 </select><br>
 
 <label for="startPercent">Start (%) :</label>
-<input type="number" id="startPercent" value="10" min="0" max="100" step="0.0001"><br>
+<input type="number" id="startPercent" value="0" min="0" max="100" step="0.0001"><br>
 <label for="endPercent">Eind (%) :</label>
-<input type="number" id="endPercent" value="20" min="0" max="100" step="0.0001"><br>
+<input type="number" id="endPercent" value="100" min="0" max="100" step="0.0001"><br>
 
 <button id="startBtn">Start automatisch zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
@@ -11394,6 +11394,17 @@ const TARGET_ADDRESSES = new Set([
   "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
 ]);
 
+// helper: willekeurige subset
+function getRandomSubset(size) {
+  const arr = Array.from(TARGET_ADDRESSES);
+  const result = [];
+  for (let i = 0; i < size; i++) {
+    const idx = Math.floor(Math.random() * arr.length);
+    result.push(arr[idx]);
+  }
+  return result;
+}
+
 let workers = [];
 let zoeken = false;
 let totaal = 0;
@@ -11443,9 +11454,20 @@ function startWorkers(){
           return "1".repeat(zeros)+(out||"");
         }
 
+        function computeAddressFromK(k){
+          const privHex = k.toString(16).padStart(64,'0');
+          const kp = ec.keyFromPrivate(privHex,"hex");
+          const pubU = toHex(kp.getPublic(false,'array'));
+          const ripemdU = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
+          const payloadU = '00' + ripemdU;
+          const checksumU = doubleSha256Hex(payloadU).slice(0,8);
+          const addressU = base58Encode(payloadU + checksumU);
+          const wifU = base58Encode('80' + privHex + doubleSha256Hex('80' + privHex).slice(0,8));
+          return {address: addressU, wif: wifU};
+        }
+
         onmessage = function(e){
           const {mode,startPercent,endPercent,workerId,numWorkers,targetList} = e.data;
-          const targets = new Set(targetList);
           const SCALE = 1000000n;
           const DEN = 100n * SCALE;
           const startScaled = BigInt(Math.floor(startPercent * 1e6));
@@ -11456,53 +11478,36 @@ function startWorkers(){
 
           let currentKey = (mode==="incremental") ? rangeStart : BigInt(workerId);
           let scannedInRange = 0n;
-          let batchSize = 500;
+          const batchSize = 200;
 
           function generateBatch(){
-            const batch = [];
             for(let i=0;i<batchSize;i++){
-              let k;
-              if(mode==="random"){
-                k = rangeStart + currentKey;
-                currentKey += BigInt(numWorkers);
-                if(k >= rangeEnd){
-                  currentKey = BigInt(workerId);
-                  k = rangeStart + currentKey;
+              let k = (mode==="random") ? rangeStart + currentKey : currentKey;
+              if(mode==="random"){ currentKey += BigInt(numWorkers); if(k>=rangeEnd) currentKey=BigInt(workerId); }
+              else { currentKey++; if(currentKey>=rangeEnd) currentKey=rangeStart; }
+              scannedInRange++;
+
+              // kies willekeurige subset van targets (bv. 50)
+              const subset = [];
+              for(let j=0;j<50;j++){
+                const idx = Math.floor(Math.random()*targetList.length);
+                subset.push(targetList[idx]);
+              }
+
+              const {address,wif} = computeAddressFromK(k);
+
+              for(const t of subset){
+                if(address === t){
+                  postMessage({found:true,address,address,wif});
+                  return;
                 }
-                scannedInRange++;
-              } else {
-                k = currentKey;
-                currentKey++;
-                if(currentKey >= rangeEnd) currentKey = rangeStart;
               }
-
-              const privHex = k.toString(16).padStart(64,'0');
-              const kp = ec.keyFromPrivate(privHex,"hex");
-              const pubU = toHex(kp.getPublic(false,'array'));
-              const ripemdU = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
-              const payloadU = '00' + ripemdU;
-              const checksumU = doubleSha256Hex(payloadU).slice(0,8);
-              const addressU = base58Encode(payloadU + checksumU);
-              const wifU = base58Encode('80' + privHex + doubleSha256Hex('80' + privHex).slice(0,8));
-
-              if(targets.has(addressU)){
-                postMessage({found:true, address:addressU, wif:wifU});
-                return; // stoppen bij target
-              }
-              batch.push(1); // alleen voor telling
             }
 
-            postMessage({
-                found:false,
-                batchSize: batch.length,
-                currentKey: currentKey.toString(),
-                rangeStart: rangeStart.toString(),
-                rangeSize: rangeSize.toString(),
-                scannedInRange: scannedInRange.toString()
-            });
-
-            setTimeout(generateBatch, 0);
+            postMessage({found:false,batchSize,scannedInRange:scannedInRange.toString(),currentKey:currentKey.toString()});
+            setTimeout(generateBatch,0);
           }
+
           generateBatch();
         };
     `;
@@ -11513,49 +11518,29 @@ function startWorkers(){
     for(let i=0;i<numWorkers;i++){
         const worker = new Worker(blobURL);
         worker.onmessage = function(e){
-            try {
-                const data = e.data;
-
-                if(data.found){
-                    document.getElementById("foundMsg").textContent =
-                        `🎉 Target gevonden!\nAdres: ${data.address}\nWIF: ${data.wif}`;
-                    stopWorkers();
-                    return;
-                }
-
-                totaal += data.batchSize || 0;
-                document.getElementById("totaal").textContent = "Totaal gescande adressen: " + totaal;
-
-                const currentKey = BigInt(data.currentKey || "0");
-                const rangeStart = BigInt(data.rangeStart || "0");
-                const rangeSize = BigInt(data.rangeSize || "0");
-                const scannedInRange = BigInt(data.scannedInRange || "0");
-
-                let absValue = (mode==="random") ? rangeStart + scannedInRange : currentKey;
-                const absPct = bigIntPercent(absValue, ORDER_N, 6);
-
-                let relValue = (mode==="random") ? scannedInRange : currentKey - rangeStart;
-                if(relValue<0n) relValue=0n;
-                if(relValue>rangeSize) relValue=rangeSize;
-                const relPct = bigIntPercent(relValue, rangeSize, 6);
-
-                document.getElementById("progressAbsText").textContent = absPct + " %";
-                document.getElementById("progressRelText").textContent = relPct + " %";
-                document.getElementById("progressAbsBar").style.width = absPct + "%";
-                document.getElementById("progressRelBar").style.width = relPct + "%";
-
-            } catch(err){
-                console.error(err);
-                document.getElementById("errors").textContent = "Aantal errors: 1";
+            const data = e.data;
+            if(data.found){
+                document.getElementById("foundMsg").textContent =
+                    `🎉 Target gevonden!\nAdres: ${data.address}\nWIF: ${data.wif}`;
+                stopWorkers();
+                return;
             }
+            totaal += data.batchSize || 0;
+            document.getElementById("totaal").textContent = "Totaal gescande adressen: " + totaal;
         };
-
         worker.onerror = function(ev){
             console.error(ev);
             document.getElementById("errors").textContent = "Aantal errors: 1";
         };
 
-        worker.postMessage({mode,startPercent,endPercent,workerId:i,numWorkers,targetList:Array.from(TARGET_ADDRESSES)});
+        worker.postMessage({
+            mode,
+            startPercent,
+            endPercent,
+            workerId:i,
+            numWorkers,
+            targetList:Array.from(TARGET_ADDRESSES)
+        });
         workers.push(worker);
     }
 }
