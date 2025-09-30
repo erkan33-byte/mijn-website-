@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator (Worker + Direct Stop)</title>
+<title>BTC Key Generator (Worker + Random/Incremental/Hybrid)</title>
 <style>
 body { font-family: Arial, sans-serif; padding: 20px; }
 table { border-collapse: collapse; width: 100%; margin-top: 15px; }
@@ -14,7 +14,7 @@ button, input, select { margin-bottom: 10px; padding: 6px 10px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator (met directe stop)</h2>
+<h2>BTC Key Generator (met Web Worker)</h2>
 
 <label for="mode">Modus:</label>
 <select id="mode">
@@ -60,7 +60,7 @@ button, input, select { margin-bottom: 10px; padding: 6px 10px; }
 </table>
 
 <script>
-// ===== Worker code =====
+// ===== Inline Worker Code =====
 const workerCode = `
 importScripts("https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js");
 importScripts("https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js");
@@ -113,24 +113,23 @@ function getProgressAbs(k){return ((Number(k)/Number(KEYSPACE_SIZE))*100).toFixe
 function getProgressRel(k){return ((Number(k)/Number(KEYSPACE_SIZE)*100 - cfg.startPercent)/(cfg.endPercent-cfg.startPercent)*100).toFixed(12)+" %";}
 
 onmessage = function(e){
-  if(e.data.type==="start"){
-    cfg=e.data.cfg;
-    searching=true;
+  if (e.data.type==="start"){
+    cfg = e.data.cfg;
+    searching = true;
 
-    // incremental/hybrid setup
-    if(cfg.mode==="incremental"||cfg.mode==="hybrid"){
-      const rangeStart=(KEYSPACE_SIZE * BigInt(Math.floor(cfg.startPercent*1e6)))/100000000n;
-      const rangeEnd=(KEYSPACE_SIZE * BigInt(Math.floor(cfg.endPercent*1e6)))/100000000n;
-      const rangeSize=rangeEnd-rangeStart;
-      stepSize=rangeSize/BigInt(cfg.numSteps);
-      currentKey=rangeStart;
+    if(cfg.mode==="incremental" || cfg.mode==="hybrid"){
+      const rangeStart = (KEYSPACE_SIZE * BigInt(Math.floor(cfg.startPercent * 1e6))) / 100000000n;
+      const rangeEnd   = (KEYSPACE_SIZE * BigInt(Math.floor(cfg.endPercent * 1e6))) / 100000000n;
+      const rangeSize  = rangeEnd - rangeStart;
+      stepSize         = rangeSize / BigInt(cfg.numSteps);
+      currentKey       = rangeStart;
     }
     if(cfg.mode==="hybrid"){
       incrementCount=0;
-      const stepPerActive=(KEYSPACE_SIZE * BigInt(Math.floor((cfg.endPercent-cfg.startPercent)*1e6))/100000000n)/BigInt(cfg.activeKeys);
-      const startRandomOffset=BigInt(Math.floor(Math.random()*Number(stepPerActive)));
-      currentKey=((KEYSPACE_SIZE * BigInt(Math.floor(cfg.startPercent*1e6)))/100000000n)+startRandomOffset;
-      expectedStep=stepPerActive;
+      const stepPerActive = (KEYSPACE_SIZE * BigInt(Math.floor((cfg.endPercent-cfg.startPercent)*1e6))/100000000n)/BigInt(cfg.activeKeys);
+      const startRandomOffset = BigInt(Math.floor(Math.random()*Number(stepPerActive)));
+      currentKey = ((KEYSPACE_SIZE * BigInt(Math.floor(cfg.startPercent*1e6)))/100000000n) + startRandomOffset;
+      expectedStep = stepPerActive;
     }
 
     loop();
@@ -139,46 +138,54 @@ onmessage = function(e){
 
 async function loop(){
   while(searching){
+    const privKeys=[];
     for(let i=0;i<cfg.batchSize;i++){
-      let privKey;
-      if(cfg.mode==="random") privKey=genRandomKeyInRange(cfg.startPercent,cfg.endPercent);
-      else if(cfg.mode==="incremental"){ privKey=currentKey; currentKey+=stepSize; }
+      if(cfg.mode==="random") privKeys.push(genRandomKeyInRange(cfg.startPercent,cfg.endPercent));
+      else if(cfg.mode==="incremental"){ privKeys.push(currentKey); currentKey+=stepSize; }
       else if(cfg.mode==="hybrid"){
-        privKey=currentKey;
-        currentKey+=1n;
-        incrementCount++;
+        privKeys.push(currentKey);
+        currentKey+=1n; incrementCount++;
         if(incrementCount>=cfg.jumpAfter){
-          const halfStep=expectedStep/2n;
-          const randOffset=BigInt(Math.floor(Math.random()*Number(expectedStep)))-halfStep;
-          currentKey=currentKey+expectedStep+randOffset;
-          const rangeEnd=(KEYSPACE_SIZE * BigInt(Math.floor(cfg.endPercent*1e6)))/100000000n;
-          const rangeStart=(KEYSPACE_SIZE * BigInt(Math.floor(cfg.startPercent*1e6)))/100000000n;
-          if(currentKey>rangeEnd) currentKey=rangeStart+(currentKey-rangeEnd);
+          const halfStep = expectedStep/2n;
+          const randOffset = BigInt(Math.floor(Math.random()*Number(expectedStep))) - halfStep;
+          currentKey = currentKey + expectedStep + randOffset;
+          const rangeEnd = (KEYSPACE_SIZE * BigInt(Math.floor(cfg.endPercent * 1e6))) / 100000000n;
+          const rangeStart = (KEYSPACE_SIZE * BigInt(Math.floor(cfg.startPercent * 1e6))) / 100000000n;
+          if(currentKey>rangeEnd) currentKey = rangeStart + (currentKey-rangeEnd);
           incrementCount=0;
         }
       }
-
-      const addrObj=makeAddress(privKey);
-      if(cfg.targets.includes(addrObj.address)){
-        addrObj.found=true;
-        postMessage({type:"batch",addresses:[addrObj],progressAbs:getProgressAbs(privKey),progressRel:getProgressRel(privKey),found:addrObj});
-        searching=false;
-        return; // stop direct
-      } else {
-        postMessage({type:"batch",addresses:[addrObj],progressAbs:getProgressAbs(privKey),progressRel:getProgressRel(privKey)});
-      }
     }
+
+    const addresses=[];
+    let found=null;
+    for(const k of privKeys){
+      const a=makeAddress(k);
+      if(cfg.targets.includes(a.address)){ found=a; a.found=true; }
+      addresses.push(a);
+    }
+
+    postMessage({
+      type:"batch",
+      addresses,
+      progressAbs:getProgressAbs(privKeys[0]),
+      progressRel:getProgressRel(privKeys[0]),
+      found
+    });
+
+    if(found){ searching=false; return; }
     await new Promise(r=>setTimeout(r,1000/cfg.batchRate));
   }
 }
 `;
 
-// ===== UI =====
+// ===== UI Logic =====
 let worker, totaal=0;
 const tbody=document.querySelector("#resultTable tbody");
-const MAX_VISIBLE=200;
+const MAX_VISIBLE=10000;
 
-const TARGET_ADDRESSES=new Set([
+// Zet hier je target adressen in:
+const TARGET_ADDRESSES = new Set([
   "19DM69H6SHkcBbYuvjWsKGaBV4ULEtraK4",
   "19DL5X7zczvNXchGrsFjctPHnjCCuVmNhn",
   "19DK4csYEAoRQASoMbjQsTxX2xksL8ekzj",
@@ -17221,6 +17228,28 @@ function startWorker(){
   const url=URL.createObjectURL(blob);
   worker=new Worker(url);
 
+  // worker berichten afvangen
+  worker.onmessage = function(e){
+    const msg=e.data;
+    if(msg.type==="batch"){
+      for(const a of msg.addresses){
+        totaal++;
+        const row=document.createElement("tr");
+        row.innerHTML=`<td>${totaal}</td><td>${a.address}</td><td>${a.wif}</td><td>${a.type}</td>`;
+        if(a.found) row.style.backgroundColor="#c8f7c5";
+        tbody.appendChild(row);
+      }
+      while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
+      document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
+      document.getElementById("progressAbs").textContent="Voortgang in keyspace: "+msg.progressAbs;
+      document.getElementById("progressRel").textContent="Voortgang in interval: "+msg.progressRel;
+      if(msg.found){
+        document.getElementById("foundMsg").textContent="🎉 Target gevonden: "+msg.found.address+" (WIF: "+msg.found.wif+")";
+        stopWorker();
+      }
+    }
+  };
+
   const cfg={
     mode: document.getElementById("mode").value,
     startPercent: parseFloat(document.getElementById("startPercent").value),
@@ -17248,29 +17277,6 @@ function stopWorker(){
 
 document.getElementById("startBtn").onclick=startWorker;
 document.getElementById("stopBtn").onclick=stopWorker;
-
-if(window.Worker){
-  window.addEventListener("message",e=>{
-    const msg=e.data;
-    if(msg.type==="batch"){
-      for(const a of msg.addresses){
-        totaal++;
-        const row=document.createElement("tr");
-        row.innerHTML=\`<td>\${totaal}</td><td>\${a.address}</td><td>\${a.wif}</td><td>\${a.type}</td>\`;
-        if(a.found) row.style.backgroundColor="#c8f7c5";
-        tbody.appendChild(row);
-      }
-      while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
-      document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
-      document.getElementById("progressAbs").textContent="Voortgang in keyspace: "+msg.progressAbs;
-      document.getElementById("progressRel").textContent="Voortgang in interval: "+msg.progressRel;
-      if(msg.found){
-        document.getElementById("foundMsg").textContent="🎉 Target gevonden: "+msg.found.address+" (WIF: "+msg.found.wif+")";
-        stopWorker();
-      }
-    }
-  });
-}
 </script>
 </body>
 </html>
