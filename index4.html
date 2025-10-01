@@ -43,8 +43,10 @@ label { display:inline-block; min-width:200px; }
 <input type="number" id="activeKeys" value="1000" min="1"><br>
 </div>
 
-<label for="batchSizeInput">Batch grootte (initial):</label>
+<label for="batchSizeInput">Batch grootte:</label>
 <input type="number" id="batchSizeInput" value="2" min="1"><br>
+<label for="batchRateInput">Batch rate (per sec):</label>
+<input type="number" id="batchRateInput" value="5" min="1"><br>
 
 <button id="startBtn">Start zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
@@ -68,7 +70,6 @@ label { display:inline-block; min-width:200px; }
 </thead>
 <tbody></tbody>
 </table>
-
 <script>
 // ===== Helpers =====
 function toHex(bytes){return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join("");}
@@ -105,7 +106,7 @@ function genRandomKeyInRange(startPercent, endPercent) {
 
 // ===== Variabelen =====
 let counter=0, totaal=0, zoeken=false, MAX_VISIBLE=250;
-let batchSize=2;
+let batchSize=2, batchRate=5;
 let startPercent=10, endPercent=20, mode="random";
 let stepSize=1, numSteps=1000000, currentKey=null;
 let incrementCount=0, expectedStep=0n, jumpAfter=1000, activeKeys=1000;
@@ -18201,7 +18202,6 @@ const TARGET_ADDRESSES = new Set([
 // ===== Progress =====
 function getProgressAbsolute(currentKey){ return (Number(currentKey)/Number(KEYSPACE_SIZE)*100).toFixed(30)+" %"; }
 function getProgressRelative(currentKey){ return (((Number(currentKey)/Number(KEYSPACE_SIZE)*100)-startPercent)/(endPercent-startPercent)*100).toFixed(30)+" %"; }
-
 // ===== Start / Stop =====
 async function starten(){
   if(zoeken) return;
@@ -18211,6 +18211,7 @@ async function starten(){
   mode         = document.getElementById("mode").value;
   numSteps     = parseInt(document.getElementById("numSteps").value);
   batchSize    = parseInt(document.getElementById("batchSizeInput").value);
+  batchRate    = parseInt(document.getElementById("batchRateInput").value);
 
   if(mode==="incremental" || mode==="hybrid"){
     const rangeStart = (KEYSPACE_SIZE * BigInt(Math.floor(startPercent * 1e6))) / 100000000n;
@@ -18234,18 +18235,15 @@ async function starten(){
   document.getElementById("startBtn").disabled=true;
   document.getElementById("stopBtn").disabled=false;
   document.getElementById("foundMsg").textContent="";
-  
-  if(mode==="hybrid") genereerHybridBatchAutoRate();
-  else genereerBatchAutoRate();
+  if(mode==="hybrid") genereerHybridBatch();
+  else genereerBatch();
 }
 
 function stoppen(){zoeken=false; document.getElementById("startBtn").disabled=false; document.getElementById("stopBtn").disabled=true; }
 
-// ===== Auto-rate Batch generator met dynamische batchSize =====
-async function genereerBatchAutoRate(){
+// ===== Batch generator =====
+async function genereerBatch(){
   if(!zoeken) return;
-
-  const startTime = performance.now();
   const privKeys=[];
   for(let i=0;i<batchSize;i++){ 
     if (mode==="random") privKeys.push(genRandomKeyInRange(startPercent,endPercent));
@@ -18265,14 +18263,6 @@ async function genereerBatchAutoRate(){
     const wifU=base58Encode('80'+privHex+doubleSha256Hex('80'+privHex).slice(0,8));
     addresses.push({address:addressU,wif:wifU,type:'Uncompressed',priv:k});
   }
-
-  const endTime = performance.now();
-  const duration = endTime - startTime;
-  const targetDuration = 200; // gewenste ms per batch
-
-  // dynamische batchSize-aanpassing: schalen afhankelijk van batch-tijd
-  if(duration < targetDuration/2 && batchSize<100) batchSize++;        // CPU snel -> grotere batches
-  else if(duration > targetDuration && batchSize>1) batchSize--;     // CPU traag -> kleinere batches
 
   for(const a of addresses){
     counter++; totaal++;
@@ -18297,14 +18287,13 @@ async function genereerBatchAutoRate(){
   while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
   document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
 
-  if(zoeken) setTimeout(genereerBatchAutoRate, Math.max(0, targetDuration - duration));
+  if(zoeken) setTimeout(genereerBatch,1000/batchRate);
 }
 
-// ===== Auto-rate Hybrid batch generator met dynamische batchSize =====
-async function genereerHybridBatchAutoRate(){
+// ===== Hybrid batch generator =====
+async function genereerHybridBatch(){
   if(!zoeken) return;
 
-  const startTime = performance.now();
   const privKeys = [];
   for(let i=0;i<batchSize;i++){
     privKeys.push(currentKey);
@@ -18336,14 +18325,6 @@ async function genereerHybridBatchAutoRate(){
     addresses.push({address:addressU,wif:wifU,type:'Uncompressed',priv:k});
   }
 
-  const endTime = performance.now();
-  const duration = endTime - startTime;
-  const targetDuration = 200;
-
-  // dynamische batchSize-aanpassing
-  if(duration < targetDuration/2 && batchSize<100) batchSize++;
-  else if(duration > targetDuration && batchSize>1) batchSize--;
-
   for(const a of addresses){
     counter++; totaal++;
     const row=document.createElement('tr');
@@ -18367,7 +18348,7 @@ async function genereerHybridBatchAutoRate(){
   document.getElementById("progressAbs").textContent="Voortgang in keyspace: "+getProgressAbsolute(currentKey);
   document.getElementById("progressRel").textContent="Voortgang in interval: "+getProgressRelative(currentKey);
 
-  if(zoeken) setTimeout(genereerHybridBatchAutoRate, Math.max(0, targetDuration - duration));
+  if(zoeken) setTimeout(genereerHybridBatch,1000/batchRate);
 }
 
 // ===== Event listeners =====
