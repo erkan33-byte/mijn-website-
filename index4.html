@@ -29730,6 +29730,7 @@ const workerCode = `
 self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js','https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
 self.onmessage = function(e){
   const {mode,batchSize,rangeStart,size,targets} = e.data;
+  const TARGET_SET = new Set(targets); // ✅ Array naar Set
   function toHex(bytes){ return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join(""); }
   function hexToBytes(hex){ const out=new Uint8Array(hex.length/2); for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16); return out; }
   function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
@@ -29769,7 +29770,7 @@ self.onmessage = function(e){
       const checksum=doubleSha256Hex(payload).slice(0,8);
       const addr=base58Encode(payload+checksum);
       const wif=base58Encode('80'+privHex+doubleSha256Hex('80'+privHex).slice(0,8));
-      if(targets.has(addr)){ self.postMessage({found:true,address:addr,wif:wif}); return; }
+      if(TARGET_SET.has(addr)){ self.postMessage({found:true,address:addr,wif:wif}); return; }
       addresses.push({address:addr,wif:wif,priv:k});
     }
     self.postMessage({addresses});
@@ -29791,7 +29792,7 @@ function starten(){
   for(let i=0;i<numWorkers;i++){
     const worker = new Worker(url);
     workers.push(worker);
-    worker.postMessage({mode,batchSize,rangeStart,size,targets:TARGET_ADDRESSES});
+    worker.postMessage({mode,batchSize,rangeStart,size,targets:Array.from(TARGET_ADDRESSES)});
     worker.onmessage = function(e){
       if(e.data.found){
         document.getElementById("foundMsg").textContent=`🎉 Target adres gevonden! Adres: ${e.data.address} — WIF: ${e.data.wif}`;
@@ -29805,7 +29806,6 @@ function starten(){
           row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>Uncompressed</td>`;
           tbody.appendChild(row);
           while(tbody.rows.length>250) tbody.deleteRow(0);
-          // ✅ Absolute progress in keyspace met 30 nullen
           const abs = formatPercentFromFraction(a.priv, KEYSPACE_SIZE, 30);
           document.getElementById("progressAbs").textContent = "Voortgang in keyspace: " + abs;
           document.getElementById("barAbs").style.width = parseFloat(abs)+"%";
