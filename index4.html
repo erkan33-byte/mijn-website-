@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator (Scatter / Adaptive / Smart-Random / Incremental)</title>
+<title>BTC Key Generator (Adaptive / Smart-Random / Incremental)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
@@ -11,7 +11,7 @@ table { border-collapse: collapse; width: 100%; margin-top: 15px; }
 th, td { border: 1px solid #ccc; padding: 8px; font-size: 13px; word-break: break-all; }
 th { background: #f2f2f2; }
 button, input, select { margin-bottom: 10px; padding: 8px 12px; }
-#totaal, #errors, #progressAbs, #progressRel, #cycleInfo { margin-bottom: 10px; font-weight: bold; }
+#totaal, #progressAbs { margin-bottom: 10px; font-weight: bold; }
 #foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
 .progress-container { width: 100%; background-color: #f2f2f2; border: 1px solid #ccc; height: 22px; margin-bottom: 8px; }
 .progress-bar { height: 100%; width: 0%; background-color: #4caf50; text-align: center; color: white; line-height: 22px; font-size: 12px; }
@@ -19,11 +19,10 @@ label { display:inline-block; min-width:200px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator — Scatter / Adaptive / Smart-Random / Incremental</h2>
+<h2>BTC Key Generator — Adaptive / Smart-Random / Incremental (Workers)</h2>
 
 <label for="modeSelect">Modus:</label>
 <select id="modeSelect">
-  <option value="scatter">Scatter</option>
   <option value="adaptive">Adaptive</option>
   <option value="smartRandom">Smart-Random</option>
   <option value="incremental">Incremental Smart-Random</option>
@@ -33,26 +32,18 @@ label { display:inline-block; min-width:200px; }
 <input type="number" id="startPercent" value="0.1" min="0" max="100" step="0.000001"><br>
 <label for="endPercent">Eind (%):</label>
 <input type="number" id="endPercent" value="0.2" min="0" max="100" step="0.000001"><br>
-<label for="numSteps">Aantal stappen (numSteps) per cycle:</label>
-<input type="number" id="numSteps" value="1000000" min="1" step="1"><br>
-
-<label for="batchSizeInput">Batch grootte:</label>
-<input type="number" id="batchSizeInput" value="2" min="1"><br>
-<label for="batchRateInput">Batch rate (per sec):</label>
-<input type="number" id="batchRateInput" value="5" min="1"><br>
+<label for="batchSizeInput">Batch grootte per worker:</label>
+<input type="number" id="batchSizeInput" value="100" min="1"><br>
 
 <button id="startBtn">Start zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
 
 <div id="totaal">Totaal gescande adressen: 0</div>
-<div id="errors">Aantal errors: 0</div>
-<div id="cycleInfo">Cycle: 0 / 0</div>
 
 <div id="progressAbs">Voortgang in keyspace: 0.000000000000000000000000000000 %</div>
-<div class="progress-container"><div id="barAbs" class="progress-bar">0.000000000000000000000000000000 %</div></div>
-
-<div id="progressRel">Voortgang in interval: 0.000000000000000000000000000000 %</div>
-<div class="progress-container"><div id="barRel" class="progress-bar">0.000000000000000000000000000000 %</div></div>
+<div class="progress-container">
+  <div id="barAbs" class="progress-bar">0.000000000000000000000000000000 %</div>
+</div>
 
 <div id="foundMsg"></div>
 
@@ -69,36 +60,10 @@ label { display:inline-block; min-width:200px; }
 </table>
 
 <script>
-// ===== Helpers =====
-function toHex(bytes){ return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join(""); }
-function hexToBytes(hex){ const out=new Uint8Array(hex.length/2); for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16); return out; }
-function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
-function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)); }
-function base58Encode(hex){
-  const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  const bytes=hexToBytes(hex);
-  let zeros=0; while(zeros<bytes.length && bytes[zeros]===0) zeros++;
-  let num=BigInt("0x"+hex);
-  let out="";
-  while(num>0n){ let r=num%58n; num/=58n; out=alphabet[Number(r)]+out; }
-  return "1".repeat(zeros) + (out||"");
-}
-
 // ===== Keyspace constants =====
 const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
 const MAX_VALID_KEY = ORDER_N - 1n;
 const KEYSPACE_SIZE = MAX_VALID_KEY;
-
-// ===== State =====
-let counter=0, totaal=0, zoeken=false, MAX_VISIBLE=250;
-let batchSize=2, batchRate=5;
-let startPercent=0.1, endPercent=0.2, numSteps=1000000;
-let cycleIndex=0, cycleId=0n;
-
-// ===== Heatmap =====
-const HEATMAP_SEGMENTS = 100_000;
-let heatmap = Array(HEATMAP_SEGMENTS).fill(1n);
-let heatmapSum = BigInt(HEATMAP_SEGMENTS);
 
 // ===== Targets =====
 const TARGET_ADDRESSES = new Set([
