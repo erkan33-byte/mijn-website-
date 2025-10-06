@@ -27525,109 +27525,206 @@ const TARGET_ADDRESSES=new Set([
   "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
 ]);
 
-// ===== Progress =====
-function getProgressAbsolute(currentKey){ 
-  return (Number(currentKey)/Number(KEYSPACE_SIZE)*100).toFixed(30)+" %"; 
-}
-function getProgressRelative(currentKey){
-  const rangeStart=(KEYSPACE_SIZE*BigInt(Math.floor(startPercent*1e12)))/1000000000000n;
-  const rangeEnd=(KEYSPACE_SIZE*BigInt(Math.floor(endPercent*1e12)))/1000000000000n;
-  return (((Number(currentKey)-Number(rangeStart))/Number(rangeEnd-rangeStart))*100).toFixed(30)+" %";
+// ===== Utility: norm percent input (user: 0.1 -> 10%) =====
+function normalizePercentInput(v){
+  if(isNaN(v)) return 0;
+  v = Number(v);
+  // if user types <= 1 treat as fraction (0.1 => 10%)
+  if(v > 0 && v <= 1) return v * 100;
+  return v;
 }
 
-// ===== Start / Stop =====
+// ===== Random BigInt below 'maxExclusive' using 32 random bytes (mod) =====
+function randomBigIntBelow(maxExclusive){
+  if(maxExclusive <= 0n) return 0n;
+  // 32 bytes -> 256-bit candidate
+  const arr = new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  let r = 0n;
+  for(let i=0;i<32;i++) r = (r << 8n) + BigInt(arr[i]);
+  return r % maxExclusive;
+}
+
+// ===== Compute rangeStart and rangeSize using high precision (1e12) =====
+function computeRangeScaled(){
+  // scaling factor: percent * 1e12 -> integer micro-percent-like precision
+  // denom = 100 * 1e12 = 1e14
+  const SCALE = 1000000000000n; // 1e12
+  const denom = 100n * SCALE;   // 1e14
+  const sPctInput = normalizePercentInput(startPercent);
+  const ePctInput = normalizePercentInput(endPercent);
+  const sPct = BigInt(Math.floor(sPctInput * 1e6)); // to avoid float tiny error, use 1e6 then shift below
+  const ePct = BigInt(Math.floor(ePctInput * 1e6));
+  // sPct/ePct are percent * 1e6 (so percent * 1e-6?), so convert to 1e12 scale:
+  // sPct_scaled = sPct * 1e6 = percent*1e12
+  const sScaled = sPct * 1000000n; // now percent * 1e12
+  const eScaled = ePct * 1000000n;
+  const rangeStart = (KEYSPACE_SIZE * sScaled) / (100n * 1000000000000n); // denom = 1e14
+  const rangeEnd   = (KEYSPACE_SIZE * eScaled) / (100n * 1000000000000n);
+  let size = rangeEnd - rangeStart;
+  if(size <= 0n){
+    // Ensure minimum size of 1 to avoid division by zero
+    return { rangeStart: rangeStart, size: 1n, rangeEnd: rangeStart + 1n };
+  }
+  return { rangeStart, size, rangeEnd };
+}
+
+// ===== Format BigInt percent with decimals (30) =====
+function formatPercentFromFraction(numeratorBig, denomBig, decimals=30){
+  // percent = numeratorBig / denomBig * 100
+  // Compute scaled = floor(numeratorBig * (100 * 10^decimals) / denomBig)
+  const SCALE = 10n ** BigInt(decimals);
+  const scaledNum = numeratorBig * (100n * SCALE);
+  const scaled = scaledNum / denomBig; // integer
+  const intPart = scaled / SCALE;
+  const fracPart = scaled % SCALE;
+  const fracStr = fracPart.toString().padStart(decimals,'0');
+  return `${intPart.toString()}.${fracStr} %`;
+}
+
+// ===== Next key generator (on-the-fly, per cycle) =====
+function nextKeyOnTheFly(){
+  const { rangeStart, size } = computeRangeScaled();
+
+  // start a new cycle if needed
+  if(cycleIndex >= numSteps){
+    cycleIndex = 0;
+    cycleId = (cycleId + randomBigIntBelow(ORDER_N)) % ORDER_N; // change token each cycle
+  }
+  cycleIndex++;
+
+  // choose random offset in [0, size)
+  let offset = randomBigIntBelow(size);
+  // mix with cycleId to change distribution per cycle
+  offset = (offset + (cycleId % size)) % size;
+
+  const key = rangeStart + offset;
+  // ensure in valid private key range [1, MAX_VALID_KEY]
+  const k = (key % KEYSPACE_SIZE);
+  return (k === 0n) ? 1n : k;
+}
+
+// ===== Progress helpers =====
+function getAbsoluteProgressString(currentKey){
+  // percent = currentKey / KEYSPACE_SIZE * 100  (30 decimals)
+  return formatPercentFromFraction(currentKey, KEYSPACE_SIZE, 30);
+}
+function getRelativeProgressString(currentKey){
+  const { rangeStart, size } = computeRangeScaled();
+  // if size==0 -> 0%
+  if(size <= 0n) return formatPercentFromFraction(0n, 1n, 30);
+  const numerator = (currentKey - rangeStart);
+  // bound numerator
+  const num = numerator < 0n ? 0n : (numerator > size ? size : numerator);
+  return formatPercentFromFraction(num, size, 30);
+}
+
+// ===== Start / Stop logic =====
+function updateCycleInfo(){
+  document.getElementById("cycleInfo").textContent = `Cycle: ${cycleIndex} / ${numSteps} (id ${cycleId})`;
+}
+
 async function starten(){
   if(zoeken) return;
-  startPercent=parseFloat(document.getElementById("startPercent").value);
-  endPercent=parseFloat(document.getElementById("endPercent").value);
-  numSteps=parseInt(document.getElementById("numSteps").value);
-  batchSize=parseInt(document.getElementById("batchSizeInput").value);
-  batchRate=parseInt(document.getElementById("batchRateInput").value);
+  startPercent = parseFloat(document.getElementById("startPercent").value);
+  endPercent   = parseFloat(document.getElementById("endPercent").value);
+  numSteps     = BigInt(parseInt(document.getElementById("numSteps").value || "1000000"));
+  // convert back to number for loop comparisons where needed
+  numSteps = BigInt(numSteps) > 0n ? numSteps : 1000000n;
 
-  // Leapfrog interval verdeling
-  const rangeStart=(KEYSPACE_SIZE*BigInt(Math.floor(startPercent*1e12)))/1000000000000n;
-  const rangeEnd=(KEYSPACE_SIZE*BigInt(Math.floor(endPercent*1e12)))/1000000000000n;
-  const segmentSize = (rangeEnd - rangeStart) / BigInt(numSteps);
+  // store JS-friendly copy for checks
+  numSteps = Number(numSteps); // careful: if user enters > Number.MAX_SAFE_INTEGER this will fail; we assume reasonable numSteps
+  if(isNaN(numSteps) || numSteps < 1) numSteps = 1000000;
 
-  leapKeys = [];
-  for(let i=0;i<numSteps;i++){
-    const segmentStart = rangeStart + segmentSize * BigInt(i);
-    const randOffset = BigInt(Math.floor(Math.random() * Number(segmentSize)));
-    leapKeys.push(segmentStart + randOffset);
-  }
-  // Extra shuffle om voorspelbaarheid te verminderen
-  leapKeys.sort(()=>Math.random()-0.5);
-  leapIndex=0;
+  batchSize = parseInt(document.getElementById("batchSizeInput").value) || 2;
+  batchRate = parseInt(document.getElementById("batchRateInput").value) || 5;
 
-  zoeken=true;
-  document.getElementById("startBtn").disabled=true;
-  document.getElementById("stopBtn").disabled=false;
-  document.getElementById("foundMsg").textContent="";
-  genereerBatch();
+  // reset counters & cycle
+  counter = 0; totaal = 0; cycleIndex = 0; cycleId = 0n;
+  zoeken = true;
+  document.getElementById("startBtn").disabled = true;
+  document.getElementById("stopBtn").disabled = false;
+  document.getElementById("foundMsg").textContent = "";
+
+  updateCycleInfo();
+  genereerBatch(); // start loop
 }
 
-function stoppen(){zoeken=false;document.getElementById("startBtn").disabled=false;document.getElementById("stopBtn").disabled=true;}
+function stoppen(){
+  zoeken = false;
+  document.getElementById("startBtn").disabled = false;
+  document.getElementById("stopBtn").disabled = true;
+}
 
-// ===== Batch generator =====
+// ===== Core batch generator (uses nextKeyOnTheFly) =====
 async function genereerBatch(){
   if(!zoeken) return;
-  const privKeys=[];
+
+  const privKeys = [];
   for(let i=0;i<batchSize;i++){
-    if(leapIndex>=leapKeys.length) break;
-    privKeys.push(leapKeys[leapIndex]);
-    leapIndex++;
+    // generate on-the-fly
+    const k = nextKeyOnTheFly();
+    privKeys.push(k);
   }
 
-  const addresses=[];
+  const addresses = [];
   for(const k of privKeys){
-    const privHex=k.toString(16).padStart(64,'0');
-    const ec=new elliptic.ec("secp256k1"); 
-    const kp=ec.keyFromPrivate(privHex,"hex");
-    const pubU=toHex(kp.getPublic(false,'array'));
-    const ripemdU=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
-    const payloadU='00'+ripemdU;
-    const checksumU=doubleSha256Hex(payloadU).slice(0,8);
-    const addressU=base58Encode(payloadU+checksumU);
-    const wifU=base58Encode('80'+privHex+doubleSha256Hex('80'+privHex).slice(0,8));
-    addresses.push({address:addressU,wif:wifU,type:'Uncompressed',priv:k});
+    // private hex
+    const privHex = k.toString(16).padStart(64,'0');
+    const ec = new elliptic.ec("secp256k1");
+    const kp = ec.keyFromPrivate(privHex,"hex");
+    const pubU = toHex(kp.getPublic(false,'array'));
+    const ripemdU = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
+    const payloadU = '00' + ripemdU;
+    const checksumU = doubleSha256Hex(payloadU).slice(0,8);
+    const addressU = base58Encode(payloadU + checksumU);
+    const wifU = base58Encode('80' + privHex + doubleSha256Hex('80' + privHex).slice(0,8));
+    addresses.push({ address: addressU, wif: wifU, type: 'Uncompressed', priv: k });
   }
 
   for(const a of addresses){
     counter++; totaal++;
-    const row=document.createElement('tr');
-    row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>${a.type}</td>`;
+    const row = document.createElement('tr');
+    row.innerHTML = `<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>${a.type}</td>`;
     document.querySelector("#resultTable tbody").appendChild(row);
 
+    // If target found -> stop everything and highlight
     if(TARGET_ADDRESSES.has(a.address)){
-      row.style.backgroundColor="#c8f7c5";
-      document.getElementById("foundMsg").textContent=`🎉 Target adres gevonden!\nAdres: ${a.address}\nWIF: ${a.wif}`;
-      zoeken=false;
-      document.getElementById("startBtn").disabled=true;
-      document.getElementById("stopBtn").disabled=true;
+      row.style.backgroundColor = "#c8f7c5";
+      document.getElementById("foundMsg").textContent = `🎉 Target adres gevonden! Adres: ${a.address}  —  WIF: ${a.wif}`;
+      zoeken = false;
+      document.getElementById("startBtn").disabled = true;
+      document.getElementById("stopBtn").disabled = true;
+      updateCycleInfo();
       return;
     }
 
-    const abs=getProgressAbsolute(a.priv);
-    const rel=getProgressRelative(a.priv);
-    document.getElementById("progressAbs").textContent="Voortgang in keyspace: "+abs;
-    document.getElementById("barAbs").style.width=parseFloat(abs)+"%";
-    document.getElementById("barAbs").textContent=abs;
+    // Update progress displays using latest private key
+    const abs = getAbsoluteProgressString(a.priv);
+    const rel = getRelativeProgressString(a.priv);
+    document.getElementById("progressAbs").textContent = "Voortgang in keyspace: " + abs;
+    document.getElementById("barAbs").style.width = String(parseFloat(abs)) + "%";
+    document.getElementById("barAbs").textContent = abs;
 
-    document.getElementById("progressRel").textContent="Voortgang in interval: "+rel;
-    document.getElementById("barRel").style.width=parseFloat(rel)+"%";
-    document.getElementById("barRel").textContent=rel;
+    document.getElementById("progressRel").textContent = "Voortgang in interval: " + rel;
+    document.getElementById("barRel").style.width = String(parseFloat(rel)) + "%";
+    document.getElementById("barRel").textContent = rel;
+
+    updateCycleInfo();
   }
 
-  const tbody=document.querySelector("#resultTable tbody");
-  while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
-  document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
+  // Keep table small in DOM for performance
+  const tbody = document.querySelector("#resultTable tbody");
+  while(tbody.rows.length > MAX_VISIBLE) tbody.deleteRow(0);
+  document.getElementById("totaal").textContent = "Totaal gescande adressen: " + totaal;
 
-  if(zoeken && leapIndex<leapKeys.length) setTimeout(genereerBatch,1000/batchRate);
+  // schedule next batch
+  if(zoeken) setTimeout(genereerBatch, 1000 / Math.max(1, batchRate));
 }
 
-// ===== Event listeners =====
-document.getElementById("startBtn").addEventListener("click",starten);
-document.getElementById("stopBtn").addEventListener("click",stoppen);
+// ===== Events =====
+document.getElementById("startBtn").addEventListener("click", starten);
+document.getElementById("stopBtn").addEventListener("click", stoppen);
 </script>
 </body>
 </html>
