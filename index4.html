@@ -27535,206 +27535,164 @@ const TARGET_ADDRESSES = new Set([
   "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
 ]);
 
-// ===== Utility: norm percent input (user: 0.1 -> 10%) =====
-function normalizePercentInput(v){
-  if(isNaN(v)) return 0;
-  v = Number(v);
-  // if user types <= 1 treat as fraction (0.1 => 10%)
-  if(v > 0 && v <= 1) return v * 100;
-  return v;
-}
+function normalizePercentInput(v){ if(isNaN(v)) return 0; v=Number(v); if(v>0 && v<=1) return v*100; return v; }
+function randomBigIntBelow(maxExclusive){ if(maxExclusive<=0n) return 0n; const arr=new Uint8Array(32); crypto.getRandomValues(arr); let r=0n; for(let i=0;i<32;i++) r=(r<<8n)+BigInt(arr[i]); return r%maxExclusive; }
 
-// ===== Random BigInt below 'maxExclusive' using 32 random bytes (mod) =====
-function randomBigIntBelow(maxExclusive){
-  if(maxExclusive <= 0n) return 0n;
-  // 32 bytes -> 256-bit candidate
-  const arr = new Uint8Array(32);
-  crypto.getRandomValues(arr);
-  let r = 0n;
-  for(let i=0;i<32;i++) r = (r << 8n) + BigInt(arr[i]);
-  return r % maxExclusive;
-}
-
-// ===== Compute rangeStart and rangeSize using high precision (1e12) =====
 function computeRangeScaled(){
-  // scaling factor: percent * 1e12 -> integer micro-percent-like precision
-  // denom = 100 * 1e12 = 1e14
-  const SCALE = 1000000000000n; // 1e12
-  const denom = 100n * SCALE;   // 1e14
-  const sPctInput = normalizePercentInput(startPercent);
-  const ePctInput = normalizePercentInput(endPercent);
-  const sPct = BigInt(Math.floor(sPctInput * 1e6)); // to avoid float tiny error, use 1e6 then shift below
-  const ePct = BigInt(Math.floor(ePctInput * 1e6));
-  // sPct/ePct are percent * 1e6 (so percent * 1e-6?), so convert to 1e12 scale:
-  // sPct_scaled = sPct * 1e6 = percent*1e12
-  const sScaled = sPct * 1000000n; // now percent * 1e12
-  const eScaled = ePct * 1000000n;
-  const rangeStart = (KEYSPACE_SIZE * sScaled) / (100n * 1000000000000n); // denom = 1e14
-  const rangeEnd   = (KEYSPACE_SIZE * eScaled) / (100n * 1000000000000n);
-  let size = rangeEnd - rangeStart;
-  if(size <= 0n){
-    // Ensure minimum size of 1 to avoid division by zero
-    return { rangeStart: rangeStart, size: 1n, rangeEnd: rangeStart + 1n };
-  }
-  return { rangeStart, size, rangeEnd };
+  const sPct = BigInt(Math.floor(normalizePercentInput(startPercent)*1e6));
+  const ePct = BigInt(Math.floor(normalizePercentInput(endPercent)*1e6));
+  const sScaled = sPct*1000000n;
+  const eScaled = ePct*1000000n;
+  const rangeStart = (KEYSPACE_SIZE*sScaled)/(100n*1_000_000_000_000n);
+  const rangeEnd   = (KEYSPACE_SIZE*eScaled)/(100n*1_000_000_000_000n);
+  let size = rangeEnd-rangeStart; if(size<=0n) size=1n;
+  return {rangeStart, size, rangeEnd: rangeStart+size};
 }
 
-// ===== Format BigInt percent with decimals (30) =====
-function formatPercentFromFraction(numeratorBig, denomBig, decimals=30){
-  // percent = numeratorBig / denomBig * 100
-  // Compute scaled = floor(numeratorBig * (100 * 10^decimals) / denomBig)
-  const SCALE = 10n ** BigInt(decimals);
-  const scaledNum = numeratorBig * (100n * SCALE);
-  const scaled = scaledNum / denomBig; // integer
-  const intPart = scaled / SCALE;
-  const fracPart = scaled % SCALE;
-  const fracStr = fracPart.toString().padStart(decimals,'0');
-  return `${intPart.toString()}.${fracStr} %`;
+function formatPercentFromFraction(num, denom, decimals=30){
+  const SCALE = 10n**BigInt(decimals);
+  const scaledNum = num*(100n*SCALE);
+  const scaled = scaledNum/denom;
+  const intPart = scaled/SCALE;
+  const fracPart = scaled%SCALE;
+  return `${intPart.toString()}.${fracPart.toString().padStart(decimals,'0')} %`;
 }
 
-// ===== Next key generator (on-the-fly, per cycle) =====
-function nextKeyOnTheFly(){
-  const { rangeStart, size } = computeRangeScaled();
-
-  // start a new cycle if needed
-  if(cycleIndex >= numSteps){
-    cycleIndex = 0;
-    cycleId = (cycleId + randomBigIntBelow(ORDER_N)) % ORDER_N; // change token each cycle
-  }
-  cycleIndex++;
-
-  // choose random offset in [0, size)
-  let offset = randomBigIntBelow(size);
-  // mix with cycleId to change distribution per cycle
-  offset = (offset + (cycleId % size)) % size;
-
-  const key = rangeStart + offset;
-  // ensure in valid private key range [1, MAX_VALID_KEY]
-  const k = (key % KEYSPACE_SIZE);
-  return (k === 0n) ? 1n : k;
+// ===== Key generators =====
+function nextKeyScatter(){
+  const {rangeStart,size} = computeRangeScaled();
+  const offset = randomBigIntBelow(size);
+  const key = rangeStart+offset;
+  return key===0n?1n:key%KEYSPACE_SIZE;
 }
 
-// ===== Progress helpers =====
-function getAbsoluteProgressString(currentKey){
-  // percent = currentKey / KEYSPACE_SIZE * 100  (30 decimals)
-  return formatPercentFromFraction(currentKey, KEYSPACE_SIZE, 30);
-}
-function getRelativeProgressString(currentKey){
-  const { rangeStart, size } = computeRangeScaled();
-  // if size==0 -> 0%
-  if(size <= 0n) return formatPercentFromFraction(0n, 1n, 30);
-  const numerator = (currentKey - rangeStart);
-  // bound numerator
-  const num = numerator < 0n ? 0n : (numerator > size ? size : numerator);
-  return formatPercentFromFraction(num, size, 30);
+function nextKeyAdaptive(){
+  const {rangeStart,size} = computeRangeScaled();
+  const r = randomBigIntBelow(heatmapSum);
+  let acc=0n, segIndex=0;
+  for(let i=0;i<HEATMAP_SEGMENTS;i++){ acc+=heatmap[i]; if(r<acc){ segIndex=i; break; } }
+  const segSize = size/BigInt(HEATMAP_SEGMENTS);
+  const offset = segSize*BigInt(segIndex)+randomBigIntBelow(segSize);
+  heatmap[segIndex]+=1n; heatmapSum+=1n;
+  const key = rangeStart+offset;
+  return key===0n?1n:key%KEYSPACE_SIZE;
 }
 
-// ===== Start / Stop logic =====
-function updateCycleInfo(){
-  document.getElementById("cycleInfo").textContent = `Cycle: ${cycleIndex} / ${numSteps} (id ${cycleId})`;
+function nextKeySmartRandom(){
+  const {rangeStart,size} = computeRangeScaled();
+  let segIndex = Number(randomBigIntBelow(BigInt(HEATMAP_SEGMENTS)));
+  const segSize = size/BigInt(HEATMAP_SEGMENTS);
+  const offset = segSize*BigInt(segIndex)+randomBigIntBelow(segSize);
+  heatmap[segIndex]+=1n; heatmapSum+=1n;
+  const key = rangeStart+offset;
+  return key===0n?1n:key%KEYSPACE_SIZE;
 }
+
+// ===== Incremental Smart-Random =====
+function nextKeyIncremental(){
+  const {rangeStart,size} = computeRangeScaled();
+  // Slimmer: gebruik heatmap voor probabilistische selectie
+  const r = randomBigIntBelow(heatmapSum);
+  let acc=0n, segIndex=0;
+  for(let i=0;i<HEATMAP_SEGMENTS;i++){ acc+=heatmap[i]; if(r<acc){ segIndex=i; break; } }
+  const segSize = size/BigInt(HEATMAP_SEGMENTS);
+  const offset = segSize*BigInt(segIndex)+randomBigIntBelow(segSize);
+  // versterk segmenten die vaker gekozen worden
+  heatmap[segIndex] += 10n; // incrementeel effect
+  heatmapSum += 10n;
+  const key = rangeStart+offset;
+  return key===0n?1n:key%KEYSPACE_SIZE;
+}
+
+// ===== Progress =====
+function getAbsoluteProgressString(k){ return formatPercentFromFraction(k, KEYSPACE_SIZE,30); }
+function getRelativeProgressString(k){ const {rangeStart,size} = computeRangeScaled(); let numerator=k-rangeStart; if(numerator<0n) numerator=0n; if(numerator>size) numerator=size; return formatPercentFromFraction(numerator,size,30); }
+
+// ===== Start/Stop =====
+function updateCycleInfo(){ document.getElementById("cycleInfo").textContent=`Cycle: ${cycleIndex} / ${numSteps} (id ${cycleId})`; }
 
 async function starten(){
   if(zoeken) return;
-  startPercent = parseFloat(document.getElementById("startPercent").value);
-  endPercent   = parseFloat(document.getElementById("endPercent").value);
-  numSteps     = BigInt(parseInt(document.getElementById("numSteps").value || "1000000"));
-  // convert back to number for loop comparisons where needed
-  numSteps = BigInt(numSteps) > 0n ? numSteps : 1000000n;
-
-  // store JS-friendly copy for checks
-  numSteps = Number(numSteps); // careful: if user enters > Number.MAX_SAFE_INTEGER this will fail; we assume reasonable numSteps
-  if(isNaN(numSteps) || numSteps < 1) numSteps = 1000000;
-
-  batchSize = parseInt(document.getElementById("batchSizeInput").value) || 2;
-  batchRate = parseInt(document.getElementById("batchRateInput").value) || 5;
-
-  // reset counters & cycle
-  counter = 0; totaal = 0; cycleIndex = 0; cycleId = 0n;
-  zoeken = true;
-  document.getElementById("startBtn").disabled = true;
-  document.getElementById("stopBtn").disabled = false;
-  document.getElementById("foundMsg").textContent = "";
-
+  startPercent=parseFloat(document.getElementById("startPercent").value);
+  endPercent=parseFloat(document.getElementById("endPercent").value);
+  numSteps=parseInt(document.getElementById("numSteps").value)||1000000;
+  batchSize=parseInt(document.getElementById("batchSizeInput").value)||2;
+  batchRate=parseInt(document.getElementById("batchRateInput").value)||5;
+  counter=0;totaal=0;cycleIndex=0;cycleId=0n;
+  heatmap.fill(1n); heatmapSum=BigInt(HEATMAP_SEGMENTS);
+  zoeken=true;
+  document.getElementById("startBtn").disabled=true;
+  document.getElementById("stopBtn").disabled=false;
+  document.getElementById("foundMsg").textContent="";
   updateCycleInfo();
-  genereerBatch(); // start loop
+  genereerBatch();
 }
 
-function stoppen(){
-  zoeken = false;
-  document.getElementById("startBtn").disabled = false;
-  document.getElementById("stopBtn").disabled = true;
-}
+function stoppen(){ zoeken=false; document.getElementById("startBtn").disabled=false; document.getElementById("stopBtn").disabled=true; }
 
-// ===== Core batch generator (uses nextKeyOnTheFly) =====
+// ===== Batch generator =====
 async function genereerBatch(){
   if(!zoeken) return;
-
-  const privKeys = [];
+  const mode=document.getElementById("modeSelect").value;
+  const privKeys=[];
   for(let i=0;i<batchSize;i++){
-    // generate on-the-fly
-    const k = nextKeyOnTheFly();
+    let k;
+    if(mode==="scatter") k=nextKeyScatter();
+    else if(mode==="adaptive") k=nextKeyAdaptive();
+    else if(mode==="smartRandom") k=nextKeySmartRandom();
+    else k=nextKeyIncremental();
     privKeys.push(k);
   }
 
-  const addresses = [];
+  const addresses=[];
   for(const k of privKeys){
-    // private hex
-    const privHex = k.toString(16).padStart(64,'0');
-    const ec = new elliptic.ec("secp256k1");
-    const kp = ec.keyFromPrivate(privHex,"hex");
-    const pubU = toHex(kp.getPublic(false,'array'));
-    const ripemdU = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
-    const payloadU = '00' + ripemdU;
-    const checksumU = doubleSha256Hex(payloadU).slice(0,8);
-    const addressU = base58Encode(payloadU + checksumU);
-    const wifU = base58Encode('80' + privHex + doubleSha256Hex('80' + privHex).slice(0,8));
-    addresses.push({ address: addressU, wif: wifU, type: 'Uncompressed', priv: k });
+    const privHex=k.toString(16).padStart(64,'0');
+    const ec=new elliptic.ec("secp256k1");
+    const kp=ec.keyFromPrivate(privHex,"hex");
+    const pubU=toHex(kp.getPublic(false,'array'));
+    const ripemdU=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pubU))).toString();
+    const payloadU='00'+ripemdU;
+    const checksumU=doubleSha256Hex(payloadU).slice(0,8);
+    const addressU=base58Encode(payloadU+checksumU);
+    const wifU=base58Encode('80'+privHex+doubleSha256Hex('80'+privHex).slice(0,8));
+    addresses.push({address:addressU,wif:wifU,type:'Uncompressed',priv:k});
   }
 
   for(const a of addresses){
     counter++; totaal++;
-    const row = document.createElement('tr');
-    row.innerHTML = `<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>${a.type}</td>`;
+    const row=document.createElement('tr');
+    row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>${a.type}</td>`;
     document.querySelector("#resultTable tbody").appendChild(row);
 
-    // If target found -> stop everything and highlight
     if(TARGET_ADDRESSES.has(a.address)){
-      row.style.backgroundColor = "#c8f7c5";
-      document.getElementById("foundMsg").textContent = `🎉 Target adres gevonden! Adres: ${a.address}  —  WIF: ${a.wif}`;
-      zoeken = false;
-      document.getElementById("startBtn").disabled = true;
-      document.getElementById("stopBtn").disabled = true;
+      row.style.backgroundColor="#c8f7c5";
+      document.getElementById("foundMsg").textContent=`🎉 Target adres gevonden! Adres: ${a.address} — WIF: ${a.wif}`;
+      zoeken=false;
+      document.getElementById("startBtn").disabled=true;
+      document.getElementById("stopBtn").disabled=true;
       updateCycleInfo();
       return;
     }
 
-    // Update progress displays using latest private key
-    const abs = getAbsoluteProgressString(a.priv);
-    const rel = getRelativeProgressString(a.priv);
-    document.getElementById("progressAbs").textContent = "Voortgang in keyspace: " + abs;
-    document.getElementById("barAbs").style.width = String(parseFloat(abs)) + "%";
-    document.getElementById("barAbs").textContent = abs;
-
-    document.getElementById("progressRel").textContent = "Voortgang in interval: " + rel;
-    document.getElementById("barRel").style.width = String(parseFloat(rel)) + "%";
-    document.getElementById("barRel").textContent = rel;
-
+    const abs=getAbsoluteProgressString(a.priv);
+    const rel=getRelativeProgressString(a.priv);
+    document.getElementById("progressAbs").textContent="Voortgang in keyspace: "+abs;
+    document.getElementById("barAbs").style.width=String(parseFloat(abs))+"%";
+    document.getElementById("barAbs").textContent=abs;
+    document.getElementById("progressRel").textContent="Voortgang in interval: "+rel;
+    document.getElementById("barRel").style.width=String(parseFloat(rel))+"%";
+    document.getElementById("barRel").textContent=rel;
     updateCycleInfo();
   }
 
-  // Keep table small in DOM for performance
-  const tbody = document.querySelector("#resultTable tbody");
-  while(tbody.rows.length > MAX_VISIBLE) tbody.deleteRow(0);
-  document.getElementById("totaal").textContent = "Totaal gescande adressen: " + totaal;
-
-  // schedule next batch
-  if(zoeken) setTimeout(genereerBatch, 1000 / Math.max(1, batchRate));
+  const tbody=document.querySelector("#resultTable tbody");
+  while(tbody.rows.length>MAX_VISIBLE) tbody.deleteRow(0);
+  document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
+  if(zoeken) setTimeout(genereerBatch,1000/Math.max(1,batchRate));
 }
 
-// ===== Events =====
-document.getElementById("startBtn").addEventListener("click", starten);
-document.getElementById("stopBtn").addEventListener("click", stoppen);
+document.getElementById("startBtn").addEventListener("click",starten);
+document.getElementById("stopBtn").addEventListener("click",stoppen);
 </script>
 </body>
 </html>
