@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator (On-the-fly Scatter / Cycles)</title>
+<title>BTC Key Generator (Scatter / Adaptive / Smart-Random / Incremental)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
@@ -10,7 +10,7 @@ body { font-family: Arial, sans-serif; padding: 20px; }
 table { border-collapse: collapse; width: 100%; margin-top: 15px; }
 th, td { border: 1px solid #ccc; padding: 8px; font-size: 13px; word-break: break-all; }
 th { background: #f2f2f2; }
-button, input { margin-bottom: 10px; padding: 8px 12px; }
+button, input, select { margin-bottom: 10px; padding: 8px 12px; }
 #totaal, #errors, #progressAbs, #progressRel, #cycleInfo { margin-bottom: 10px; font-weight: bold; }
 #foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
 .progress-container { width: 100%; background-color: #f2f2f2; border: 1px solid #ccc; height: 22px; margin-bottom: 8px; }
@@ -19,7 +19,15 @@ label { display:inline-block; min-width:200px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator — Scatter (on-the-fly cycles)</h2>
+<h2>BTC Key Generator — Scatter / Adaptive / Smart-Random / Incremental</h2>
+
+<label for="modeSelect">Modus:</label>
+<select id="modeSelect">
+  <option value="scatter">Scatter</option>
+  <option value="adaptive">Adaptive</option>
+  <option value="smartRandom">Smart-Random</option>
+  <option value="incremental">Incremental Smart-Random</option>
+</select><br>
 
 <label for="startPercent">Start (%):</label>
 <input type="number" id="startPercent" value="0.1" min="0" max="100" step="0.000001"><br>
@@ -61,7 +69,7 @@ label { display:inline-block; min-width:200px; }
 </table>
 
 <script>
-// ===== Helpers & crypto utils =====
+// ===== Helpers =====
 function toHex(bytes){ return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join(""); }
 function hexToBytes(hex){ const out=new Uint8Array(hex.length/2); for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16); return out; }
 function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
@@ -82,16 +90,18 @@ const MAX_VALID_KEY = ORDER_N - 1n;
 const KEYSPACE_SIZE = MAX_VALID_KEY;
 
 // ===== State =====
-let counter = 0, totaal = 0, zoeken = false, MAX_VISIBLE = 250;
-let batchSize = 2, batchRate = 5;
-let startPercent = 0.1, endPercent = 0.2, numSteps = 1000000;
+let counter=0, totaal=0, zoeken=false, MAX_VISIBLE=250;
+let batchSize=2, batchRate=5;
+let startPercent=0.1, endPercent=0.2, numSteps=1000000;
+let cycleIndex=0, cycleId=0n;
 
-// cycle state (on-the-fly)
-let cycleIndex = 0;      // how many generated in current cycle
-let cycleId = 0n;        // increments each cycle and used to mix offsets
+// ===== Heatmap =====
+const HEATMAP_SEGMENTS = 100_000;
+let heatmap = Array(HEATMAP_SEGMENTS).fill(1n);
+let heatmapSum = BigInt(HEATMAP_SEGMENTS);
 
-// ===== Target adressen =====
-const TARGET_ADDRESSES=new Set([
+// ===== Targets =====
+const TARGET_ADDRESSES = new Set([
   "18W8Q4RDPfJuDJaDCVCUHSkpuKefsjXCGF",
   "18W6de6kCCjB3vcj6LRwnQpHBenukkR9Qr",
   "18VxCGT5eABVALGbnM9KmvESzBaBcdaTVc",
