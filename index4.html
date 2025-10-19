@@ -36435,12 +36435,52 @@ self.onmessage = function(e){
   let heatmap = Array(HEATMAP_SEGMENTS).fill(1n); 
   let heatmapSum = BigInt(HEATMAP_SEGMENTS);
 
-  function nextKeyAdaptive(){ const r = randomBigIntBelow(heatmapSum); let acc=0n, segIndex=0; for(let i=0;i<HEATMAP_SEGMENTS;i++){ acc+=heatmap[i]; if(r<acc){ segIndex=i; break; } } const segSize=size/BigInt(HEATMAP_SEGMENTS); const offset = segSize*BigInt(segIndex)+randomBigIntBelow(segSize); heatmap[segIndex]+=1n; heatmapSum+=1n; return rangeStart+offset; }
-  function nextKeySmartRandom(){ let segIndex = Number(randomBigIntBelow(BigInt(HEATMAP_SEGMENTS))); const segSize=size/BigInt(HEATMAP_SEGMENTS); const offset = segSize*BigInt(segIndex)+randomBigIntBelow(segSize); heatmap[segIndex]+=1n; heatmapSum+=1n; return rangeStart+offset; }
-  function nextKeyIncremental(){ const r = randomBigIntBelow(heatmapSum); let acc=0n, segIndex=0; for(let i=0;i<HEATMAP_SEGMENTS;i++){ acc+=heatmap[i]; if(r<acc){ segIndex=i; break; } } const segSize=size/BigInt(HEATMAP_SEGMENTS); const offset = segSize*BigInt(segIndex)+randomBigIntBelow(segSize); heatmap[segIndex]+=10n; heatmapSum+=10n; return rangeStart+offset; }
+  function nextKeyAdaptive(){ 
+  const r = randomBigIntBelow(heatmapSum); 
+  let acc=0n, segIndex=0; 
+  for(let i=0;i<HEATMAP_SEGMENTS;i++){ acc+=heatmap[i]; if(r<acc){ segIndex=i; break; } } 
+  const segSize=size/BigInt(HEATMAP_SEGMENTS); 
+  const offset = segSize*BigInt(segIndex)+randomBigIntBelow(segSize); 
+  heatmap[segIndex]+=1n; 
+  heatmapSum+=1n; 
+  return rangeStart+offset; 
+}
 
-  function nextKey(){ if(mode==='adaptive') return nextKeyAdaptive(); else if(mode==='smartRandom') return nextKeySmartRandom(); else return nextKeyIncremental(); }
+function nextKeySmartRandom(){ 
+  let segIndex = Number(randomBigIntBelow(BigInt(HEATMAP_SEGMENTS))); 
+  const segSize=size/BigInt(HEATMAP_SEGMENTS); 
+  const offset = segSize*BigInt(segIndex)+randomBigIntBelow(segSize); 
+  heatmap[segIndex]+=1n; 
+  heatmapSum+=1n; 
+  return rangeStart+offset; 
+}
 
+function nextKeyIncrementalSmart(){ 
+  const r = randomBigIntBelow(heatmapSum); 
+  let acc=0n, segIndex=0; 
+  for(let i=0;i<HEATMAP_SEGMENTS;i++){ acc+=heatmap[i]; if(r<acc){ segIndex=i; break; } } 
+  const segSize=size/BigInt(HEATMAP_SEGMENTS); 
+  const offset = segSize*BigInt(segIndex)+randomBigIntBelow(segSize); 
+  heatmap[segIndex]+=10n; 
+  heatmapSum+=10n; 
+  return rangeStart+offset; 
+}
+
+// ✅ Nieuwe simpele incremental
+let incrementalPointer = 0n;
+function nextKeyIncremental(){ 
+  const key = rangeStart + incrementalPointer; 
+  incrementalPointer += 1n; 
+  if(incrementalPointer >= size) incrementalPointer = 0n; 
+  return key; 
+}
+
+function nextKey(){ 
+  if(mode==='adaptive') return nextKeyAdaptive(); 
+  else if(mode==='smartRandom') return nextKeySmartRandom(); 
+  else if(mode==='incrementalSmart') return nextKeyIncrementalSmart(); 
+  else return nextKeyIncremental(); 
+}
   setInterval(()=>{
     const addresses=[];
     for(let i=0;i<batchSize;i++){
