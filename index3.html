@@ -1,117 +1,62 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-<meta charset="UTF-8">
-<title>BTC Key Generator (Random + Incremental + Hybrid)</title>
+<meta charset="UTF-8" />
+<title>BTC Key Generator — Smart Incredimal & Random</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
-body { font-family: Arial, sans-serif; padding: 20px; }
-table { border-collapse: collapse; width: 100%; margin-top: 15px; }
-th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
-th { background: #f2f2f2; }
-button, input, select { margin-bottom: 10px; padding: 8px 12px; }
-#totaal, #errors, #progressAbs, #progressRel { margin-bottom: 10px; font-weight: bold; }
-#foundMsg, #retryMsg, #currentApi { margin-top: 15px; font-weight: bold; font-size: 16px; }
-#foundMsg { color: green; }
-#retryMsg { color: orange; animation: blink 1s infinite; }
-@keyframes blink { 0%,50%,100% {opacity:1;} 25%,75% {opacity:0;} }
-label { display:inline-block; min-width:200px; }
+body { font-family: Arial, sans-serif; padding: 18px; }
+label { display:inline-block; min-width:200px; margin-bottom:8px; }
+input, select, button { padding:6px 10px; margin-bottom:8px; }
+#status { margin:8px 0; font-weight:bold; }
+table { width:100%; border-collapse:collapse; margin-top:12px; }
+th,td { border:1px solid #ddd; padding:6px; font-size:13px; word-break:break-all; }
+th { background:#f7f7f7; }
+#progressAbs, #progressRel { font-weight:bold; margin-top:8px; }
+#foundMsg { margin-top:10px; color:green; font-weight:bold; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator (Random + Incremental + Hybrid - Alleen Uncompressed)</h2>
+<h2>BTC Key Generator — Smart Incredimal & Random</h2>
 
 <label for="mode">Modus:</label>
 <select id="mode">
-  <option value="random" selected>Random</option>
-  <option value="incremental">Incremental</option>
-  <option value="hybrid">Hybrid</option>
+  <option value="incredimal" selected>Incredimal</option>
+  <option value="random">Random</option>
 </select><br>
 
-<label for="startPercent">Start (%) :</label>
-<input type="number" id="startPercent" value="10" min="0" max="100" step="0.0001"><br>
-<label for="endPercent">Eind (%) :</label>
-<input type="number" id="endPercent" value="20" min="0" max="100" step="0.0001"><br>
-<label for="numSteps">Aantal stappen (alleen gebruikt voor berekening):</label>
-<input type="number" id="numSteps" value="1000000" min="1"><br>
+<label for="startPercent">Start (%):</label>
+<input id="startPercent" type="number" value="0" min="0" max="100" step="0.0001"><br>
 
-<div id="hybridSettings" style="display:none;">
-<label for="jumpAfter">Aantal incrementele sleutels voor sprong:</label>
-<input type="number" id="jumpAfter" value="1000" min="1"><br>
-<label for="activeKeys">Aantal verwachte actieve sleutels binnen interval:</label>
-<input type="number" id="activeKeys" value="1000" min="1"><br>
-</div>
+<label for="endPercent">Eind (%):</label>
+<input id="endPercent" type="number" value="100" min="0" max="100" step="0.0001"><br>
 
-<label for="batchSizeInput">Batch grootte:</label>
-<input type="number" id="batchSizeInput" value="2" min="1"><br>
-<label for="batchRateInput">Batch rate (per sec):</label>
-<input type="number" id="batchRateInput" value="5" min="1"><br>
+<label for="batchSizeInput">Batch grootte per worker:</label>
+<input id="batchSizeInput" type="number" value="4" min="1"><br>
+
+<label for="numWorkers">Aantal workers:</label>
+<input id="numWorkers" type="number" value="2" min="1" max="16"><br>
 
 <button id="startBtn">Start zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
 
+<div id="status">Status: idle</div>
 <div id="totaal">Totaal gescande adressen: 0</div>
-<div id="errors">Aantal errors: 0</div>
-<div id="progressAbs">Voortgang in keyspace: 0.000000000000000000000000000000 %</div>
-<div id="progressRel">Voortgang in interval: 0.000000000000000000000000000000 %</div>
-
-<div id="retryMsg"></div>
+<div id="progressAbs">Voortgang in keyspace: 0 %</div>
+<div id="progressRel">Voortgang in interval: 0 %</div>
 <div id="foundMsg"></div>
 
-<table id="resultTable">
+<table id="resultTable" aria-live="polite">
 <thead>
-<tr>
-<th>#</th>
-<th>Adres</th>
-<th>WIF</th>
-<th>Type</th>
-</tr>
+  <tr><th>#</th><th>Adres</th><th>WIF</th><th>Type</th></tr>
 </thead>
 <tbody></tbody>
 </table>
+
 <script>
-// ===== Helpers =====
-function toHex(bytes){return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join("");}
-function hexToBytes(hex){const out=new Uint8Array(hex.length/2);for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16);return out;}
-function sha256Hex(hex){return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString();}
-function doubleSha256Hex(hex){return sha256Hex(sha256Hex(hex));}
-function base58Encode(hex){
-  const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  const bytes=hexToBytes(hex);let zeros=0;
-  while(zeros<bytes.length&&bytes[zeros]===0) zeros++;
-  let num=BigInt("0x"+hex);let out="";
-  while(num>0n){let r=num%58n;num/=58n;out=alphabet[Number(r)]+out;}
-  return "1".repeat(zeros)+(out||"");
-}
-
-// ===== Keyspace =====
 const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
-const MAX_VALID_KEY = ORDER_N-1n;
-const KEYSPACE_SIZE = MAX_VALID_KEY;
-
-// ===== Random key in percentage-range =====
-function genRandomKeyInRange(startPercent, endPercent) {
-  const rangeStart = (KEYSPACE_SIZE * BigInt(Math.floor(startPercent * 1e6))) / 100000000n;
-  const rangeEnd   = (KEYSPACE_SIZE * BigInt(Math.floor(endPercent * 1e6))) / 100000000n;
-  const rangeSize = rangeEnd - rangeStart;
-  let rand;
-  do {
-    const arr = new Uint8Array(32);
-    crypto.getRandomValues(arr);
-    rand = BigInt("0x"+Array.from(arr,b=>b.toString(16).padStart(2,"0")).join(""));
-  } while(rand > MAX_VALID_KEY);
-  return (rand % rangeSize) + rangeStart;
-}
-
-// ===== Variabelen =====
-let counter=0, totaal=0, zoeken=false, MAX_VISIBLE=250;
-let batchSize=2, batchRate=5;
-let startPercent=10, endPercent=20, mode="random";
-let stepSize=1, numSteps=1000000, currentKey=null;
-let incrementCount=0, expectedStep=0n, jumpAfter=1000, activeKeys=1000;
-
-// ===== Target adressen ====
+const KEYSPACE_SIZE = ORDER_N - 1n;
 const TARGET_ADDRESSES = new Set([
   "1AY7ZsAcqWbbkPmognriy2nfzmEkRCf4SQ",
   "1BTzCaHUXEouFdyqxebGQvFZjbrcY64Fps",
