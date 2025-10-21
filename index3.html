@@ -1,62 +1,75 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-<meta charset="UTF-8" />
-<title>BTC Key Generator — Smart Incredimal & Random</title>
+<meta charset="UTF-8">
+<title>BTC Key Generator (Random + Incremental + Hybrid - Workers)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
-body { font-family: Arial, sans-serif; padding: 18px; }
-label { display:inline-block; min-width:200px; margin-bottom:8px; }
-input, select, button { padding:6px 10px; margin-bottom:8px; }
-#status { margin:8px 0; font-weight:bold; }
-table { width:100%; border-collapse:collapse; margin-top:12px; }
-th,td { border:1px solid #ddd; padding:6px; font-size:13px; word-break:break-all; }
-th { background:#f7f7f7; }
-#progressAbs, #progressRel { font-weight:bold; margin-top:8px; }
-#foundMsg { margin-top:10px; color:green; font-weight:bold; }
+body { font-family: Arial, sans-serif; padding: 20px; }
+table { border-collapse: collapse; width: 100%; margin-top: 15px; }
+th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
+th { background: #f2f2f2; }
+button, input, select { margin-bottom: 10px; padding: 8px 12px; }
+#totaal, #progressAbs, #progressRel { margin-bottom: 10px; font-weight: bold; }
+#foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
+label { display:inline-block; min-width:200px; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator — Smart Incredimal & Random</h2>
+<h2>BTC Key Generator (Random + Incremental + Hybrid - Workers)</h2>
 
 <label for="mode">Modus:</label>
 <select id="mode">
-  <option value="incredimal" selected>Incredimal</option>
-  <option value="random">Random</option>
+  <option value="random" selected>Random</option>
+  <option value="incremental">Incremental</option>
+  <option value="hybrid">Hybrid</option>
 </select><br>
 
 <label for="startPercent">Start (%):</label>
-<input id="startPercent" type="number" value="0" min="0" max="100" step="0.0001"><br>
-
+<input type="number" id="startPercent" value="10" min="0" max="100" step="0.0001"><br>
 <label for="endPercent">Eind (%):</label>
-<input id="endPercent" type="number" value="100" min="0" max="100" step="0.0001"><br>
+<input type="number" id="endPercent" value="20" min="0" max="100" step="0.0001"><br>
+
+<div id="hybridSettings" style="display:none;">
+<label for="jumpAfter">Aantal incrementele sleutels voor sprong:</label>
+<input type="number" id="jumpAfter" value="1000" min="1"><br>
+<label for="activeKeys">Aantal verwachte actieve sleutels binnen interval:</label>
+<input type="number" id="activeKeys" value="1000" min="1"><br>
+</div>
 
 <label for="batchSizeInput">Batch grootte per worker:</label>
-<input id="batchSizeInput" type="number" value="4" min="1"><br>
-
+<input type="number" id="batchSizeInput" value="2" min="1"><br>
 <label for="numWorkers">Aantal workers:</label>
-<input id="numWorkers" type="number" value="2" min="1" max="16"><br>
+<input type="number" id="numWorkers" value="4" min="1"><br>
 
 <button id="startBtn">Start zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
 
-<div id="status">Status: idle</div>
 <div id="totaal">Totaal gescande adressen: 0</div>
-<div id="progressAbs">Voortgang in keyspace: 0 %</div>
-<div id="progressRel">Voortgang in interval: 0 %</div>
+<div id="progressAbs">Voortgang in keyspace: 0.000000000000000000000000000000 %</div>
+<div id="progressRel">Voortgang in interval: 0.000000000000000000000000000000 %</div>
 <div id="foundMsg"></div>
 
-<table id="resultTable" aria-live="polite">
+<table id="resultTable">
 <thead>
-  <tr><th>#</th><th>Adres</th><th>WIF</th><th>Type</th></tr>
+<tr>
+<th>#</th>
+<th>Adres</th>
+<th>WIF</th>
+<th>Type</th>
+</tr>
 </thead>
 <tbody></tbody>
 </table>
 
 <script>
+// ===== Keyspace =====
 const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
-const KEYSPACE_SIZE = ORDER_N - 1n;
+const MAX_VALID_KEY = ORDER_N-1n;
+const KEYSPACE_SIZE = MAX_VALID_KEY;
+
+// ===== Targets =====
 const TARGET_ADDRESSES = new Set([
   "1AY7ZsAcqWbbkPmognriy2nfzmEkRCf4SQ",
   "1BTzCaHUXEouFdyqxebGQvFZjbrcY64Fps",
