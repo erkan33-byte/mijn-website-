@@ -36488,217 +36488,163 @@ const TARGET_ADDRESSES = new Set([
   "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
 ]);
 
-let workers = [];
-let zoeken = false;
-let totaal = 0, counter = 0;
+// ===== State =====
+let zoeken=false, totaal=0, counter=0;
+let workers=[];
 
+// ===== Helpers =====
 function normalizePercentInput(v){ return Math.min(Math.max(Number(v),0),100); }
-
+function formatPercentFromFraction(num, denom, decimals=30){
+  const SCALE = 10n**BigInt(decimals);
+  const scaledNum = num*(100n*SCALE);
+  const scaled = scaledNum/denom;
+  const intPart = scaled/SCALE;
+  const fracPart = scaled%SCALE;
+  return `${intPart.toString()}.${fracPart.toString().padStart(decimals,'0')} %`;
+}
 function computeRangeScaled(){
-  const s = BigInt(Math.floor(normalizePercentInput(document.getElementById("startPercent").value) * 1e6));
-  const e = BigInt(Math.floor(normalizePercentInput(document.getElementById("endPercent").value) * 1e6));
-  const rangeStart = (KEYSPACE_SIZE * s) / (100n * 1000000n);
-  const rangeEnd = (KEYSPACE_SIZE * e) / (100n * 1000000n);
-  let size = rangeEnd - rangeStart;
-  if(size <= 0n) size = 1n;
-  return { rangeStart, size };
+  const sPct = BigInt(Math.floor(normalizePercentInput(document.getElementById("startPercent").value)*1e6));
+  const ePct = BigInt(Math.floor(normalizePercentInput(document.getElementById("endPercent").value)*1e6));
+  const sScaled = sPct*1000000n;
+  const eScaled = ePct*1000000n;
+  const rangeStart = (KEYSPACE_SIZE*sScaled)/(100n*1_000_000_000_000n);
+  const rangeEnd   = (KEYSPACE_SIZE*eScaled)/(100n*1_000_000_000_000n);
+  let size = rangeEnd-rangeStart; if(size<=0n) size=1n;
+  return {rangeStart, size};
 }
 
-function formatPercentFromFraction(numBigInt, denomBigInt, decimals=12){
-  const num = Number(numBigInt);
-  const denom = Number(denomBigInt);
-  if(!isFinite(num) || !isFinite(denom) || denom === 0) return "0."+ "0".repeat(decimals) + " %";
-  return ((num/denom)*100).toFixed(decimals) + " %";
-}
-
-// WORKER CODE
+// ===== Worker code =====
 const workerCode = `
-self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js');
-self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js','https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
 
-onmessage = function(e){
-  try{
-    const {mode,batchSize,rangeStartStr,sizeStr,targetsArray,step,offset} = e.data;
-    const rangeStart = BigInt(rangeStartStr);
-    const size = BigInt(sizeStr);
-    const stepBig = BigInt(step || 1);
-    const offsetBig = BigInt(offset || 0);
-    const TARGET_SET = new Set(targetsArray || []);
+self.onmessage = function(e){
+  const {mode,batchSize,rangeStart,size,jumpAfter,activeKeys,targets} = e.data;
+  const TARGET_SET = new Set(targets);
 
-    function toHex(bytes){ return Array.from(bytes).map(b=>b.toString(16).padStart(2,'0')).join(''); }
-    function hexToBytes(hex){ const out=new Uint8Array(hex.length/2); for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16); return out; }
-    function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
-    function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)); }
-    function base58Encode(hex){
-      const alphabet='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-      const bytes = hexToBytes(hex);
-      let zeros=0; while(zeros < bytes.length && bytes[zeros]===0) zeros++;
-      let num = BigInt('0x'+hex);
-      let out=''; while(num>0n){ const r=num%58n; num=num/58n; out=alphabet[Number(r)]+out; }
-      return '1'.repeat(zeros)+(out||'1');
+  function toHex(bytes){ return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join(""); }
+  function hexToBytes(hex){ const out=new Uint8Array(hex.length/2); for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16); return out; }
+  function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+  function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)); }
+  function base58Encode(hex){
+    const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    const bytes=hexToBytes(hex);let zeros=0;
+    while(zeros<bytes.length && bytes[zeros]===0) zeros++;
+    let num=BigInt("0x"+hex); let out="";
+    while(num>0n){ let r=num%58n; num/=58n; out=alphabet[Number(r)]+out; }
+    return "1".repeat(zeros)+(out||"");
+  }
+  function randomBigIntBelow(maxExclusive){
+    const arr=new Uint8Array(32); crypto.getRandomValues(arr);
+    let r=0n; for(let i=0;i<32;i++) r=(r<<8n)+BigInt(arr[i]); return r%maxExclusive;
+  }
+
+  let currentKey = rangeStart;
+  let incrementCount = 0;
+  const stepPerActive = activeKeys ? size / BigInt(activeKeys) : 1n;
+
+  function nextKeyRandom(){ return rangeStart + randomBigIntBelow(size); }
+  function nextKeyIncremental(){ 
+    const k = currentKey; 
+    currentKey = (currentKey + 1n - rangeStart) % size + rangeStart; 
+    return k;
+  }
+  function nextKeyHybrid(){
+    const k = currentKey;
+    currentKey = (currentKey + 1n - rangeStart) % size + rangeStart;
+    incrementCount++;
+    if(incrementCount >= jumpAfter){
+      const randOffset = BigInt(Math.floor(Math.random()*Number(stepPerActive)));
+      currentKey = (currentKey + stepPerActive + randOffset - rangeStart) % size + rangeStart;
+      incrementCount=0;
     }
-    function randomBigIntBelow(maxExclusive){
-      const arr=new Uint8Array(32); crypto.getRandomValues(arr);
-      let r=0n; for(let i=0;i<arr.length;i++) r=(r<<8n)+BigInt(arr[i]);
-      return r%maxExclusive;
-    }
+    return k;
+  }
 
-    let current = rangeStart + offsetBig;
-    let incrCount = 0n;
-    const INCR_LIMIT = 1000000n;
+  function nextKey(){
+    if(mode==='random') return nextKeyRandom();
+    else if(mode==='incremental') return nextKeyIncremental();
+    else return nextKeyHybrid();
+  }
 
-    function nextIncredimal(){
-      const k = current;
-      current = rangeStart + ((current - rangeStart + stepBig) % size);
-      incrCount++;
-      if(incrCount >= INCR_LIMIT){
-        current = rangeStart + randomBigIntBelow(size);
-        incrCount = 0n;
-      }
-      return generateKey(k);
-    }
-
-    function nextRandom(){
-      const k = rangeStart + randomBigIntBelow(size);
-      return generateKey(k);
-    }
-
-    function generateKey(k){
+  setInterval(()=>{
+    const addresses=[];
+    for(let i=0;i<batchSize;i++){
+      const k = nextKey();
       const privHex = k.toString(16).padStart(64,'0');
-      const ec = new elliptic.ec('secp256k1');
+      const ec = new elliptic.ec("secp256k1");
       const kp = ec.keyFromPrivate(privHex,'hex');
       const pub = toHex(kp.getPublic(false,'array'));
       const rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pub))).toString();
-      const payload = '00' + rip;
+      const payload = '00'+rip;
       const checksum = doubleSha256Hex(payload).slice(0,8);
-      const addr = base58Encode(payload + checksum);
-      const wif = base58Encode('80' + privHex + doubleSha256Hex('80' + privHex).slice(0,8));
-      return { kHex: privHex, address: addr, wif: wif };
+      const addr = base58Encode(payload+checksum);
+      const wif = base58Encode('80'+privHex+doubleSha256Hex('80'+privHex).slice(0,8));
+      if(TARGET_SET.has(addr)){ self.postMessage({found:true,address:addr,wif:wif}); return; }
+      addresses.push({address:addr,wif:wif,priv:k});
     }
-
-    function nextGenerated(){
-      return mode==='random'?nextRandom():nextIncredimal();
-    }
-
-    const interval = setInterval(()=>{
-      const batch = [];
-      const batchSet = new Set();
-      for(let i=0;i<batchSize;i++){
-        let gen;
-        do{
-          gen=nextGenerated();
-        }while(batchSet.has(gen.kHex));
-        batchSet.add(gen.kHex);
-
-        if(TARGET_SET.has(gen.address)){
-          self.postMessage({found:true, address: gen.address, wif: gen.wif});
-          clearInterval(interval);
-          return;
-        }
-        batch.push(gen);
-      }
-      self.postMessage({addresses: batch});
-    }, 30);
-
-  }catch(err){
-    self.postMessage({error: String(err)});
-  }
+    self.postMessage({addresses});
+  },10);
 };
 `;
 
-function createWorker(){
-  const blob = new Blob([workerCode], {type: 'application/javascript'});
-  return URL.createObjectURL(blob);
-}
-
+// ===== Start / Stop =====
 function starten(){
   if(zoeken) return;
-  zoeken = true;
-  document.getElementById('startBtn').disabled = true;
-  document.getElementById('stopBtn').disabled = false;
-  document.getElementById('status').textContent = 'Status: starting workers...';
-  totaal = 0; counter = 0;
-  document.querySelector('#resultTable tbody').innerHTML = '';
-  document.getElementById('foundMsg').textContent = '';
-
-  const numWorkers = Math.max(1, Math.min(16, parseInt(document.getElementById('numWorkers').value) || 2));
-  const batchSize = Math.max(1, parseInt(document.getElementById('batchSizeInput').value) || 4);
-  const mode = document.getElementById('mode').value;
-  const {rangeStart, size} = computeRangeScaled();
-
-  const url = createWorker();
+  zoeken=true; document.getElementById("startBtn").disabled=true; document.getElementById("stopBtn").disabled=false;
+  totaal=0; counter=0; document.querySelector("#resultTable tbody").innerHTML='';
+  const numWorkers = parseInt(document.getElementById("numWorkers").value)||4;
+  const batchSize = parseInt(document.getElementById("batchSizeInput").value)||2;
+  const mode = document.getElementById("mode").value;
+  const jumpAfter = parseInt(document.getElementById("jumpAfter").value)||1000;
+  const activeKeys = parseInt(document.getElementById("activeKeys").value)||1000;
+  const {rangeStart,size} = computeRangeScaled();
+  const blob = new Blob([workerCode], {type:'application/javascript'});
+  const url = URL.createObjectURL(blob);
 
   for(let i=0;i<numWorkers;i++){
-    const w = new Worker(url);
-    workers.push(w);
-
-    w.postMessage({
-      mode,
-      batchSize,
-      rangeStartStr: rangeStart.toString(),
-      sizeStr: size.toString(),
-      step: numWorkers,   // stapgrootte = aantal workers
-      offset: i,          // startpositie van deze worker
-      targetsArray: Array.from(TARGET_ADDRESSES)
-    });
-
-    w.onmessage = function(ev){
-      if(ev.data.error){
-        console.error('Worker error:', ev.data.error);
-        document.getElementById('status').textContent = 'Status: worker error — check console';
-        w.terminate();
-        return;
-      }
-      if(ev.data.found){
-        document.getElementById('foundMsg').textContent = `🎉 Target gevonden: ${ev.data.address} — WIF: ${ev.data.wif}`;
+    const worker = new Worker(url);
+    workers.push(worker);
+    worker.postMessage({mode,batchSize,rangeStart,size,jumpAfter,activeKeys,targets:Array.from(TARGET_ADDRESSES)});
+    worker.onmessage = function(e){
+      if(e.data.found){
+        document.getElementById("foundMsg").textContent = `🎉 Target adres gevonden! Adres: ${e.data.address} — WIF: ${e.data.wif}`;
         stoppen();
         return;
       }
-      if(ev.data.addresses && Array.isArray(ev.data.addresses)){
-        const tbody = document.querySelector('#resultTable tbody');
-        for(const obj of ev.data.addresses){
+      if(e.data.addresses){
+        const tbody=document.querySelector("#resultTable tbody");
+        for(const a of e.data.addresses){
           counter++; totaal++;
-          const row = document.createElement('tr');
-          row.innerHTML = `<td>${counter}</td><td>${obj.address}</td><td>${obj.wif}</td><td>${mode==='random'?'Random':'Incredimal'}</td>`;
+          const row=document.createElement('tr');
+          row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>Uncompressed</td>`;
           tbody.appendChild(row);
-          while(tbody.rows.length > 500) tbody.deleteRow(0);
-
-          try{
-            const kBig = obj.kHex ? BigInt('0x'+obj.kHex) : 0n;
-            // Absoluut percentage over hele keyspace
-            document.getElementById('progressAbs').textContent = 'Voortgang in keyspace: ' + formatPercentFromFraction(kBig, KEYSPACE_SIZE, 12);
-            // Relatief percentage binnen interval
-            const {rangeStart, size: sz} = computeRangeScaled();
-            const offset = (kBig - rangeStart + sz) % sz; // modulo zorgt dat het altijd positief blijft
-            document.getElementById('progressRel').textContent = 'Voortgang in interval: ' + formatPercentFromFraction(offset, sz, 12);
-          }catch(e){}
+          while(tbody.rows.length>250) tbody.deleteRow(0);
+          const abs = formatPercentFromFraction(a.priv, KEYSPACE_SIZE, 30);
+          document.getElementById("progressAbs").textContent = "Voortgang in keyspace: "+abs;
+          const startPct = parseFloat(document.getElementById("startPercent").value)/100;
+          const endPct = parseFloat(document.getElementById("endPercent").value)/100;
+          const rel = ((Number(a.priv)/Number(KEYSPACE_SIZE) - startPct)/(endPct-startPct)*100).toFixed(6) + " %";
+          document.getElementById("progressRel").textContent = "Voortgang in interval: "+rel;
         }
-        document.getElementById('totaal').textContent = 'Totaal gescande adressen: ' + totaal;
+        document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
       }
     };
-
-    w.onerror = function(err){
-      console.error('Worker runtime error', err);
-      document.getElementById('status').textContent = 'Status: worker runtime error — check console';
-    };
   }
-
-  document.getElementById('status').textContent = `Status: ${workers.length} worker(s) gestart — genereren...`;
 }
 
 function stoppen(){
-  zoeken = false;
-  for(const w of workers) try{ w.terminate(); }catch(e){}
-  workers = [];
-  document.getElementById('startBtn').disabled = false;
-  document.getElementById('stopBtn').disabled = true;
-  document.getElementById('status').textContent = 'Status: stopped';
+  zoeken=false;
+  for(const w of workers) w.terminate();
+  workers=[];
+  document.getElementById("startBtn").disabled=false;
+  document.getElementById("stopBtn").disabled=true;
 }
 
-document.getElementById('startBtn').addEventListener('click', starten);
-document.getElementById('stopBtn').addEventListener('click', stoppen);
-
-console.log('Laad de pagina en open de console (F12) voor debug info als er niets verschijnt.');
+document.getElementById("startBtn").addEventListener("click", starten);
+document.getElementById("stopBtn").addEventListener("click", stoppen);
+document.getElementById("mode").addEventListener("change",()=>{
+  document.getElementById("hybridSettings").style.display = document.getElementById("mode").value==="hybrid" ? "block" : "none";
+});
 </script>
 </body>
 </html>
