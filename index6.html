@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>BTC Key Generator — Random + Incremental Reeks + Gokker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; }
+table { border-collapse: collapse; width: 100%; margin-top: 15px; }
+th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
+th { background: #f2f2f2; }
+button, input { margin-bottom: 10px; padding: 8px 12px; }
+#totaal, #progressAbs, #progressRel { margin-bottom: 10px; font-weight: bold; }
+#foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
+label { display:inline-block; min-width:200px; }
+</style>
+</head>
+<body>
+<h2>BTC Key Generator — Random + Incremental Reeks + Gokker</h2>
+
+<label for="startPercent">Start (%):</label>
+<input type="number" id="startPercent" value="10" min="0" max="100" step="0.0001"><br>
+
+<label for="endPercent">Eind (%):</label>
+<input type="number" id="endPercent" value="20" min="0" max="100" step="0.0001"><br>
+
+<label for="jumpAfter">Aantal sleutels per reeks (voor nieuwe random sprong):</label>
+<input type="number" id="jumpAfter" value="1000" min="1"><br>
+
+<label for="batchSizeInput">Batch grootte:</label>
+<input type="number" id="batchSizeInput" value="2" min="1"><br>
+
+<label><input type="checkbox" id="gokkerMode"> Gokker modus</label><br>
+
+<button id="startBtn">Start zoeken</button>
+<button id="stopBtn" disabled>Stop</button>
+
+<div id="totaal">Totaal gescande adressen: 0</div>
+<div id="progressAbs">Voortgang in keyspace: 0.000000000000000000000000000000 %</div>
+<div id="progressRel">Voortgang in interval: 0.000000000000000000000000000000 %</div>
+<div id="foundMsg"></div>
+
+<table id="resultTable">
+<thead>
+<tr><th>#</th><th>Adres</th><th>WIF</th><th>Type</th></tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<script>
+// ====== CONSTANTEN ======
+const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+const KEYSPACE_SIZE = ORDER_N - 1n;
+
+const TARGET_ADDRESSES = new Set([
+  // Voeg hier je doeladressen toe
+]);
+
+let zoeken = false, totaal = 0, counter = 0;
+let loopHandle = null;
+
+// ====== HELPERS ======
+function normalizePercentInput(v){ return Math.min(Math.max(Number(v),0),100); }
+
+function formatPercentFromFraction(num, denom, decimals=30){
+  const SCALE = 10n**BigInt(decimals);
+  const scaledNum = num*(100n*SCALE);
+  const scaled = scaledNum/denom;
+  const intPart = scaled/SCALE;
+  const fracPart = scaled%SCALE;
+  return `${intPart.toString()}.${fracPart.toString().padStart(decimals,'0')} %`;
+}
+
+function computeRangeScaled(){
+  const sPct = BigInt(Math.floor(normalizePercentInput(document.getElementById("startPercent").value)*1e6));
+  const ePct = BigInt(Math.floor(normalizePercentInput(document.getElementById("endPercent").value)*1e6));
+  const sScaled = sPct*1000000n;
+  const eScaled = ePct*1000000n;
+  const rangeStart = (KEYSPACE_SIZE*sScaled)/(100n*1_000_000_000_000n);
+  const rangeEnd   = (KEYSPACE_SIZE*eScaled)/(100n*1_000_000_000_000n);
+  let size = rangeEnd - rangeStart; if(size<=0n) size=1n;
+  return {rangeStart, size};
+}
+
+function randomBigIntBelow(max){
+  const arr=new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  let r=0n;
+  for(let i=0;i<32;i++) r=(r<<8n)+BigInt(arr[i]);
+  return r%max;
+}
+
+function generateAddress(k){
+  const ec = new elliptic.ec("secp256k1");
+  const privHex = k.toString(16).padStart(64,'0');
+  const kp = ec.keyFromPrivate(privHex,'hex');
+  const pub = Array.from(kp.getPublic(false,"array")).map(b=>b.toString(16).padStart(2,'0')).join('');
+  const rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pub)).toString())).toString();
+  const payload = "00"+rip;
+  const checksum = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(CryptoJS.SHA256(CryptoJS.enc.Hex.parse(payload)).toString())).toString().slice(0,8);
+  const full = payload+checksum;
+  const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  const bytes=Uint8Array.from(full.match(/.{2}/g).map(b=>parseInt(b,16)));
+  let zeros=0; while(zeros<bytes.length && bytes[zeros]===0) zeros++;
+  let num=BigInt("0x"+full); let out="";
+  while(num>0n){ let r=num%58n; num/=58n; out=alphabet[Number(r)]+out; }
+  const addr="1".repeat(zeros)+(out||"");
+  const wifPayload="80"+privHex;
+  const wifChecksum = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(CryptoJS.SHA256(CryptoJS.enc.Hex.parse(wifPayload)).toString())).toString().slice(0,8);
+  const wifFull=wifPayload+wifChecksum;
+  const bytesWif=Uint8Array.from(wifFull.match(/.{2}/g).map(b=>parseInt(b,16)));
+  let zerosW=0; while(zerosW<bytesWif.length && bytesWif[zerosW]===0) zerosW++;
+  let numW=BigInt("0x"+wifFull); let outW="";
+  while(numW>0n){ let r=numW%58n; numW/=58n; outW=alphabet[Number(r)]+outW; }
+  const wif="1".repeat(zerosW)+(outW||"");
+  return {address:addr,wif:wif};
+}
+
+// ====== ZOEKFUNCTIE ======
+function starten(){
+  if(zoeken) return;
+  zoeken=true;
+  document.getElementById("startBtn").disabled=true;
+  document.getElementById("stopBtn").disabled=false;
+  totaal=0; counter=0;
+  document.querySelector("#resultTable tbody").innerHTML='';
+  document.getElementById("foundMsg").textContent='';
+
+  const gokker = document.getElementById("gokkerMode").checked;
+  const {rangeStart, size} = computeRangeScaled();
+  const jumpAfter = parseInt(document.getElementById("jumpAfter").value)||1000;
+  const batchSize = parseInt(document.getElementById("batchSizeInput").value)||2;
+
+  let currentKey = rangeStart + randomBigIntBelow(size);
+  let incrementCount = 0;
+
+  function nextKey(){
+    if(gokker){
+      // Gokker modus: elke reeks een nieuwe random start
+      if(incrementCount >= jumpAfter){
+        currentKey = rangeStart + randomBigIntBelow(size);
+        incrementCount = 0;
+      }
+    } else {
+      // Gewone modus
+      if(incrementCount >= jumpAfter){
+        currentKey = rangeStart + randomBigIntBelow(size);
+        incrementCount = 0;
+      }
+    }
+    const k = currentKey;
+    currentKey = (currentKey + 1n - rangeStart) % size + rangeStart;
+    incrementCount++;
+    return k;
+  }
+
+  loopHandle = setInterval(()=>{
+    if(!zoeken) return;
+    const tbody=document.querySelector("#resultTable tbody");
+    for(let i=0;i<batchSize;i++){
+      const k = nextKey();
+      const {address,wif} = generateAddress(k);
+      counter++; totaal++;
+      const row=document.createElement('tr');
+      row.innerHTML=`<td>${counter}</td><td>${address}</td><td>${wif}</td><td>Uncompressed</td>`;
+      tbody.appendChild(row);
+      while(tbody.rows.length>250) tbody.deleteRow(0);
+
+      const abs = formatPercentFromFraction(k, KEYSPACE_SIZE, 30);
+      document.getElementById("progressAbs").textContent = "Voortgang in keyspace: "+abs;
+
+      const startPct = parseFloat(document.getElementById("startPercent").value)/100;
+      const endPct = parseFloat(document.getElementById("endPercent").value)/100;
+      const rel = ((Number(k)/Number(KEYSPACE_SIZE) - startPct)/(endPct-startPct)*100).toFixed(6)+" %";
+      document.getElementById("progressRel").textContent = "Voortgang in interval: "+rel;
+
+      if(TARGET_ADDRESSES.has(address)){
+        document.getElementById("foundMsg").textContent=`🎉 Target adres gevonden! Adres: ${address} — WIF: ${wif}`;
+        stoppen();
+        return;
+      }
+    }
+    document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
+  },10);
+}
+
+function stoppen(){
+  zoeken=false;
+  clearInterval(loopHandle);
+  document.getElementById("startBtn").disabled=false;
+  document.getElementById("stopBtn").disabled=true;
+}
+
+document.getElementById("startBtn").addEventListener("click", starten);
+document.getElementById("stopBtn").addEventListener("click", stoppen);
+</script>
+</body>
+</html>
