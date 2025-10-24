@@ -2,236 +2,155 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator — Test met fake WIF injectie</title>
+<title>BTC Key Generator — met verborgen targets en injectie-test</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
 body { font-family: Arial, sans-serif; padding: 20px; }
+h2 { margin-bottom: 0; }
+#foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
 table { border-collapse: collapse; width: 100%; margin-top: 15px; }
 th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
 th { background: #f2f2f2; }
-button, input { margin-bottom: 10px; padding: 8px 12px; }
-#totaal, #progressAbs, #progressRel { margin-bottom: 10px; font-weight: bold; }
-#foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
-label { display:inline-block; min-width:200px; }
-#targetList { margin-top:10px; font-size:14px; color:#333; }
+.hidden { display: none; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator — Random + Incremental Reeks + Gokker (met fake WIF test)</h2>
+<h2>BTC Key Generator — test met vaste targets (onzichtbaar)</h2>
 
-<!-- Test invoer -->
-<h3>🎯 Test-adres invoer</h3>
-<label for="targetInput">Voer (test) BTC-adres in:</label>
-<input type="text" id="targetInput" placeholder="Bijv. 1A1zP1eP5QGef..." size="60">
-<button id="addTargetBtn">➕ Voeg target toe</button>
-<button id="addAndSimulateBtn">🧪 Voeg en simuleer (inject once)</button>
-<div id="targetList"><strong>Actieve targets:</strong> (geen)</div>
+<!-- alleen test-invoer -->
+<label for="targetInput">Injecteer testadres (voor simulatie):</label>
+<input type="text" id="targetInput" size="60" placeholder="bijv. 1BoatSLRHtKNngkdXEeobR76b53LETtpyT">
+<button id="injectBtn">🧪 Injecteer (simuleer match)</button>
 
 <hr>
 
-<label for="startPercent">Start (%):</label>
-<input type="number" id="startPercent" value="10" min="0" max="100" step="0.0001"><br>
+<button id="startBtn">▶️ Start genereren</button>
+<button id="stopBtn" disabled>⏹️ Stop</button>
 
-<label for="endPercent">Eind (%):</label>
-<input type="number" id="endPercent" value="20" min="0" max="100" step="0.0001"><br>
-
-<label for="jumpAfter">Aantal sleutels per reeks (voor nieuwe random sprong):</label>
-<input type="number" id="jumpAfter" value="1000" min="1"><br>
-
-<label for="batchSizeInput">Batch grootte:</label>
-<input type="number" id="batchSizeInput" value="2" min="1"><br>
-
-<label><input type="checkbox" id="gokkerMode"> Gokker modus</label><br>
-
-<button id="startBtn">Start zoeken</button>
-<button id="stopBtn" disabled>Stop</button>
-
-<div id="totaal">Totaal gescande adressen: 0</div>
-<div id="progressAbs">Voortgang in keyspace: 0.000000000000000000000000000000 %</div>
-<div id="progressRel">Voortgang in interval: 0.000000000000000000000000000000 %</div>
 <div id="foundMsg"></div>
 
 <table id="resultTable">
-<thead>
-<tr><th>#</th><th>Adres</th><th>WIF</th><th>Type</th></tr>
-</thead>
+<thead><tr><th>#</th><th>Adres</th><th>WIF</th><th>Type</th></tr></thead>
 <tbody></tbody>
 </table>
 
 <script>
+// ========== CONSTANTEN ==========
 const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
-const KEYSPACE_SIZE = ORDER_N - 1n;
-
 const TARGET_ADDRESSES = new Set();
-const SIMULATED_QUEUE = [];
 const FAKE_WIF_MAP = new Map();
 
-let zoeken = false, totaal = 0, counter = 0;
-let loopHandle = null;
+// 🧱 Hier zet jij je vaste targets (ze worden NIET getoond op de pagina)
+const VASTE_TARGETS = [
+  "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+  "1KFHE7w8BhaENAswwryaoccDb6qcT6DbYY",
+  "1dice8EMZmqKvrGE4Qc9bUFf9PX3xaYDp"
+];
+VASTE_TARGETS.forEach(a => TARGET_ADDRESSES.add(a));
 
-function normalizePercentInput(v){ return Math.min(Math.max(Number(v),0),100); }
-
-function formatPercentFromFraction(num, denom, decimals=30){
-  const SCALE = 10n**BigInt(decimals);
-  const scaledNum = num*(100n*SCALE);
-  const scaled = scaledNum/denom;
-  const intPart = scaled/SCALE;
-  const fracPart = scaled%SCALE;
-  return `${intPart.toString()}.${fracPart.toString().padStart(decimals,'0')} %`;
-}
-
-function computeRangeScaled(){
-  const sPct = BigInt(Math.floor(normalizePercentInput(document.getElementById("startPercent").value)*1e6));
-  const ePct = BigInt(Math.floor(normalizePercentInput(document.getElementById("endPercent").value)*1e6));
-  const sScaled = sPct*1000000n;
-  const eScaled = ePct*1000000n;
-  const rangeStart = (KEYSPACE_SIZE*sScaled)/(100n*1_000_000_000_000n);
-  const rangeEnd   = (KEYSPACE_SIZE*eScaled)/(100n*1_000_000_000_000n);
-  let size = rangeEnd - rangeStart; if(size<=0n) size=1n;
-  return {rangeStart, size};
-}
-
-function randomBigIntBelow(max){
-  const arr=new Uint8Array(32);
-  crypto.getRandomValues(arr);
-  let r=0n;
-  for(let i=0;i<32;i++) r=(r<<8n)+BigInt(arr[i]);
-  return r%max;
-}
-
-function generateAddress(k){
-  const ec = new elliptic.ec("secp256k1");
-  const privHex = k.toString(16).padStart(64,'0');
-  const kp = ec.keyFromPrivate(privHex,'hex');
-  const pub = Array.from(kp.getPublic(false,"array")).map(b=>b.toString(16).padStart(2,'0')).join('');
-  const rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pub)).toString())).toString();
-  const payload = "00"+rip;
-  const checksum = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(CryptoJS.SHA256(CryptoJS.enc.Hex.parse(payload)).toString())).toString().slice(0,8);
-  const full = payload+checksum;
-  const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  let num=BigInt("0x"+full); let out="";
-  while(num>0n){ let r=num%58n; num/=58n; out=alphabet[Number(r)]+out; }
-  const bytes=Uint8Array.from(full.match(/.{2}/g).map(b=>parseInt(b,16)));
-  let zeros=0; while(zeros<bytes.length && bytes[zeros]===0) zeros++;
-  const addr="1".repeat(zeros)+(out||"");
-  const wifPayload="80"+privHex;
-  const wifChecksum = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(CryptoJS.SHA256(CryptoJS.enc.Hex.parse(wifPayload)).toString())).toString().slice(0,8);
-  const wifFull=wifPayload+wifChecksum;
-  let numW=BigInt("0x"+wifFull); let outW="";
-  while(numW>0n){ let r=numW%58n; numW/=58n; outW=alphabet[Number(r)]+outW; }
-  const bytesWif=Uint8Array.from(wifFull.match(/.{2}/g).map(b=>parseInt(b,16)));
-  let zerosW=0; while(zerosW<bytesWif.length && bytesWif[zerosW]===0) zerosW++;
-  const wif="1".repeat(zerosW)+(outW||"");
-  return {address:addr,wif:wif};
-}
-
+// ========== HULPFUNCTIES ==========
 function makeFakeWif() {
-  const rnd = crypto.getRandomValues(new Uint8Array(8));
-  return "fakeWIF_" + Array.from(rnd).map(b => b.toString(16).padStart(2,'0')).join('');
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  return "fakeWIF_" + Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-function voegTargetToeHandmatig() {
-  const val = document.getElementById("targetInput").value.trim();
-  if (!val) { alert("Voer een adres in."); return; }
-  TARGET_ADDRESSES.add(val);
-  updateTargetListUI();
-  document.getElementById("targetInput").value = "";
+function randomBigIntBelow(max) {
+  const arr = new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  let r = 0n;
+  for (let i = 0; i < 32; i++) r = (r << 8n) + BigInt(arr[i]);
+  return r % max;
 }
 
-// 🔧 aangepaste versie — geen toevoeging aan TARGET_ADDRESSES
-function voegTargetEnSimuleerEenKeer() {
-  const val = document.getElementById("targetInput").value.trim();
-  if (!val) { alert("Voer een adres in."); return; }
-  const fake = makeFakeWif();
-  FAKE_WIF_MAP.set(val, fake);
-  SIMULATED_QUEUE.push(val);
-  document.getElementById("targetInput").value = "";
-  alert("Simulatie toegevoegd: dit adres zal één keer verschijnen met een fake WIF (zonder in targets te staan).");
+function generateAddress(k) {
+  const ec = new elliptic.ec("secp256k1");
+  const privHex = k.toString(16).padStart(64, "0");
+  const kp = ec.keyFromPrivate(privHex, "hex");
+  const pub = Array.from(kp.getPublic(false, "array")).map(b => b.toString(16).padStart(2, "0")).join('');
+  const rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pub)).toString())).toString();
+  const payload = "00" + rip;
+  const checksum = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(CryptoJS.SHA256(CryptoJS.enc.Hex.parse(payload)).toString())).toString().slice(0, 8);
+  const full = payload + checksum;
+  const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  let num = BigInt("0x" + full), out = "";
+  while (num > 0n) { let r = num % 58n; num /= 58n; out = alphabet[Number(r)] + out; }
+  const bytes = Uint8Array.from(full.match(/.{2}/g).map(b => parseInt(b, 16)));
+  let zeros = 0; while (zeros < bytes.length && bytes[zeros] === 0) zeros++;
+  const addr = "1".repeat(zeros) + (out || "");
+  const wifPayload = "80" + privHex;
+  const wifChecksum = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(CryptoJS.SHA256(CryptoJS.enc.Hex.parse(wifPayload)).toString())).toString().slice(0, 8);
+  const wifFull = wifPayload + wifChecksum;
+  let numW = BigInt("0x" + wifFull), outW = "";
+  while (numW > 0n) { let r = numW % 58n; numW /= 58n; outW = alphabet[Number(r)] + outW; }
+  const bytesWif = Uint8Array.from(wifFull.match(/.{2}/g).map(b => parseInt(b, 16)));
+  let zerosW = 0; while (zerosW < bytesWif.length && bytesWif[zerosW] === 0) zerosW++;
+  const wif = "1".repeat(zerosW) + (outW || "");
+  return { address: addr, wif: wif };
 }
 
-function updateTargetListUI(){
-  const list = Array.from(TARGET_ADDRESSES);
-  document.getElementById("targetList").innerHTML = "<strong>Actieve targets:</strong><br>" + (list.length? list.map(a=>"• "+a).join("<br>") : "(geen)");
-}
+// ========== GENERATOR LOOP ==========
+let zoeken = false, counter = 0, loopHandle = null;
 
-function starten(){
-  if(zoeken) return;
-  zoeken=true;
-  document.getElementById("startBtn").disabled=true;
-  document.getElementById("stopBtn").disabled=false;
-  totaal=0; counter=0;
-  document.querySelector("#resultTable tbody").innerHTML='';
-  document.getElementById("foundMsg").textContent='';
+function starten() {
+  if (zoeken) return;
+  zoeken = true;
+  document.getElementById("startBtn").disabled = true;
+  document.getElementById("stopBtn").disabled = false;
+  document.getElementById("foundMsg").textContent = "";
+  document.querySelector("#resultTable tbody").innerHTML = "";
+  counter = 0;
 
-  const gokker = document.getElementById("gokkerMode").checked;
-  const {rangeStart, size} = computeRangeScaled();
-  const jumpAfter = parseInt(document.getElementById("jumpAfter").value)||1000;
-  const batchSize = parseInt(document.getElementById("batchSizeInput").value)||2;
+  loopHandle = setInterval(() => {
+    if (!zoeken) return;
+    const k = randomBigIntBelow(ORDER_N);
+    const { address, wif } = generateAddress(k);
+    counter++;
 
-  let currentKey = rangeStart + randomBigIntBelow(size);
-  let incrementCount = 0;
+    const row = document.createElement("tr");
+    row.innerHTML = `<td>${counter}</td><td>${address}</td><td>${wif}</td><td>Uncompressed</td>`;
+    const tbody = document.querySelector("#resultTable tbody");
+    tbody.appendChild(row);
+    while (tbody.rows.length > 100) tbody.deleteRow(0);
 
-  function nextKey(){
-    if(incrementCount >= jumpAfter){
-      currentKey = rangeStart + randomBigIntBelow(size);
-      incrementCount = 0;
+    if (TARGET_ADDRESSES.has(address)) {
+      document.getElementById("foundMsg").textContent =
+        `🎯 Target gevonden: ${address} — WIF: ${wif}`;
+      stoppen();
     }
-    const k = currentKey;
-    currentKey = (currentKey + 1n - rangeStart) % size + rangeStart;
-    incrementCount++;
-    return k;
-  }
-
-  loopHandle = setInterval(()=>{
-    if(!zoeken) return;
-    const tbody=document.querySelector("#resultTable tbody");
-    for(let i=0;i<batchSize;i++){
-      let address, wif, type = "Uncompressed";
-      let injected = false;
-      if(SIMULATED_QUEUE.length > 0 && Math.random() < 0.3){
-        address = SIMULATED_QUEUE.shift();
-        wif = FAKE_WIF_MAP.get(address) || makeFakeWif();
-        injected = true;
-      } else {
-        const k = nextKey();
-        const gen = generateAddress(k);
-        address = gen.address;
-        wif = gen.wif;
-      }
-
-      counter++; totaal++;
-      const row=document.createElement('tr');
-      row.innerHTML=`<td>${counter}</td><td>${address}</td><td>${wif}</td><td>${type}${injected? " (SIMULATED)":""}</td>`;
-      tbody.appendChild(row);
-      while(tbody.rows.length>250) tbody.deleteRow(0);
-
-      if(injected){
-        document.getElementById("progressAbs").textContent = "Voortgang in keyspace: (simulated injection)";
-        document.getElementById("progressRel").textContent = "Voortgang in interval: (simulated injection)";
-      }
-
-      if(TARGET_ADDRESSES.has(address)){
-        document.getElementById("foundMsg").textContent = `🎉 Target adres gevonden! Adres: ${address} — WIF: ${wif}`;
-        stoppen();
-        return;
-      }
-    }
-    document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
-  },10);
+  }, 10);
 }
 
-function stoppen(){
-  zoeken=false;
+function stoppen() {
+  zoeken = false;
   clearInterval(loopHandle);
-  document.getElementById("startBtn").disabled=false;
-  document.getElementById("stopBtn").disabled=true;
+  document.getElementById("startBtn").disabled = false;
+  document.getElementById("stopBtn").disabled = true;
 }
 
+// ========== INJECTIE TEST ==========
+document.getElementById("injectBtn").addEventListener("click", () => {
+  const val = document.getElementById("targetInput").value.trim();
+  if (!val) return alert("Voer een adres in om te injecteren!");
+  const fake = makeFakeWif();
+  const tbody = document.querySelector("#resultTable tbody");
+  const row = document.createElement("tr");
+  row.innerHTML = `<td>${counter + 1}</td><td>${val}</td><td>${fake}</td><td>(SIMULATED)</td>`;
+  tbody.appendChild(row);
+
+  if (TARGET_ADDRESSES.has(val)) {
+    document.getElementById("foundMsg").textContent =
+      `🧪 Injectie uitgevoerd — target ${val} herkend, script gestopt.`;
+    stoppen();
+  } else {
+    document.getElementById("foundMsg").textContent =
+      `🧪 Injectie uitgevoerd — adres ${val} niet in targetlijst.`;
+  }
+});
+
+// ========== START/STOP ==========
 document.getElementById("startBtn").addEventListener("click", starten);
 document.getElementById("stopBtn").addEventListener("click", stoppen);
-document.getElementById("addTargetBtn").addEventListener("click", voegTargetToeHandmatig);
-document.getElementById("addAndSimulateBtn").addEventListener("click", voegTargetEnSimuleerEenKeer);
 </script>
 </body>
 </html>
