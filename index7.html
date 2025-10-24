@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>BTC Key Generator — met verborgen targets en injectie-test</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; }
+h2 { margin-bottom: 0; }
+#foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
+table { border-collapse: collapse; width: 100%; margin-top: 15px; }
+th, td { border: 1px solid #ccc; padding: 8px; font-size: 14px; word-break: break-all; }
+th { background: #f2f2f2; }
+.hidden { display: none; }
+</style>
+</head>
+<body>
+<h2>BTC Key Generator — test met vaste targets (onzichtbaar)</h2>
+
+<!-- alleen test-invoer -->
+<label for="targetInput">Injecteer testadres (voor simulatie):</label>
+<input type="text" id="targetInput" size="60" placeholder="bijv. 1BoatSLRHtKNngkdXEeobR76b53LETtpyT">
+<button id="injectBtn">🧪 Injecteer (simuleer match)</button>
+
+<hr>
+
+<button id="startBtn">▶️ Start genereren</button>
+<button id="stopBtn" disabled>⏹️ Stop</button>
+
+<div id="foundMsg"></div>
+
+<table id="resultTable">
+<thead><tr><th>#</th><th>Adres</th><th>WIF</th><th>Type</th></tr></thead>
+<tbody></tbody>
+</table>
+
+<script>
+// ========== CONSTANTEN ==========
+const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+const TARGET_ADDRESSES = new Set();
+const FAKE_WIF_MAP = new Map();
+
+// 🧱 Hier zet jij je vaste targets (ze worden NIET getoond op de pagina)
+const VASTE_TARGETS = [
+  "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+  "1KFHE7w8BhaENAswwryaoccDb6qcT6DbYY",
+  "1dice8EMZmqKvrGE4Qc9bUFf9PX3xaYDp"
+];
+VASTE_TARGETS.forEach(a => TARGET_ADDRESSES.add(a));
+
+// ========== HULPFUNCTIES ==========
+function makeFakeWif() {
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  return "fakeWIF_" + Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function randomBigIntBelow(max) {
+  const arr = new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  let r = 0n;
+  for (let i = 0; i < 32; i++) r = (r << 8n) + BigInt(arr[i]);
+  return r % max;
+}
+
+function generateAddress(k) {
+  const ec = new elliptic.ec("secp256k1");
+  const privHex = k.toString(16).padStart(64, "0");
+  const kp = ec.keyFromPrivate(privHex, "hex");
+  const pub = Array.from(kp.getPublic(false, "array")).map(b => b.toString(16).padStart(2, "0")).join('');
+  const rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pub)).toString())).toString();
+  const payload = "00" + rip;
+  const checksum = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(CryptoJS.SHA256(CryptoJS.enc.Hex.parse(payload)).toString())).toString().slice(0, 8);
+  const full = payload + checksum;
+  const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  let num = BigInt("0x" + full), out = "";
+  while (num > 0n) { let r = num % 58n; num /= 58n; out = alphabet[Number(r)] + out; }
+  const bytes = Uint8Array.from(full.match(/.{2}/g).map(b => parseInt(b, 16)));
+  let zeros = 0; while (zeros < bytes.length && bytes[zeros] === 0) zeros++;
+  const addr = "1".repeat(zeros) + (out || "");
+  const wifPayload = "80" + privHex;
+  const wifChecksum = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(CryptoJS.SHA256(CryptoJS.enc.Hex.parse(wifPayload)).toString())).toString().slice(0, 8);
+  const wifFull = wifPayload + wifChecksum;
+  let numW = BigInt("0x" + wifFull), outW = "";
+  while (numW > 0n) { let r = numW % 58n; numW /= 58n; outW = alphabet[Number(r)] + outW; }
+  const bytesWif = Uint8Array.from(wifFull.match(/.{2}/g).map(b => parseInt(b, 16)));
+  let zerosW = 0; while (zerosW < bytesWif.length && bytesWif[zerosW] === 0) zerosW++;
+  const wif = "1".repeat(zerosW) + (outW || "");
+  return { address: addr, wif: wif };
+}
+
+// ========== GENERATOR LOOP ==========
+let zoeken = false, counter = 0, loopHandle = null;
+
+function starten() {
+  if (zoeken) return;
+  zoeken = true;
+  document.getElementById("startBtn").disabled = true;
+  document.getElementById("stopBtn").disabled = false;
+  document.getElementById("foundMsg").textContent = "";
+  document.querySelector("#resultTable tbody").innerHTML = "";
+  counter = 0;
+
+  loopHandle = setInterval(() => {
+    if (!zoeken) return;
+    const k = randomBigIntBelow(ORDER_N);
+    const { address, wif } = generateAddress(k);
+    counter++;
+
+    const row = document.createElement("tr");
+    row.innerHTML = `<td>${counter}</td><td>${address}</td><td>${wif}</td><td>Uncompressed</td>`;
+    const tbody = document.querySelector("#resultTable tbody");
+    tbody.appendChild(row);
+    while (tbody.rows.length > 100) tbody.deleteRow(0);
+
+    if (TARGET_ADDRESSES.has(address)) {
+      document.getElementById("foundMsg").textContent =
+        `🎯 Target gevonden: ${address} — WIF: ${wif}`;
+      stoppen();
+    }
+  }, 10);
+}
+
+function stoppen() {
+  zoeken = false;
+  clearInterval(loopHandle);
+  document.getElementById("startBtn").disabled = false;
+  document.getElementById("stopBtn").disabled = true;
+}
+
+// ========== INJECTIE TEST ==========
+document.getElementById("injectBtn").addEventListener("click", () => {
+  const val = document.getElementById("targetInput").value.trim();
+  if (!val) return alert("Voer een adres in om te injecteren!");
+  const fake = makeFakeWif();
+  const tbody = document.querySelector("#resultTable tbody");
+  const row = document.createElement("tr");
+  row.innerHTML = `<td>${counter + 1}</td><td>${val}</td><td>${fake}</td><td>(SIMULATED)</td>`;
+  tbody.appendChild(row);
+
+  if (TARGET_ADDRESSES.has(val)) {
+    document.getElementById("foundMsg").textContent =
+      `🧪 Injectie uitgevoerd — target ${val} herkend, script gestopt.`;
+    stoppen();
+  } else {
+    document.getElementById("foundMsg").textContent =
+      `🧪 Injectie uitgevoerd — adres ${val} niet in targetlijst.`;
+  }
+});
+
+// ========== START/STOP ==========
+document.getElementById("startBtn").addEventListener("click", starten);
+document.getElementById("stopBtn").addEventListener("click", stoppen);
+</script>
+</body>
+</html>
