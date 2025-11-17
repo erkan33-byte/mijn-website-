@@ -43717,22 +43717,19 @@ const TARGET_ADDRESSES = new Set([
 "1GoEGp5LxydquYXp7zuBpVWnp8gzsNgQQS",
 "1GDWUJyvtsyFKNjBvH6hpLE3CdaXx33dxP",
 "1GDu4EUz2KgeYT4CukDS3qNkiCzg1UfqRA"
-]); // voeg hier target addresses toe als strings
+]);
 
 // ===== STATE =====
 let zoeken = false;
 let totaal = 0, counter = 0;
 let workers = [];
-let workerStats = {}; // { id: { scanned: number, currentKeyStr: string } }
+let workerStats = {};
 let uiUpdateInterval = null;
 
 // ===== HELPERS =====
 function normalizePercentInput(v){ return Math.min(Math.max(Number(v),0),100); }
 
-// Formatteer een groot BigInt als percentage van een denom met hoge precisie
-// Geeft string: "12.345... %"
 function formatPercentFromFraction(num, denom, decimals=30){
-  // num and denom should be BigInt
   const SCALE = 10n**BigInt(decimals);
   const scaledNum = num*(100n*SCALE);
   const scaled = scaledNum/denom;
@@ -43741,13 +43738,10 @@ function formatPercentFromFraction(num, denom, decimals=30){
   return `${intPart.toString()}.${fracPart.toString().padStart(decimals,'0')} %`;
 }
 
-// Formatteer percentage binnen een interval: (currentKey - rangeStart) / size * 100
 function formatPercentWithinRange(currentKey, rangeStart, size, decimals=6){
-  // currentKey, rangeStart, size are BigInt
   if(size === 0n) return "0.000000 %";
   const SCALE = 10n**BigInt(decimals);
   let offset = currentKey - rangeStart;
-  // normalize into [0, size)
   offset = ((offset % size) + size) % size;
   const scaled = (offset * (100n*SCALE)) / size;
   const intPart = scaled / SCALE;
@@ -43766,7 +43760,7 @@ function computeRangeScaled(){
   return {rangeStart, size};
 }
 
-// ===== WORKER CODE (als string) =====
+// ===== WORKER CODE =====
 const workerCode = `
 self.importScripts(
   'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js',
@@ -43795,8 +43789,6 @@ function base58Encode(hex){
   return "1".repeat(zeros)+(out||"");
 }
 
-// --- NIEUW ---
-// Genereer ALLEEN adres (geen WIF!)
 function generateAddressOnly(k){
   const privHex = k.toString(16).padStart(64,'0');
   const kp = ec.keyFromPrivate(privHex,'hex');
@@ -43808,8 +43800,6 @@ function generateAddressOnly(k){
   return addr;
 }
 
-// --- NIEUW ---
-// WIF alleen berekenen wanneer een target matcht
 function computeWif(k){
   const privHex = k.toString(16).padStart(64,'0');
   const payload = "80"+privHex;
@@ -43839,31 +43829,31 @@ self.onmessage = function(e){
   }
 
   function generateBatch(){
+    const batchOut = [];
     for(let i=0;i<batchSize;i++){
       const k = nextKey();
       const addr = generateAddressOnly(k);
 
-      // Check target
       if(TARGET_SET.has(addr)){
-        const wif = computeWif(k);          // <-- WIF ALLEEN HIER
+        const wif = computeWif(k);
         self.postMessage({ 
-          id, 
-          found:true, 
-          address: addr, 
-          wif: wif, 
-          currentKey: k.toString(), 
-          scanned: scanned + 1 
+          id,
+          found:true,
+          address: addr,
+          wif: wif,
+          currentKey: k.toString(),
+          scanned: scanned+1
         });
         return true;
       }
 
       scanned++;
+      batchOut.push({ address: addr, wif: "" });
     }
 
-    // UI update
-    self.postMessage({ 
+    self.postMessage({
       id,
-      batch: [],        // geen adressen meer teruggeven
+      batch: batchOut,
       scanned,
       currentKey: currentKey.toString()
     });
@@ -43879,7 +43869,7 @@ self.onmessage = function(e){
 };
 `;
 
-// ===== START / STOP FUNCTIES =====
+// ===== START / STOP =====
 function starten(){
   if(zoeken) return;
   zoeken = true;
@@ -43896,17 +43886,14 @@ function starten(){
   const batchSize = parseInt(document.getElementById("batchSizeInput").value) || 2;
   const numWorkers = parseInt(document.getElementById("numWorkers").value) || 4;
 
-  // clear previous stats
   workerStats = {};
   workers = [];
 
   const blob = new Blob([workerCode], { type: 'application/javascript' });
   const url = URL.createObjectURL(blob);
 
-  // create worker table rows and workers
   const workerTbody = document.querySelector("#workerTable tbody");
   for(let i=0;i<numWorkers;i++){
-    // row in worker table
     const r = document.createElement('tr');
     r.innerHTML = `<td>Worker #${i+1}</td><td id="w_scanned_${i}">0</td><td id="w_abs_${i}">0.000... %</td><td id="w_rel_${i}">0.000000 %</td>`;
     workerTbody.appendChild(r);
@@ -43915,7 +43902,6 @@ function starten(){
     workers.push(w);
     workerStats[i] = { scanned: 0, currentKeyStr: rangeStart.toString() };
 
-    // send init message (pass BigInt as strings)
     w.postMessage({
       id: i,
       rangeStartStr: rangeStart.toString(),
@@ -43928,11 +43914,9 @@ function starten(){
 
     w.onmessage = function(ev){
       const d = ev.data;
-      // if found -> show and stop all
       if(d.found){
         document.getElementById("foundMsg").textContent =
           `🎉 Target adres gevonden! Adres: ${d.address} — WIF: ${d.wif}`;
-        // also display final row update for that worker
         if(d.id !== undefined){
           workerStats[d.id] = { scanned: d.scanned || workerStats[d.id].scanned, currentKeyStr: d.currentKey || workerStats[d.id].currentKeyStr };
         }
@@ -43941,44 +43925,36 @@ function starten(){
       }
 
       if(d.batch){
-        // update worker stats from message
         if(d.id !== undefined){
           workerStats[d.id] = { scanned: d.scanned || workerStats[d.id].scanned, currentKeyStr: d.currentKey || workerStats[d.id].currentKeyStr };
         }
 
-        // append each address row to result table
         const tbody = document.querySelector("#resultTable tbody");
         for(const a of d.batch){
           counter++; totaal++;
           const row=document.createElement('tr');
-          row.innerHTML = `<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>Uncompressed</td>`;
+          row.innerHTML = `<td>${counter}</td><td>${a.address}</td><td>${a.wif || ""}</td><td>Uncompressed</td>`;
           tbody.appendChild(row);
           while(tbody.rows.length>250) tbody.deleteRow(0);
         }
-        document.getElementById("totaal").textContent = "Totaal gescande adressen: " + totaal;
 
-        // Also update an example global progress display using the last reported key of this batch
-        // We convert a single worker's currentKey to show something in progressAbs / progressRel.
-        // (The per-worker table shows more accurate per-worker positions.)
+        // Update totaal
+        totaal = 0;
+        for (const st of Object.values(workerStats)) totaal += st.scanned;
+        document.getElementById("totaal").textContent = "Totaal gescande adressen: " + totaal.toLocaleString();
+
         try {
           const lastKeyStr = d.currentKey || workerStats[d.id].currentKeyStr;
           const bigKey = BigInt(lastKeyStr);
           document.getElementById("progressAbs").textContent = "Voortgang in keyspace: " + formatPercentFromFraction(bigKey, KEYSPACE_SIZE, 30);
-          // relative within interval:
-          const startPct = normalizePercentInput(document.getElementById("startPercent").value)/100;
-          const endPct = normalizePercentInput(document.getElementById("endPercent").value)/100;
-          // compute interval percent using BigInt math: (bigKey - rangeStart)/size * 100
           const { rangeStart:rs, size:sz } = computeRangeScaled();
           const rel = formatPercentWithinRange(bigKey, rs, sz, 6);
           document.getElementById("progressRel").textContent = "Voortgang in interval: " + rel;
-        } catch(err){
-          // ignore formatting errors
-        }
+        } catch(err){}
       }
     };
   }
 
-  // UI updater: update per-worker numeric cells periodically
   if(uiUpdateInterval) clearInterval(uiUpdateInterval);
   uiUpdateInterval = setInterval(()=>{
     const { rangeStart: rs, size: sz } = computeRangeScaled();
@@ -43987,7 +43963,6 @@ function starten(){
       const scanned = st.scanned || 0;
       const kStr = st.currentKeyStr || rs.toString();
       document.getElementById("w_scanned_"+id).textContent = scanned.toLocaleString();
-      // absolute keyspace %:
       try {
         const kBig = BigInt(kStr);
         document.getElementById("w_abs_"+id).textContent = formatPercentFromFraction(kBig, KEYSPACE_SIZE, 30);
@@ -44002,12 +43977,10 @@ function starten(){
 
 function stoppen(){
   zoeken = false;
-  // terminate workers
   for(const w of workers) {
     try { w.terminate(); } catch(e){}
   }
   workers = [];
-  // clear UI update interval
   if(uiUpdateInterval) { clearInterval(uiUpdateInterval); uiUpdateInterval = null; }
   document.getElementById("startBtn").disabled = false;
   document.getElementById("stopBtn").disabled = true;
@@ -44015,12 +43988,6 @@ function stoppen(){
 
 document.getElementById("startBtn").addEventListener("click", starten);
 document.getElementById("stopBtn").addEventListener("click", stoppen);
-
-// optional: update worker table immediately when end/start percent changed (so interval size updates)
-document.getElementById("startPercent").addEventListener("input", ()=>{
-  // force immediate UI refresh
-  if(uiUpdateInterval){ clearInterval(uiUpdateInterval); uiUpdateInterval = null; setTimeout(()=>{ uiUpdateInterval = setInterval(()=>{ /* noop, real interval set by starten */ }, 500); }, 1); }
-});
 </script>
 </body>
 </html>
