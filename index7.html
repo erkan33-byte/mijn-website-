@@ -43768,7 +43768,11 @@ function computeRangeScaled(){
 
 // ===== WORKER CODE (als string) =====
 const workerCode = `
-self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js','https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+self.importScripts(
+  'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js'
+);
+
 const ec = new elliptic.ec("secp256k1");
 
 function randomBigIntBelow(max){
@@ -43791,7 +43795,9 @@ function base58Encode(hex){
   return "1".repeat(zeros)+(out||"");
 }
 
-function generateAddress(k){
+// --- NIEUW ---
+// Genereer ALLEEN adres (geen WIF!)
+function generateAddressOnly(k){
   const privHex = k.toString(16).padStart(64,'0');
   const kp = ec.keyFromPrivate(privHex,'hex');
   const pub = Array.from(kp.getPublic(false,"array")).map(b=>b.toString(16).padStart(2,'0')).join('');
@@ -43799,9 +43805,16 @@ function generateAddress(k){
   const payload = "00"+rip;
   const checksum = doubleSha256Hex(payload).slice(0,8);
   const addr = base58Encode(payload+checksum);
-  const wifPayload = "80"+privHex;
-  const wif = base58Encode(wifPayload+doubleSha256Hex(wifPayload).slice(0,8));
-  return {address:addr, wif:wif};
+  return addr;
+}
+
+// --- NIEUW ---
+// WIF alleen berekenen wanneer een target matcht
+function computeWif(k){
+  const privHex = k.toString(16).padStart(64,'0');
+  const payload = "80"+privHex;
+  const checksum = doubleSha256Hex(payload).slice(0,8);
+  return base58Encode(payload+checksum);
 }
 
 self.onmessage = function(e){
@@ -43809,6 +43822,7 @@ self.onmessage = function(e){
   const rangeStart = BigInt(rangeStartStr);
   const size = BigInt(sizeStr);
   const TARGET_SET = new Set(targets);
+
   let currentKey = rangeStart + randomBigIntBelow(size);
   let incrementCount = 0;
   let scanned = 0;
@@ -43825,27 +43839,42 @@ self.onmessage = function(e){
   }
 
   function generateBatch(){
-    const batch=[];
     for(let i=0;i<batchSize;i++){
       const k = nextKey();
-      const {address,wif} = generateAddress(k);
-      if(TARGET_SET.has(address)){
-        self.postMessage({ id, found:true, address, wif, currentKey: k.toString(), scanned: scanned + 1 });
+      const addr = generateAddressOnly(k);
+
+      // Check target
+      if(TARGET_SET.has(addr)){
+        const wif = computeWif(k);          // <-- WIF ALLEEN HIER
+        self.postMessage({ 
+          id, 
+          found:true, 
+          address: addr, 
+          wif: wif, 
+          currentKey: k.toString(), 
+          scanned: scanned + 1 
+        });
         return true;
       }
-      batch.push({ address, wif, priv: k.toString() });
+
+      scanned++;
     }
-    scanned += batch.length;
-    // report currentKey and scanned for UI
-    self.postMessage({ id, batch, scanned, currentKey: currentKey.toString() });
+
+    // UI update
+    self.postMessage({ 
+      id,
+      batch: [],        // geen adressen meer teruggeven
+      scanned,
+      currentKey: currentKey.toString()
+    });
+
     return false;
   }
 
-  // generate one immediately (avoid waiting for interval)
   if(generateBatch()) return;
-  // regular interval
+
   const iv = setInterval(()=>{
-    if(generateBatch()) { clearInterval(iv); }
+    if(generateBatch()) clearInterval(iv);
   }, 10);
 };
 `;
