@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>BTC Key Generator — Workers + per-worker keyspace & interval positie</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; }
+table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+th, td { border: 1px solid #ccc; padding: 8px; font-size: 13px; word-break: break-all; text-align: left; }
+th { background: #f2f2f2; }
+button, input, select { margin-bottom: 10px; padding: 8px 12px; }
+#totaal, #progressAbs, #progressRel { margin-bottom: 10px; font-weight: bold; }
+#foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
+label { display:inline-block; min-width:220px; }
+.worker-status { margin-top: 20px; }
+.small { font-size: 12px; color: #555; }
+</style>
+</head>
+<body>
+<h2>BTC Key Generator — Workers + per-worker keyspace & interval positie</h2>
+
+<label for="startPercent">Start (%):</label>
+<input type="number" id="startPercent" value="10" min="0" max="100" step="0.0001"><br>
+
+<label for="endPercent">Eind (%):</label>
+<input type="number" id="endPercent" value="20" min="0" max="100" step="0.0001"><br>
+
+<label for="jumpAfter">Aantal sleutels per reeks (voor nieuwe random sprong):</label>
+<input type="number" id="jumpAfter" value="1000" min="1"><br>
+
+<label for="batchSizeInput">Batch grootte per worker:</label>
+<input type="number" id="batchSizeInput" value="2" min="1"><br>
+
+<label for="modeSelect">Modus:</label>
+<select id="modeSelect">
+  <option value="standard">Standaard (sequentieel + sprongen)</option>
+  <option value="gokker">Gokker (volledig random)</option>
+  <option value="stride">Stride (deterministische partitie per worker)</option>
+  <option value="prefix">Prefix filter (toon alleen matches met prefix)</option>
+</select><br>
+
+<label for="prefixInput">Adres-prefix (voor prefix modus):</label>
+<input type="text" id="prefixInput" placeholder="bijv. 1Boat..."><br>
+
+<label for="numWorkers">Aantal workers:</label>
+<input type="number" id="numWorkers" value="4" min="1"><br>
+
+<button id="startBtn">Start zoeken</button>
+<button id="stopBtn" disabled>Stop</button>
+
+<div id="totaal">Totaal gescande adressen: 0</div>
+<div id="progressAbs">Voortgang (voorbeeld): 0.000000000000000000000000000000 %</div>
+<div id="progressRel">Voortgang in interval (voorbeeld): 0.000000 %</div>
+<div id="foundMsg"></div>
+
+<table id="resultTable">
+<thead>
+<tr><th>#</th><th>Adres</th><th>WIF</th><th>Type</th></tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<!-- Worker progress -->
+<h3>Worker status</h3>
+<table id="workerTable" class="worker-status">
+<thead><tr><th>Worker ID</th><th>Gescande adressen</th><th>Keyspace % (absoluut)</th><th>Interval %</th></tr></thead>
+<tbody></tbody>
+</table>
+
+<script>
+// ===== CONSTANTEN =====
+const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+const KEYSPACE_SIZE = ORDER_N - 1n;
+const TARGET_ADDRESSES = new Set([
+"1GDu4EUz2KgeYT4CukDS3qNkiCzg1UfqRA"
+]); // voeg hier target addresses toe als strings
+
+// ===== STATE =====
+let zoeken = false;
+let totaal = 0, counter = 0;
+let workers = [];
+let workerStats = {}; // { id: { scanned: number, currentKeyStr: string } }
+let uiUpdateInterval = null;
+
+// ===== HELPERS =====
+function normalizePercentInput(v){ return Math.min(Math.max(Number(v),0),100); }
+
+// Formatteer een groot BigInt als percentage van een denom met hoge precisie
+function formatPercentFromFraction(num, denom, decimals=30){
+  const SCALE = 10n**BigInt(decimals);
+  const scaledNum = num*(100n*SCALE);
+  const scaled = scaledNum/denom;
+  const intPart = scaled / SCALE;
+  const fracPart = scaled % SCALE;
+  return `${intPart.toString()}.${fracPart.toString().padStart(decimals,'0')} %`;
+}
+
+function formatPercentWithinRange(currentKey, rangeStart, size, decimals=6){
+  if(size === 0n) return "0.000000 %";
+  const SCALE = 10n**BigInt(decimals);
+  let offset = currentKey - rangeStart;
+  offset = ((offset % size) + size) % size;
+  const scaled = (offset * (100n*SCALE)) / size;
+  const intPart = scaled / SCALE;
+  const fracPart = scaled % SCALE;
+  return `${intPart.toString()}.${fracPart.toString().padStart(decimals,'0')} %`;
+}
+
+function computeRangeScaled(){
+  const sPct = BigInt(Math.floor(normalizePercentInput(document.getElementById("startPercent").value)*1e6));
+  const ePct = BigInt(Math.floor(normalizePercentInput(document.getElementById("endPercent").value)*1e6));
+  const sScaled = sPct*1000000n;
+  const eScaled = ePct*1000000n;
+  const rangeStart = (KEYSPACE_SIZE*sScaled)/(100n*1_000_000_000_000n);
+  const rangeEnd   = (KEYSPACE_SIZE*eScaled)/(100n*1_000_000_000_000n);
+  let size = rangeEnd - rangeStart; if(size<=0n) size=1n;
+  return {rangeStart, size};
+}
+
+// ===== WORKER CODE (als string) =====
+const workerCode = `
+self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js','https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+const ec = new elliptic.ec("secp256k1");
+
+function randomBigIntBelow(max){
+  const arr=new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  let r=0n;
+  for(let i=0;i<32;i++) r=(r<<8n)+BigInt(arr[i]);
+  return r%max;
+}
+
+function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)); }
+
+function base58Encode(hex){
+  const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  const bytes=Uint8Array.from(hex.match(/.{2}/g).map(b=>parseInt(b,16)));
+  let zeros=0; while(zeros<bytes.length && bytes[zeros]===0) zeros++;
+  let num=BigInt("0x"+hex); let out="";
+  while(num>0n){ let r=num%58n; num/=58n; out=alphabet[Number(r)]+out; }
+  return "1".repeat(zeros)+(out||"");
+}
+
+function generateAddress(k){
+  const privHex = k.toString(16).padStart(64,'0');
+  const kp = ec.keyFromPrivate(privHex,'hex');
+  const pub = Array.from(kp.getPublic(false,"array")).map(b=>b.toString(16).padStart(2,'0')).join('');
+  const rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pub))).toString();
+  const payload = "00"+rip;
+  const checksum = doubleSha256Hex(payload).slice(0,8);
+  const addr = base58Encode(payload+checksum);
+  const wifPayload = "80"+privHex;
+  const wif = base58Encode(wifPayload+doubleSha256Hex(wifPayload).slice(0,8));
+  return {address:addr, wif:wif};
+}
+
+self.onmessage = function(e){
+  const { id, rangeStartStr, sizeStr, jumpAfter, batchSize, mode, numWorkers, prefix, targets } = e.data;
+  const rangeStart = BigInt(rangeStartStr);
+  const size = BigInt(sizeStr);
+  const TARGET_SET = new Set(targets);
+  let currentKey;
+  let incrementCount = 0;
+  let scanned = 0;
+
+  // initialize currentKey based on mode
+  if(mode === 'stride'){
+    // each worker starts at a distinct offset (mod size)
+    const offset = BigInt(id) % size;
+    currentKey = (rangeStart + offset) % (rangeStart + size);
+    // ensure in [rangeStart, rangeStart+size)
+    if(currentKey < rangeStart) currentKey = rangeStart;
+  } else {
+    // random seed inside range
+    currentKey = rangeStart + randomBigIntBelow(size);
+  }
+
+  function nextKey_standard(){
+    if(incrementCount >= jumpAfter){
+      currentKey = rangeStart + randomBigIntBelow(size);
+      incrementCount = 0;
+    }
+    const k = currentKey;
+    currentKey = (currentKey + 1n - rangeStart) % size + rangeStart;
+    incrementCount++;
+    return k;
+  }
+
+  function nextKey_gokker(){
+    return rangeStart + randomBigIntBelow(size);
+  }
+
+  function nextKey_stride(){
+    // step by numWorkers to avoid overlap with other workers
+    const step = BigInt(numWorkers);
+    const k = currentKey;
+    // advance by step within the circular interval
+    let offset = (k - rangeStart + step) % size;
+    currentKey = rangeStart + offset;
+    return k;
+  }
+
+  function generateBatch(){
+    const batch=[];
+    let attempts = 0;
+    // fill batchSize valid items (in prefix-mode we may skip many)
+    while(batch.length < batchSize && attempts < batchSize*1000){
+      attempts++;
+      let k;
+      if(mode === 'gokker') k = nextKey_gokker();
+      else if(mode === 'stride') k = nextKey_stride();
+      else /* standard or prefix */ k = nextKey_standard();
+
+      const {address,wif} = generateAddress(k);
+      scanned++;
+
+      // check targets (exact matches) first
+      if(TARGET_SET.has(address)){
+        self.postMessage({ id, found:true, address, wif, currentKey: k.toString(), scanned });
+        return true;
+      }
+
+      // if prefix-mode is active, only include addresses that start with prefix
+      if(mode === 'prefix'){
+        if(prefix && prefix.length>0){
+          if(address.startsWith(prefix)) {
+            batch.push({ address, wif, priv: k.toString() });
+          } else {
+            // skip non-matching
+          }
+        } else {
+          // no prefix provided — fallback to standard behaviour (push everything)
+          batch.push({ address, wif, priv: k.toString() });
+        }
+      } else {
+        // normal behavior: push every generated address
+        batch.push({ address, wif, priv: k.toString() });
+      }
+    }
+
+    // report
+    self.postMessage({ id, batch, scanned, currentKey: currentKey.toString() });
+    return false;
+  }
+
+  // run one immediate batch
+  if(generateBatch()) return;
+
+  // regular interval to keep generating
+  const iv = setInterval(()=>{
+    if(generateBatch()) { clearInterval(iv); }
+  }, 10);
+};
+`;
+
+// ===== START / STOP FUNCTIES =====
+function starten(){
+  if(zoeken) return;
+  zoeken = true;
+  document.getElementById("startBtn").disabled = true;
+  document.getElementById("stopBtn").disabled = false;
+  totaal = 0; counter = 0;
+  document.querySelector("#resultTable tbody").innerHTML = '';
+  document.querySelector("#workerTable tbody").innerHTML = '';
+  document.getElementById("foundMsg").textContent = '';
+
+  const mode = document.getElementById("modeSelect").value;
+  const prefix = document.getElementById("prefixInput").value || "";
+  const { rangeStart, size } = computeRangeScaled();
+  const jumpAfter = parseInt(document.getElementById("jumpAfter").value) || 1000;
+  const batchSize = parseInt(document.getElementById("batchSizeInput").value) || 2;
+  const numWorkers = parseInt(document.getElementById("numWorkers").value) || 4;
+
+  // clear previous stats
+  workerStats = {};
+  workers = [];
+
+  const blob = new Blob([workerCode], { type: 'application/javascript' });
+  const url = URL.createObjectURL(blob);
+
+  // create worker table rows and workers
+  const workerTbody = document.querySelector("#workerTable tbody");
+  for(let i=0;i<numWorkers;i++){
+    // row in worker table
+    const r = document.createElement('tr');
+    r.innerHTML = `<td>Worker #${i+1}</td><td id="w_scanned_${i}">0</td><td id="w_abs_${i}">0.000... %</td><td id="w_rel_${i}">0.000000 %</td>`;
+    workerTbody.appendChild(r);
+
+    const w = new Worker(url);
+    workers.push(w);
+    workerStats[i] = { scanned: 0, currentKeyStr: rangeStart.toString() };
+
+    // send init message (pass BigInt as strings)
+    w.postMessage({
+      id: i,
+      rangeStartStr: rangeStart.toString(),
+      sizeStr: size.toString(),
+      jumpAfter,
+      batchSize,
+      mode,           // new
+      numWorkers,     // new
+      prefix,         // new
+      targets: Array.from(TARGET_ADDRESSES)
+    });
+
+    w.onmessage = function(ev){
+      const d = ev.data;
+      // if found -> show and stop all
+      if(d.found){
+        document.getElementById("foundMsg").textContent =
+          `🎉 Target adres gevonden! Adres: ${d.address} — WIF: ${d.wif}`;
+        if(d.id !== undefined){
+          workerStats[d.id] = { scanned: d.scanned || workerStats[d.id].scanned, currentKeyStr: d.currentKey || workerStats[d.id].currentKeyStr };
+        }
+        stoppen();
+        return;
+      }
+
+      if(d.batch){
+        if(d.id !== undefined){
+          workerStats[d.id] = { scanned: d.scanned || workerStats[d.id].scanned, currentKeyStr: d.currentKey || workerStats[d.id].currentKeyStr };
+        }
+
+        const tbody = document.querySelector("#resultTable tbody");
+        for(const a of d.batch){
+          counter++; totaal++;
+          const row=document.createElement('tr');
+          row.innerHTML = `<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>Uncompressed</td>`;
+          tbody.appendChild(row);
+          while(tbody.rows.length>250) tbody.deleteRow(0);
+        }
+        document.getElementById("totaal").textContent = "Totaal gescande adressen: " + totaal;
+
+        try {
+          const lastKeyStr = d.currentKey || workerStats[d.id].currentKeyStr;
+          const bigKey = BigInt(lastKeyStr);
+          document.getElementById("progressAbs").textContent = "Voortgang in keyspace: " + formatPercentFromFraction(bigKey, KEYSPACE_SIZE, 30);
+          const { rangeStart:rs, size:sz } = computeRangeScaled();
+          const rel = formatPercentWithinRange(bigKey, rs, sz, 6);
+          document.getElementById("progressRel").textContent = "Voortgang in interval: " + rel;
+        } catch(err){
+          // ignore formatting errors
+        }
+      }
+    };
+  }
+
+  // UI updater: update per-worker numeric cells periodically
+  if(uiUpdateInterval) clearInterval(uiUpdateInterval);
+  uiUpdateInterval = setInterval(()=>{
+    const { rangeStart: rs, size: sz } = computeRangeScaled();
+    for(const [idStr, st] of Object.entries(workerStats)){
+      const id = idStr|0;
+      const scanned = st.scanned || 0;
+      const kStr = st.currentKeyStr || rs.toString();
+      document.getElementById("w_scanned_"+id).textContent = scanned.toLocaleString();
+      try {
+        const kBig = BigInt(kStr);
+        document.getElementById("w_abs_"+id).textContent = formatPercentFromFraction(kBig, KEYSPACE_SIZE, 30);
+        document.getElementById("w_rel_"+id).textContent = formatPercentWithinRange(kBig, rs, sz, 6);
+      } catch(e){
+        document.getElementById("w_abs_"+id).textContent = "err";
+        document.getElementById("w_rel_"+id).textContent = "err";
+      }
+    }
+  }, 500);
+}
+
+function stoppen(){
+  zoeken = false;
+  for(const w of workers) {
+    try { w.terminate(); } catch(e){}
+  }
+  workers = [];
+  if(uiUpdateInterval) { clearInterval(uiUpdateInterval); uiUpdateInterval = null; }
+  document.getElementById("startBtn").disabled = false;
+  document.getElementById("stopBtn").disabled = true;
+}
+
+document.getElementById("startBtn").addEventListener("click", starten);
+document.getElementById("stopBtn").addEventListener("click", stoppen);
+
+</script>
+</body>
+</html>
