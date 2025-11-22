@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>BTC Key Generator — Workers + per-worker keyspace & interval positie</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; }
+table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+th, td { border: 1px solid #ccc; padding: 8px; font-size: 13px; word-break: break-all; text-align: left; }
+th { background: #f2f2f2; }
+button, input { margin-bottom: 10px; padding: 8px 12px; }
+#totaal, #progressAbs, #progressRel { margin-bottom: 10px; font-weight: bold; }
+#foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
+label { display:inline-block; min-width:220px; }
+.worker-status { margin-top: 20px; }
+.small { font-size: 12px; color: #555; }
+</style>
+</head>
+<body>
+<h2>BTC Key Generator — Workers + per-worker keyspace & interval positie</h2>
+
+<label for="startPercent">Start (%):</label>
+<input type="number" id="startPercent" value="10" min="0" max="100" step="0.0001"><br>
+
+<label for="endPercent">Eind (%):</label>
+<input type="number" id="endPercent" value="20" min="0" max="100" step="0.0001"><br>
+
+<label for="jumpAfter">Aantal sleutels per reeks (voor nieuwe random sprong):</label>
+<input type="number" id="jumpAfter" value="1000" min="1"><br>
+
+<label for="batchSizeInput">Batch grootte per worker:</label>
+<input type="number" id="batchSizeInput" value="2" min="1"><br>
+
+<label><input type="checkbox" id="gokkerMode"> Gokker modus</label><br>
+
+<label for="numWorkers">Aantal workers:</label>
+<input type="number" id="numWorkers" value="4" min="1"><br>
+
+<!-- NIEUW: WIF startpunt -->
+<label for="wifInput">Start WIF (optioneel):</label>
+<input type="text" id="wifInput" placeholder="5Hue... of Kx..."><br>
+<label><input type="checkbox" id="useWifStart"> Gebruik WIF als startpunt</label><br>
+
+<button id="startBtn">Start zoeken</button>
+<button id="stopBtn" disabled>Stop</button>
+
+<div id="totaal">Totaal gescande adressen: 0</div>
+<div id="progressAbs">Voortgang (voorbeeld): 0.000000000000000000000000000000 %</div>
+<div id="progressRel">Voortgang in interval (voorbeeld): 0.000000 %</div>
+<div id="foundMsg"></div>
+
+<table id="resultTable">
+<thead>
+<tr><th>#</th><th>Adres</th><th>WIF</th><th>Type</th></tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<!-- Worker progress -->
+<h3>Worker status</h3>
+<table id="workerTable" class="worker-status">
+<thead><tr><th>Worker ID</th><th>Gescande adressen</th><th>Keyspace % (absoluut)</th><th>Interval %</th></tr></thead>
+<tbody></tbody>
+</table>
+
+<script>
+// ===== CONSTANTEN =====
+const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+const KEYSPACE_SIZE = ORDER_N - 1n;
+const TARGET_ADDRESSES = new Set([
+"1GDu4EUz2KgeYT4CukDS3qNkiCzg1UfqRA"
+]); // voeg hier target addresses toe als strings
+
+// ===== STATE =====
+let zoeken = false;
+let totaal = 0, counter = 0;
+let workers = [];
+let workerStats = {}; // { id: { scanned: number, currentKeyStr: string } }
+let uiUpdateInterval = null;
+
+// ===== HELPERS =====
+function normalizePercentInput(v){ return Math.min(Math.max(Number(v),0),100); }
+
+// Formatteer een groot BigInt als percentage van een denom met hoge precisie
+function formatPercentFromFraction(num, denom, decimals=30){
+  const SCALE = 10n**BigInt(decimals);
+  const scaledNum = num*(100n*SCALE);
+  const scaled = scaledNum/denom;
+  const intPart = scaled / SCALE;
+  const fracPart = scaled % SCALE;
+  return `${intPart.toString()}.${fracPart.toString().padStart(decimals,'0')} %`;
+}
+
+// Format percentage within range
+function formatPercentWithinRange(currentKey, rangeStart, size, decimals=6){
+  if(size === 0n) return "0.000000 %";
+  const SCALE = 10n**BigInt(decimals);
+  let offset = currentKey - rangeStart;
+  offset = ((offset % size) + size) % size;
+  const scaled = (offset * (100n*SCALE)) / size;
+  const intPart = scaled / SCALE;
+  const fracPart = scaled % SCALE;
+  return `${intPart.toString()}.${fracPart.toString().padStart(decimals,'0')} %`;
+}
+
+function computeRangeScaled(){
+  const sPct = BigInt(Math.floor(normalizePercentInput(document.getElementById("startPercent").value)*1e6));
+  const ePct = BigInt(Math.floor(normalizePercentInput(document.getElementById("endPercent").value)*1e6));
+  const sScaled = sPct*1000000n;
+  const eScaled = ePct*1000000n;
+  const rangeStart = (KEYSPACE_SIZE*sScaled)/(100n*1_000_000_000_000n);
+  const rangeEnd   = (KEYSPACE_SIZE*eScaled)/(100n*1_000_000_000_000n);
+  let size = rangeEnd - rangeStart; if(size<=0n) size=1n;
+  return {rangeStart, size};
+}
+
+// ===== WIF / Base58 helpers (main thread) =====
+const BASE58_ALPH = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function base58ToBytes(str){
+  // returns Uint8Array
+  let num = 0n;
+  for(const ch of str){
+    const idx = BASE58_ALPH.indexOf(ch);
+    if(idx === -1) throw new Error("Invalid base58 char");
+    num = num*58n + BigInt(idx);
+  }
+  // convert to bytes
+  let hex = num.toString(16);
+  if(hex.length % 2) hex = '0' + hex;
+  const bytes = hex.match(/.{2}/g) ? hex.match(/.{2}/g).map(b=>parseInt(b,16)) : [];
+  // leading zeros
+  let leading = 0;
+  for(const ch of str){
+    if(ch === '1') leading++;
+    else break;
+  }
+  const out = new Uint8Array(leading + bytes.length);
+  for(let i=0;i<bytes.length;i++) out[leading + i] = bytes[i];
+  return out;
+}
+
+function decodeWIFToBigInt(wif){
+  // decode base58check, return BigInt private key (ignores compression flag)
+  try{
+    const bytes = base58ToBytes(wif);
+    if(bytes.length < 5) throw new Error("WIF te kort");
+    // checksum last 4 bytes
+    const payload = bytes.slice(0, bytes.length-4);
+    const checksum = bytes.slice(bytes.length-4);
+    // compute double sha256
+    const wordArray = CryptoJS.lib.WordArray.create(payload);
+    const h1 = CryptoJS.SHA256(wordArray).toString();
+    const h2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h1)).toString();
+    const computedChecksum = Uint8Array.from(h2.match(/.{2}/g).map(b=>parseInt(b,16))).slice(0,4);
+    for(let i=0;i<4;i++) if(computedChecksum[i] !== checksum[i]) throw new Error("Checksum mismatch");
+    // first byte should be 0x80 for mainnet private key
+    if(payload[0] !== 0x80) console.warn("WIF: unexpected version byte:", payload[0]);
+    // remove version byte
+    let keyBytes = payload.slice(1);
+    // if length is 33 and last byte is 0x01 -> compressed flag, drop it
+    if(keyBytes.length === 33 && keyBytes[32] === 0x01){
+      keyBytes = keyBytes.slice(0,32);
+    } else if(keyBytes.length !== 32){
+      throw new Error("Onverwachte privésleutelgrootte: " + keyBytes.length);
+    }
+    // convert to BigInt
+    let hex = Array.from(keyBytes).map(b=>b.toString(16).padStart(2,'0')).join('');
+    return BigInt("0x" + hex);
+  }catch(err){
+    throw err;
+  }
+}
+
+// ===== WORKER CODE (als string) =====
+const workerCode = `
+self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js','https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+const ec = new elliptic.ec("secp256k1");
+
+function randomBigIntBelow(max){
+  const arr=new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  let r=0n;
+  for(let i=0;i<32;i++) r=(r<<8n)+BigInt(arr[i]);
+  return r%max;
+}
+
+function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)); }
+
+function base58Encode(hex){
+  const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  const bytes=Uint8Array.from(hex.match(/.{2}/g).map(b=>parseInt(b,16)));
+  let zeros=0; while(zeros<bytes.length && bytes[zeros]===0) zeros++;
+  let num=BigInt("0x"+hex); let out="";
+  while(num>0n){ let r=num%58n; num/=58n; out=alphabet[Number(r)]+out; }
+  return "1".repeat(zeros)+(out||"");
+}
+
+function generateAddress(k){
+  const privHex = k.toString(16).padStart(64,'0');
+  const kp = ec.keyFromPrivate(privHex,'hex');
+  const pub = Array.from(kp.getPublic(false,"array")).map(b=>b.toString(16).padStart(2,'0')).join('');
+  const rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pub))).toString();
+  const payload = "00"+rip;
+  const checksum = doubleSha256Hex(payload).slice(0,8);
+  const addr = base58Encode(payload+checksum);
+  const wifPayload = "80"+privHex;
+  const wif = base58Encode(wifPayload+doubleSha256Hex(wifPayload).slice(0,8));
+  return {address:addr, wif:wif};
+}
+
+self.onmessage = function(e){
+  const { id, rangeStartStr, sizeStr, jumpAfter, batchSize, gokker, targets, startKeyStr } = e.data;
+  const rangeStart = BigInt(rangeStartStr);
+  const size = BigInt(sizeStr);
+  const TARGET_SET = new Set(targets);
+  // initialize currentKey: if startKeyStr provided, use it (assumed already normalized into [rangeStart, rangeStart+size) by main thread)
+  let currentKey = startKeyStr ? BigInt(startKeyStr) : (rangeStart + randomBigIntBelow(size));
+  let incrementCount = 0;
+  let scanned = 0;
+
+  function nextKey(){
+    if(incrementCount >= jumpAfter){
+      currentKey = rangeStart + randomBigIntBelow(size);
+      incrementCount = 0;
+    }
+    const k = gokker ? rangeStart + randomBigIntBelow(size) : currentKey;
+    // advance currentKey by 1 within interval
+    currentKey = (currentKey + 1n - rangeStart) % size + rangeStart;
+    incrementCount++;
+    return k;
+  }
+
+  function generateBatch(){
+    const batch=[];
+    for(let i=0;i<batchSize;i++){
+      const k = nextKey();
+      const {address,wif} = generateAddress(k);
+      if(TARGET_SET.has(address)){
+        self.postMessage({ id, found:true, address, wif, currentKey: k.toString(), scanned: scanned + 1 });
+        return true;
+      }
+      batch.push({ address, wif, priv: k.toString() });
+    }
+    scanned += batch.length;
+    // report currentKey and scanned for UI
+    self.postMessage({ id, batch, scanned, currentKey: currentKey.toString() });
+    return false;
+  }
+
+  // generate one immediately (avoid waiting for interval)
+  if(generateBatch()) return;
+  // regular interval
+  const iv = setInterval(()=>{
+    if(generateBatch()) { clearInterval(iv); }
+  }, 10);
+};
+`;
+
+// ===== START / STOP FUNCTIES =====
+function starten(){
+  if(zoeken) return;
+  zoeken = true;
+  document.getElementById("startBtn").disabled = true;
+  document.getElementById("stopBtn").disabled = false;
+  totaal = 0; counter = 0;
+  document.querySelector("#resultTable tbody").innerHTML = '';
+  document.querySelector("#workerTable tbody").innerHTML = '';
+  document.getElementById("foundMsg").textContent = '';
+
+  const gokker = document.getElementById("gokkerMode").checked;
+  const { rangeStart, size } = computeRangeScaled();
+  const jumpAfter = parseInt(document.getElementById("jumpAfter").value) || 1000;
+  const batchSize = parseInt(document.getElementById("batchSizeInput").value) || 2;
+  const numWorkers = parseInt(document.getElementById("numWorkers").value) || 4;
+  const useWif = document.getElementById("useWifStart").checked;
+  const wifVal = document.getElementById("wifInput").value.trim();
+
+  // try decode WIF if requested
+  let baseStartBig = null;
+  if(useWif && wifVal){
+    try{
+      const decoded = decodeWIFToBigInt(wifVal);
+      // map into interval: compute offset = (decoded - rangeStart) mod size; normalized start = rangeStart + offset
+      const offset = ((decoded - rangeStart) % size + size) % size;
+      baseStartBig = rangeStart + offset;
+      console.log("WIF gedecodeerd -> start key (genormaliseerd binnen interval):", baseStartBig.toString());
+    }catch(err){
+      console.error("WIF kon niet worden gedecodeerd:", err);
+      alert("WIF kon niet worden gedecodeerd: " + err.message + "\nDe zoekopdracht wordt zonder WIF-start uitgevoerd.");
+      baseStartBig = null;
+    }
+  }
+
+  // clear previous stats
+  workerStats = {};
+  workers = [];
+
+  const blob = new Blob([workerCode], { type: 'application/javascript' });
+  const url = URL.createObjectURL(blob);
+
+  // create worker table rows and workers
+  const workerTbody = document.querySelector("#workerTable tbody");
+  for(let i=0;i<numWorkers;i++){
+    // row in worker table
+    const r = document.createElement('tr');
+    r.innerHTML = `<td>Worker #${i+1}</td><td id="w_scanned_${i}">0</td><td id="w_abs_${i}">0.000... %</td><td id="w_rel_${i}">0.000000 %</td>`;
+    workerTbody.appendChild(r);
+
+    const w = new Worker(url);
+    workers.push(w);
+    workerStats[i] = { scanned: 0, currentKeyStr: rangeStart.toString() };
+
+    // compute per-worker startKeyStr (if baseStartBig provided) offset by worker id to avoid exact overlap
+    let startKeyStr = null;
+    if(baseStartBig !== null){
+      // offset by i and normalize within interval
+      const offset = ((baseStartBig - rangeStart + BigInt(i)) % size + size) % size;
+      const startForWorker = rangeStart + offset;
+      startKeyStr = startForWorker.toString();
+    }
+
+    // send init message (pass BigInt as strings)
+    w.postMessage({
+      id: i,
+      rangeStartStr: rangeStart.toString(),
+      sizeStr: size.toString(),
+      jumpAfter,
+      batchSize,
+      gokker,
+      targets: Array.from(TARGET_ADDRESSES),
+      startKeyStr // may be null
+    });
+
+    w.onmessage = function(ev){
+      const d = ev.data;
+      // if found -> show and stop all
+      if(d.found){
+        document.getElementById("foundMsg").textContent =
+          `🎉 Target adres gevonden! Adres: ${d.address} — WIF: ${d.wif}`;
+        if(d.id !== undefined){
+          workerStats[d.id] = { scanned: d.scanned || workerStats[d.id].scanned, currentKeyStr: d.currentKey || workerStats[d.id].currentKeyStr };
+        }
+        stoppen();
+        return;
+      }
+
+      if(d.batch){
+        // update worker stats from message
+        if(d.id !== undefined){
+          workerStats[d.id] = { scanned: d.scanned || workerStats[d.id].scanned, currentKeyStr: d.currentKey || workerStats[d.id].currentKeyStr };
+        }
+
+        // append each address row to result table
+        const tbody = document.querySelector("#resultTable tbody");
+        for(const a of d.batch){
+          counter++; totaal++;
+          const row=document.createElement('tr');
+          row.innerHTML = `<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>Uncompressed</td>`;
+          tbody.appendChild(row);
+          while(tbody.rows.length>250) tbody.deleteRow(0);
+        }
+        document.getElementById("totaal").textContent = "Totaal gescande adressen: " + totaal;
+
+        // update global progress display using last reported key of this batch
+        try {
+          const lastKeyStr = d.currentKey || workerStats[d.id].currentKeyStr;
+          const bigKey = BigInt(lastKeyStr);
+          document.getElementById("progressAbs").textContent = "Voortgang in keyspace: " + formatPercentFromFraction(bigKey, KEYSPACE_SIZE, 30);
+          const { rangeStart:rs, size:sz } = computeRangeScaled();
+          const rel = formatPercentWithinRange(bigKey, rs, sz, 6);
+          document.getElementById("progressRel").textContent = "Voortgang in interval: " + rel;
+        } catch(err){
+          // ignore formatting errors
+        }
+      }
+    };
+  }
+
+  // UI updater: update per-worker numeric cells periodically
+  if(uiUpdateInterval) clearInterval(uiUpdateInterval);
+  uiUpdateInterval = setInterval(()=>{
+    const { rangeStart: rs, size: sz } = computeRangeScaled();
+    for(const [idStr, st] of Object.entries(workerStats)){
+      const id = idStr|0;
+      const scanned = st.scanned || 0;
+      const kStr = st.currentKeyStr || rs.toString();
+      document.getElementById("w_scanned_"+id).textContent = scanned.toLocaleString();
+      // absolute keyspace %:
+      try {
+        const kBig = BigInt(kStr);
+        document.getElementById("w_abs_"+id).textContent = formatPercentFromFraction(kBig, KEYSPACE_SIZE, 30);
+        document.getElementById("w_rel_"+id).textContent = formatPercentWithinRange(kBig, rs, sz, 6);
+      } catch(e){
+        document.getElementById("w_abs_"+id).textContent = "err";
+        document.getElementById("w_rel_"+id).textContent = "err";
+      }
+    }
+  }, 500);
+}
+
+function stoppen(){
+  zoeken = false;
+  // terminate workers
+  for(const w of workers) {
+    try { w.terminate(); } catch(e){}
+  }
+  workers = [];
+  // clear UI update interval
+  if(uiUpdateInterval) { clearInterval(uiUpdateInterval); uiUpdateInterval = null; }
+  document.getElementById("startBtn").disabled = false;
+  document.getElementById("stopBtn").disabled = true;
+}
+
+document.getElementById("startBtn").addEventListener("click", starten);
+document.getElementById("stopBtn").addEventListener("click", stoppen);
+
+// optional: update worker table immediately when end/start percent changed (so interval size updates)
+document.getElementById("startPercent").addEventListener("input", ()=>{
+  if(uiUpdateInterval){ clearInterval(uiUpdateInterval); uiUpdateInterval = null; setTimeout(()=>{ uiUpdateInterval = setInterval(()=>{ /* noop, real interval set by starten */ }, 500); }, 1); }
+});
+</script>
+</body>
+</html>
