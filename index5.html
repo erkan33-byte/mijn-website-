@@ -43715,17 +43715,33 @@ const TARGET_ADDRESSES = new Set([
 "1GDu4EUz2KgeYT4CukDS3qNkiCzg1UfqRA"
 ]);
 
-// ===== State =====
-let zoeken=false, totaal=0, counter=0;
-let workers=[], numWorkers=navigator.hardwareConcurrency || 4;
+// ===== STATE =====
+let zoeken = false;
+let totaal = 0, counter = 0;
+let workers = [];
+let workerStats = {};
+let uiUpdateInterval = null;
 
+// ===== HELPERS =====
 function normalizePercentInput(v){ return Math.min(Math.max(Number(v),0),100); }
+
 function formatPercentFromFraction(num, denom, decimals=30){
   const SCALE = 10n**BigInt(decimals);
   const scaledNum = num*(100n*SCALE);
   const scaled = scaledNum/denom;
-  const intPart = scaled/SCALE;
-  const fracPart = scaled%SCALE;
+  const intPart = scaled / SCALE;
+  const fracPart = scaled % SCALE;
+  return `${intPart.toString()}.${fracPart.toString().padStart(decimals,'0')} %`;
+}
+
+function formatPercentWithinRange(currentKey, rangeStart, size, decimals=6){
+  if(size === 0n) return "0.000000 %";
+  const SCALE = 10n**BigInt(decimals);
+  let offset = currentKey - rangeStart;
+  offset = ((offset % size) + size) % size;
+  const scaled = (offset * (100n*SCALE)) / size;
+  const intPart = scaled / SCALE;
+  const fracPart = scaled % SCALE;
   return `${intPart.toString()}.${fracPart.toString().padStart(decimals,'0')} %`;
 }
 
@@ -43736,138 +43752,200 @@ function computeRangeScaled(){
   const eScaled = ePct*1000000n;
   const rangeStart = (KEYSPACE_SIZE*sScaled)/(100n*1_000_000_000_000n);
   const rangeEnd   = (KEYSPACE_SIZE*eScaled)/(100n*1_000_000_000_000n);
-  let size = rangeEnd-rangeStart; if(size<=0n) size=1n;
+  let size = rangeEnd - rangeStart; if(size<=0n) size=1n;
   return {rangeStart, size};
 }
 
-// ===== Worker script =====
+// ===== WORKER CODE =====
 const workerCode = `
-self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js','https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+self.importScripts(
+  'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js'
+);
+
+const ec = new elliptic.ec("secp256k1");
+
+function randomBigIntBelow(max){
+  const arr=new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  let r=0n;
+  for(let i=0;i<32;i++) r=(r<<8n)+BigInt(arr[i]);
+  return r%max;
+}
+
+function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)); }
+
+function base58Encode(hex){
+  const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  const bytes=Uint8Array.from(hex.match(/.{2}/g).map(b=>parseInt(b,16)));
+  let zeros=0; while(zeros<bytes.length && bytes[zeros]===0) zeros++;
+  let num=BigInt("0x"+hex); let out="";
+  while(num>0n){ let r=num%58n; num/=58n; out=alphabet[Number(r)]+out; }
+  return "1".repeat(zeros)+(out||"");
+}
+
+function generateAddressOnly(k){
+  const privHex = k.toString(16).padStart(64,'0');
+  const kp = ec.keyFromPrivate(privHex,'hex');
+  const pub = Array.from(kp.getPublic(false,"array")).map(b=>b.toString(16).padStart(2,'0')).join('');
+  const rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pub))).toString();
+  const payload = "00"+rip;
+  const checksum = doubleSha256Hex(payload).slice(0,8);
+  return base58Encode(payload+checksum);
+}
+
+function computeWif(k){
+  const privHex = k.toString(16).padStart(64,'0');
+  const payload = "80"+privHex;
+  const checksum = doubleSha256Hex(payload).slice(0,8);
+  return base58Encode(payload+checksum);
+}
+
 self.onmessage = function(e){
-  const {mode,batchSize,rangeStart,size,targets} = e.data;
+  const { id, rangeStartStr, sizeStr, batchSize, gokker, targets } = e.data;
+  const rangeStart = BigInt(rangeStartStr);
+  const size = BigInt(sizeStr);
   const TARGET_SET = new Set(targets);
-  function toHex(bytes){ return Array.from(bytes).map(b=>b.toString(16).padStart(2,"0")).join(""); }
-  function hexToBytes(hex){ const out=new Uint8Array(hex.length/2); for(let i=0;i<out.length;i++) out[i]=parseInt(hex.substr(i*2,2),16); return out; }
-  function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
-  function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)); }
-  function base58Encode(hex){
-    const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-    let num=BigInt("0x"+hex); let out="", zeros=0;
-    const bytes=hexToBytes(hex); while(zeros<bytes.length && bytes[zeros]===0) zeros++;
-    while(num>0n){ let r=num%58n; num/=58n; out=alphabet[Number(r)]+out; }
-    return "1".repeat(zeros) + (out||"");
-  }
-  function randomBigIntBelow(maxExclusive){
-    if(maxExclusive<=0n) return 0n;
-    const arr=new Uint8Array(32); crypto.getRandomValues(arr);
-    let r=0n; for(let i=0;i<32;i++) r=(r<<8n)+BigInt(arr[i]); return r%maxExclusive;
-  }
 
-  let linearCounter = rangeStart;
-  const jumpEvery = 1000000n; // 1 miljoen lineair
-  let generated = 0n;
-  let exponentialStep = 1n;
+  let seed = randomBigIntBelow(size);
+  let lastPubHex = "00";
+  let scanned = 0;
+  let mutateFactor = 13n;
 
-  function nextKeyHybrid(){
-    if(generated > 0n && generated % jumpEvery === 0n){
-      // Random sprong
-      const k = randomBigIntBelow(size) + rangeStart;
-      generated++;
-      return k;
-    } else {
-      // Lineair
-      const k = linearCounter;
-      linearCounter += 1n;
-      if(linearCounter >= rangeStart + size) linearCounter = rangeStart;
-      generated++;
-      return k;
-    }
+  function nextKeyAdaptive(){
+    const hashVal = BigInt('0x'+sha256Hex(lastPubHex).slice(0,16));
+    seed = (seed * 6364136223846793005n + hashVal) % size;
+    seed = ((seed << (mutateFactor + (hashVal % 5n))) | (seed >> (256n-(mutateFactor + (hashVal % 5n))))) % size;
+    seed = (seed ^ (hashVal >> 7n)) % size;
+    if(gokker && Math.random()<0.05) seed = randomBigIntBelow(size);
+    mutateFactor = (mutateFactor + 1n) % 31n;
+    return rangeStart + seed;
   }
 
-  function nextKeyLinear(){ 
-    const k = linearCounter; 
-    linearCounter += 1n; 
-    if(linearCounter >= rangeStart + size) linearCounter = rangeStart; 
-    return k; 
-  }
-
-  function nextKeyExponential(){ 
-    const k = rangeStart + exponentialStep; 
-    exponentialStep = exponentialStep*2n % size; 
-    return k; 
-  }
-
-  function nextKey(){ 
-    if(mode==='hybrid') return nextKeyHybrid();
-    else if(mode==='linear') return nextKeyLinear();
-    else return nextKeyExponential();
-  }
-
-  setInterval(()=>{
-    const addresses=[];
+  function generateBatch(){
+    const batchOut = [];
     for(let i=0;i<batchSize;i++){
-      const k = nextKey();
-      const privHex=k.toString(16).padStart(64,'0');
-      const ec=new elliptic.ec("secp256k1"); const kp=ec.keyFromPrivate(privHex,"hex");
-      const pub=toHex(kp.getPublic(false,'array'));
-      const rip=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pub))).toString();
-      const payload='00'+rip;
-      const checksum=doubleSha256Hex(payload).slice(0,8);
-      const addr=base58Encode(payload+checksum);
-      const wif=base58Encode('80'+privHex+doubleSha256Hex('80'+privHex).slice(0,8));
-      if(TARGET_SET.has(addr)){ self.postMessage({found:true,address:addr,wif:wif}); return; }
-      addresses.push({address:addr,wif:wif,priv:k});
+      const k = nextKeyAdaptive();
+      const privHex = k.toString(16).padStart(64,'0');
+      const kp = ec.keyFromPrivate(privHex,'hex');
+      const pub = Array.from(kp.getPublic(false,"array")).map(b=>b.toString(16).padStart(2,'0')).join('');
+      lastPubHex = pub;
+      const addr = generateAddressOnly(k);
+
+      if(TARGET_SET.has(addr)){
+        const wif = computeWif(k);
+        self.postMessage({ id, found:true, address: addr, wif, currentKey: k.toString(), scanned: scanned+1 });
+        return true;
+      }
+
+      scanned++;
+      batchOut.push({ address: addr, wif: "" });
     }
-    self.postMessage({addresses});
-  },10);
+
+    self.postMessage({ id, batch: batchOut, scanned, currentKey: (rangeStart + seed).toString() });
+    return false;
+  }
+
+  if(generateBatch()) return;
+  const iv = setInterval(()=>{ if(generateBatch()) clearInterval(iv); },10);
 };
 `;
 
-// ===== Start / Stop =====
+// ===== START / STOP =====
 function starten(){
   if(zoeken) return;
-  zoeken=true; document.getElementById("startBtn").disabled=true; document.getElementById("stopBtn").disabled=false;
-  totaal=0; counter=0; document.querySelector("#resultTable tbody").innerHTML='';
-  const batchSize = parseInt(document.getElementById("batchSizeInput").value)||100;
-  const mode = document.getElementById("modeSelect").value;
-  const {rangeStart,size} = computeRangeScaled();
-  const blob = new Blob([workerCode], {type:'application/javascript'});
+  zoeken = true;
+  document.getElementById("startBtn").disabled = true;
+  document.getElementById("stopBtn").disabled = false;
+  totaal = 0; counter = 0;
+  document.querySelector("#resultTable tbody").innerHTML = '';
+  document.querySelector("#workerTable tbody").innerHTML = '';
+  document.getElementById("foundMsg").textContent = '';
+
+  const gokker = document.getElementById("gokkerMode").checked;
+  const { rangeStart, size } = computeRangeScaled();
+  const batchSize = parseInt(document.getElementById("batchSizeInput").value) || 2;
+  const numWorkers = parseInt(document.getElementById("numWorkers").value) || 4;
+
+  workerStats = {};
+  workers = [];
+
+  const blob = new Blob([workerCode], { type: 'application/javascript' });
   const url = URL.createObjectURL(blob);
 
+  const workerTbody = document.querySelector("#workerTable tbody");
   for(let i=0;i<numWorkers;i++){
-    const worker = new Worker(url);
-    workers.push(worker);
-    worker.postMessage({mode,batchSize,rangeStart,size,targets:Array.from(TARGET_ADDRESSES)});
-    worker.onmessage = function(e){
-      if(e.data.found){
-        document.getElementById("foundMsg").textContent=`🎉 Target adres gevonden! Adres: ${e.data.address} — WIF: ${e.data.wif}`;
-        stoppen(); return;
+    const r = document.createElement('tr');
+    r.innerHTML = `<td>Worker #${i+1}</td><td id="w_scanned_${i}">0</td><td id="w_abs_${i}">0.000... %</td><td id="w_rel_${i}">0.000000 %</td>`;
+    workerTbody.appendChild(r);
+
+    const w = new Worker(url);
+    workers.push(w);
+    workerStats[i] = { scanned: 0, currentKeyStr: rangeStart.toString() };
+
+    w.postMessage({ id:i, rangeStartStr: rangeStart.toString(), sizeStr:size.toString(), batchSize, gokker, targets:Array.from(TARGET_ADDRESSES) });
+
+    w.onmessage = function(ev){
+      const d = ev.data;
+      if(d.found){
+        document.getElementById("foundMsg").textContent = `🎉 Target adres gevonden! Adres: ${d.address} — WIF: ${d.wif}`;
+        workerStats[d.id] = { scanned: d.scanned || workerStats[d.id].scanned, currentKeyStr: d.currentKey || workerStats[d.id].currentKeyStr };
+        stoppen();
+        return;
       }
-      if(e.data.addresses){
-        const tbody=document.querySelector("#resultTable tbody");
-        for(const a of e.data.addresses){
+      if(d.batch){
+        workerStats[d.id] = { scanned: d.scanned || workerStats[d.id].scanned, currentKeyStr: d.currentKey || workerStats[d.id].currentKeyStr };
+        const tbody = document.querySelector("#resultTable tbody");
+        for(const a of d.batch){
           counter++; totaal++;
           const row=document.createElement('tr');
-          row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>Uncompressed</td>`;
+          row.innerHTML = `<td>${counter}</td><td>${a.address}</td><td>${a.wif || ""}</td><td>Uncompressed</td>`;
           tbody.appendChild(row);
           while(tbody.rows.length>250) tbody.deleteRow(0);
-          const abs = formatPercentFromFraction(a.priv, KEYSPACE_SIZE, 30);
-          document.getElementById("progressAbs").textContent = "Voortgang in keyspace: " + abs;
-          document.getElementById("barAbs").style.width = parseFloat(abs)+"%";
-          document.getElementById("barAbs").textContent = abs;
         }
-        document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
+        totaal = 0;
+        for (const st of Object.values(workerStats)) totaal += st.scanned;
+        document.getElementById("totaal").textContent = "Totaal gescande adressen: " + totaal.toLocaleString();
+        try {
+          const lastKeyStr = d.currentKey || workerStats[d.id].currentKeyStr;
+          const bigKey = BigInt(lastKeyStr);
+          document.getElementById("progressAbs").textContent = "Voortgang in keyspace: " + formatPercentFromFraction(bigKey, KEYSPACE_SIZE, 30);
+          const { rangeStart:rs, size:sz } = computeRangeScaled();
+          const rel = formatPercentWithinRange(bigKey, rs, sz, 6);
+          document.getElementById("progressRel").textContent = "Voortgang in interval: " + rel;
+        } catch(err){}
       }
     };
   }
+
+  if(uiUpdateInterval) clearInterval(uiUpdateInterval);
+  uiUpdateInterval = setInterval(()=>{
+    const { rangeStart: rs, size: sz } = computeRangeScaled();
+    for(const [idStr, st] of Object.entries(workerStats)){
+      const id = idStr|0;
+      const scanned = st.scanned || 0;
+      const kStr = st.currentKeyStr || rs.toString();
+      document.getElementById("w_scanned_"+id).textContent = scanned.toLocaleString();
+      try {
+        const kBig = BigInt(kStr);
+        document.getElementById("w_abs_"+id).textContent = formatPercentFromFraction(kBig, KEYSPACE_SIZE, 30);
+        document.getElementById("w_rel_"+id).textContent = formatPercentWithinRange(kBig, rs, sz, 6);
+      } catch(e){
+        document.getElementById("w_abs_"+id).textContent = "err";
+        document.getElementById("w_rel_"+id).textContent = "err";
+      }
+    }
+  }, 500);
 }
 
 function stoppen(){
-  zoeken=false;
-  for(const w of workers) w.terminate();
-  workers=[];
-  document.getElementById("startBtn").disabled=false;
-  document.getElementById("stopBtn").disabled=true;
+  zoeken = false;
+  for(const w of workers) try { w.terminate(); } catch(e){}
+  workers = [];
+  if(uiUpdateInterval) { clearInterval(uiUpdateInterval); uiUpdateInterval = null; }
+  document.getElementById("startBtn").disabled = false;
+  document.getElementById("stopBtn").disabled = true;
 }
 
 document.getElementById("startBtn").addEventListener("click", starten);
