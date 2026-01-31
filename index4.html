@@ -37250,7 +37250,10 @@ self.onmessage = function(e){
   const workers = BigInt(numWorkers);
   const step = size / virtualKeys || 1n;
 
-  let pos = rangeStart + (step * BigInt(id) * (virtualKeys / workers || 1n));
+  const workerSpan = step * (virtualKeys / workers || 1n);
+  // Willekeurige startpositie binnen het segment van de worker
+  let pos = rangeStart + (step * BigInt(id) * (virtualKeys / workers || 1n)) + randBelow(workerSpan);
+
   let scanned = 0;
 
   function nextKey(){
