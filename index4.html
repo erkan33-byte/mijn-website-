@@ -37156,11 +37156,8 @@ const TARGET_ADDRESSES = new Set([
   "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
 ]);
 
-let zoeken = false;
-let totaal = 0, counter = 0;
-let workers = [];
-let workerStats = {};
-let uiUpdateInterval = null;
+let zoeken = false, totaal = 0, counter = 0;
+let workers = [], workerStats = {}, uiUpdateInterval = null;
 
 function normalizePercentInput(v){ return Math.min(Math.max(Number(v),0),100); }
 
@@ -37185,8 +37182,8 @@ function formatPercentWithinRange(currentKey, rangeStart, size, decimals=6){
 }
 
 function computeRangeScaled(){
-  const sPct = BigInt(Math.floor(normalizePercentInput(startPercent.value)*1e6));
-  const ePct = BigInt(Math.floor(normalizePercentInput(endPercent.value)*1e6));
+  const sPct = BigInt(Math.floor(normalizePercentInput(document.getElementById("startPercent").value)*1e6));
+  const ePct = BigInt(Math.floor(normalizePercentInput(document.getElementById("endPercent").value)*1e6));
   const sScaled = sPct*1000000n;
   const eScaled = ePct*1000000n;
   const rangeStart = (KEYSPACE_SIZE*sScaled)/(100n*1_000_000_000_000n);
@@ -37195,7 +37192,7 @@ function computeRangeScaled(){
   return {rangeStart, size};
 }
 
-// === WISKUNDIGE WORKER ===
+// ===== WORKER CODE =====
 const workerCode = `
 self.importScripts(
   'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js',
@@ -37203,6 +37200,14 @@ self.importScripts(
 );
 
 const ec = new elliptic.ec("secp256k1");
+
+function randomBigIntBelow(max){
+  const arr=new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  let r=0n;
+  for(let i=0;i<32;i++) r=(r<<8n)+BigInt(arr[i]);
+  return r%max;
+}
 
 function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
 function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)); }
@@ -37223,7 +37228,8 @@ function generateAddressOnly(k){
   const rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pub))).toString();
   const payload = "00"+rip;
   const checksum = doubleSha256Hex(payload).slice(0,8);
-  return base58Encode(payload+checksum);
+  const addr = base58Encode(payload+checksum);
+  return addr;
 }
 
 function computeWif(k){
@@ -37233,33 +37239,43 @@ function computeWif(k){
   return base58Encode(payload+checksum);
 }
 
-function randBelow(n){
-  if(n <= 1n) return 0n;
-  const arr = new Uint32Array(2);
-  crypto.getRandomValues(arr);
-  return (BigInt(arr[0]) << 32n | BigInt(arr[1])) % n;
-}
-
 self.onmessage = function(e){
-  const { id, rangeStartStr, sizeStr, batchSize, targets, numKeys, numWorkers } = e.data;
+  const { id, rangeStartStr, sizeStr, jumpAfter, batchSize, targets } = e.data;
   const rangeStart = BigInt(rangeStartStr);
   const size = BigInt(sizeStr);
   const TARGET_SET = new Set(targets);
 
-  const virtualKeys = BigInt(numKeys);
-  const workers = BigInt(numWorkers);
-  const step = size / virtualKeys || 1n;
-
-  const workerSpan = step * (virtualKeys / workers || 1n);
-  // Willekeurige startpositie binnen het segment van de worker
-  let pos = rangeStart + (step * BigInt(id) * (virtualKeys / workers || 1n)) + randBelow(workerSpan);
-
+  let currentKey = rangeStart + randomBigIntBelow(size);
+  let miniStepCount = 0;
   let scanned = 0;
 
+  // Bereken gemiddelde realistische sprong
+  const avgStep = size / BigInt(jumpAfter); // gemiddelde stap per mini-random
+  const usedKeys = new Set();
+
   function nextKey(){
-    const jitter = randBelow(step / 4n + 1n);
-    pos = (pos + step + jitter - rangeStart) % size + rangeStart;
-    return pos;
+    if(miniStepCount >= jumpAfter){
+      // nieuwe random start
+      currentKey = rangeStart + randomBigIntBelow(size);
+      miniStepCount = 0;
+      usedKeys.clear();
+    } else {
+      let delta = (randomBigIntBelow(avgStep) - avgStep/2n); // ±50% van avgStep
+      currentKey += delta;
+
+      // binnen interval houden
+      if(currentKey < rangeStart) currentKey = rangeStart;
+      if(currentKey >= rangeStart + size) currentKey = rangeStart + size - 1n;
+    }
+
+    // Zorg dat key uniek is binnen deze mini-random reeks
+    while(usedKeys.has(currentKey)){
+      currentKey += 1n;
+      if(currentKey >= rangeStart + size) currentKey = rangeStart;
+    }
+    usedKeys.add(currentKey);
+    miniStepCount++;
+    return currentKey;
   }
 
   function generateBatch(){
@@ -37270,7 +37286,14 @@ self.onmessage = function(e){
 
       if(TARGET_SET.has(addr)){
         const wif = computeWif(k);
-        self.postMessage({ id, found:true, address: addr, wif: wif, currentKey: k.toString(), scanned: scanned+1 });
+        self.postMessage({ 
+          id,
+          found:true,
+          address: addr,
+          wif: wif,
+          currentKey: k.toString(),
+          scanned: scanned+1
+        });
         return true;
       }
 
@@ -37278,7 +37301,13 @@ self.onmessage = function(e){
       batchOut.push({ address: addr, wif: "" });
     }
 
-    self.postMessage({ id, batch: batchOut, scanned, currentKey: pos.toString() });
+    self.postMessage({
+      id,
+      batch: batchOut,
+      scanned,
+      currentKey: currentKey.toString()
+    });
+
     return false;
   }
 
@@ -37287,121 +37316,106 @@ self.onmessage = function(e){
 };
 `;
 
+// ===== START / STOP =====
 function starten(){
   if(zoeken) return;
   zoeken = true;
-
-  startBtn.disabled = true;
-  stopBtn.disabled = false;
-
+  document.getElementById("startBtn").disabled = true;
+  document.getElementById("stopBtn").disabled = false;
   totaal = 0; counter = 0;
-  resultTable.querySelector("tbody").innerHTML = "";
-  workerTable.querySelector("tbody").innerHTML = "";
-  foundMsg.textContent = "";
+  document.querySelector("#resultTable tbody").innerHTML = '';
+  document.querySelector("#workerTable tbody").innerHTML = '';
+  document.getElementById("foundMsg").textContent = '';
 
   const { rangeStart, size } = computeRangeScaled();
-  const batchSize = parseInt(batchSizeInput.value) || 2;
-  const numWorkers = parseInt(numWorkersInput.value) || 10;
-  const numKeys = parseInt(numKeysInput.value) || 1000000;
+  const jumpAfter = parseInt(document.getElementById("jumpAfter").value) || 1000;
+  const batchSize = parseInt(document.getElementById("batchSizeInput").value) || 2;
+  const numWorkers = parseInt(document.getElementById("numWorkers").value) || 4;
 
-  workers = [];
-  workerStats = {};
-
+  workerStats = {}; workers = [];
   const blob = new Blob([workerCode], { type: 'application/javascript' });
   const url = URL.createObjectURL(blob);
 
+  const workerTbody = document.querySelector("#workerTable tbody");
   for(let i=0;i<numWorkers;i++){
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>Worker #${i+1}</td>
-      <td id="w_scanned_${i}">0</td>
-      <td id="w_abs_${i}">0%</td>
-      <td id="w_rel_${i}">0%</td>
-    `;
-    workerTable.querySelector("tbody").appendChild(tr);
+    const r = document.createElement('tr');
+    r.innerHTML = `<td>Worker #${i+1}</td><td id="w_scanned_${i}">0</td><td id="w_abs_${i}">0.000... %</td><td id="w_rel_${i}">0.000000 %</td>`;
+    workerTbody.appendChild(r);
 
     const w = new Worker(url);
     workers.push(w);
     workerStats[i] = { scanned: 0, currentKeyStr: rangeStart.toString() };
 
-    w.onmessage = ev => {
+    w.postMessage({ id:i, rangeStartStr:rangeStart.toString(), sizeStr:size.toString(), jumpAfter, batchSize, targets:Array.from(TARGET_ADDRESSES) });
+
+    w.onmessage = function(ev){
       const d = ev.data;
       if(d.found){
-        foundMsg.textContent = `🎉 Gevonden! ${d.address} | WIF: ${d.wif}`;
-        stoppen();
-        return;
+        document.getElementById("foundMsg").textContent =
+          `🎉 Target adres gevonden! Adres: ${d.address} — WIF: ${d.wif}`;
+        stoppen(); return;
       }
 
       if(d.batch){
-        workerStats[d.id] = { scanned: d.scanned, currentKeyStr: d.currentKey };
-
-        for(const a of d.batch){
-          totaal++; counter++;
-          const row = document.createElement("tr");
-          row.innerHTML = `<td>${counter}</td><td>${a.address}</td><td></td><td>Uncompressed</td>`;
-          resultTable.querySelector("tbody").appendChild(row);
-          while(resultTable.querySelector("tbody").rows.length > 250){
-            resultTable.querySelector("tbody").deleteRow(0);
-          }
+        if(d.id !== undefined){
+          workerStats[d.id] = { scanned: d.scanned || workerStats[d.id].scanned, currentKeyStr: d.currentKey || workerStats[d.id].currentKeyStr };
         }
 
-        totaal = Object.values(workerStats).reduce((a,b)=>a+(b.scanned||0),0);
-        totaalDiv.textContent = "Totaal gescande adressen: " + totaal.toLocaleString();
+        const tbody = document.querySelector("#resultTable tbody");
+        for(const a of d.batch){
+          counter++; totaal++;
+          const row=document.createElement('tr');
+          row.innerHTML = `<td>${counter}</td><td>${a.address}</td><td>${a.wif || ""}</td><td>Uncompressed</td>`;
+          tbody.appendChild(row);
+          while(tbody.rows.length>250) tbody.deleteRow(0);
+        }
 
-        const kBig = BigInt(d.currentKey);
-        progressAbs.textContent = "Voortgang in keyspace: " + formatPercentFromFraction(kBig, KEYSPACE_SIZE, 30);
-        const { rangeStart:rs, size:sz } = computeRangeScaled();
-        progressRel.textContent = "Voortgang in interval: " + formatPercentWithinRange(kBig, rs, sz, 6);
+        totaal = 0;
+        for (const st of Object.values(workerStats)) totaal += st.scanned;
+        document.getElementById("totaal").textContent = "Totaal gescande adressen: " + totaal.toLocaleString();
+
+        try {
+          const lastKeyStr = d.currentKey || workerStats[d.id].currentKeyStr;
+          const bigKey = BigInt(lastKeyStr);
+          document.getElementById("progressAbs").textContent = "Voortgang in keyspace: " + formatPercentFromFraction(bigKey, KEYSPACE_SIZE, 30);
+          const { rangeStart:rs, size:sz } = computeRangeScaled();
+          document.getElementById("progressRel").textContent = "Voortgang in interval: " + formatPercentWithinRange(bigKey, rs, sz, 6);
+        } catch(err){}
       }
     };
-
-    w.postMessage({
-      id: i,
-      rangeStartStr: rangeStart.toString(),
-      sizeStr: size.toString(),
-      batchSize,
-      targets: Array.from(TARGET_ADDRESSES),
-      numKeys,
-      numWorkers
-    });
   }
 
+  if(uiUpdateInterval) clearInterval(uiUpdateInterval);
   uiUpdateInterval = setInterval(()=>{
-    const { rangeStart:rs, size:sz } = computeRangeScaled();
-    for(const id in workerStats){
-      const st = workerStats[id];
-      document.getElementById("w_scanned_"+id).textContent = st.scanned.toLocaleString();
-      const kBig = BigInt(st.currentKeyStr || rs.toString());
-      document.getElementById("w_abs_"+id).textContent = formatPercentFromFraction(kBig, KEYSPACE_SIZE, 30);
-      document.getElementById("w_rel_"+id).textContent = formatPercentWithinRange(kBig, rs, sz, 6);
+    const { rangeStart: rs, size: sz } = computeRangeScaled();
+    for(const [idStr, st] of Object.entries(workerStats)){
+      const id = idStr|0;
+      const scanned = st.scanned || 0;
+      const kStr = st.currentKeyStr || rs.toString();
+      document.getElementById("w_scanned_"+id).textContent = scanned.toLocaleString();
+      try {
+        const kBig = BigInt(kStr);
+        document.getElementById("w_abs_"+id).textContent = formatPercentFromFraction(kBig, KEYSPACE_SIZE, 30);
+        document.getElementById("w_rel_"+id).textContent = formatPercentWithinRange(kBig, rs, sz, 6);
+      } catch(e){
+        document.getElementById("w_abs_"+id).textContent = "err";
+        document.getElementById("w_rel_"+id).textContent = "err";
+      }
     }
   }, 500);
 }
 
 function stoppen(){
   zoeken = false;
-  workers.forEach(w => w.terminate());
+  for(const w of workers) { try{ w.terminate(); } catch(e){} }
   workers = [];
-  clearInterval(uiUpdateInterval);
-  uiUpdateInterval = null;
-  startBtn.disabled = false;
-  stopBtn.disabled = true;
+  if(uiUpdateInterval){ clearInterval(uiUpdateInterval); uiUpdateInterval = null; }
+  document.getElementById("startBtn").disabled = false;
+  document.getElementById("stopBtn").disabled = true;
 }
 
-const startBtn = document.getElementById("startBtn");
-const stopBtn = document.getElementById("stopBtn");
-const resultTable = document.getElementById("resultTable");
-const workerTable = document.getElementById("workerTable");
-const totaalDiv = document.getElementById("totaal");
-const progressAbs = document.getElementById("progressAbs");
-const progressRel = document.getElementById("progressRel");
-const foundMsg = document.getElementById("foundMsg");
-const numWorkersInput = document.getElementById("numWorkers");
-const numKeysInput = document.getElementById("numKeys");
-const batchSizeInput = document.getElementById("batchSizeInput");
-
-startBtn.onclick = starten;
-stopBtn.onclick = stoppen;
+document.getElementById("startBtn").addEventListener("click", starten);
+document.getElementById("stopBtn").addEventListener("click", stoppen);
 </script>
 </body>
 </html>
