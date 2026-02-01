@@ -37157,9 +37157,11 @@ const TARGET_ADDRESSES = new Set([
   "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
 ]);
 
+// ===== STATE =====
 let zoeken = false, totaal = 0, counter = 0;
 let workers = [], workerStats = {}, uiUpdateInterval = null;
 
+// ===== HELPERS =====
 function normalizePercentInput(v){ return Math.min(Math.max(Number(v),0),100); }
 
 function formatPercentFromFraction(num, denom, decimals=30){
@@ -37249,32 +37251,18 @@ self.onmessage = function(e){
   let currentKey = rangeStart + randomBigIntBelow(size);
   let miniStepCount = 0;
   let scanned = 0;
-
-  // Bereken gemiddelde realistische sprong
-  const avgStep = size / BigInt(jumpAfter); // gemiddelde stap per mini-random
-  const usedKeys = new Set();
+  const avgStep = size / BigInt(jumpAfter);
 
   function nextKey(){
     if(miniStepCount >= jumpAfter){
-      // nieuwe random start
       currentKey = rangeStart + randomBigIntBelow(size);
       miniStepCount = 0;
-      usedKeys.clear();
     } else {
-      let delta = (randomBigIntBelow(avgStep) - avgStep/2n); // ±50% van avgStep
+      let delta = (randomBigIntBelow(avgStep) - avgStep/2n);
       currentKey += delta;
-
-      // binnen interval houden
       if(currentKey < rangeStart) currentKey = rangeStart;
       if(currentKey >= rangeStart + size) currentKey = rangeStart + size - 1n;
     }
-
-    // Zorg dat key uniek is binnen deze mini-random reeks
-    while(usedKeys.has(currentKey)){
-      currentKey += 1n;
-      if(currentKey >= rangeStart + size) currentKey = rangeStart;
-    }
-    usedKeys.add(currentKey);
     miniStepCount++;
     return currentKey;
   }
@@ -37287,14 +37275,7 @@ self.onmessage = function(e){
 
       if(TARGET_SET.has(addr)){
         const wif = computeWif(k);
-        self.postMessage({ 
-          id,
-          found:true,
-          address: addr,
-          wif: wif,
-          currentKey: k.toString(),
-          scanned: scanned+1
-        });
+        self.postMessage({ id, found:true, address: addr, wif: wif, currentKey: k.toString(), scanned: scanned+1 });
         return true;
       }
 
@@ -37302,13 +37283,7 @@ self.onmessage = function(e){
       batchOut.push({ address: addr, wif: "" });
     }
 
-    self.postMessage({
-      id,
-      batch: batchOut,
-      scanned,
-      currentKey: currentKey.toString()
-    });
-
+    self.postMessage({ id, batch: batchOut, scanned, currentKey: currentKey.toString() });
     return false;
   }
 
@@ -37351,10 +37326,19 @@ function starten(){
 
     w.onmessage = function(ev){
       const d = ev.data;
+
       if(d.found){
+        const tbody = document.querySelector("#resultTable tbody");
+        counter++; totaal++;
+        const row = document.createElement('tr');
+        row.innerHTML = `<td>${counter}</td><td>${d.address}</td><td>${d.wif}</td><td>Uncompressed</td><td>${d.id}</td>`;
+        tbody.appendChild(row);
+
         document.getElementById("foundMsg").textContent =
-          `🎉 Target adres gevonden! Adres: ${d.address} — WIF: ${d.wif}`;
-        stoppen(); return;
+            `🎉 Target adres gevonden! Adres: ${d.address} — WIF: ${d.wif}`;
+
+        stoppen();
+        return;
       }
 
       if(d.batch){
@@ -37365,8 +37349,8 @@ function starten(){
         const tbody = document.querySelector("#resultTable tbody");
         for(const a of d.batch){
           counter++; totaal++;
-          const row=document.createElement('tr');
-          row.innerHTML = `<td>${counter}</td><td>${a.address}</td><td>${a.wif || ""}</td><td>Uncompressed</td>`;
+          const row = document.createElement('tr');
+          row.innerHTML = `<td>${counter}</td><td>${a.address}</td><td>${a.wif || ""}</td><td>Uncompressed</td><td>${d.id}</td>`;
           tbody.appendChild(row);
           while(tbody.rows.length>250) tbody.deleteRow(0);
         }
