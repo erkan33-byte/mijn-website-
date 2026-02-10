@@ -43720,21 +43720,30 @@ const TARGET_ADDRESSES = new Set([
 "1GDu4EUz2KgeYT4CukDS3qNkiCzg1UfqRA"
 ]);
 
+// ===== STATE =====
 let zoeken = false, totaal = 0, counter = 0;
-let loopHandle = null;
+let workers = [], workerStats = {}, uiUpdateInterval = null;
 
-// ====== HELPERS ======
+// ===== HELPERS =====
 function normalizePercentInput(v){ return Math.min(Math.max(Number(v),0),100); }
-
 function formatPercentFromFraction(num, denom, decimals=30){
   const SCALE = 10n**BigInt(decimals);
   const scaledNum = num*(100n*SCALE);
   const scaled = scaledNum/denom;
-  const intPart = scaled/SCALE;
-  const fracPart = scaled%SCALE;
+  const intPart = scaled / SCALE;
+  const fracPart = scaled % SCALE;
   return `${intPart.toString()}.${fracPart.toString().padStart(decimals,'0')} %`;
 }
-
+function formatPercentWithinRange(currentKey, rangeStart, size, decimals=6){
+  if(size === 0n) return "0.000000 %";
+  const SCALE = 10n**BigInt(decimals);
+  let offset = currentKey - rangeStart;
+  offset = ((offset % size) + size) % size;
+  const scaled = (offset * (100n*SCALE)) / size;
+  const intPart = scaled / SCALE;
+  const fracPart = scaled % SCALE;
+  return `${intPart.toString()}.${fracPart.toString().padStart(decimals,'0')} %`;
+}
 function computeRangeScaled(){
   const sPct = BigInt(Math.floor(normalizePercentInput(document.getElementById("startPercent").value)*1e6));
   const ePct = BigInt(Math.floor(normalizePercentInput(document.getElementById("endPercent").value)*1e6));
@@ -43746,41 +43755,68 @@ function computeRangeScaled(){
   return {rangeStart, size};
 }
 
-function randomBigIntBelow(max){
-  const arr=new Uint8Array(32);
-  crypto.getRandomValues(arr);
-  let r=0n;
-  for(let i=0;i<32;i++) r=(r<<8n)+BigInt(arr[i]);
-  return r%max;
-}
+// ===== WORKER CODE =====
+const workerCode = `
+self.importScripts(
+  'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js'
+);
 
-function generateAddress(k){
-  const ec = new elliptic.ec("secp256k1");
-  const privHex = k.toString(16).padStart(64,'0');
-  const kp = ec.keyFromPrivate(privHex,'hex');
-  const pub = Array.from(kp.getPublic(false,"array")).map(b=>b.toString(16).padStart(2,'0')).join('');
-  const rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pub)).toString())).toString();
-  const payload = "00"+rip;
-  const checksum = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(CryptoJS.SHA256(CryptoJS.enc.Hex.parse(payload)).toString())).toString().slice(0,8);
-  const full = payload+checksum;
-  const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  const bytes=Uint8Array.from(full.match(/.{2}/g).map(b=>parseInt(b,16)));
-  let zeros=0; while(zeros<bytes.length && bytes[zeros]===0) zeros++;
-  let num=BigInt("0x"+full); let out="";
-  while(num>0n){ let r=num%58n; num/=58n; out=alphabet[Number(r)]+out; }
-  const addr="1".repeat(zeros)+(out||"");
-  const wifPayload="80"+privHex;
-  const wifChecksum = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(CryptoJS.SHA256(CryptoJS.enc.Hex.parse(wifPayload)).toString())).toString().slice(0,8);
-  const wifFull=wifPayload+wifChecksum;
-  const bytesWif=Uint8Array.from(wifFull.match(/.{2}/g).map(b=>parseInt(b,16)));
-  let zerosW=0; while(zerosW<bytesWif.length && bytesWif[zerosW]===0) zerosW++;
-  let numW=BigInt("0x"+wifFull); let outW="";
-  while(numW>0n){ let r=numW%58n; numW/=58n; outW=alphabet[Number(r)]+outW; }
-  const wif="1".repeat(zerosW)+(outW||"");
-  return {address:addr,wif:wif};
-}
+const ec = new elliptic.ec("secp256k1");
 
-// ====== ZOEKFUNCTIE ======
+function randomBigIntBelow(max){ const arr=new Uint8Array(32); crypto.getRandomValues(arr); let r=0n; for(let i=0;i<32;i++) r=(r<<8n)+BigInt(arr[i]); return r%max; }
+function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)); }
+function base58Encode(hex){ const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; const bytes=Uint8Array.from(hex.match(/.{2}/g).map(b=>parseInt(b,16))); let zeros=0; while(zeros<bytes.length && bytes[zeros]===0) zeros++; let num=BigInt("0x"+hex), out=""; while(num>0n){ let r=num%58n; num/=58n; out=alphabet[Number(r)]+out; } return "1".repeat(zeros)+(out||""); }
+function generateAddressOnly(k){ const privHex=k.toString(16).padStart(64,'0'); const kp=ec.keyFromPrivate(privHex,'hex'); const pub=Array.from(kp.getPublic(false,"array")).map(b=>b.toString(16).padStart(2,'0')).join(''); const rip=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pub))).toString(); const payload="00"+rip; const checksum=doubleSha256Hex(payload).slice(0,8); return base58Encode(payload+checksum); }
+function computeWif(k){ const privHex=k.toString(16).padStart(64,'0'); const payload="80"+privHex; const checksum=doubleSha256Hex(payload).slice(0,8); return base58Encode(payload+checksum); }
+
+self.onmessage=function(e){
+  const { id, rangeStartStr, sizeStr, jumpAfter, batchSize, gokker, targets, zoekWoord }=e.data;
+  const rangeStart = BigInt(rangeStartStr);
+  const size = BigInt(sizeStr);
+  const TARGET_SET = new Set(targets);
+  const zoekWoordLower = zoekWoord.toLowerCase();
+
+  let currentKey = rangeStart+randomBigIntBelow(size);
+  let incrementCount=0, scanned=0;
+
+  function nextKey(){
+    if(incrementCount>=jumpAfter){ currentKey = rangeStart+randomBigIntBelow(size); incrementCount=0; }
+    const k=gokker?rangeStart+randomBigIntBelow(size):currentKey;
+    currentKey=(currentKey+1n-rangeStart)%size+rangeStart;
+    incrementCount++;
+    return k;
+  }
+
+  function generateBatch(){
+    const batchOut=[];
+    for(let i=0;i<batchSize;i++){
+      const k=nextKey();
+      scanned++;
+
+      const wif=computeWif(k);
+      if(wif.toLowerCase().includes(zoekWoordLower)){
+        const addr=generateAddressOnly(k);
+        batchOut.push({ address: addr, wif });
+
+        if(TARGET_SET.has(addr)){
+          self.postMessage({ id, found:true, address: addr, wif, currentKey: k.toString(), scanned });
+          return true;
+        }
+      }
+    }
+
+    if(batchOut.length>0) self.postMessage({ id, batch: batchOut, scanned, currentKey: currentKey.toString() });
+    return false;
+  }
+
+  if(generateBatch()) return;
+  const iv=setInterval(()=>{ if(generateBatch()) clearInterval(iv); }, 10);
+};
+`;
+
+// ===== START / STOP =====
 function starten(){
   if(zoeken) return;
   zoeken=true;
@@ -43788,69 +43824,83 @@ function starten(){
   document.getElementById("stopBtn").disabled=false;
   totaal=0; counter=0;
   document.querySelector("#resultTable tbody").innerHTML='';
+  document.querySelector("#workerTable tbody").innerHTML='';
   document.getElementById("foundMsg").textContent='';
 
-  const gokker = document.getElementById("gokkerMode").checked;
-  const {rangeStart, size} = computeRangeScaled();
-  const jumpAfter = parseInt(document.getElementById("jumpAfter").value)||1000;
-  const batchSize = parseInt(document.getElementById("batchSizeInput").value)||2;
+  const gokker=document.getElementById("gokkerMode").checked;
+  const { rangeStart, size } = computeRangeScaled();
+  const jumpAfter=parseInt(document.getElementById("jumpAfter").value)||1000;
+  const batchSize=parseInt(document.getElementById("batchSizeInput").value)||2;
+  const numWorkers=parseInt(document.getElementById("numWorkers").value)||4;
+  const zoekWoord=document.getElementById("zoekWoord").value;
 
-  let currentKey = rangeStart + randomBigIntBelow(size);
-  let incrementCount = 0;
+  workerStats={}; workers=[];
 
-  function nextKey(){
-    if(gokker){
-      // Gokker modus: elke reeks een nieuwe random start
-      if(incrementCount >= jumpAfter){
-        currentKey = rangeStart + randomBigIntBelow(size);
-        incrementCount = 0;
-      }
-    } else {
-      // Gewone modus
-      if(incrementCount >= jumpAfter){
-        currentKey = rangeStart + randomBigIntBelow(size);
-        incrementCount = 0;
-      }
-    }
-    const k = currentKey;
-    currentKey = (currentKey + 1n - rangeStart) % size + rangeStart;
-    incrementCount++;
-    return k;
-  }
+  const blob=new Blob([workerCode],{ type:'application/javascript' });
+  const url=URL.createObjectURL(blob);
+  const workerTbody=document.querySelector("#workerTable tbody");
 
-  loopHandle = setInterval(()=>{
-    if(!zoeken) return;
-    const tbody=document.querySelector("#resultTable tbody");
-    for(let i=0;i<batchSize;i++){
-      const k = nextKey();
-      const {address,wif} = generateAddress(k);
-      counter++; totaal++;
-      const row=document.createElement('tr');
-      row.innerHTML=`<td>${counter}</td><td>${address}</td><td>${wif}</td><td>Uncompressed</td>`;
-      tbody.appendChild(row);
-      while(tbody.rows.length>250) tbody.deleteRow(0);
+  for(let i=0;i<numWorkers;i++){
+    const r=document.createElement('tr');
+    r.innerHTML=`<td>Worker #${i+1}</td><td id="w_scanned_${i}">0</td><td id="w_abs_${i}">0.000... %</td><td id="w_rel_${i}">0.000000 %</td>`;
+    workerTbody.appendChild(r);
 
-      const abs = formatPercentFromFraction(k, KEYSPACE_SIZE, 30);
-      document.getElementById("progressAbs").textContent = "Voortgang in keyspace: "+abs;
+    const w=new Worker(url);
+    workers.push(w);
+    workerStats[i]={ scanned:0, currentKeyStr: rangeStart.toString() };
 
-      const startPct = parseFloat(document.getElementById("startPercent").value)/100;
-      const endPct = parseFloat(document.getElementById("endPercent").value)/100;
-      const rel = ((Number(k)/Number(KEYSPACE_SIZE) - startPct)/(endPct-startPct)*100).toFixed(6)+" %";
-      document.getElementById("progressRel").textContent = "Voortgang in interval: "+rel;
+    w.postMessage({ id:i, rangeStartStr: rangeStart.toString(), sizeStr:size.toString(), jumpAfter, batchSize, gokker, targets:Array.from(TARGET_ADDRESSES), zoekWoord });
 
-      if(TARGET_ADDRESSES.has(address)){
-        document.getElementById("foundMsg").textContent=`🎉 Target adres gevonden! Adres: ${address} — WIF: ${wif}`;
+    w.onmessage=function(ev){
+      const d=ev.data;
+
+      if(d.found){
+        document.getElementById("foundMsg").textContent=`🎉 Target adres gevonden! Adres: ${d.address} — WIF: ${d.wif}`;
         stoppen();
         return;
       }
+
+      if(d.batch){
+        if(d.id!==undefined)
+          workerStats[d.id]={ scanned:d.scanned||workerStats[d.id].scanned, currentKeyStr:d.currentKey||workerStats[d.id].currentKeyStr };
+
+        const tbody=document.querySelector("#resultTable tbody");
+        for(const a of d.batch){
+          counter++;
+          const row=document.createElement('tr');
+          row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>Uncompressed</td>`;
+          tbody.appendChild(row);
+          while(tbody.rows.length>250) tbody.deleteRow(0);
+        }
+
+        totaal=0; 
+        for(const st of Object.values(workerStats)) totaal+=st.scanned;
+        document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal.toLocaleString();
+      }
+    };
+  }
+
+  if(uiUpdateInterval) clearInterval(uiUpdateInterval);
+  uiUpdateInterval=setInterval(()=>{
+    const {rangeStart:rs,size:sz}=computeRangeScaled();
+    for(const [idStr, st] of Object.entries(workerStats)){
+      const id=idStr|0, scanned=st.scanned||0;
+      const kStr=st.currentKeyStr||rs.toString();
+      document.getElementById("w_scanned_"+id).textContent=scanned.toLocaleString();
+      try{
+        const kBig=BigInt(kStr);
+        document.getElementById("w_abs_"+id).textContent=formatPercentFromFraction(kBig,KEYSPACE_SIZE,30);
+        document.getElementById("w_rel_"+id).textContent=formatPercentWithinRange(kBig,rs,sz,6);
+      }catch(e){ document.getElementById("w_abs_"+id).textContent="err"; document.getElementById("w_rel_"+id).textContent="err"; }
     }
-    document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal;
-  },10);
+  },500);
 }
 
 function stoppen(){
   zoeken=false;
-  clearInterval(loopHandle);
+  for(const w of workers) try{ w.terminate(); }catch(e){}
+  workers=[];
+  if(uiUpdateInterval){ clearInterval(uiUpdateInterval); uiUpdateInterval=null; }
   document.getElementById("startBtn").disabled=false;
   document.getElementById("stopBtn").disabled=true;
 }
