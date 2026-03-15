@@ -2,9 +2,11 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Ultra Fast Uncompressed Scanner</title>
+<title>BTC Faster Scanner (Hash160 optimized)</title>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+
 <style>
 body{font-family:Arial;padding:20px}
 input,button{padding:6px;margin:4px}
@@ -14,18 +16,24 @@ th{background:#eee}
 #foundMsg{color:green;font-weight:bold;margin-top:10px}
 </style>
 </head>
+
 <body>
 
-<h2>BTC Ultra Fast Uncompressed Scanner</h2>
+<h2>BTC Hash160 Fast Scanner</h2>
 
 <label>Start %</label>
-<input id="startPercent" type="number" value="10" step="0.0001"><br>
+<input id="startPercent" type="number" value="35.995" step="0.000001">
+
 <label>End %</label>
-<input id="endPercent" type="number" value="20" step="0.0001"><br>
-<label>Batch size</label>
-<input id="batchSize" type="number" value="2000"><br>
+<input id="endPercent" type="number" value="35.996" step="0.000001">
+
+<label>Batch</label>
+<input id="batchSize" type="number" value="1000">
+
 <label>Workers</label>
-<input id="numWorkers" type="number" value="4"><br>
+<input id="numWorkers" type="number" value="4">
+
+<br>
 
 <button id="startBtn">Start</button>
 <button id="stopBtn" disabled>Stop</button>
@@ -34,23 +42,37 @@ th{background:#eee}
 <div id="foundMsg"></div>
 
 <h3>Resultaten</h3>
+
 <table>
-<thead><tr><th>#</th><th>Adres</th><th>WIF</th></tr></thead>
+<thead>
+<tr>
+<th>#</th>
+<th>Adres</th>
+<th>WIF</th>
+</tr>
+</thead>
 <tbody id="resultBody"></tbody>
 </table>
 
 <h3>Worker status</h3>
+
 <table>
-<thead><tr><th>Worker</th><th>Scanned</th><th>Keyspace %</th></tr></thead>
+<thead>
+<tr>
+<th>Worker</th>
+<th>Scanned</th>
+<th>Keyspace %</th>
+</tr>
+</thead>
 <tbody id="workerBody"></tbody>
 </table>
 
 <script>
-const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
-const KEYSPACE_SIZE = ORDER_N - 1n;
 
-// Voor testen kan je hier target adres toevoegen
-const TARGET_ADDRESSES = new Set([
+const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n
+const KEYSPACE_SIZE = ORDER_N - 1n
+
+const TARGET_ADDRESSES = [
   "1EUXN9yCnq5yur6ZUy3kGQd87KzGK2ywTZ",
   "16xzDttFSNK1T8BLGqBjJxf47Gjm5ufcmB",
   "149XtqTaQUB2q9XJFXPvb6NoSuvVRGRTZN",
