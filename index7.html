@@ -43711,16 +43711,16 @@ const TARGET_ADDRESSES = [
 ]
 
 function base58Decode(addr){
-const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-let num=0n
-for(let c of addr) num=num*58n+BigInt(alphabet.indexOf(c))
-let hex=num.toString(16)
-if(hex.length%2)hex="0"+hex
-return hex
+    const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+    let num=0n
+    for(let c of addr) num=num*58n+BigInt(alphabet.indexOf(c))
+    let hex=num.toString(16)
+    if(hex.length%2) hex="0"+hex
+    return hex
 }
 
 function addressToHash160(addr){
-return base58Decode(addr).slice(2,42)
+    return base58Decode(addr).slice(2,42)
 }
 
 const TARGET_HASH160 = TARGET_ADDRESSES.map(addressToHash160)
@@ -43731,12 +43731,12 @@ let counter=0
 let searching=false
 
 function pctToKey(p){
-const pct=BigInt(Math.floor(p*1e8))
-return KEYSPACE_SIZE*pct/10000000000n
+    const pct=BigInt(Math.floor(p*1e8))
+    return KEYSPACE_SIZE*pct/10000000000n
 }
 
+// Worker code
 const workerCode=`
-
 self.importScripts(
 'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js',
 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js'
@@ -43745,180 +43745,149 @@ self.importScripts(
 const ec=new elliptic.ec("secp256k1")
 const G=ec.g
 
-function sha256Hex(hex){
-return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString()
-}
-
-function ripemd160Hex(hex){
-return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString()
-}
-
-function doubleSha256Hex(hex){
-return sha256Hex(sha256Hex(hex))
-}
+function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString() }
+function ripemd160Hex(hex){ return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString() }
+function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)) }
 
 function base58Encode(hex){
-const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-let num=BigInt("0x"+hex)
-let out=""
-while(num>0n){
-let r=num%58n
-num/=58n
-out=alphabet[Number(r)]+out
-}
-return out
+    const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+    let num=BigInt("0x"+hex)
+    let out=""
+    while(num>0n){
+        let r=num%58n
+        num/=58n
+        out=alphabet[Number(r)]+out
+    }
+    return out
 }
 
 function computeWif(k){
-const privHex=k.toString(16).padStart(64,'0')
-const payload="80"+privHex
-const checksum=doubleSha256Hex(payload).slice(0,8)
-return base58Encode(payload+checksum)
+    const privHex=k.toString(16).padStart(64,'0')
+    const payload="80"+privHex
+    const checksum=doubleSha256Hex(payload).slice(0,8)
+    return base58Encode(payload+checksum)
 }
 
 function randomBigInt(max){
-const arr=new Uint8Array(32)
-crypto.getRandomValues(arr)
-let r=0n
-for(let i=0;i<32;i++) r=(r<<8n)+BigInt(arr[i])
-return r%max
+    const arr=new Uint8Array(32)
+    crypto.getRandomValues(arr)
+    let r=0n
+    for(let i=0;i<32;i++) r=(r<<8n)+BigInt(arr[i])
+    return r%max
 }
 
 self.onmessage=function(e){
+    const {startKey,size,batch,targets,jumpSize}=e.data
+    const TARGET=new Set(targets)
+    const JUMP=BigInt(jumpSize)
 
-const {startKey,size,batch,targets,jumpSize}=e.data
-const TARGET=new Set(targets)
-const JUMP=BigInt(jumpSize)
+    let k=BigInt(startKey)+randomBigInt(BigInt(size))
+    let keyPoint=ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
+    let scanned=0
+    let sinceJump=0n
 
-let k=BigInt(startKey)+randomBigInt(BigInt(size))
-let keyPoint=ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
+    function nextPoint(){ keyPoint=keyPoint.add(G); k++ }
 
-let scanned=0
-let sinceJump=0n
+    while(true){
+        for(let i=0;i<batch;i++){
+            scanned++
+            sinceJump++
 
-function nextPoint(){
-keyPoint=keyPoint.add(G)
-k++
-}
+            const pub=keyPoint.encodeCompressed('hex')
+            const hash1=sha256Hex(pub)
+            const hash160=ripemd160Hex(hash1)
 
-while(true){
+            if(TARGET.has(hash160)){
+                const payload="00"+hash160
+                const checksum=doubleSha256Hex(payload).slice(0,8)
+                const address=base58Encode(payload+checksum)
+                const wif=computeWif(k)
+                self.postMessage({found:true,address,wif,scanned})
+                return
+            }
 
-for(let i=0;i<batch;i++){
+            if(JUMP>0n && sinceJump>=JUMP){
+                k=BigInt(startKey)+randomBigInt(BigInt(size))
+                keyPoint=ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
+                sinceJump=0n
+                continue
+            }
 
-scanned++
-sinceJump++
-
-const pub=keyPoint.encodeCompressed('hex') // 🔥 sneller
-
-const hash1=sha256Hex(pub)
-const hash160=ripemd160Hex(hash1)
-
-if(TARGET.has(hash160)){
-
-const payload="00"+hash160
-const checksum=doubleSha256Hex(payload).slice(0,8)
-
-const address=base58Encode(payload+checksum)
-const wif=computeWif(k)
-
-self.postMessage({found:true,address,wif,scanned})
-return
-}
-
-if(JUMP>0n && sinceJump>=JUMP){
-k=BigInt(startKey)+randomBigInt(BigInt(size))
-keyPoint=ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
-sinceJump=0n
-continue
-}
-
-nextPoint()
-
-}
-
-self.postMessage({progress:true,scanned})
-
-}
-
+            nextPoint()
+        }
+        self.postMessage({progress:true,scanned})
+    }
 }
 `
 
 function startScan(){
+    if(searching) return
+    searching=true
+    totaal=0
+    counter=0
+    resultBody.innerHTML=""
+    startBtn.disabled=true
+    stopBtn.disabled=false
+    document.getElementById("foundMsg").textContent=""
 
-if(searching)return
-searching=true
+    const startKey=pctToKey(parseFloat(startPercent.value))
+    const endKey=pctToKey(parseFloat(endPercent.value))
+    const size=endKey-startKey
+    const num=parseInt(numWorkers.value)
+    const batch=parseInt(batchSize.value)
+    const jumpSize=parseInt(jumpSizeInput.value)
 
-totaal=0
-counter=0
-resultBody.innerHTML=""
+    const blob=new Blob([workerCode],{type:'application/javascript'})
+    const url=URL.createObjectURL(blob)
 
-startBtn.disabled=true
-stopBtn.disabled=false
+    for(let i=0;i<num;i++){
+        const w=new Worker(url)
+        workers.push(w)
 
-const startKey=pctToKey(parseFloat(startPercent.value))
-const endKey=pctToKey(parseFloat(endPercent.value))
-const size=endKey-startKey
+        w.postMessage({
+            startKey:startKey.toString(),
+            size:size.toString(),
+            batch:batch,
+            targets:TARGET_HASH160,
+            jumpSize:jumpSize
+        })
 
-const num=parseInt(numWorkers.value)
-const batch=parseInt(batchSize.value)
-const jumpSize=parseInt(jumpSizeInput.value)
+        w.onmessage=function(ev){
+            const d=ev.data
 
-const blob=new Blob([workerCode],{type:'application/javascript'})
-const url=URL.createObjectURL(blob)
+            // Correct totaal berekening
+            if(d.progress){
+                totaal += d.scanned
+                document.getElementById("totaal").textContent="Scanned: "+totaal.toLocaleString()
+            }
 
-for(let i=0;i<num;i++){
+            if(d.found){
+                counter++
+                const row=document.createElement("tr")
+                row.innerHTML="<td>"+counter+"</td><td>"+d.address+"</td><td>"+d.wif+"</td>"
+                resultBody.appendChild(row)
+                document.getElementById("foundMsg").textContent="🎉 FOUND!"
 
-const w=new Worker(url)
-workers.push(w)
+                // WIF popup
+                alert("WIF gevonden: " + d.wif)
 
-w.postMessage({
-startKey:startKey.toString(),
-size:size.toString(),
-batch:batch,
-targets:TARGET_HASH160,
-jumpSize:jumpSize
-})
-
-w.onmessage=function(ev){
-
-const d=ev.data
-
-if(d.progress){
-totaal+=d.scanned
-document.getElementById("totaal").textContent="Scanned: "+totaal.toLocaleString()
-}
-
-if(d.found){
-
-counter++
-
-const row=document.createElement("tr")
-row.innerHTML="<td>"+counter+"</td><td>"+d.address+"</td><td>"+d.wif+"</td>"
-resultBody.appendChild(row)
-
-document.getElementById("foundMsg").textContent="🎉 FOUND!"
-
-stopScan()
-}
-
-}
-
-}
-
+                stopScan()
+            }
+        }
+    }
 }
 
 function stopScan(){
-searching=false
-for(const w of workers)w.terminate()
-workers=[]
-startBtn.disabled=false
-stopBtn.disabled=true
+    searching=false
+    for(const w of workers) w.terminate()
+    workers=[]
+    startBtn.disabled=false
+    stopBtn.disabled=true
 }
 
 const jumpSizeInput=document.getElementById("jumpSize")
 startBtn.onclick=startScan
 stopBtn.onclick=stopScan
-
 </script>
 
 </body>
