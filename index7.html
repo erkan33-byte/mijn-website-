@@ -43737,16 +43737,16 @@ function addressToHash160(addr){
 const TARGET_HASH160 = TARGET_ADDRESSES.map(addressToHash160)
 
 let workers=[]
+let workerStats={}
 let totaal=0
 let counter=0
 let searching=false
 
 function pctToKey(p){
     const pct=BigInt(Math.floor(p*1e8))
-    return KEYSPACE_SIZE*pct/10000000000n
+    return KEYSPACE_SIZE * pct / 10000000000n
 }
 
-// Worker code
 const workerCode=`
 self.importScripts(
 'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js',
@@ -43756,19 +43756,14 @@ self.importScripts(
 const ec=new elliptic.ec("secp256k1")
 const G=ec.g
 
-function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString() }
-function ripemd160Hex(hex){ return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString() }
-function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)) }
+function sha256Hex(hex){return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString()}
+function ripemd160Hex(hex){return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString()}
+function doubleSha256Hex(hex){return sha256Hex(sha256Hex(hex))}
 
 function base58Encode(hex){
     const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-    let num=BigInt("0x"+hex)
-    let out=""
-    while(num>0n){
-        let r=num%58n
-        num/=58n
-        out=alphabet[Number(r)]+out
-    }
+    let num=BigInt("0x"+hex), out=""
+    while(num>0n){let r=num%58n;num/=58n;out=alphabet[Number(r)]+out}
     return out
 }
 
@@ -43780,10 +43775,8 @@ function computeWif(k){
 }
 
 function randomBigInt(max){
-    const arr=new Uint8Array(32)
-    crypto.getRandomValues(arr)
-    let r=0n
-    for(let i=0;i<32;i++) r=(r<<8n)+BigInt(arr[i])
+    const arr=new Uint8Array(32); crypto.getRandomValues(arr)
+    let r=0n; for(let i=0;i<32;i++) r=(r<<8n)+BigInt(arr[i])
     return r%max
 }
 
@@ -43794,10 +43787,19 @@ self.onmessage=function(e){
 
     let k=BigInt(startKey)+randomBigInt(BigInt(size))
     let keyPoint=ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
+
     let scanned=0
     let sinceJump=0n
 
-    function nextPoint(){ keyPoint=keyPoint.add(G); k++ }
+    function nextPoint(){
+        keyPoint=keyPoint.add(G)
+        k++
+        if(k>=BigInt(startKey)+BigInt(size)){
+            k=BigInt(startKey)+randomBigInt(BigInt(size))
+            keyPoint=ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
+            sinceJump=0n
+        }
+    }
 
     while(true){
         for(let i=0;i<batch;i++){
@@ -43813,7 +43815,8 @@ self.onmessage=function(e){
                 const checksum=doubleSha256Hex(payload).slice(0,8)
                 const address=base58Encode(payload+checksum)
                 const wif=computeWif(k)
-                self.postMessage({found:true,address,wif,scanned})
+
+                self.postMessage({found:true,address,wif})
                 return
             }
 
@@ -43821,66 +43824,98 @@ self.onmessage=function(e){
                 k=BigInt(startKey)+randomBigInt(BigInt(size))
                 keyPoint=ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
                 sinceJump=0n
-                continue
             }
 
             nextPoint()
         }
-        self.postMessage({progress:true,scanned})
+
+        self.postMessage({progress:true,key:k.toString(),scanned})
     }
 }
 `
 
 function startScan(){
+
     if(searching) return
+
+    const startVal=parseFloat(startPercent.value)
+    const endVal=parseFloat(endPercent.value)
+
+    if(endVal <= startVal){
+        alert("End % moet groter zijn dan Start %")
+        return
+    }
+
+    const startKey=pctToKey(startVal)
+    const endKey=pctToKey(endVal)
+    const size=endKey-startKey
+
+    const num=parseInt(numWorkers.value)
+    const batch=parseInt(batchSize.value)
+    const jumpSize=parseInt(document.getElementById("jumpSize").value)
+
     searching=true
     totaal=0
     counter=0
+    workerStats={}
+    workers=[]
+
+    workerBody.innerHTML=""
     resultBody.innerHTML=""
+
     startBtn.disabled=true
     stopBtn.disabled=false
-    document.getElementById("foundMsg").textContent=""
-
-    const startKey=pctToKey(parseFloat(startPercent.value))
-    const endKey=pctToKey(parseFloat(endPercent.value))
-    const size=endKey-startKey
-    const num=parseInt(numWorkers.value)
-    const batch=parseInt(batchSize.value)
-    const jumpSize=parseInt(jumpSizeInput.value)
 
     const blob=new Blob([workerCode],{type:'application/javascript'})
     const url=URL.createObjectURL(blob)
 
     for(let i=0;i<num;i++){
+
+        const row=document.createElement("tr")
+        row.innerHTML =
+        "<td>Worker "+(i+1)+"</td>"+
+        "<td id='wscan"+i+"'>0</td>"+
+        "<td id='wpos"+i+"'>0%</td>"
+
+        workerBody.appendChild(row)
+
         const w=new Worker(url)
         workers.push(w)
 
-        w.postMessage({
-            startKey:startKey.toString(),
-            size:size.toString(),
-            batch:batch,
-            targets:TARGET_HASH160,
-            jumpSize:jumpSize
-        })
+        w.postMessage({startKey:startKey.toString(), size:size.toString(), batch, targets:TARGET_HASH160, jumpSize})
 
         w.onmessage=function(ev){
+
             const d=ev.data
 
-            // Correct totaal berekening
             if(d.progress){
-                totaal += d.scanned
+
+                workerStats[i]=d
+
+                document.getElementById("wscan"+i).textContent = d.scanned.toLocaleString()
+
+                const pct = Number(BigInt(d.key)%KEYSPACE_SIZE)/Number(KEYSPACE_SIZE)*100
+                document.getElementById("wpos"+i).textContent = pct.toFixed(6)+" %"
+
+                totaal=0
+                for(const st of Object.values(workerStats)) totaal+=st.scanned
+
                 document.getElementById("totaal").textContent="Scanned: "+totaal.toLocaleString()
             }
 
             if(d.found){
+
                 counter++
+
+                // ✅ tabel
                 const row=document.createElement("tr")
                 row.innerHTML="<td>"+counter+"</td><td>"+d.address+"</td><td>"+d.wif+"</td>"
                 resultBody.appendChild(row)
+
                 document.getElementById("foundMsg").textContent="🎉 FOUND!"
 
-                // WIF popup
-                alert("WIF gevonden: " + d.wif)
+                // ✅ popup
+                alert("🔥 WIF gevonden:\\n" + d.wif)
 
                 stopScan()
             }
@@ -43896,10 +43931,9 @@ function stopScan(){
     stopBtn.disabled=true
 }
 
-const jumpSizeInput=document.getElementById("jumpSize")
 startBtn.onclick=startScan
 stopBtn.onclick=stopScan
-</script>
 
+</script>
 </body>
 </html>
