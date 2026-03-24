@@ -43824,7 +43824,9 @@ self.onmessage=function(e){
             scanned++
             steps++
 
-            const pub=keyPoint.encodeCompressed('hex')
+            // 🔥 UNCOMPRESSED
+            const pub=keyPoint.encode('hex')
+
             const hash160=ripemd160Hex(sha256Hex(pub))
 
             if(TARGET.has(hash160)){
@@ -43839,7 +43841,6 @@ self.onmessage=function(e){
 
             if(steps >= stepsBeforeJump){
 
-                // 🔥 JUMP LOGIC (wrap inside range)
                 k = start + ((k - start + BigInt(jumpSize)) % range)
 
                 keyPoint=ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
@@ -43865,8 +43866,10 @@ self.onmessage=function(e){
 }
 `
 
-function startScan(){
+// rest blijft IDENTIEK
+// (geen wijzigingen nodig)
 
+function startScan(){
     if(searching) return
 
     const startVal=parseFloat(startPercent.value)
