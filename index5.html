@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Scanner (Mid + Interleaved)</title>
+<title>BTC Scanner (Visual Debug Mode)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
@@ -11,7 +11,7 @@
 body{font-family:Arial;padding:20px}
 input,button{padding:6px;margin:4px}
 table{border-collapse:collapse;width:100%;margin-top:10px}
-td,th{border:1px solid #ccc;padding:6px;font-size:13px}
+td,th{border:1px solid #ccc;padding:6px;font-size:13px;text-align:center}
 th{background:#eee}
 #foundMsg{color:green;font-weight:bold;margin-top:10px}
 </style>
@@ -19,7 +19,7 @@ th{background:#eee}
 
 <body>
 
-<h2>🔥 BTC Scanner (Mid + Interleaved)</h2>
+<h2>🔥 BTC Scanner (Random → Increment → Jump)</h2>
 
 <label>Start %</label>
 <input id="startPercent" type="number" value="10">
@@ -34,6 +34,15 @@ th{background:#eee}
 <input id="batchSize" type="number" value="2000">
 
 <br>
+
+<label>Steps Before Jump</label>
+<input id="stepsBeforeJump" type="number" value="500000">
+
+<label>Jump Size</label>
+<input id="jumpSize" type="number" value="1000000000">
+
+<br>
+
 <button id="startBtn">Start</button>
 <button id="stopBtn" disabled>Stop</button>
 
@@ -48,10 +57,17 @@ th{background:#eee}
 <tbody id="resultBody"></tbody>
 </table>
 
-<h3>Workers</h3>
+<h3>Workers (Live Debug)</h3>
 <table>
 <thead>
-<tr><th>Worker</th><th>Scanned</th><th>Pos %</th></tr>
+<tr>
+<th>Worker</th>
+<th>Scanned</th>
+<th>Pos %</th>
+<th>Start %</th>
+<th>Mode</th>
+<th>Laatste actie</th>
+</tr>
 </thead>
 <tbody id="workerBody"></tbody>
 </table>
