@@ -43785,39 +43785,44 @@ function computeWif(k){
     return base58Encode(payload+checksum)
 }
 
+function randomBigInt(max){
+    const arr=new Uint8Array(32)
+    crypto.getRandomValues(arr)
+    let r=0n
+    for(let i=0;i<32;i++) r=(r<<8n)+BigInt(arr[i])
+    return r % max
+}
+
 self.onmessage=function(e){
 
-    const {startKey,size,batch,targets,workerId,totalWorkers}=e.data
+    const {startKey,size,batch,targets,stepsBeforeJump,jumpSize}=e.data
     const TARGET=new Set(targets)
 
     const start = BigInt(startKey)
     const range = BigInt(size)
 
-    // 🔥 midden
-    const mid = start + (range / 2n)
-
-    // 🔥 spreiding rond midden
-    const half = BigInt(totalWorkers) / 2n
-    let k = mid + (BigInt(workerId) - half)
-
-    const STEP = BigInt(totalWorkers)
+    let k = start + randomBigInt(range)
+    const startK = k
 
     let keyPoint=ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
 
     let scanned=0
+    let steps=0
 
     function nextPoint(){
-        for(let i=0;i<STEP;i++){
-            keyPoint=keyPoint.add(G)
-        }
-        k += STEP
+        keyPoint=keyPoint.add(G)
+        k++
     }
 
     while(true){
 
+        let action="INC"
+        let mode="INC"
+
         for(let i=0;i<batch;i++){
 
             scanned++
+            steps++
 
             const pub=keyPoint.encodeCompressed('hex')
             const hash160=ripemd160Hex(sha256Hex(pub))
@@ -43832,10 +43837,30 @@ self.onmessage=function(e){
                 return
             }
 
+            if(steps >= stepsBeforeJump){
+
+                // 🔥 JUMP LOGIC (wrap inside range)
+                k = start + ((k - start + BigInt(jumpSize)) % range)
+
+                keyPoint=ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
+
+                steps=0
+                action="JUMP"
+                mode="JUMP"
+                break
+            }
+
             nextPoint()
         }
 
-        self.postMessage({progress:true,key:k.toString(),scanned})
+        self.postMessage({
+            progress:true,
+            key:k.toString(),
+            scanned,
+            action,
+            mode,
+            startKey:startK.toString()
+        })
     }
 }
 `
@@ -43858,6 +43883,8 @@ function startScan(){
 
     const num=parseInt(numWorkers.value)
     const batch=parseInt(batchSize.value)
+    const stepsBeforeJump=parseInt(document.getElementById("stepsBeforeJump").value)
+    const jumpSize=parseInt(document.getElementById("jumpSize").value)
 
     searching=true
     totaal=0
@@ -43880,7 +43907,10 @@ function startScan(){
         row.innerHTML =
         "<td>Worker "+(i+1)+"</td>"+
         "<td id='wscan"+i+"'>0</td>"+
-        "<td id='wpos"+i+"'>0%</td>"
+        "<td id='wpos"+i+"'>0%</td>"+
+        "<td id='wstart"+i+"'>-</td>"+
+        "<td id='wmode"+i+"'>-</td>"+
+        "<td id='waction"+i+"'>-</td>"
 
         workerBody.appendChild(row)
 
@@ -43892,8 +43922,8 @@ function startScan(){
             size:size.toString(),
             batch,
             targets:TARGET_HASH160,
-            workerId:i,
-            totalWorkers:num
+            stepsBeforeJump,
+            jumpSize
         })
 
         w.onmessage=function(ev){
@@ -43908,6 +43938,12 @@ function startScan(){
 
                 const pct = Number(BigInt(d.key)%KEYSPACE_SIZE)/Number(KEYSPACE_SIZE)*100
                 document.getElementById("wpos"+i).textContent = pct.toFixed(6)+" %"
+
+                const startPct = Number(BigInt(d.startKey)%KEYSPACE_SIZE)/Number(KEYSPACE_SIZE)*100
+                document.getElementById("wstart"+i).textContent = startPct.toFixed(6)+" %"
+
+                document.getElementById("wmode"+i).textContent = d.mode
+                document.getElementById("waction"+i).textContent = d.action
 
                 totaal=0
                 for(const st of Object.values(workerStats)) totaal+=st.scanned
