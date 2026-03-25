@@ -43804,7 +43804,8 @@ self.onmessage=function(e){
             scanned++
             sinceJump++
 
-            const pub=keyPoint.encodeCompressed('hex')
+            const pub = keyPoint.encode('hex')
+
             const hash1=sha256Hex(pub)
             const hash160=ripemd160Hex(hash1)
 
@@ -43905,14 +43906,12 @@ function startScan(){
 
                 counter++
 
-                // ✅ tabel
                 const row=document.createElement("tr")
                 row.innerHTML="<td>"+counter+"</td><td>"+d.address+"</td><td>"+d.wif+"</td>"
                 resultBody.appendChild(row)
 
                 document.getElementById("foundMsg").textContent="🎉 FOUND!"
 
-                // ✅ popup
                 alert("🔥 WIF gevonden:\\n" + d.wif)
 
                 stopScan()
