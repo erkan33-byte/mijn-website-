@@ -43717,7 +43717,6 @@ const KEYSPACE_SIZE = ORDER_N - 1n
 let workers=[]
 let totaal=0
 let counter=0
-let liveCounter=0
 
 function pctToKey(p){
     return KEYSPACE_SIZE * BigInt(Math.floor(p*1e8)) / 10000000000n
@@ -43771,6 +43770,7 @@ function computeWif(k){
     return base58Encode(payload+checksum)
 }
 
+// 🔥 RANDOM BIGINT
 function randomBigInt(max){
     const arr=new Uint8Array(32)
     crypto.getRandomValues(arr)
@@ -43781,21 +43781,20 @@ function randomBigInt(max){
 
 self.onmessage=function(e){
 
-    const {startKey,size,batch,targets,jumpSize}=e.data
+    const {startKey,size,batch,targets}=e.data
     const TARGET = new Set(targets)
 
     const start = BigInt(startKey)
     const range = BigInt(size)
 
-    function newRandomKey(){
-        return start + randomBigInt(range)
-    }
+    // 🔥 RANDOM START
+    let k = start + randomBigInt(range)
 
-    let k = newRandomKey()
-    let point = ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
+    let point = ec.keyFromPrivate(
+        k.toString(16).padStart(64,'0')
+    ).getPublic()
 
     let scanned=0
-    let steps=0
     let lastLive = 0
 
     while(true){
@@ -43803,12 +43802,10 @@ self.onmessage=function(e){
         for(let i=0;i<batch;i++){
 
             scanned++
-            steps++
 
-            const pub = point.encode('hex', false) // 🔒 uncompressed
+            const pub = point.encode('hex', false)
             const address = pubToAddress(pub)
 
-            // ⚡ throttled live updates (max ~10/sec)
             if(Date.now() - lastLive > 100){
                 self.postMessage({live:true,address})
                 lastLive = Date.now()
@@ -43820,16 +43817,9 @@ self.onmessage=function(e){
                 return
             }
 
-            // incremental
+            // 🔥 incremental vanaf random start
             point = point.add(G)
             k++
-
-            // random jump
-            if(jumpSize > 0 && steps >= jumpSize){
-                k = newRandomKey()
-                point = ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
-                steps = 0
-            }
         }
 
         self.postMessage({progress:true, scanned})
@@ -43840,12 +43830,8 @@ self.onmessage=function(e){
 
 // ================= UI =================
 function addLive(address){
-
-    liveCounter++
-
     const row=document.createElement("tr")
-    row.innerHTML="<td>"+liveCounter+"</td><td>"+address+"</td>"
-
+    row.innerHTML="<td>"+totaal.toLocaleString()+"</td><td>"+address+"</td>"
     liveBody.prepend(row)
 
     while(liveBody.children.length > 250){
@@ -43864,11 +43850,9 @@ function startScan(){
 
     const num = parseInt(numWorkers.value)
     const batch = parseInt(batchSize.value)
-    const jumpSize = parseInt(document.getElementById("jumpSize").value)
 
     totaal=0
     counter=0
-    liveCounter=0
 
     resultBody.innerHTML=""
     liveBody.innerHTML=""
@@ -43886,8 +43870,7 @@ function startScan(){
             startKey:startKey.toString(),
             size:size.toString(),
             batch,
-            targets,
-            jumpSize
+            targets
         })
 
         w.onmessage=function(ev){
@@ -43913,7 +43896,6 @@ function startScan(){
                 resultBody.appendChild(row)
 
                 foundMsg.textContent="🎉 FOUND TARGET!"
-
                 alert("BTC gevonden:\\n"+d.address+"\\n\\nWIF:\\n"+d.wif)
 
                 stopScan()
