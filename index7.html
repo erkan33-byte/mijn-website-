@@ -43713,8 +43713,7 @@ const TARGET_ADDRESSES = [
 "1GDu4EUz2KgeYT4CukDS3qNkiCzg1UfqRA"
 ]
 
-// ==============================
-
+// ================= CONSTANTS =================
 const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n
 const KEYSPACE_SIZE = ORDER_N - 1n
 
@@ -43728,7 +43727,6 @@ function pctToKey(p){
 }
 
 // ================= WORKER =================
-
 const workerCode = `
 self.importScripts(
 'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js',
@@ -43789,14 +43787,19 @@ self.onmessage=function(e){
     const {startKey,size,batch,targets,jumpSize}=e.data
     const TARGET = new Set(targets)
 
-    let start = BigInt(startKey)
-    let range = BigInt(size)
+    const start = BigInt(startKey)
+    const range = BigInt(size)
 
-    let k = start + randomBigInt(range)
+    function newRandomKey(){
+        return start + randomBigInt(range)
+    }
+
+    let k = newRandomKey()
     let point = ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
 
     let scanned=0
     let steps=0
+    let lastLive = 0
 
     while(true){
 
@@ -43805,11 +43808,14 @@ self.onmessage=function(e){
             scanned++
             steps++
 
-            const pub = point.encode('hex', false)
+            const pub = point.encode('hex', false) // 🔒 uncompressed
             const address = pubToAddress(pub)
 
-            // 👀 stuur live adres
-            self.postMessage({live:true,address})
+            // ⚡ throttled live updates (max ~10/sec)
+            if(Date.now() - lastLive > 100){
+                self.postMessage({live:true,address})
+                lastLive = Date.now()
+            }
 
             if(TARGET.has(address)){
                 const wif = computeWif(k)
@@ -43817,23 +43823,25 @@ self.onmessage=function(e){
                 return
             }
 
+            // incremental
+            point = point.add(G)
+            k++
+
+            // random jump
             if(jumpSize > 0 && steps >= jumpSize){
-                k = start + randomBigInt(range)
+                k = newRandomKey()
                 point = ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
-                steps=0
-            }else{
-                point = point.add(G)
-                k++
+                steps = 0
             }
         }
 
         self.postMessage({progress:true, scanned})
+        scanned = 0
     }
 }
 `
 
-// ================= MAIN =================
-
+// ================= UI =================
 function addLive(address){
 
     liveCounter++
@@ -43848,6 +43856,7 @@ function addLive(address){
     }
 }
 
+// ================= START =================
 function startScan(){
 
     const targets = TARGET_ADDRESSES
@@ -43919,6 +43928,7 @@ function startScan(){
     stopBtn.disabled=false
 }
 
+// ================= STOP =================
 function stopScan(){
     for(const w of workers) w.terminate()
     workers=[]
