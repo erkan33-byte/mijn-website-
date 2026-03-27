@@ -43719,56 +43719,63 @@ const TARGET_ADDRESSES = [
 "1GDu4EUz2KgeYT4CukDS3qNkiCzg1UfqRA"
 ]
 
-function base58Decode(addr){
-    const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-    let num=0n
-    for(let c of addr) num=num*58n+BigInt(alphabet.indexOf(c))
-    let hex=num.toString(16)
-    if(hex.length%2) hex="0"+hex
-    return hex
-}
-
-function addressToHash160(addr){
-    return base58Decode(addr).slice(2,42)
-}
-
-const TARGET_HASH160 = TARGET_ADDRESSES.map(addressToHash160)
+// ================= CONSTANTS =================
+const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n
+const KEYSPACE_SIZE = ORDER_N - 1n
 
 let workers=[]
-let workerStats={}
 let totaal=0
 let counter=0
-let searching=false
 
 function pctToKey(p){
-    const pct=BigInt(Math.floor(p*1e8))
-    return KEYSPACE_SIZE * pct / 10000000000n
+    return KEYSPACE_SIZE * BigInt(Math.floor(p*1e8)) / 10000000000n
 }
 
-const workerCode=`
+// ================= WORKER =================
+const workerCode = `
 self.importScripts(
 'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js',
 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js'
 )
 
-const ec=new elliptic.ec("secp256k1")
-const G=ec.g
+const ec = new elliptic.ec("secp256k1")
+const G = ec.g
 
-function sha256Hex(hex){return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString()}
-function ripemd160Hex(hex){return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString()}
-function doubleSha256Hex(hex){return sha256Hex(sha256Hex(hex))}
+function sha256(hex){
+    return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString()
+}
+function ripemd160(hex){
+    return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString()
+}
+function doubleSha256(hex){
+    return sha256(sha256(hex))
+}
 
 function base58Encode(hex){
     const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
     let num=BigInt("0x"+hex), out=""
-    while(num>0n){let r=num%58n;num/=58n;out=alphabet[Number(r)]+out}
+    while(num>0n){
+        let r=num%58n
+        num/=58n
+        out=alphabet[Number(r)]+out
+    }
+    for(let i=0; i<hex.length && hex.substr(i,2)==="00"; i+=2){
+        out = "1" + out
+    }
     return out
+}
+
+function pubToAddress(pub){
+    const hash160 = ripemd160(sha256(pub))
+    const payload = "00" + hash160
+    const checksum = doubleSha256(payload).slice(0,8)
+    return base58Encode(payload + checksum)
 }
 
 function computeWif(k){
     const privHex=k.toString(16).padStart(64,'0')
     const payload="80"+privHex
-    const checksum=doubleSha256Hex(payload).slice(0,8)
+    const checksum=doubleSha256(payload).slice(0,8)
     return base58Encode(payload+checksum)
 }
 
@@ -43782,163 +43789,141 @@ function randomBigInt(max){
 
 self.onmessage=function(e){
 
-    const {startKey,size,batch,targets,stepsBeforeJump,jumpSize}=e.data
-    const TARGET=new Set(targets)
+    const {startKey,size,batch,targets,incSteps,jumpSize}=e.data
+    const TARGET = new Set(targets)
 
     const start = BigInt(startKey)
     const range = BigInt(size)
 
     let k = start + randomBigInt(range)
-    const startK = k
 
-    let keyPoint=ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
+    let point = ec.keyFromPrivate(
+        k.toString(16).padStart(64,'0')
+    ).getPublic()
 
     let scanned=0
-    let steps=0
-
-    function nextPoint(){
-        keyPoint=keyPoint.add(G)
-        k++
-    }
+    let stepCounter=0
+    let liveBatch=[]
 
     while(true){
-
-        let action="INC"
-        let mode="INC"
 
         for(let i=0;i<batch;i++){
 
             scanned++
-            steps++
+            stepCounter++
 
-            // 🔥 UNCOMPRESSED
-            const pub=keyPoint.encode('hex')
+            const pub = point.encode('hex', false)
+            const address = pubToAddress(pub)
 
-            const hash160=ripemd160Hex(sha256Hex(pub))
+            // ✅ batch verzamelen (SYNC FIX)
+            liveBatch.push(address)
 
-            if(TARGET.has(hash160)){
-                const payload="00"+hash160
-                const checksum=doubleSha256Hex(payload).slice(0,8)
-                const address=base58Encode(payload+checksum)
-                const wif=computeWif(k)
+            if(liveBatch.length >= 100){
+                self.postMessage({liveBatch:true, list: liveBatch})
+                liveBatch = []
+            }
 
+            if(TARGET.has(address)){
+                const wif = computeWif(k)
                 self.postMessage({found:true,address,wif})
                 return
             }
 
-            if(steps >= stepsBeforeJump){
+            point = point.add(G)
+            k++
 
-                k = start + ((k - start + BigInt(jumpSize)) % range)
-
-                keyPoint=ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
-
-                steps=0
-                action="JUMP"
-                mode="JUMP"
-                break
+            if(k >= start + range){
+                k = start + randomBigInt(range)
+                point = ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
+                stepCounter = 0
             }
 
-            nextPoint()
+            if(stepCounter >= incSteps){
+                k += BigInt(jumpSize)
+                point = ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
+                stepCounter = 0
+
+                if(k >= start + range){
+                    k = start + randomBigInt(range)
+                    point = ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
+                }
+            }
         }
 
-        self.postMessage({
-            progress:true,
-            key:k.toString(),
-            scanned,
-            action,
-            mode,
-            startKey:startK.toString()
-        })
+        self.postMessage({progress:true, scanned})
+        scanned = 0
     }
 }
 `
 
-// rest blijft IDENTIEK
-// (geen wijzigingen nodig)
+// ================= UI =================
+function addLive(address){
+    const row=document.createElement("tr")
 
-function startScan(){
-    if(searching) return
+    // ✅ NU synchroon met totaal
+    row.innerHTML =
+        "<td>"+totaal.toLocaleString()+"</td><td>"+address+"</td>"
 
-    const startVal=parseFloat(startPercent.value)
-    const endVal=parseFloat(endPercent.value)
+    liveBody.prepend(row)
 
-    if(endVal <= startVal){
-        alert("End % moet groter zijn dan Start %")
-        return
+    while(liveBody.children.length > 250){
+        liveBody.removeChild(liveBody.lastChild)
     }
+}
 
-    const startKey=pctToKey(startVal)
-    const endKey=pctToKey(endVal)
-    const size=endKey-startKey
+// ================= START =================
+function startScan(){
 
-    const num=parseInt(numWorkers.value)
-    const batch=parseInt(batchSize.value)
-    const stepsBeforeJump=parseInt(document.getElementById("stepsBeforeJump").value)
-    const jumpSize=parseInt(document.getElementById("jumpSize").value)
+    const startKey = pctToKey(parseFloat(startPercent.value))
+    const endKey = pctToKey(parseFloat(endPercent.value))
+    const size = endKey - startKey
 
-    searching=true
+    const num = parseInt(numWorkers.value)
+    const batch = parseInt(batchSize.value)
+    const incSteps = parseInt(document.getElementById("incSteps").value)
+    const jumpSize = parseInt(document.getElementById("jumpSize").value)
+
     totaal=0
     counter=0
-    workerStats={}
-    workers=[]
 
-    workerBody.innerHTML=""
     resultBody.innerHTML=""
+    liveBody.innerHTML=""
+    foundMsg.textContent=""
 
-    startBtn.disabled=true
-    stopBtn.disabled=false
-
-    const blob=new Blob([workerCode],{type:'application/javascript'})
-    const url=URL.createObjectURL(blob)
+    const blob = new Blob([workerCode],{type:'application/javascript'})
+    const url = URL.createObjectURL(blob)
 
     for(let i=0;i<num;i++){
 
-        const row=document.createElement("tr")
-        row.innerHTML =
-        "<td>Worker "+(i+1)+"</td>"+
-        "<td id='wscan"+i+"'>0</td>"+
-        "<td id='wpos"+i+"'>0%</td>"+
-        "<td id='wstart"+i+"'>-</td>"+
-        "<td id='wmode"+i+"'>-</td>"+
-        "<td id='waction"+i+"'>-</td>"
-
-        workerBody.appendChild(row)
-
-        const w=new Worker(url)
+        const w = new Worker(url)
         workers.push(w)
 
         w.postMessage({
             startKey:startKey.toString(),
             size:size.toString(),
             batch,
-            targets:TARGET_HASH160,
-            stepsBeforeJump,
+            targets:TARGET_ADDRESSES,
+            incSteps,
             jumpSize
         })
 
         w.onmessage=function(ev){
 
-            const d=ev.data
+            const d = ev.data
+
+            // ✅ LIVE BATCH verwerken
+            if(d.liveBatch){
+                for(const addr of d.list){
+                    totaal++
+                    addLive(addr)
+                }
+
+                document.getElementById("totaal").textContent =
+                    "Scanned: " + totaal.toLocaleString()
+            }
 
             if(d.progress){
-
-                workerStats[i]=d
-
-                document.getElementById("wscan"+i).textContent = d.scanned.toLocaleString()
-
-                const pct = Number(BigInt(d.key)%KEYSPACE_SIZE)/Number(KEYSPACE_SIZE)*100
-                document.getElementById("wpos"+i).textContent = pct.toFixed(6)+" %"
-
-                const startPct = Number(BigInt(d.startKey)%KEYSPACE_SIZE)/Number(KEYSPACE_SIZE)*100
-                document.getElementById("wstart"+i).textContent = startPct.toFixed(6)+" %"
-
-                document.getElementById("wmode"+i).textContent = d.mode
-                document.getElementById("waction"+i).textContent = d.action
-
-                totaal=0
-                for(const st of Object.values(workerStats)) totaal+=st.scanned
-
-                document.getElementById("totaal").textContent="Scanned: "+totaal.toLocaleString()
+                // optioneel, niet meer nodig voor sync
             }
 
             if(d.found){
@@ -43949,18 +43934,20 @@ function startScan(){
                 row.innerHTML="<td>"+counter+"</td><td>"+d.address+"</td><td>"+d.wif+"</td>"
                 resultBody.appendChild(row)
 
-                document.getElementById("foundMsg").textContent="🎉 FOUND!"
-
-                alert("🔥 WIF gevonden:\\n" + d.wif)
+                foundMsg.textContent="🎉 FOUND TARGET!"
+                alert("BTC gevonden:\\n"+d.address+"\\n\\nWIF:\\n"+d.wif)
 
                 stopScan()
             }
         }
     }
+
+    startBtn.disabled=true
+    stopBtn.disabled=false
 }
 
+// ================= STOP =================
 function stopScan(){
-    searching=false
     for(const w of workers) w.terminate()
     workers=[]
     startBtn.disabled=false
@@ -43971,5 +43958,6 @@ startBtn.onclick=startScan
 stopBtn.onclick=stopScan
 
 </script>
+
 </body>
 </html>
