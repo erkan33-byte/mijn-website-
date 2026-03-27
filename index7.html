@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Scanner (UNCOMPRESSED ONLY)</title>
+<title>BTC Scanner (LIVE + FIXED)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
@@ -11,7 +11,7 @@
 body{font-family:Arial;padding:20px}
 input,button{padding:6px;margin:4px}
 table{border-collapse:collapse;width:100%;margin-top:10px}
-td,th{border:1px solid #ccc;padding:6px;font-size:13px}
+td,th{border:1px solid #ccc;padding:6px;font-size:12px}
 th{background:#eee}
 #foundMsg{color:green;font-weight:bold;margin-top:10px}
 </style>
@@ -19,22 +19,22 @@ th{background:#eee}
 
 <body>
 
-<h2>🔥 BTC Scanner (UNCOMPRESSED ONLY)</h2>
+<h2>🔥 BTC Scanner (LIVE DEBUG)</h2>
 
 <label>Start %</label>
-<input id="startPercent" type="number" value="10" step="0.000001">
+<input id="startPercent" type="number" value="0">
 
 <label>End %</label>
-<input id="endPercent" type="number" value="20" step="0.000001">
+<input id="endPercent" type="number" value="0.0000001">
 
 <label>Batch</label>
 <input id="batchSize" type="number" value="2000">
 
 <label>Workers</label>
-<input id="numWorkers" type="number" value="6">
+<input id="numWorkers" type="number" value="2">
 
 <label>Jump Size</label>
-<input id="jumpSize" type="number" value="1000000">
+<input id="jumpSize" type="number" value="100000">
 
 <br>
 <button id="startBtn">Start</button>
@@ -43,26 +43,23 @@ th{background:#eee}
 <div id="totaal">Scanned: 0</div>
 <div id="foundMsg"></div>
 
-<h3>Resultaten</h3>
+<h3>🎯 Matches</h3>
 <table>
-<thead>
-<tr><th>#</th><th>Adres</th><th>WIF</th></tr>
-</thead>
+<thead><tr><th>#</th><th>Adres</th><th>WIF</th></tr></thead>
 <tbody id="resultBody"></tbody>
 </table>
 
-<h3>Workers</h3>
+<h3>👀 Live gegenereerde adressen (max 250)</h3>
 <table>
-<thead>
-<tr><th>Worker</th><th>Scanned</th><th>Pos %</th></tr>
-</thead>
-<tbody id="workerBody"></tbody>
+<thead><tr><th>#</th><th>Adres</th></tr></thead>
+<tbody id="liveBody"></tbody>
 </table>
 
 <script>
 
-const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n
-const KEYSPACE_SIZE = ORDER_N - 1n
+// ==============================
+// 🔥 VASTE TARGETS
+// ==============================
 
 const TARGET_ADDRESSES = [
 "1EUXN9yCnq5yur6ZUy3kGQd87KzGK2ywTZ",
