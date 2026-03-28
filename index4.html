@@ -37159,8 +37159,11 @@ const TARGET = [
 
 let workers=[]
 let total=0
+let lastTime=Date.now()
+let lastTotal=0
 
 const workerCode = `
+
 self.importScripts(
 'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js',
 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js'
@@ -37178,14 +37181,14 @@ function base58(hex){
     let num = BigInt("0x"+hex)
     let out = ""
 
-    while(num > 0n){
-        let r = num % 58n
-        num /= 58n
-        out = alphabet[Number(r)] + out
+    while(num>0n){
+        let r=num%58n
+        num/=58n
+        out=alphabet[Number(r)]+out
     }
 
-    for(let i=0; i<hex.length && hex.substr(i,2)==="00"; i+=2){
-        out = "1" + out
+    for(let i=0;i<hex.length && hex.substr(i,2)==="00";i+=2){
+        out="1"+out
     }
 
     return out
@@ -37195,66 +37198,67 @@ function pubToAddress(pub){
     const sha = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pub))
     const ripe = CryptoJS.RIPEMD160(sha)
 
-    const payload = "00" + ripe.toString()
+    const payload = "00"+ripe.toString()
 
     const hash1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(payload))
     const hash2 = CryptoJS.SHA256(hash1)
 
     const checksum = hash2.toString().slice(0,8)
-
-    return base58(payload + checksum)
+    return base58(payload+checksum)
 }
 
 function computeWif(k){
-    const hex = k.toString(16).padStart(64,'0')
+    const hex=k.toString(16).padStart(64,'0')
     const payload="80"+hex
 
     const hash1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(payload))
     const hash2 = CryptoJS.SHA256(hash1)
 
     const checksum = hash2.toString().slice(0,8)
-
     return base58(payload+checksum)
 }
 
-// 🔥 slimme generator (geen repeats)
-function generate(baseWords, counter){
+function generate(word, counter){
 
-    const w = baseWords[counter % baseWords.length]
+    const year = 2000 + (counter % 30)
+    const num = counter % 10000
 
-    const variants = [
-        w,
-        w + counter,
-        w + (2000 + (counter % 30)),
-        w.toUpperCase(),
-        w + "123",
-        w.replace(/o/g,"0").replace(/i/g,"1"),
-        w + "_" + counter
+    return [
+        word,
+        word + num,
+        word + year,
+        word + "_" + num,
+        word.toUpperCase(),
+        word.charAt(0).toUpperCase() + word.slice(1),
+        word.replace(/o/g,"0").replace(/i/g,"1").replace(/e/g,"3"),
+        word + "123",
+        word + "!",
+        word + "@",
+        word + year + num
     ]
-
-    return variants
 }
 
-self.onmessage = function(e){
+self.onmessage=function(e){
 
-    const baseWords = e.data.words
-    const TARGET = new Set(e.data.targets)
-    const BATCH = e.data.batch
+    const baseWords=e.data.words
+    const TARGET=new Set(e.data.targets)
+    const BATCH=e.data.batch
 
-    let scanned = 0
-    let counter = 0
+    let counter=0
+    let scanned=0
 
-    const seen = new Set()
+    const seen=new Set()
 
     while(true){
 
         for(let b=0;b<BATCH;b++){
 
-            const variants = generate(baseWords, counter)
+            const word = baseWords[counter % baseWords.length]
+            const variants = generate(word,counter)
 
-            for(const word of variants){
+            for(const v of variants){
 
-                const hash = sha256hex(word)
+                const hash = sha256hex(v)
                 const k = BigInt("0x"+hash) % ORDER_N
 
                 const key = ec.keyFromPrivate(
@@ -37264,23 +37268,21 @@ self.onmessage = function(e){
                 const pub = key.getPublic().encode('hex', false)
                 const addr = pubToAddress(pub)
 
-                // ❌ skip duplicates
                 if(seen.has(addr)) continue
                 seen.add(addr)
 
                 if(!addr.startsWith("1")) continue
-
-                self.postMessage({live:addr})
 
                 if(TARGET.has(addr)){
                     self.postMessage({
                         found:true,
                         addr,
                         wif:computeWif(k),
-                        source:word
+                        source:v
                     })
                 }
 
+                self.postMessage({live:addr})
                 scanned++
             }
 
@@ -37288,7 +37290,7 @@ self.onmessage = function(e){
         }
 
         self.postMessage({progress:scanned})
-        scanned = 0
+        scanned=0
     }
 }
 `
@@ -37302,6 +37304,9 @@ function start(){
     const batch = parseInt(document.getElementById("batch").value)
 
     total=0
+    lastTime=Date.now()
+    lastTotal=0
+
     results.innerHTML=""
     live.innerHTML=""
     foundMsg.textContent=""
@@ -37311,19 +37316,16 @@ function start(){
 
     for(let i=0;i<num;i++){
 
-        const w = new Worker(url)
+        const w=new Worker(url)
         workers.push(w)
 
         w.postMessage({words,targets:TARGET,batch})
 
-        w.onmessage = function(ev){
+        w.onmessage=function(ev){
 
-            const d = ev.data
+            const d=ev.data
 
             if(d.live){
-                total++
-                status.textContent = "Scanned: " + total
-
                 const row=document.createElement("tr")
                 row.innerHTML="<td>"+d.live+"</td>"
                 live.prepend(row)
@@ -37334,17 +37336,45 @@ function start(){
             }
 
             if(d.progress){
+
                 total += d.progress
-                status.textContent = "Scanned: " + total
+
+                const now = Date.now()
+                const diff = (now - lastTime) / 1000
+
+                let speed = 0
+                if(diff > 0){
+                    speed = Math.floor((total - lastTotal) / diff)
+                }
+
+                status.textContent =
+                    "Scanned: " + total.toLocaleString() +
+                    " | Speed: " + speed.toLocaleString() + "/sec"
+
+                if(diff >= 1){
+                    lastTime = now
+                    lastTotal = total
+                }
             }
 
             if(d.found){
+
                 const row=document.createElement("tr")
-                row.innerHTML="<td>"+d.addr+"</td><td>"+d.wif+"</td><td>"+d.source+"</td>"
+                row.innerHTML=
+                "<td>"+d.addr+"</td>"+
+                "<td>"+d.wif+"</td>"+
+                "<td>"+d.source+"</td>"+
+                "<td><button onclick='copy(\""+d.wif+"\")'>Copy</button></td>"
+
                 results.appendChild(row)
 
                 foundMsg.textContent="🎉 MATCH FOUND!"
-                alert("FOUND:\\n"+d.addr+"\\nSOURCE:\\n"+d.source)
+
+                alert(
+                "FOUND:\\n"+d.addr+
+                "\\n\\nWIF:\\n"+d.wif+
+                "\\n\\nSOURCE:\\n"+d.source
+                )
             }
         }
     }
@@ -37353,6 +37383,11 @@ function start(){
 function stop(){
     for(const w of workers) w.terminate()
     workers=[]
+}
+
+function copy(text){
+    navigator.clipboard.writeText(text)
+    alert("WIF gekopieerd")
 }
 
 </script>
