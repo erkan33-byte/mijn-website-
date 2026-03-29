@@ -1,67 +1,46 @@
 <!DOCTYPE html>
-<html lang="nl">
+<html>
 <head>
 <meta charset="UTF-8">
-<title>BTC Brainwallet Scanner PRO FIXED</title>
+<title>BTC Scanner PRO (WIF MATCH)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 
 <style>
-body{font-family:Arial;padding:20px}
-textarea,input,button{margin:5px;padding:6px}
+body{font-family:Arial;padding:15px}
+input,button{margin:5px;padding:6px}
 table{border-collapse:collapse;width:100%;margin-top:10px}
-td,th{border:1px solid #ccc;padding:6px;font-size:12px}
-th{background:#eee}
-#foundMsg{color:green;font-weight:bold}
+td{border:1px solid #ccc;padding:5px;font-size:12px}
 </style>
 </head>
 
 <body>
 
-<h2>🔥 BTC Brainwallet Scanner PRO (FIXED)</h2>
+<h2>😈 BTC Scanner (UNCOMPRESSED + WIF)</h2>
 
-<label>Workers</label>
-<input id="workers" type="number" value="2">
-
-<label>Batch size</label>
-<input id="batch" type="number" value="500">
-
-<br>
-
-<label>Base words</label><br>
-<textarea id="words" rows="6" cols="50">
-bitcoin
-btc
-crypto
-wallet
-satoshi
-blockchain
-</textarea>
-
-<br>
+Workers <input id="workers" value="2"><br>
+Batch <input id="batch" value="80"><br>
 
 <button onclick="start()">Start</button>
 <button onclick="stop()">Stop</button>
 
-<div id="status">Scanned: 0 | Speed: 0/sec</div>
-<div id="foundMsg"></div>
+<div id="status">Scanned: 0</div>
 
 <h3>🎯 Matches</h3>
 <table>
-<thead><tr><th>Adres</th><th>WIF</th><th>Bron</th><th></th></tr></thead>
 <tbody id="results"></tbody>
 </table>
 
-<h3>👀 Live</h3>
-<table>
-<thead><tr><th>Adres</th></tr></thead>
-<tbody id="live"></tbody>
-</table>
+<h3>👀 Live Adressen</h3>
+<table><tbody id="live"></tbody></table>
+
+<h3>🧠 Woorden</h3>
+<table><tbody id="words"></tbody></table>
 
 <script>
 
-const TARGET = [
+const TARGET=[
   "1EUXN9yCnq5yur6ZUy3kGQd87KzGK2ywTZ",
   "16xzDttFSNK1T8BLGqBjJxf47Gjm5ufcmB",
   "149XtqTaQUB2q9XJFXPvb6NoSuvVRGRTZN",
