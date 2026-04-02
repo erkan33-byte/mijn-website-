@@ -37255,248 +37255,182 @@ const targetMap = Object.create(null);
   "1M5aojQPWaWFGKr9PZhA9nF8SZvahVWgHr",
   "1M5TCaLbChT7iwpzdYgwh5YNtzFCR26sUy",
   "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
-]
+].forEach(a => targetMap[a] = true);
 
-let TARGET_HASH160=[]
+// KEYSPACE
+const KEYSPACE = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
 
-function base58Decode(addr){
-const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-let num=0n
-for(let c of addr){
-num=num*58n+BigInt(alphabet.indexOf(c))
-}
-let hex=num.toString(16)
-if(hex.length%2)hex="0"+hex
-return hex
-}
+let workers=[], running=false, total=0, count=0;
 
-function addressToHash160(addr){
-const hex=base58Decode(addr)
-return hex.slice(2,42)
-}
-
-for(let a of TARGET_ADDRESSES){
-TARGET_HASH160.push(addressToHash160(a))
-}
-
-let workers=[]
-let workerStats={}
-let totaal=0
-let counter=0
-let searching=false
-
-function pctToKey(p){
-const pct=BigInt(Math.floor(p*1e8))
-return KEYSPACE_SIZE*pct/10000000000n
-}
-
-const workerCode=`
-
+// ===== WORKER CODE =====
+const workerCode = `
 self.importScripts(
 'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js',
 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js'
-)
+);
 
-const ec=new elliptic.ec("secp256k1")
-const G=ec.g
+const ec = new elliptic.ec("secp256k1");
 
-function sha256Hex(hex){
-return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString()
-}
-
-function ripemd160Hex(hex){
-return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString()
-}
-
-function doubleSha256Hex(hex){
-return sha256Hex(sha256Hex(hex))
+function base58(hex){
+ const A="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+ const bytes=Uint8Array.from(hex.match(/.{2}/g).map(b=>parseInt(b,16)));
+ let zeros=0;
+ while(zeros<bytes.length && bytes[zeros]===0) zeros++;
+ let num=BigInt("0x"+hex), out="";
+ while(num>0n){let r=num%58n;num/=58n;out=A[Number(r)]+out;}
+ return "1".repeat(zeros)+(out||"");
 }
 
-function base58Encode(hex){
-const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-let num=BigInt("0x"+hex)
-let out=""
-while(num>0n){
-let r=num%58n
-num/=58n
-out=alphabet[Number(r)]+out
-}
-return out
+function sha256(h){return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h)).toString();}
+function dsha(h){return sha256(sha256(h));}
+
+function getAddress(k){
+ const priv=k.toString(16).padStart(64,'0');
+ const key=ec.keyFromPrivate(priv,'hex');
+ const pub=key.getPublic().encode('hex', false); // uncompressed
+ const hash=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256(pub))).toString();
+ const payload="00"+hash;
+ return base58(payload + dsha(payload).slice(0,8));
 }
 
-function computeWif(k){
-const privHex=k.toString(16).padStart(64,'0')
-const payload="80"+privHex
-const checksum=doubleSha256Hex(payload).slice(0,8)
-return base58Encode(payload+checksum)
+function getWif(k){
+ const priv=k.toString(16).padStart(64,'0');
+ const payload="80"+priv;
+ return base58(payload + dsha(payload).slice(0,8));
 }
 
-function randomBigInt(max){
-const arr=new Uint8Array(32)
-crypto.getRandomValues(arr)
-let r=0n
-for(let i=0;i<32;i++){
-r=(r<<8n)+BigInt(arr[i])
+function randRange(min,max){
+ let a=new Uint8Array(32);
+ crypto.getRandomValues(a);
+ let r=0n;
+ for(let i=0;i<32;i++) r=(r<<8n)+BigInt(a[i]);
+ return min + (r % (max-min));
 }
-return r%max
-}
+
+let scanned=0;
 
 self.onmessage=function(e){
+ const {id, zoek, batch, min, max, targets}=e.data;
 
-const {startKey,size,batch,targets}=e.data
-const TARGET=new Set(targets)
+ function loop(){
+  for(let i=0;i<batch;i++){
+   const k=randRange(min,max);
+   scanned++;
 
-let k=BigInt(startKey)+randomBigInt(BigInt(size))
+   const priv=k.toString(16).padStart(64,'0');
 
-let keyPoint=ec.keyFromPrivate(k.toString(16).padStart(64,'0')).getPublic()
+   if(!zoek || priv.includes(zoek)){
+     const addr=getAddress(k);
+     const wif=getWif(k);
 
-let scanned=0
+     // 🔥 SNELLE TARGET CHECK
+     if(targets[addr]){
+       self.postMessage({found:true, addr, wif});
+       return;
+     }
 
-function nextPoint(){
-keyPoint=keyPoint.add(G)
-k++
+     self.postMessage({id, addr, wif});
+   }
+
+   if(scanned % 1000 === 0){
+     self.postMessage({id, scanned});
+   }
+  }
+
+  setTimeout(loop,0);
+ }
+
+ loop();
+};
+`;
+
+// ===== START =====
+function start(){
+ if(running) return;
+ running=true;
+
+ startBtn.disabled=true;
+ stopBtn.disabled=false;
+
+ results.innerHTML="";
+ workersDiv.innerHTML="";
+ total=0; count=0;
+
+ const zoek=zoekWoord.value.toLowerCase();
+ const num=parseInt(numWorkers.value);
+ const batch=parseInt(batchSize.value);
+
+ const startP=Number(startPercent.value)/100;
+ const endP=Number(endPercent.value)/100;
+
+ const min=BigInt(Math.floor(startP * Number(KEYSPACE)));
+ const max=BigInt(Math.floor(endP * Number(KEYSPACE)));
+
+ const blob=new Blob([workerCode], {type:"application/javascript"});
+ const url=URL.createObjectURL(blob);
+
+ for(let i=0;i<num;i++){
+  const w=new Worker(url);
+  workers.push(w);
+
+  const row=document.createElement("tr");
+  row.innerHTML="<td>"+i+"</td><td id='w"+i+"'>0</td>";
+  workersDiv.appendChild(row);
+
+  w.postMessage({
+    id:i,
+    zoek,
+    batch,
+    min,
+    max,
+    targets:targetMap
+  });
+
+  w.onmessage=(e)=>{
+    const d=e.data;
+
+    if(d.found){
+      alert("🎉 GEVONDEN!\\nAdres: "+d.addr+"\\nWIF: "+d.wif);
+      found.innerText="GEVONDEN: "+d.addr;
+      stop();
+      return;
+    }
+
+    if(d.addr){
+      count++;
+      total++;
+
+      const tr=document.createElement("tr");
+      tr.innerHTML="<td>"+count+"</td><td>"+d.addr+"</td><td>"+d.wif+"</td>";
+      results.appendChild(tr);
+
+      if(results.rows.length>200) results.deleteRow(0);
+    }
+
+    if(d.scanned){
+      document.getElementById("w"+d.id).innerText=d.scanned;
+    }
+
+    totaal.innerText="Totaal: "+total;
+  };
+ }
 }
 
-while(true){
+// ===== STOP =====
+function stop(){
+ running=false;
+ startBtn.disabled=false;
+ stopBtn.disabled=true;
 
-for(let i=0;i<batch;i++){
-
-scanned++
-
-const pub=keyPoint.encode('hex',false)
-
-const hash1=sha256Hex(pub)
-const hash160=ripemd160Hex(hash1)
-
-if(TARGET.has(hash160)){
-
-const payload="00"+hash160
-const checksum=doubleSha256Hex(payload).slice(0,8)
-
-const address=base58Encode(payload+checksum)
-const wif=computeWif(k)
-
-self.postMessage({found:true,address,wif,key:k.toString(),scanned})
-
-return
-
+ workers.forEach(w=>w.terminate());
+ workers=[];
 }
 
-nextPoint()
+startBtn.onclick=start;
+stopBtn.onclick=stop;
 
-}
-
-self.postMessage({progress:true,key:k.toString(),scanned})
-
-}
-
-}
-`
-
-function startScan(){
-
-if(searching)return
-
-searching=true
-workers=[]
-workerStats={}
-totaal=0
-counter=0
-
-resultBody.innerHTML=""
-workerBody.innerHTML=""
-
-startBtn.disabled=true
-stopBtn.disabled=false
-
-const startKey=pctToKey(parseFloat(startPercent.value))
-const endKey=pctToKey(parseFloat(endPercent.value))
-const size=endKey-startKey
-
-const num=parseInt(numWorkers.value)
-const batch=parseInt(batchSize.value)
-
-const chunk=size/BigInt(num)
-
-const blob=new Blob([workerCode],{type:'application/javascript'})
-const url=URL.createObjectURL(blob)
-
-for(let i=0;i<num;i++){
-
-const wStart=startKey+chunk*BigInt(i)
-const wSize=(i===num-1)?size-chunk*BigInt(i):chunk
-
-const row=document.createElement("tr")
-row.innerHTML="<td>Worker "+(i+1)+"</td><td id='wscan"+i+"'>0</td><td id='wpos"+i+"'>0%</td>"
-workerBody.appendChild(row)
-
-const w=new Worker(url)
-workers.push(w)
-
-w.postMessage({
-startKey:wStart.toString(),
-size:wSize.toString(),
-batch:batch,
-targets:TARGET_HASH160
-})
-
-w.onmessage=function(ev){
-
-const d=ev.data
-
-if(d.progress){
-
-workerStats[i]=d
-
-document.getElementById("wscan"+i).textContent=d.scanned.toLocaleString()
-
-const pct=Number(BigInt(d.key)%KEYSPACE_SIZE)/Number(KEYSPACE_SIZE)*100
-
-document.getElementById("wpos"+i).textContent=pct.toFixed(8)+" %"
-
-totaal=0
-for(const st of Object.values(workerStats))totaal+=st.scanned
-
-document.getElementById("totaal").textContent="Scanned: "+totaal.toLocaleString()
-
-}
-
-if(d.found){
-
-counter++
-
-const row=document.createElement("tr")
-row.innerHTML="<td>"+counter+"</td><td>"+d.address+"</td><td>"+d.wif+"</td>"
-resultBody.appendChild(row)
-
-document.getElementById("foundMsg").textContent="🎉 Target gevonden!"
-
-stopScan()
-
-}
-
-}
-
-}
-
-}
-
-function stopScan(){
-
-searching=false
-
-for(const w of workers)w.terminate()
-
-workers=[]
-
-startBtn.disabled=false
-stopBtn.disabled=true
-
-}
-
-startBtn.onclick=startScan
-stopBtn.onclick=stopScan
-
+const results=document.getElementById("results");
+const workersDiv=document.getElementById("workers");
 </script>
 
 </body>
