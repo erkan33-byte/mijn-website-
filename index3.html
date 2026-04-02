@@ -2,77 +2,62 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Faster Scanner (Hash160 optimized)</title>
+<title>BTC Generator PRO (40K Targets)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 
 <style>
-body{font-family:Arial;padding:20px}
-input,button{padding:6px;margin:4px}
-table{border-collapse:collapse;width:100%;margin-top:10px}
-td,th{border:1px solid #ccc;padding:6px;font-size:13px}
-th{background:#eee}
-#foundMsg{color:green;font-weight:bold;margin-top:10px}
+body { font-family: Arial; padding:20px; }
+table { border-collapse: collapse; width:100%; margin-top:10px; }
+th,td { border:1px solid #ccc; padding:6px; font-size:12px; word-break:break-all; }
+th { background:#f2f2f2; }
+button,input { margin:5px 0; padding:6px 10px; width:250px; }
 </style>
 </head>
 
 <body>
 
-<h2>BTC Hash160 Fast Scanner</h2>
+<h2>BTC Generator PRO</h2>
 
-<label>Start %</label>
-<input id="startPercent" type="number" value="35.995" step="0.000001">
+<label>Start %:</label><br>
+<input type="number" id="startPercent" value="0"><br>
 
-<label>End %</label>
-<input id="endPercent" type="number" value="35.996" step="0.000001">
+<label>Eind %:</label><br>
+<input type="number" id="endPercent" value="100"><br>
 
-<label>Batch</label>
-<input id="batchSize" type="number" value="1000">
+<label>Batch per worker:</label><br>
+<input type="number" id="batchSize" value="500"><br>
 
-<label>Workers</label>
-<input id="numWorkers" type="number" value="4">
+<label>Aantal workers:</label><br>
+<input type="number" id="numWorkers" value="4"><br>
 
-<br>
+<label>Zoekwoord in PRIVATE KEY:</label><br>
+<input type="text" id="zoekWoord"><br>
 
 <button id="startBtn">Start</button>
 <button id="stopBtn" disabled>Stop</button>
 
-<div id="totaal">Scanned: 0</div>
-<div id="foundMsg"></div>
+<div id="totaal">Totaal: 0</div>
+<div id="found"></div>
 
 <h3>Resultaten</h3>
-
 <table>
-<thead>
-<tr>
-<th>#</th>
-<th>Adres</th>
-<th>WIF</th>
-</tr>
-</thead>
-<tbody id="resultBody"></tbody>
+<thead><tr><th>#</th><th>Adres</th><th>WIF</th></tr></thead>
+<tbody id="results"></tbody>
 </table>
 
-<h3>Worker status</h3>
-
+<h3>Workers</h3>
 <table>
-<thead>
-<tr>
-<th>Worker</th>
-<th>Scanned</th>
-<th>Keyspace %</th>
-</tr>
-</thead>
-<tbody id="workerBody"></tbody>
+<thead><tr><th>ID</th><th>Gescand</th></tr></thead>
+<tbody id="workers"></tbody>
 </table>
 
 <script>
+// 🔥 TARGET LIST (PLAK HIER JE 40K ADRESSEN)
+const targetMap = Object.create(null);
 
-const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n
-const KEYSPACE_SIZE = ORDER_N - 1n
-
-const TARGET_ADDRESSES = [
+[
   "1EUXN9yCnq5yur6ZUy3kGQd87KzGK2ywTZ",
   "16xzDttFSNK1T8BLGqBjJxf47Gjm5ufcmB",
   "149XtqTaQUB2q9XJFXPvb6NoSuvVRGRTZN",
