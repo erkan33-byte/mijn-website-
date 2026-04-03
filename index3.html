@@ -37284,53 +37284,58 @@ function base58(hex){
 function sha256(h){return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h)).toString();}
 function dsha(h){return sha256(sha256(h));}
 
-function getAddress(k){
- const priv=k.toString(16).padStart(64,'0');
+// 🔥 PATTERN GENERATOR (ALTIJD IN KEY)
+function generateWithPattern(pattern){
+ const rand = () => Math.floor(Math.random()*16).toString(16);
+
+ let prefixLen = Math.floor(Math.random() * (64 - pattern.length));
+ let prefix = "";
+ for(let i=0;i<prefixLen;i++) prefix += rand();
+
+ let suffix = "";
+ while((prefix + pattern + suffix).length < 64){
+   suffix += rand();
+ }
+
+ return prefix + pattern + suffix;
+}
+
+function getAddressFromPrivHex(priv){
  const key=ec.keyFromPrivate(priv,'hex');
- const pub=key.getPublic().encode('hex', false); // uncompressed
+ const pub=key.getPublic().encode('hex', false); // UNCOMPRESSED
  const hash=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256(pub))).toString();
  const payload="00"+hash;
  return base58(payload + dsha(payload).slice(0,8));
 }
 
-function getWif(k){
- const priv=k.toString(16).padStart(64,'0');
+function getWifFromPrivHex(priv){
  const payload="80"+priv;
  return base58(payload + dsha(payload).slice(0,8));
-}
-
-function randRange(min,max){
- let a=new Uint8Array(32);
- crypto.getRandomValues(a);
- let r=0n;
- for(let i=0;i<32;i++) r=(r<<8n)+BigInt(a[i]);
- return min + (r % (max-min));
 }
 
 let scanned=0;
 
 self.onmessage=function(e){
- const {id, zoek, batch, min, max, targets}=e.data;
+ const {id, batch, pattern, targets}=e.data;
 
  function loop(){
   for(let i=0;i<batch;i++){
-   const k=randRange(min,max);
+
+   const priv = pattern ? generateWithPattern(pattern) :
+     Array.from(crypto.getRandomValues(new Uint8Array(32)))
+       .map(b=>b.toString(16).padStart(2,'0')).join('');
+
    scanned++;
 
-   const priv=k.toString(16).padStart(64,'0');
+   const addr=getAddressFromPrivHex(priv);
+   const wif=getWifFromPrivHex(priv);
 
-   if(!zoek || priv.includes(zoek)){
-     const addr=getAddress(k);
-     const wif=getWif(k);
-
-     // 🔥 SNELLE TARGET CHECK
-     if(targets[addr]){
-       self.postMessage({found:true, addr, wif});
-       return;
-     }
-
-     self.postMessage({id, addr, wif});
+   if(targets[addr]){
+     self.postMessage({found:true, addr, wif});
+     return;
    }
+
+   self.postMessage({id, addr, wif});
 
    if(scanned % 1000 === 0){
      self.postMessage({id, scanned});
@@ -37356,15 +37361,9 @@ function start(){
  workersDiv.innerHTML="";
  total=0; count=0;
 
- const zoek=zoekWoord.value.toLowerCase();
  const num=parseInt(numWorkers.value);
  const batch=parseInt(batchSize.value);
-
- const startP=Number(startPercent.value)/100;
- const endP=Number(endPercent.value)/100;
-
- const min=BigInt(Math.floor(startP * Number(KEYSPACE)));
- const max=BigInt(Math.floor(endP * Number(KEYSPACE)));
+ const pattern=document.getElementById("pattern").value.toLowerCase();
 
  const blob=new Blob([workerCode], {type:"application/javascript"});
  const url=URL.createObjectURL(blob);
@@ -37379,10 +37378,8 @@ function start(){
 
   w.postMessage({
     id:i,
-    zoek,
     batch,
-    min,
-    max,
+    pattern,
     targets:targetMap
   });
 
