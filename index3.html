@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Generator PRO (40K Targets)</title>
+<title>BTC Generator PRO (Pattern Mode)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
@@ -18,7 +18,7 @@ button,input { margin:5px 0; padding:6px 10px; width:250px; }
 
 <body>
 
-<h2>BTC Generator PRO</h2>
+<h2>BTC Generator PRO (Pattern Mode)</h2>
 
 <label>Start %:</label><br>
 <input type="number" id="startPercent" value="0"><br>
@@ -32,8 +32,8 @@ button,input { margin:5px 0; padding:6px 10px; width:250px; }
 <label>Aantal workers:</label><br>
 <input type="number" id="numWorkers" value="4"><br>
 
-<label>Zoekwoord in PRIVATE KEY:</label><br>
-<input type="text" id="zoekWoord"><br>
+<label>Pattern in PRIVATE KEY (hex!):</label><br>
+<input type="text" id="pattern" placeholder="bijv: eeff"><br>
 
 <button id="startBtn">Start</button>
 <button id="stopBtn" disabled>Stop</button>
@@ -54,7 +54,7 @@ button,input { margin:5px 0; padding:6px 10px; width:250px; }
 </table>
 
 <script>
-// 🔥 TARGET LIST (PLAK HIER JE 40K ADRESSEN)
+// 🔥 TARGET LIST
 const targetMap = Object.create(null);
 
 [
