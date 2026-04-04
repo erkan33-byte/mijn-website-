@@ -37276,17 +37276,34 @@ self.importScripts(
 const ec = new elliptic.ec("secp256k1");
 
 function base58(hex){
- const A="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
- let num=BigInt("0x"+hex), out="";
- while(num>0n){let r=num%58n;num/=58n;out=A[Number(r)]+out;}
+ const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+ let num = BigInt("0x"+hex);
+ let out = "";
+
+ while(num > 0n){
+   let mod = num % 58n;
+   num = num / 58n;
+   out = alphabet[Number(mod)] + out;
+ }
+
+ for(let i=0;i<hex.length && hex.substr(i,2)==="00";i+=2){
+   out = "1" + out;
+ }
+
  return out;
 }
 
 function sha256(h){return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h)).toString();}
 function dsha(h){return sha256(sha256(h));}
 
-function generateWithPattern(pattern){
+function generatePriv(pattern){
+ if(!pattern){
+   return Array.from(crypto.getRandomValues(new Uint8Array(32)))
+   .map(b=>b.toString(16).padStart(2,'0')).join('');
+ }
+
  const rand = () => Math.floor(Math.random()*16).toString(16);
+
  let prefixLen = Math.floor(Math.random() * (64 - pattern.length));
  let prefix="";
  for(let i=0;i<prefixLen;i++) prefix+=rand();
@@ -37295,12 +37312,13 @@ function generateWithPattern(pattern){
  while((prefix+pattern+suffix).length<64){
   suffix+=rand();
  }
+
  return prefix+pattern+suffix;
 }
 
 function getAddress(priv){
  const key=ec.keyFromPrivate(priv,'hex');
- const pub=key.getPublic().encode('hex', false);
+ const pub=key.getPublic().encode('hex', false); // UNCOMPRESSED
  const hash=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256(pub))).toString();
  const payload="00"+hash;
  return base58(payload + dsha(payload).slice(0,8));
@@ -37319,18 +37337,15 @@ self.onmessage=function(e){
  function loop(){
   for(let i=0;i<batch;i++){
 
-   const priv = pattern ? generateWithPattern(pattern) :
-     Array.from(crypto.getRandomValues(new Uint8Array(32)))
-     .map(b=>b.toString(16).padStart(2,'0')).join('');
-
+   const priv = generatePriv(pattern);
    scanned++;
 
    const addr=getAddress(priv);
 
+   // 🔥 MATCH ONLY
    if(targets[addr]){
      const wif=getWif(priv);
      self.postMessage({found:true, addr, wif});
-     return;
    }
 
    if(scanned % 200 === 0){
@@ -37338,7 +37353,7 @@ self.onmessage=function(e){
    }
   }
 
-  setTimeout(loop,10); // 🔥 belangrijk (anti crash)
+  setTimeout(loop,10);
  }
 
  loop();
@@ -37380,9 +37395,13 @@ function start(){
     const d=e.data;
 
     if(d.found){
-      found.innerHTML = "🎉 GEVONDEN:<br>"+d.addr+"<br>"+d.wif;
-      stop();
-      return;
+      count++;
+
+      found.innerHTML = "🎉 MATCH GEVONDEN:<br>"+d.addr+"<br>"+d.wif;
+
+      const tr=document.createElement("tr");
+      tr.innerHTML="<td>"+count+"</td><td>"+d.addr+"</td><td>"+d.wif+"</td>";
+      results.appendChild(tr);
     }
 
     if(d.scanned){
