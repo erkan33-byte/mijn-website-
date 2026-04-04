@@ -37252,9 +37252,18 @@ const targetMap = Object.create(null);
   "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
 ].forEach(a => targetMap[a] = true);
 
-// KEYSPACE
-const KEYSPACE = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+// ===== WAKE LOCK =====
+let wakeLock=null;
+async function keepAwake(){
+ try{
+  wakeLock = await navigator.wakeLock.request('screen');
+ }catch(e){}
+}
+document.addEventListener("visibilitychange",()=>{
+ if(document.visibilityState==="visible") keepAwake();
+});
 
+// ===== STATE =====
 let workers=[], running=false, total=0, count=0;
 
 // ===== WORKER CODE =====
@@ -37268,42 +37277,36 @@ const ec = new elliptic.ec("secp256k1");
 
 function base58(hex){
  const A="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
- const bytes=Uint8Array.from(hex.match(/.{2}/g).map(b=>parseInt(b,16)));
- let zeros=0;
- while(zeros<bytes.length && bytes[zeros]===0) zeros++;
  let num=BigInt("0x"+hex), out="";
  while(num>0n){let r=num%58n;num/=58n;out=A[Number(r)]+out;}
- return "1".repeat(zeros)+(out||"");
+ return out;
 }
 
 function sha256(h){return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h)).toString();}
 function dsha(h){return sha256(sha256(h));}
 
-// 🔥 PATTERN GENERATOR (ALTIJD IN KEY)
 function generateWithPattern(pattern){
  const rand = () => Math.floor(Math.random()*16).toString(16);
-
  let prefixLen = Math.floor(Math.random() * (64 - pattern.length));
- let prefix = "";
- for(let i=0;i<prefixLen;i++) prefix += rand();
+ let prefix="";
+ for(let i=0;i<prefixLen;i++) prefix+=rand();
 
- let suffix = "";
- while((prefix + pattern + suffix).length < 64){
-   suffix += rand();
+ let suffix="";
+ while((prefix+pattern+suffix).length<64){
+  suffix+=rand();
  }
-
- return prefix + pattern + suffix;
+ return prefix+pattern+suffix;
 }
 
-function getAddressFromPrivHex(priv){
+function getAddress(priv){
  const key=ec.keyFromPrivate(priv,'hex');
- const pub=key.getPublic().encode('hex', false); // UNCOMPRESSED
+ const pub=key.getPublic().encode('hex', false);
  const hash=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256(pub))).toString();
  const payload="00"+hash;
  return base58(payload + dsha(payload).slice(0,8));
 }
 
-function getWifFromPrivHex(priv){
+function getWif(priv){
  const payload="80"+priv;
  return base58(payload + dsha(payload).slice(0,8));
 }
@@ -37318,26 +37321,24 @@ self.onmessage=function(e){
 
    const priv = pattern ? generateWithPattern(pattern) :
      Array.from(crypto.getRandomValues(new Uint8Array(32)))
-       .map(b=>b.toString(16).padStart(2,'0')).join('');
+     .map(b=>b.toString(16).padStart(2,'0')).join('');
 
    scanned++;
 
-   const addr=getAddressFromPrivHex(priv);
-   const wif=getWifFromPrivHex(priv);
+   const addr=getAddress(priv);
 
    if(targets[addr]){
+     const wif=getWif(priv);
      self.postMessage({found:true, addr, wif});
      return;
    }
 
-   self.postMessage({id, addr, wif});
-
-   if(scanned % 1000 === 0){
+   if(scanned % 200 === 0){
      self.postMessage({id, scanned});
    }
   }
 
-  setTimeout(loop,0);
+  setTimeout(loop,10); // 🔥 belangrijk (anti crash)
  }
 
  loop();
@@ -37348,6 +37349,8 @@ self.onmessage=function(e){
 function start(){
  if(running) return;
  running=true;
+
+ keepAwake();
 
  startBtn.disabled=true;
  stopBtn.disabled=false;
@@ -37371,39 +37374,22 @@ function start(){
   row.innerHTML="<td>"+i+"</td><td id='w"+i+"'>0</td>";
   workersDiv.appendChild(row);
 
-  w.postMessage({
-    id:i,
-    batch,
-    pattern,
-    targets:targetMap
-  });
+  w.postMessage({id:i, batch, pattern, targets:targetMap});
 
   w.onmessage=(e)=>{
     const d=e.data;
 
     if(d.found){
-      alert("🎉 GEVONDEN!\\nAdres: "+d.addr+"\\nWIF: "+d.wif);
-      found.innerText="GEVONDEN: "+d.addr;
+      found.innerHTML = "🎉 GEVONDEN:<br>"+d.addr+"<br>"+d.wif;
       stop();
       return;
     }
 
-    if(d.addr){
-      count++;
-      total++;
-
-      const tr=document.createElement("tr");
-      tr.innerHTML="<td>"+count+"</td><td>"+d.addr+"</td><td>"+d.wif+"</td>";
-      results.appendChild(tr);
-
-      if(results.rows.length>200) results.deleteRow(0);
-    }
-
     if(d.scanned){
       document.getElementById("w"+d.id).innerText=d.scanned;
+      total+=200;
+      totaal.innerText="Totaal: "+total;
     }
-
-    totaal.innerText="Totaal: "+total;
   };
  }
 }
@@ -37417,6 +37403,13 @@ function stop(){
  workers.forEach(w=>w.terminate());
  workers=[];
 }
+
+// ===== AUTO RESTART =====
+setInterval(()=>{
+ if(running && workers.length===0){
+   start();
+ }
+},5000);
 
 startBtn.onclick=start;
 stopBtn.onclick=stop;
