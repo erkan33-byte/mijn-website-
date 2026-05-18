@@ -2,78 +2,117 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator — Workers + per-worker keyspace & interval positie</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTC Vanity Matcher (40K optimized)</title>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+
 <style>
-body { font-family: Arial, sans-serif; padding: 20px; }
-table { border-collapse: collapse; width: 100%; margin-top: 12px; }
-th, td { border: 1px solid #ccc; padding: 8px; font-size: 13px; word-break: break-all; text-align: left; }
-th { background: #f2f2f2; }
-button, input, select { margin-bottom: 10px; padding: 8px 12px; }
-#totaal, #progressAbs, #progressRel { margin-bottom: 10px; font-weight: bold; }
-#foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
-label { display:inline-block; min-width:220px; }
-.worker-status { margin-top: 20px; }
-.small { font-size: 12px; color: #555; }
+body{
+  background:#111;
+  color:#eee;
+  font-family:Arial;
+  padding:20px;
+}
+
+h1{ color:#00ff99; }
+
+input,button{
+  padding:10px;
+  margin:5px 0;
+  border:none;
+  border-radius:6px;
+}
+
+button{
+  background:#00aa66;
+  color:white;
+  cursor:pointer;
+}
+
+button:hover{
+  background:#00cc88;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:15px;
+}
+
+th,td{
+  border:1px solid #333;
+  padding:8px;
+  font-size:12px;
+  word-break:break-all;
+}
+
+th{
+  background:#222;
+  color:#00ff99;
+}
+
+#found{
+  margin-top:10px;
+  color:#00ff99;
+  font-weight:bold;
+}
 </style>
 </head>
+
 <body>
-<h2>BTC Key Generator — Workers + per-worker keyspace & interval positie</h2>
 
-<label for="startPercent">Start (%):</label>
-<input type="number" id="startPercent" value="10" min="0" max="100" step="0.0001"><br>
+<h1>BTC Vanity Matcher (40K optimized)</h1>
 
-<label for="endPercent">Eind (%):</label>
-<input type="number" id="endPercent" value="20" min="0" max="100" step="0.0001"><br>
+<label>Batch per worker</label><br>
+<input id="batchSize" type="number" value="500"><br>
 
-<label for="jumpAfter">Aantal sleutels per reeks (voor nieuwe random sprong):</label>
-<input type="number" id="jumpAfter" value="1000" min="1"><br>
+<label>Workers</label><br>
+<input id="numWorkers" type="number" value="4"><br>
 
-<label for="batchSizeInput">Batch grootte per worker:</label>
-<input type="number" id="batchSizeInput" value="2" min="1"><br>
+<label>Match prefix length</label><br>
+<input id="matchLength" type="number" value="6"><br>
 
-<label for="modeSelect">Modus:</label>
-<select id="modeSelect">
-  <option value="standard">Standaard (sequentieel + sprongen)</option>
-  <option value="gokker">Gokker (volledig random)</option>
-  <option value="stride">Stride (deterministische partitie per worker)</option>
-  <option value="prefix">Prefix filter (toon alleen matches met prefix)</option>
-</select><br>
+<button id="startBtn">START</button>
+<button id="stopBtn" disabled>STOP</button>
 
-<label for="prefixInput">Adres-prefix (voor prefix modus):</label>
-<input type="text" id="prefixInput" placeholder="bijv. 1Boat..."><br>
+<h3 id="totaal">Totaal: 0</h3>
+<div id="found"></div>
 
-<label for="numWorkers">Aantal workers:</label>
-<input type="number" id="numWorkers" value="4" min="1"><br>
-
-<button id="startBtn">Start zoeken</button>
-<button id="stopBtn" disabled>Stop</button>
-
-<div id="totaal">Totaal gescande adressen: 0</div>
-<div id="progressAbs">Voortgang (voorbeeld): 0.000000000000000000000000000000 %</div>
-<div id="progressRel">Voortgang in interval (voorbeeld): 0.000000 %</div>
-<div id="foundMsg"></div>
-
-<table id="resultTable">
+<h2>Matches</h2>
+<table>
 <thead>
-<tr><th>#</th><th>Adres</th><th>WIF</th><th>Type</th></tr>
+<tr>
+<th>#</th>
+<th>Generated</th>
+<th>Target</th>
+<th>Prefix</th>
+<th>WIF</th>
+</tr>
 </thead>
-<tbody></tbody>
+<tbody id="results"></tbody>
 </table>
 
-<!-- Worker progress -->
-<h3>Worker status</h3>
-<table id="workerTable" class="worker-status">
-<thead><tr><th>Worker ID</th><th>Gescande adressen</th><th>Keyspace % (absoluut)</th><th>Interval %</th></tr></thead>
-<tbody></tbody>
+<h2>Workers</h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Scanned</th>
+</tr>
+</thead>
+<tbody id="workers"></tbody>
 </table>
 
 <script>
-// ===== CONSTANTEN =====
-const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
-const KEYSPACE_SIZE = ORDER_N - 1n;
-const TARGET_ADDRESSES = new Set([
+
+// =======================
+// 40K READY TARGET SYSTEM
+// =======================
+
+// 👉 hier kun je straks 40.000 adressen zetten
+const targets = [
 "1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF",
 "12tkqA9xSoowkzoERHMWNKsTey55YEBqkv",
 "12ib7dApVFvg82TXKycWBNpN8kFyiAN1dr",
