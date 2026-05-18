@@ -42550,7 +42550,9 @@ let matchLength = 6;
 const prefixMap = Object.create(null);
 
 function buildIndex(len){
+
   matchLength = len;
+
   for(const addr of targets){
     prefixMap[addr.slice(0,len)] = addr;
   }
@@ -42559,18 +42561,33 @@ function buildIndex(len){
 // =======================
 // BALANCE CHECK
 // =======================
-async function checkBalance(address) {
-  try {
-    const res = await fetch(`https://blockstream.info/api/address/${address}`);
+async function checkBalance(address){
+
+  try{
+
+    const res = await fetch(
+      `https://blockstream.info/api/address/${address}`
+    );
+
+    if(!res.ok){
+      throw new Error("API ERROR");
+    }
+
     const data = await res.json();
 
     const funded =
-      (data.chain_stats.funded_txo_sum - data.chain_stats.spent_txo_sum) +
-      (data.mempool_stats.funded_txo_sum - data.mempool_stats.spent_txo_sum);
+      (data.chain_stats.funded_txo_sum -
+      data.chain_stats.spent_txo_sum) +
+
+      (data.mempool_stats.funded_txo_sum -
+      data.mempool_stats.spent_txo_sum);
 
     return funded / 1e8;
-  } catch (e) {
-    console.error("Balance error", e);
+
+  }catch(e){
+
+    console.error("Balance error:", e);
+
     return null;
   }
 }
@@ -42587,18 +42604,25 @@ self.importScripts(
 const ec = new elliptic.ec("secp256k1");
 
 function base58(hex){
+
  const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
  let num = BigInt("0x"+hex);
+
  let out="";
 
  while(num>0n){
+
   let mod=num%58n;
   num=num/58n;
-  out=alphabet[Number(mod)]+out;
+
+  out=alphabet[Number(mod)] + out;
  }
 
  for(let i=0;i<hex.length;i+=2){
+
   if(hex.substr(i,2)!=="00") break;
+
   out="1"+out;
  }
 
@@ -42606,7 +42630,9 @@ function base58(hex){
 }
 
 function sha256(h){
- return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h)).toString();
+ return CryptoJS.SHA256(
+  CryptoJS.enc.Hex.parse(h)
+ ).toString();
 }
 
 function dsha(h){
@@ -42614,21 +42640,38 @@ function dsha(h){
 }
 
 function randPriv(){
- return Array.from(crypto.getRandomValues(new Uint8Array(32)))
- .map(b=>b.toString(16).padStart(2,'0')).join('');
+
+ return Array.from(
+  crypto.getRandomValues(new Uint8Array(32))
+ )
+ .map(b=>b.toString(16).padStart(2,'0'))
+ .join('');
 }
 
 function getAddr(priv){
+
  const key=ec.keyFromPrivate(priv,'hex');
+
  const pub=key.getPublic().encode('hex',false);
- const hash=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256(pub))).toString();
+
+ const hash=CryptoJS.RIPEMD160(
+  CryptoJS.enc.Hex.parse(sha256(pub))
+ ).toString();
+
  const payload="00"+hash;
- return base58(payload + dsha(payload).slice(0,8));
+
+ return base58(
+  payload + dsha(payload).slice(0,8)
+ );
 }
 
 function getWif(priv){
+
  const payload="80"+priv;
- return base58(payload + dsha(payload).slice(0,8));
+
+ return base58(
+  payload + dsha(payload).slice(0,8)
+ );
 }
 
 let scanned=0;
@@ -42638,15 +42681,19 @@ self.onmessage=function(e){
  const {id,batch,prefixMap,matchLength}=e.data;
 
  function loop(){
+
   for(let i=0;i<batch;i++){
 
    const priv=randPriv();
+
    const addr=getAddr(priv);
+
    scanned++;
 
    const prefix=addr.slice(0,matchLength);
 
    if(prefixMap[prefix]){
+
     self.postMessage({
      found:true,
      addr,
@@ -42657,9 +42704,14 @@ self.onmessage=function(e){
    }
 
    if(scanned%300===0){
-    self.postMessage({id,scanned});
+
+    self.postMessage({
+      id,
+      scanned
+    });
    }
   }
+
   setTimeout(loop,10);
  }
 
@@ -42691,6 +42743,7 @@ const found=document.getElementById("found");
 function start(){
 
  if(running) return;
+
  running=true;
 
  total=0;
@@ -42699,42 +42752,96 @@ function start(){
  results.innerHTML="";
  workersDiv.innerHTML="";
 
- const batch=parseInt(document.getElementById("batchSize").value);
- const num=parseInt(document.getElementById("numWorkers").value);
- const len=parseInt(document.getElementById("matchLength").value);
+ startBtn.disabled=true;
+ stopBtn.disabled=false;
+
+ const batch=parseInt(
+  document.getElementById("batchSize").value
+ );
+
+ const num=parseInt(
+  document.getElementById("numWorkers").value
+ );
+
+ const len=parseInt(
+  document.getElementById("matchLength").value
+ );
 
  buildIndex(len);
 
- const blob=new Blob([workerCode],{type:"application/javascript"});
+ const blob=new Blob(
+  [workerCode],
+  {type:"application/javascript"}
+ );
+
  const url=URL.createObjectURL(blob);
 
  for(let i=0;i<num;i++){
 
   const w=new Worker(url);
+
   workers.push(w);
 
   const row=document.createElement("tr");
-  row.innerHTML=`<td>${i}</td><td id="w${i}">0</td>`;
+
+  row.innerHTML =
+   `<td>${i}</td><td id="w${i}">0</td>`;
+
   workersDiv.appendChild(row);
 
-  w.postMessage({id:i,batch,prefixMap,matchLength});
+  w.postMessage({
+   id:i,
+   batch,
+   prefixMap,
+   matchLength
+  });
 
   w.onmessage=function(e){
 
    const d=e.data;
 
+   // =======================
+   // MATCH FOUND
+   // =======================
    if(d.found){
+
     foundCount++;
-    found.innerHTML="🎉 MATCH GEVONDEN - balance check...";
+
+    found.innerHTML =
+      "🎉 MATCH GEVONDEN - balance check...";
 
     checkBalance(d.addr).then(balance => {
 
-      const btc = balance !== null ? balance.toFixed(8) : "unknown";
+      const btc =
+        typeof balance === "number"
+        ? balance.toFixed(2)
+        : "ERROR";
 
-      found.innerHTML = `🎉 MATCH | Balance: ${btc} BTC`;
+      // =======================
+      // AUTO STOP BIJ BTC
+      // =======================
+      if(typeof balance === "number" && balance > 0){
+
+        found.innerHTML =
+          `💰 BTC GEVONDEN! ${btc} BTC`;
+
+        stop();
+
+        alert(
+          `BTC WALLET MET SALDO GEVONDEN!\n\n` +
+          `Adres: ${d.addr}\n` +
+          `Balance: ${btc} BTC`
+        );
+      }
+      else{
+
+        found.innerHTML =
+          `🎉 MATCH | Balance: ${btc} BTC`;
+      }
 
       const tr=document.createElement("tr");
-      tr.innerHTML=`
+
+      tr.innerHTML = `
         <td>${foundCount}</td>
         <td>${d.addr}</td>
         <td>${d.target}</td>
@@ -42742,14 +42849,24 @@ function start(){
         <td>${d.wif}</td>
         <td>${btc}</td>
       `;
+
       results.prepend(tr);
     });
    }
 
+   // =======================
+   // STATS
+   // =======================
    if(d.scanned){
-    document.getElementById("w"+d.id).innerText=d.scanned;
-    total+=300;
-    totaal.innerText="Totaal: "+total;
+
+    document.getElementById(
+      "w"+d.id
+    ).innerText=d.scanned;
+
+    total += 300;
+
+    totaal.innerText =
+      "Totaal: " + total;
    }
   };
  }
@@ -42759,9 +42876,13 @@ function start(){
 // STOP
 // =======================
 function stop(){
+
  running=false;
+
  workers.forEach(w=>w.terminate());
+
  workers=[];
+
  startBtn.disabled=false;
  stopBtn.disabled=true;
 }
