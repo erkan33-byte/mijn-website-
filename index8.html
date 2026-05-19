@@ -3,115 +3,262 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BTC Vanity Matcher (40K optimized)</title>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+<title>BTC Vanity Matcher + Balance Check</title>
 
 <style>
-body{
-  background:#111;
-  color:#eee;
-  font-family:Arial;
-  padding:20px;
-}
+  :root {
+    --bg-color: #0f172a;
+    --panel-bg: #1e293b;
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --accent: #10b981;
+    --accent-hover: #059669;
+    --border: #334155;
+  }
 
-h1{ color:#00ff99; }
+  body {
+    background: var(--bg-color);
+    color: var(--text-main);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    padding: 20px;
+    margin: 0;
+  }
 
-input,button{
-  padding:10px;
-  margin:5px 0;
-  border:none;
-  border-radius:6px;
-}
+  h1 {
+    color: var(--accent);
+    text-align: center;
+    margin-bottom: 30px;
+  }
 
-button{
-  background:#00aa66;
-  color:white;
-  cursor:pointer;
-}
+  h2 {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+    margin-top: 40px;
+  }
 
-button:hover{
-  background:#00cc88;
-}
+  .dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 15px;
+    background: var(--panel-bg);
+    padding: 20px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
 
-table{
-  width:100%;
-  border-collapse:collapse;
-  margin-top:15px;
-}
+  .input-group {
+    display: flex;
+    flex-direction: column;
+  }
 
-th,td{
-  border:1px solid #333;
-  padding:8px;
-  font-size:12px;
-  word-break:break-all;
-}
+  .input-group label {
+    margin-bottom: 5px;
+    font-size: 14px;
+    color: var(--text-muted);
+  }
 
-th{
-  background:#222;
-  color:#00ff99;
-}
+  .input-group div {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
 
-#found{
-  margin-top:10px;
-  color:#00ff99;
-  font-weight:bold;
-}
+  input {
+    padding: 10px;
+    background: var(--bg-color);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    border-radius: 6px;
+    outline: none;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  input:focus {
+    border-color: var(--accent);
+  }
+
+  .button-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  button {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  #startBtn {
+    background: var(--accent);
+    color: white;
+  }
+
+  #startBtn:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+
+  #stopBtn {
+    background: #ef4444;
+    color: white;
+  }
+
+  #stopBtn:hover:not(:disabled) {
+    background: #dc2626;
+  }
+
+  button:disabled {
+    background: var(--border);
+    color: var(--text-muted);
+    cursor: not-allowed;
+  }
+
+  .stats-panel {
+    display: flex;
+    justify-content: space-around;
+    background: var(--panel-bg);
+    padding: 20px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    text-align: center;
+  }
+
+  .stat-box h3 {
+    margin: 0 0 5px 0;
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+
+  .stat-box p {
+    margin: 0;
+    font-size: 24px;
+    font-weight: bold;
+    color: var(--accent);
+  }
+
+  #found {
+    margin-top: 15px;
+    color: var(--accent);
+    font-weight: bold;
+    text-align: center;
+    min-height: 20px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+    background: var(--panel-bg);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  th, td {
+    border-bottom: 1px solid var(--border);
+    padding: 12px;
+    font-size: 13px;
+    word-break: break-all;
+    text-align: left;
+  }
+
+  th {
+    background: #0f172a;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+
+  tr:hover td {
+    background: rgba(255, 255, 255, 0.05);
+  }
 </style>
 </head>
 
 <body>
 
-<h1>BTC Vanity Matcher (40K optimized)</h1>
+<h1>BTC Vanity Matcher + Balance Check</h1>
 
-<label>Batch per worker</label><br>
-<input id="batchSize" type="number" value="500"><br>
+<div class="dashboard">
+  <div class="input-group">
+    <label>Batch per worker (Sleutels per loop)</label>
+    <input id="batchSize" type="number" value="500">
+  </div>
+  <div class="input-group">
+    <label>Aantal Workers (CPU Threads)</label>
+    <input id="numWorkers" type="number" value="4">
+  </div>
+  <div class="input-group">
+    <label>Match Prefix Lengte (1...)</label>
+    <input id="matchLength" type="number" value="6">
+  </div>
+  <div class="input-group">
+    <label>Keyspace Bereik (%)</label>
+    <div>
+      <input id="keyspaceMin" type="number" step="any" value="0"> 
+      <span>tot</span> 
+      <input id="keyspaceMax" type="number" step="any" value="100">
+    </div>
+  </div>
+</div>
 
-<label>Workers</label><br>
-<input id="numWorkers" type="number" value="4"><br>
+<div class="button-group">
+  <button id="startBtn">START ZOEKEN</button>
+  <button id="stopBtn" disabled>STOP</button>
+</div>
 
-<label>Match prefix length</label><br>
-<input id="matchLength" type="number" value="6"><br>
-
-<button id="startBtn">START</button>
-<button id="stopBtn" disabled>STOP</button>
-
-<h3 id="totaal">Totaal: 0</h3>
 <div id="found"></div>
+
+<div class="stats-panel" style="margin-top: 20px;">
+  <div class="stat-box">
+    <h3>Totaal Gescand</h3>
+    <p id="totaal">0</p>
+  </div>
+  <div class="stat-box">
+    <h3>Snelheid</h3>
+    <p><span id="speed">0</span> keys/s</p>
+  </div>
+</div>
 
 <h2>Matches</h2>
 <table>
-<thead>
-<tr>
-<th>#</th>
-<th>Generated</th>
-<th>Target</th>
-<th>Prefix</th>
-<th>WIF</th>
-</tr>
-</thead>
-<tbody id="results"></tbody>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Gegenereerd (Uncompressed)</th>
+      <th>Target Match</th>
+      <th>Prefix</th>
+      <th>WIF Private Key</th>
+      <th>Balance (BTC)</th>
+    </tr>
+  </thead>
+  <tbody id="results"></tbody>
 </table>
 
-<h2>Workers</h2>
+<h2>Workers Status</h2>
 <table>
-<thead>
-<tr>
-<th>ID</th>
-<th>Scanned</th>
-</tr>
-</thead>
-<tbody id="workers"></tbody>
+  <thead>
+    <tr>
+      <th>Worker ID</th>
+      <th>Gescande Sleutels</th>
+    </tr>
+  </thead>
+  <tbody id="workers"></tbody>
 </table>
 
 <script>
-
 // =======================
-// 40K READY TARGET SYSTEM
+// TARGETS (Puzzle Addresses etc.)
 // =======================
-
-// 👉 hier kun je straks 40.000 adressen zetten
 const targets = [
 "1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF",
 "12tkqA9xSoowkzoERHMWNKsTey55YEBqkv",
