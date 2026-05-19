@@ -1,46 +1,125 @@
 <!DOCTYPE html>
-<html>
+<html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Scanner PRO (WIF MATCH)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTC Vanity Matcher + Balance Check (Uncompressed)</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 
 <style>
-body{font-family:Arial;padding:15px}
-input,button{margin:5px;padding:6px}
-table{border-collapse:collapse;width:100%;margin-top:10px}
-td{border:1px solid #ccc;padding:5px;font-size:12px}
+body{
+  background:#111;
+  color:#eee;
+  font-family:Arial;
+  padding:20px;
+}
+
+h1{
+  color:#00ff99;
+}
+
+input,button{
+  padding:10px;
+  margin:5px 0;
+  border:none;
+  border-radius:6px;
+}
+
+button{
+  background:#00aa66;
+  color:white;
+  cursor:pointer;
+}
+
+button:hover{
+  background:#00cc88;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:15px;
+}
+
+th,td{
+  border:1px solid #333;
+  padding:8px;
+  font-size:12px;
+  word-break:break-all;
+}
+
+th{
+  background:#222;
+  color:#00ff99;
+}
+
+#found{
+  margin-top:10px;
+  color:#00ff99;
+  font-weight:bold;
+}
 </style>
 </head>
 
 <body>
 
-<h2>😈 BTC Scanner (UNCOMPRESSED + WIF)</h2>
+<h1>BTC Vanity Matcher + Balance Check (Uncompressed)</h1>
 
-Workers <input id="workers" value="2"><br>
-Batch <input id="batch" value="80"><br>
+<label>Batch per worker</label><br>
+<input id="batchSize" type="number" value="500"><br>
 
-<button onclick="start()">Start</button>
-<button onclick="stop()">Stop</button>
+<label>Workers</label><br>
+<input id="numWorkers" type="number" value="4"><br>
 
-<div id="status">Scanned: 0</div>
+<label>Match prefix length</label><br>
+<input id="matchLength" type="number" value="6"><br>
 
-<h3>🎯 Matches</h3>
+<label>Keyspace range (%)</label><br>
+<input id="keyspaceMin" type="number" step="any" value="0" style="width: 80px;"> tot 
+<input id="keyspaceMax" type="number" step="any" value="100" style="width: 80px;"><br>
+
+<button id="startBtn">START</button>
+<button id="stopBtn" disabled>STOP</button>
+
+<h3 id="totaal">Totaal: 0</h3>
+<div id="found"></div>
+
+<h2>Matches</h2>
+
 <table>
+<thead>
+<tr>
+<th>#</th>
+<th>Generated (Uncompressed)</th>
+<th>Target</th>
+<th>Prefix</th>
+<th>WIF (Uncompressed)</th>
+<th>Balance (BTC)</th>
+</tr>
+</thead>
 <tbody id="results"></tbody>
 </table>
 
-<h3>👀 Live Adressen</h3>
-<table><tbody id="live"></tbody></table>
+<h2>Workers</h2>
 
-<h3>🧠 Woorden</h3>
-<table><tbody id="words"></tbody></table>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Scanned</th>
+</tr>
+</thead>
+<tbody id="workers"></tbody>
+</table>
 
 <script>
 
-const TARGET=[
+// =======================
+// TARGETS
+// =======================
+const targets = [
   "1EUXN9yCnq5yur6ZUy3kGQd87KzGK2ywTZ",
   "16xzDttFSNK1T8BLGqBjJxf47Gjm5ufcmB",
   "149XtqTaQUB2q9XJFXPvb6NoSuvVRGRTZN",
