@@ -37213,221 +37213,412 @@ const targets = [
   "1M5aojQPWaWFGKr9PZhA9nF8SZvahVWgHr",
   "1M5TCaLbChT7iwpzdYgwh5YNtzFCR26sUy",
   "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
-]
+];
 
-let workers=[]
-let total=0
+// =======================
+// INDEX
+// =======================
+let matchLength = 6;
+let prefixMap = {};
 
+function buildIndex(len){
+
+  matchLength = len;
+  prefixMap = {};
+
+  for(const addr of targets){
+
+    prefixMap[addr.slice(0,len)] = addr;
+  }
+}
+
+// =======================
+// BALANCE CHECK
+// =======================
+async function checkBalance(address){
+
+  try{
+
+    const res = await fetch(
+      "https://blockstream.info/api/address/" + address
+    );
+
+    if(!res.ok){
+      throw new Error("API ERROR");
+    }
+
+    const data = await res.json();
+
+    const funded =
+      (data.chain_stats.funded_txo_sum -
+      data.chain_stats.spent_txo_sum) +
+
+      (data.mempool_stats.funded_txo_sum -
+      data.mempool_stats.spent_txo_sum);
+
+    return funded / 100000000;
+
+  }catch(e){
+
+    console.error(e);
+
+    return null;
+  }
+}
+
+// =======================
+// WORKER CODE
+// =======================
 const workerCode = `
 self.importScripts(
 'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js',
 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js'
-)
+);
 
-const ec=new elliptic.ec("secp256k1")
-const ORDER_N=BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141")
+const ec = new elliptic.ec("secp256k1");
 
-function randomNum(){
- return Math.floor(100000 + Math.random()*90000000)
-}
+function base58(hex){
 
-const names=["john","anna","mike","sarah","alex"]
-const words=["btc","bitcoin","wallet","crypto"]
+ const alphabet =
+ "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
-function generate(counter){
- const a=names[counter%names.length]
- const b=words[Math.floor(counter/names.length)%words.length]
- const num=randomNum()
- return [a+b+num]
-}
+ let num = BigInt("0x"+hex);
 
-function sha256hex(s){
- return CryptoJS.SHA256(s).toString()
-}
+ let out = "";
 
-// ✅ Base58Check correct
-function base58check(hex){
+ while(num > 0n){
 
- const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+  let mod = num % 58n;
 
- let num=BigInt("0x"+hex)
- let out=""
+  num = num / 58n;
 
- while(num>0n){
-  const rem=num%58n
-  num=num/58n
-  out=alphabet[Number(rem)]+out
+  out = alphabet[Number(mod)] + out;
  }
 
- for(let i=0;i<hex.length && hex.substr(i,2)==="00";i+=2){
-  out="1"+out
+ for(let i=0;i<hex.length;i+=2){
+
+  if(hex.substr(i,2)!=="00") break;
+
+  out="1"+out;
  }
 
- return out
+ return out;
 }
 
-function pubToAddress(pub){
+function sha256(h){
 
- const sha=CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pub))
- const ripe=CryptoJS.RIPEMD160(sha)
-
- const payload="00"+ripe.toString()
-
- const hash1=CryptoJS.SHA256(CryptoJS.enc.Hex.parse(payload))
- const hash2=CryptoJS.SHA256(hash1)
-
- const checksum=hash2.toString().slice(0,8)
-
- return base58check(payload+checksum)
+ return CryptoJS.SHA256(
+  CryptoJS.enc.Hex.parse(h)
+ ).toString();
 }
 
-// 🔑 WIF
-function computeWif(k){
+function dsha(h){
 
- const hex=k.toString(16).padStart(64,'0')
- const payload="80"+hex
-
- const hash1=CryptoJS.SHA256(CryptoJS.enc.Hex.parse(payload))
- const hash2=CryptoJS.SHA256(hash1)
-
- const checksum=hash2.toString().slice(0,8)
-
- return base58check(payload+checksum)
+ return sha256(sha256(h));
 }
 
-self.onmessage=function(e){
+function randPrivInRange(minStr, maxStr){
+ const min = BigInt(minStr);
+ const max = BigInt(maxStr);
+ const range = max - min + 1n;
+ 
+ const byteLength = Math.ceil(range.toString(2).length / 8);
+ const bytes = new Uint8Array(byteLength);
+ 
+ while (true) {
+  crypto.getRandomValues(bytes);
+  let hex = "";
+  for (let i = 0; i < bytes.length; i++) {
+   hex += bytes[i].toString(16).padStart(2, '0');
+  }
+  let num = BigInt("0x" + hex);
+  
+  if (num < range) {
+   const finalNum = min + num;
+   return finalNum.toString(16).padStart(64, '0');
+  }
+ }
+}
 
- const TARGET=new Set(e.data.targets)
- const BATCH=e.data.batch
+function getAddr(priv){
 
- let counter=0
- let scanned=0
+ const key = ec.keyFromPrivate(priv,'hex');
+
+ const pub = key.getPublic().encode('hex', false);
+
+ const hash = CryptoJS.RIPEMD160(
+  CryptoJS.enc.Hex.parse(
+   sha256(pub)
+  )
+ ).toString();
+
+ const payload = "00"+hash;
+
+ return base58(
+  payload + dsha(payload).slice(0,8)
+ );
+}
+
+function getWif(priv){
+
+ const payload = "80"+priv;
+
+ return base58(
+  payload + dsha(payload).slice(0,8)
+ );
+}
+
+let scanned = 0;
+
+self.onmessage = function(e){
+
+ const data = e.data;
+
+ const id = data.id;
+ const batch = data.batch;
+ const prefixMap = data.prefixMap;
+ const matchLength = data.matchLength;
+ const keyMinStr = data.keyMinStr;
+ const keyMaxStr = data.keyMaxStr;
 
  function loop(){
 
-  for(let i=0;i<BATCH;i++){
+  for(let i=0;i<batch;i++){
 
-   const vars=generate(counter)
+   const priv = randPrivInRange(keyMinStr, keyMaxStr);
 
-   for(const v of vars){
+   const addr = getAddr(priv);
 
-    const hash=sha256hex(v)
-    const k=BigInt("0x"+hash)%ORDER_N
+   scanned++;
 
-    const key=ec.keyFromPrivate(k.toString(16).padStart(64,'0'))
-    const pub=key.getPublic().encode('hex',false)
+   const prefix = addr.slice(0,matchLength);
 
-    const addr=pubToAddress(pub)
+   if(prefixMap[prefix]){
 
-    if(!addr.startsWith("1")) continue
-
-    // 👀 live (beperkt)
-    if(scanned % 10 === 0){
-      self.postMessage({live:addr,word:v})
-    }
-
-    // 🎯 MATCH
-    if(TARGET.has(addr)){
-      self.postMessage({
-        found:true,
-        addr:addr,
-        wif:computeWif(k),
-        source:v
-      })
-    }
-
-    scanned++
+    self.postMessage({
+      found:true,
+      addr:addr,
+      target:prefixMap[prefix],
+      prefix:prefix,
+      wif:getWif(priv)
+    });
    }
 
-   counter++
+   if(scanned % 300 === 0){
+
+    self.postMessage({
+      id:id,
+      scanned:scanned
+    });
+   }
   }
 
-  self.postMessage({progress:scanned})
-  scanned=0
-
-  setTimeout(loop,0)
+  setTimeout(loop,1);
  }
 
- loop()
-}
-`
+ loop();
+};
+`;
 
+// =======================
+// STATE
+// =======================
+let workers = [];
+let running = false;
+let total = 0;
+let foundCount = 0;
+
+const MAX_ROWS = 200;
+
+const MAX_BTC_KEY = BigInt("0xfffffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141");
+
+// =======================
+// UI
+// =======================
+const results = document.getElementById("results");
+const workersDiv = document.getElementById("workers");
+const startBtn = document.getElementById("startBtn");
+const stopBtn = document.getElementById("stopBtn");
+const totaal = document.getElementById("totaal");
+const found = document.getElementById("found");
+
+// =======================
+// LIMIT MATCHES
+// =======================
+function limitRows(){
+
+ while(results.rows.length > MAX_ROWS){
+
+  results.deleteRow(results.rows.length - 1);
+ }
+}
+
+// =======================
+// STOP
+// =======================
+function stop(){
+
+ running = false;
+
+ workers.forEach(w => w.terminate());
+
+ workers = [];
+
+ startBtn.disabled = false;
+ stopBtn.disabled = true;
+}
+
+// =======================
+// START
+// =======================
 function start(){
 
- stop()
+ if(running) return;
 
- const num=parseInt(document.getElementById("workers").value)
- const batch=parseInt(document.getElementById("batch").value)
+ running = true;
 
- total=0
+ total = 0;
+ foundCount = 0;
 
- live.innerHTML=""
- words.innerHTML=""
- results.innerHTML=""
+ results.innerHTML = "";
+ workersDiv.innerHTML = "";
 
- const blob=new Blob([workerCode])
- const url=URL.createObjectURL(blob)
+ startBtn.disabled = true;
+ stopBtn.disabled = false;
+
+ const batch =
+  parseInt(document.getElementById("batchSize").value);
+
+ const num =
+  parseInt(document.getElementById("numWorkers").value);
+
+ const len =
+  parseInt(document.getElementById("matchLength").value);
+
+ const pctMin = parseFloat(document.getElementById("keyspaceMin").value) || 0;
+ const pctMax = parseFloat(document.getElementById("keyspaceMax").value) || 100;
+ 
+ const bigPctMin = BigInt(Math.round(pctMin * 1000000));
+ const bigPctMax = BigInt(Math.round(pctMax * 1000000));
+ 
+ let keyMin = (MAX_BTC_KEY * bigPctMin) / 100000000n;
+ let keyMax = (MAX_BTC_KEY * bigPctMax) / 100000000n;
+ 
+ if (keyMin < 1n) keyMin = 1n;
+ if (keyMax > MAX_BTC_KEY) keyMax = MAX_BTC_KEY;
+ if (keyMax < keyMin) keyMax = keyMin;
+
+ buildIndex(len);
+
+ const blob = new Blob(
+  [workerCode],
+  {type:"application/javascript"}
+ );
+
+ const url = URL.createObjectURL(blob);
 
  for(let i=0;i<num;i++){
 
-  const w=new Worker(url)
-  workers.push(w)
+  const w = new Worker(url);
 
-  w.postMessage({targets:TARGET,batch})
+  workers.push(w);
 
-  w.onmessage=function(ev){
+  const row = document.createElement("tr");
 
-   const d=ev.data
+  row.innerHTML =
+   '<td>'+i+'</td><td id="w'+i+'">0</td>';
 
-   if(d.live){
+  workersDiv.appendChild(row);
 
-    const r=document.createElement("tr")
-    r.innerHTML="<td>"+d.live+"</td>"
-    live.prepend(r)
+  w.postMessage({
+   id:i,
+   batch:batch,
+   prefixMap:prefixMap,
+   matchLength:matchLength,
+   keyMinStr: keyMin.toString(),
+   keyMaxStr: keyMax.toString()
+  });
 
-    if(live.children.length>100){
-     live.removeChild(live.lastChild)
-    }
+  w.onmessage = function(e){
 
-    const r2=document.createElement("tr")
-    r2.innerHTML="<td>"+d.word+"</td>"
-    words.prepend(r2)
+   const d = e.data;
 
-    if(words.children.length>100){
-     words.removeChild(words.lastChild)
-    }
-   }
-
-   if(d.progress !== undefined){
-    total+=d.progress
-    status.textContent="Scanned: "+total
-   }
-
+   // =======================
+   // MATCH FOUND
+   // =======================
    if(d.found){
 
-    const row=document.createElement("tr")
-    row.innerHTML=
-    "<td>"+d.addr+"</td>"+
-    "<td>"+d.wif+"</td>"+
-    "<td>"+d.source+"</td>"
+    foundCount++;
 
-    results.appendChild(row)
+    found.innerHTML =
+     "🎉 MATCH GEVONDEN - balance check...";
 
-    alert(
-      "🎉 MATCH GEVONDEN!\n\n" +
-      "Adres:\n" + d.addr +
-      "\n\nWIF:\n" + d.wif +
-      "\n\nBron:\n" + d.source
-    )
+    checkBalance(d.addr).then(balance => {
+
+      const btc =
+       typeof balance === "number"
+       ? balance.toFixed(8)
+       : "ERROR";
+
+      const tr = document.createElement("tr");
+
+      tr.innerHTML =
+      '<td>'+foundCount+'</td>' +
+      '<td>'+d.addr+'</td>' +
+      '<td>'+d.target+'</td>' +
+      '<td>'+d.prefix+'</td>' +
+      '<td>'+d.wif+'</td>' +
+      '<td>'+btc+'</td>';
+
+      results.prepend(tr);
+
+      limitRows();
+
+      // =======================
+      // AUTO STOP
+      // =======================
+      if(typeof balance === "number" && balance > 0){
+
+        found.innerHTML =
+         "💰 BTC GEVONDEN! " + btc + " BTC";
+
+        stop();
+
+        alert(
+          "BTC WALLET MET SALDO GEVONDEN!\n\n" +
+          "Adres: " + d.addr + "\n\n" +
+          "Balance: " + btc + " BTC\n\n" +
+          "WIF:\n" + d.wif
+        );
+
+      }else{
+
+        found.innerHTML =
+         "🎉 MATCH | Balance: " + btc + " BTC";
+      }
+    });
    }
-  }
+
+   // =======================
+   // STATS
+   // =======================
+   if(d.scanned){
+
+    document.getElementById(
+      "w"+d.id
+    ).innerText = d.scanned;
+
+    total += 300;
+
+    totaal.innerText =
+     "Totaal: " + total;
+   }
+  };
  }
 }
 
-function stop(){
- workers.forEach(w=>w.terminate())
- workers=[]
-}
+startBtn.onclick = start;
+stopBtn.onclick = stop;
 
 </script>
 
