@@ -2,120 +2,35 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BTC Vanity Matcher + Balance Check</title>
+<title>BTC Uncompressed Scanner (WIF Enabled)</title>
+<style>
+  body { background: #0f172a; color: #f8fafc; font-family: 'Segoe UI', sans-serif; padding: 20px; }
+  .container { max-width: 600px; margin: auto; background: #1e293b; padding: 25px; border-radius: 12px; border: 1px solid #334155; }
+  h1 { color: #10b981; font-size: 22px; margin-bottom: 20px; text-align: center; }
+  button { width: 100%; background: #10b981; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+  table { width: 100%; margin-top: 20px; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #334155; padding: 10px; }
+  #status { margin-top: 15px; text-align: center; color: #94a3b8; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Uncompressed Scanner</h1>
+  <input type="number" id="wordLen" value="4" min="1" max="8" style="width: 100%; padding: 10px; background: #0f172a; color: white; border: 1px solid #334155; border-radius: 6px;">
+  <button id="startBtn" style="margin-top: 10px;">START GENERATOR</button>
+  <div id="status">Status: Stand-by</div>
+  <table>
+    <thead><tr><th>Woord</th><th>Adres</th></tr></thead>
+    <tbody id="results"></tbody>
+  </table>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 
-<style>
-body{
-  background:#111;
-  color:#eee;
-  font-family:Arial;
-  padding:20px;
-}
-
-h1{
-  color:#00ff99;
-}
-
-input,button{
-  padding:10px;
-  margin:5px 0;
-  border:none;
-  border-radius:6px;
-}
-
-button{
-  background:#00aa66;
-  color:white;
-  cursor:pointer;
-}
-
-button:hover{
-  background:#00cc88;
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-  margin-top:15px;
-}
-
-th,td{
-  border:1px solid #333;
-  padding:8px;
-  font-size:12px;
-  word-break:break-all;
-}
-
-th{
-  background:#222;
-  color:#00ff99;
-}
-
-#found{
-  margin-top:10px;
-  color:#00ff99;
-  font-weight:bold;
-}
-</style>
-</head>
-
-<body>
-
-<h1>BTC Vanity Matcher + Balance Check</h1>
-
-<label>Batch per worker</label><br>
-<input id="batchSize" type="number" value="500"><br>
-
-<label>Workers</label><br>
-<input id="numWorkers" type="number" value="4"><br>
-
-<label>Match prefix length</label><br>
-<input id="matchLength" type="number" value="6"><br>
-
-<button id="startBtn">START</button>
-<button id="stopBtn" disabled>STOP</button>
-
-<h3 id="totaal">Totaal: 0</h3>
-<div id="found"></div>
-
-<h2>Matches</h2>
-
-<table>
-<thead>
-<tr>
-<th>#</th>
-<th>Generated</th>
-<th>Target</th>
-<th>Prefix</th>
-<th>WIF</th>
-<th>Balance (BTC)</th>
-</tr>
-</thead>
-<tbody id="results"></tbody>
-</table>
-
-<h2>Workers</h2>
-
-<table>
-<thead>
-<tr>
-<th>ID</th>
-<th>Scanned</th>
-</tr>
-</thead>
-<tbody id="workers"></tbody>
-</table>
-
 <script>
-
-// =======================
-// TARGETS
-// =======================
-const targets = [
+const targetAddresses = new Set([
 "1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF",
 "12tkqA9xSoowkzoERHMWNKsTey55YEBqkv",
 "12ib7dApVFvg82TXKycWBNpN8kFyiAN1dr",
