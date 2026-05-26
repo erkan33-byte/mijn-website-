@@ -37248,192 +37248,152 @@ const targetList = [
   "1M5aojQPWaWFGKr9PZhA9nF8SZvahVWgHr",
   "1M5TCaLbChT7iwpzdYgwh5YNtzFCR26sUy",
   "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
-].forEach(a => targetMap[a] = true);
+]; 
+const MAX_BTC_KEY = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
 
-// ===== WAKE LOCK =====
-let wakeLock=null;
-async function keepAwake(){
- try{
-  wakeLock = await navigator.wakeLock.request('screen');
- }catch(e){}
-}
-document.addEventListener("visibilitychange",()=>{
- if(document.visibilityState==="visible") keepAwake();
-});
-
-// ===== STATE =====
-let workers=[], running=false, total=0, count=0;
-
-// ===== WORKER CODE =====
 const workerCode = `
-self.importScripts(
-'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js',
-'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js'
-);
-
+self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
 const ec = new elliptic.ec("secp256k1");
 
-function base58(hex){
- const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
- let num = BigInt("0x"+hex);
- let out = "";
-
- while(num > 0n){
-   let mod = num % 58n;
-   num = num / 58n;
-   out = alphabet[Number(mod)] + out;
- }
-
- for(let i=0;i<hex.length && hex.substr(i,2)==="00";i+=2){
-   out = "1" + out;
- }
-
- return out;
+function getWif(priv) {
+    const p = "80" + priv;
+    const h1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(p));
+    const h2 = CryptoJS.SHA256(h1);
+    const hex = p + h2.toString().slice(0, 8);
+    const b = [];
+    for(let i=0; i<hex.length; i+=2) b.push(parseInt(hex.substr(i, 2), 16));
+    const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let digits = [0];
+    for (let i = 0; i < b.length; i++) {
+        let carry = b[i];
+        for (let j = 0; j < digits.length; j++) { carry += digits[j] << 8; digits[j] = carry % 58; carry = (carry / 58) | 0; }
+        while (carry) { digits.push(carry % 58); carry = (carry / 58) | 0; }
+    }
+    let str = "";
+    for (let i = 0; i < b.length && b[i] === 0; i++) str += "1";
+    for (let i = digits.length - 1; i >= 0; i--) str += alphabet[digits[i]];
+    return str;
 }
 
-function sha256(h){return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h)).toString();}
-function dsha(h){return sha256(sha256(h));}
-
-function generatePriv(pattern){
- if(!pattern){
-   return Array.from(crypto.getRandomValues(new Uint8Array(32)))
-   .map(b=>b.toString(16).padStart(2,'0')).join('');
- }
-
- const rand = () => Math.floor(Math.random()*16).toString(16);
-
- let prefixLen = Math.floor(Math.random() * (64 - pattern.length));
- let prefix="";
- for(let i=0;i<prefixLen;i++) prefix+=rand();
-
- let suffix="";
- while((prefix+pattern+suffix).length<64){
-  suffix+=rand();
- }
-
- return prefix+pattern+suffix;
-}
-
-function getAddress(priv){
- const key=ec.keyFromPrivate(priv,'hex');
- const pub=key.getPublic().encode('hex', false); // UNCOMPRESSED
- const hash=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256(pub))).toString();
- const payload="00"+hash;
- return base58(payload + dsha(payload).slice(0,8));
-}
-
-function getWif(priv){
- const payload="80"+priv;
- return base58(payload + dsha(payload).slice(0,8));
-}
-
-let scanned=0;
-
-self.onmessage=function(e){
- const {id, batch, pattern, targets}=e.data;
-
- function loop(){
-  for(let i=0;i<batch;i++){
-
-   const priv = generatePriv(pattern);
-   scanned++;
-
-   const addr=getAddress(priv);
-
-   // 🔥 MATCH ONLY
-   if(targets[addr]){
-     const wif=getWif(priv);
-     self.postMessage({found:true, addr, wif});
-   }
-
-   if(scanned % 200 === 0){
-     self.postMessage({id, scanned});
-   }
+function getAddr(priv) {
+  const pub = ec.keyFromPrivate(priv, 'hex').getPublic().encode('array', false);
+  const h1 = CryptoJS.RIPEMD160(CryptoJS.SHA256(CryptoJS.lib.WordArray.create(pub))).toString();
+  const p = "00" + h1;
+  const cs = CryptoJS.SHA256(CryptoJS.SHA256(CryptoJS.enc.Hex.parse(p)).toString()).toString().slice(0, 8);
+  const f = p + cs;
+  const b = [];
+  for(let i=0; i<f.length; i+=2) b.push(parseInt(f.substr(i, 2), 16));
+  const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  let digits = [0];
+  for (let i = 0; i < b.length; i++) {
+      let carry = b[i];
+      for (let j = 0; j < digits.length; j++) { carry += digits[j] << 8; digits[j] = carry % 58; carry = (carry / 58) | 0; }
+      while (carry) { digits.push(carry % 58); carry = (carry / 58) | 0; }
   }
+  let str = "";
+  for (let i = 0; i < b.length && b[i] === 0; i++) str += "1";
+  for (let i = digits.length - 1; i >= 0; i--) str += alphabet[digits[i]];
+  return str;
+}
 
-  setTimeout(loop,10);
- }
-
- loop();
+self.onmessage = function(e){
+  let { startKey, batch, stepLimit, minRange, maxRange, targets } = e.data;
+  let currentKey = BigInt("0x" + startKey);
+  let stepsCount = 0;
+  const targetSet = new Set(targets);
+  const rangeSize = BigInt("0x" + maxRange) - BigInt("0x" + minRange);
+  
+  function loop(){
+    for(let i=0; i<batch; i++){
+      currentKey += 1n;
+      stepsCount++;
+      if(stepsCount >= stepLimit) {
+         currentKey = BigInt("0x" + minRange) + (BigInt(Math.floor(Math.random() * 1000000000)) * (rangeSize / 1000000000n));
+         stepsCount = 0;
+      }
+      const priv = currentKey.toString(16).padStart(64, '0');
+      const addr = getAddr(priv);
+      if(i === 0) self.postMessage({live: addr, priv: priv, current: currentKey.toString(16), scanned: batch});
+      if(targetSet.has(addr)) self.postMessage({found: true, addr: addr, wif: getWif(priv)});
+    }
+    // Zorg dat scanned ook meegaat als er geen live update is
+    self.postMessage({scanned: batch, current: currentKey.toString(16)});
+    setTimeout(loop, 0);
+  }
+  loop();
 };
 `;
 
-// ===== START =====
-function start(){
- if(running) return;
- running=true;
+let workers = [];
+let totalScanned = 0;
+const blob = new Blob([workerCode], {type:"application/javascript"});
+const url = URL.createObjectURL(blob);
 
- keepAwake();
+document.getElementById("startBtn").onclick = () => {
+  const num = parseInt(document.getElementById("numWorkers").value);
+  const minPct = parseFloat(document.getElementById("keyMin").value) / 100;
+  const maxPct = parseFloat(document.getElementById("keyMax").value) / 100;
+  const minRange = (MAX_BTC_KEY * BigInt(Math.floor(minPct * 1000000))) / 1000000n;
+  const maxRange = (MAX_BTC_KEY * BigInt(Math.floor(maxPct * 1000000))) / 1000000n;
+  const rangeSize = maxRange - minRange;
+  
+  document.getElementById("workerStatus").innerHTML = "";
 
- startBtn.disabled=true;
- stopBtn.disabled=false;
+  for(let i=0; i<num; i++){
+    const w = new Worker(url);
+    const start = minRange + (BigInt(Math.floor(Math.random() * 1000000000)) * (rangeSize / 1000000000n));
+    
+    const row = document.getElementById("workerStatus").insertRow();
+    row.innerHTML = `<td>Worker ${i}</td><td id="workerPos${i}">0.000000%</td>`;
+    
+    w.postMessage({
+        startKey: start.toString(16), 
+        batch: parseInt(document.getElementById("batchSize").value), 
+        stepLimit: parseInt(document.getElementById("stepLimit").value),
+        minRange: minRange.toString(16),
+        maxRange: maxRange.toString(16),
+        targets: targetList
+    });
+    
+    w.onmessage = (e) => {
+      if(e.data.found){
+        const row = document.getElementById("results").insertRow(0);
+        row.innerHTML = `<td>${e.data.addr}</td><td>${e.data.wif}</td>`;
+        alert("MATCH GEVONDEN! " + e.data.addr);
+      }
+      
+      // Update teller altijd als deze wordt ontvangen
+      if(e.data.scanned) {
+        totalScanned += e.data.scanned;
+        document.getElementById("totaal").innerText = totalScanned.toLocaleString();
+      }
 
- results.innerHTML="";
- workersDiv.innerHTML="";
- total=0; count=0;
+      // Update positie en live tabel als data aanwezig is
+      if(e.data.current) {
+        if(e.data.live) {
+            const tbody = document.getElementById("liveGen");
+            const row = tbody.insertRow(0);
+            row.innerHTML = `<td>${e.data.live}</td><td>${e.data.priv.slice(0,16)}...</td>`;
+            if(tbody.rows.length > 50) tbody.deleteRow(50);
+        }
+        const currentBig = BigInt("0x" + e.data.current);
+        const tempPct = (currentBig * 10000000000n) / MAX_BTC_KEY; 
+        const pctString = (Number(tempPct) / 100000000).toFixed(6); 
+        document.getElementById(`workerPos${i}`).innerText = pctString + "%";
+      }
+    };
+    workers.push(w);
+  }
+  document.getElementById("startBtn").disabled = true;
+  document.getElementById("stopBtn").disabled = false;
+};
 
- const num=parseInt(numWorkers.value);
- const batch=parseInt(batchSize.value);
- const pattern=document.getElementById("pattern").value.toLowerCase();
-
- const blob=new Blob([workerCode], {type:"application/javascript"});
- const url=URL.createObjectURL(blob);
-
- for(let i=0;i<num;i++){
-  const w=new Worker(url);
-  workers.push(w);
-
-  const row=document.createElement("tr");
-  row.innerHTML="<td>"+i+"</td><td id='w"+i+"'>0</td>";
-  workersDiv.appendChild(row);
-
-  w.postMessage({id:i, batch, pattern, targets:targetMap});
-
-  w.onmessage=(e)=>{
-    const d=e.data;
-
-    if(d.found){
-      count++;
-
-      found.innerHTML = "🎉 MATCH GEVONDEN:<br>"+d.addr+"<br>"+d.wif;
-
-      const tr=document.createElement("tr");
-      tr.innerHTML="<td>"+count+"</td><td>"+d.addr+"</td><td>"+d.wif+"</td>";
-      results.appendChild(tr);
-    }
-
-    if(d.scanned){
-      document.getElementById("w"+d.id).innerText=d.scanned;
-      total+=200;
-      totaal.innerText="Totaal: "+total;
-    }
-  };
- }
-}
-
-// ===== STOP =====
-function stop(){
- running=false;
- startBtn.disabled=false;
- stopBtn.disabled=true;
-
- workers.forEach(w=>w.terminate());
- workers=[];
-}
-
-// ===== AUTO RESTART =====
-setInterval(()=>{
- if(running && workers.length===0){
-   start();
- }
-},5000);
-
-startBtn.onclick=start;
-stopBtn.onclick=stop;
-
-const results=document.getElementById("results");
-const workersDiv=document.getElementById("workers");
+document.getElementById("stopBtn").onclick = () => {
+  workers.forEach(w => w.terminate());
+  workers = [];
+  document.getElementById("startBtn").disabled = false;
+  document.getElementById("stopBtn").disabled = true;
+};
 </script>
-
 </body>
 </html>
