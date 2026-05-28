@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator — Uncompressed Only</title>
+<title>BTC Key Generator — Uncompressed Aftellen</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
@@ -65,8 +65,6 @@ self.onmessage = async function(e) {
     while(true) {
         currentKey--; scanned++;
         let p = currentKey.toString(16).padStart(64,'0');
-        
-        // Alleen Uncompressed WIF (begint met 80 -> Base58 start met '5')
         let wif = b58("80"+p+dsha256("80"+p).slice(0,8));
         
         if(wif.toLowerCase().includes(zoekWoord.toLowerCase())) {
@@ -115,6 +113,11 @@ document.getElementById("startBtn").onclick = () => {
                 let r = table.insertRow(0);
                 let balStr = e.data.bal === -1 ? "API FOUT" : (e.data.bal > 0 ? "💰 " + e.data.bal : "0 BTC");
                 r.innerHTML = `<td>${++counter}</td><td>${e.data.addr}</td><td>${e.data.wif}</td><td>${balStr}</td>`;
+                
+                // Limit op 200 rijen
+                if (table.rows.length > 200) {
+                    table.deleteRow(200);
+                }
             }
         };
         workers.push(w);
