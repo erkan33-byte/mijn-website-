@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>BTC Key Generator — Uncompressed Only</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+<style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; background: white; }
+    th, td { border: 1px solid #ccc; padding: 8px; font-size: 13px; word-break: break-all; text-align: left; }
+    th { background: #eee; }
+    button, input { margin-bottom: 10px; padding: 8px 12px; }
+    .error { color: red; font-weight: bold; }
+    .found { color: green; font-weight: bold; }
+</style>
+</head>
+<body>
+<h2>BTC Key Generator — Uncompressed Aftellen</h2>
+
+<label style="min-width: 150px;">Start (%):</label> <input type="number" id="startPercent" value="100" step="0.0001"><br>
+<label style="min-width: 150px;">Offset per worker:</label> <input type="number" id="offset" value="100000000"><br>
+<label style="min-width: 150px;">Workers:</label> <input type="number" id="numWorkers" value="4"><br>
+<label style="min-width: 150px;">Zoekwoord in WIF:</label> <input type="text" id="zoekWoord" value="5"><br>
+
+<button id="startBtn">Start Aftellen</button>
+<button id="stopBtn" disabled>Stop</button>
+<button id="testBtn">Test Saldo API</button>
+
+<div id="totaal" style="font-weight:bold; margin: 10px 0;">Totaal gescande adressen: 0</div>
+<table id="resultTable"><thead><tr><th>#</th><th>Adres</th><th>WIF (Uncompressed)</th><th>Saldo Status</th></tr></thead><tbody></tbody></table>
+
+<script>
+const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+
+document.getElementById("testBtn").onclick = async () => {
+    const testAddr = '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'; 
+    try {
+        let res = await fetch('https://blockchain.info/balance?active=' + testAddr);
+        let data = await res.json();
+        let saldo = (data[testAddr] ? data[testAddr].final_balance : 0) / 100000000;
+        alert("API Test Geslaagd! Saldo: " + saldo + " BTC");
+    } catch(err) { alert("API Fout: " + err); }
+};
+
+const workerCode = `
+self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+const ec = new elliptic.ec("secp256k1");
+function sha256(h){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h)).toString(); }
+function dsha256(h){ return sha256(sha256(h)); }
+function b58(h){ 
+    const alph="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; 
+    let bytes = []; for(let i=0; i<h.length; i+=2) bytes.push(parseInt(h.substr(i,2), 16));
+    let n = BigInt("0x" + h); let o = ""; 
+    while(n > 0n){ o = alph[Number(n % 58n)] + o; n /= 58n; }
+    for(let i=0; i<bytes.length && bytes[i]==0; i++) o = "1" + o;
+    return o; 
+}
+
+self.onmessage = async function(e) {
+    const { id, startPos, offset, zoekWoord } = e.data;
+    let currentKey = BigInt(startPos) - (BigInt(id) * BigInt(offset));
+    let scanned = 0;
+    
+    while(true) {
+        currentKey--; scanned++;
+        let p = currentKey.toString(16).padStart(64,'0');
+        
+        // Alleen Uncompressed WIF (begint met 80 -> Base58 start met '5')
+        let wif = b58("80"+p+dsha256("80"+p).slice(0,8));
+        
+        if(wif.toLowerCase().includes(zoekWoord.toLowerCase())) {
+            let pub = ec.keyFromPrivate(p,'hex').getPublic(false,"array");
+            let pubHex = pub.map(b=>b.toString(16).padStart(2,'0')).join('');
+            let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256(pubHex))).toString();
+            let addr = b58("00"+rip+dsha256("00"+rip).slice(0,8));
+            
+            let bal = 0;
+            try {
+                let res = await fetch('https://blockchain.info/balance?active='+addr);
+                let data = await res.json();
+                bal = (data[addr] ? data[addr].final_balance : 0) / 100000000;
+            } catch(err) { bal = -1; }
+            
+            self.postMessage({ id, addr, wif, bal, scanned });
+            if(bal > 0) break;
+            await new Promise(r => setTimeout(r, 1000));
+        }
+        if(scanned % 500 === 0) self.postMessage({ id, scanned });
+    }
+};
+`;
+
+const blob = new Blob([workerCode], {type: 'application/javascript'});
+const url = URL.createObjectURL(blob);
+let workers = [], counter = 0, workerScans = {};
+
+document.getElementById("startBtn").onclick = () => {
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("stopBtn").disabled = false;
+    let startPos = (ORDER_N * BigInt(document.getElementById("startPercent").value)) / 100n;
+    let offset = document.getElementById("offset").value;
+    
+    for(let i=0; i < parseInt(document.getElementById("numWorkers").value); i++) {
+        workerScans[i] = 0;
+        let w = new Worker(url);
+        w.postMessage({id: i, startPos: startPos.toString(), offset: offset, zoekWoord: document.getElementById("zoekWoord").value});
+        
+        w.onmessage = (e) => {
+            workerScans[e.data.id] = e.data.scanned;
+            document.getElementById("totaal").textContent = "Totaal: " + Object.values(workerScans).reduce((a, b) => a + b, 0).toLocaleString();
+            
+            if(e.data.addr) {
+                let table = document.getElementById("resultTable").getElementsByTagName('tbody')[0];
+                let r = table.insertRow(0);
+                let balStr = e.data.bal === -1 ? "API FOUT" : (e.data.bal > 0 ? "💰 " + e.data.bal : "0 BTC");
+                r.innerHTML = `<td>${++counter}</td><td>${e.data.addr}</td><td>${e.data.wif}</td><td>${balStr}</td>`;
+            }
+        };
+        workers.push(w);
+    }
+};
+
+document.getElementById("stopBtn").onclick = () => {
+    workers.forEach(w => w.terminate());
+    workers = [];
+    document.getElementById("startBtn").disabled = false;
+    document.getElementById("stopBtn").disabled = true;
+};
+</script>
+</body>
+</html>
