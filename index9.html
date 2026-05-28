@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>BTC Pro Hunter: Precise Edition</title>
+    <title>BTC Pro Hunter: Limited View</title>
     <style>
         body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
         input { background: #111; color: #0f0; border: 1px solid #333; padding: 5px; }
@@ -13,7 +13,7 @@
     </style>
 </head>
 <body>
-    <h2>BTC Pro Hunter: Precise Edition</h2>
+    <h2>BTC Pro Hunter (Auto-limiet 200 rijen)</h2>
     Zoekwoord (WIF): <input type="text" id="zoek" value="5">
     <button id="startBtn" onclick="start()">START SCAN</button>
     <button id="stopBtn" onclick="stop()" disabled>STOP SCAN</button>
@@ -30,14 +30,12 @@
     const ec = new elliptic.ec("secp256k1");
     const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
-    // Officiële Base58Check encoder
-    function toB58(buf) {
-        let n = BigInt("0x" + buf);
+    function toB58(hex) {
+        let bn = BigInt("0x" + hex);
         let res = "";
-        while (n > 0n) { res = B58[Number(n % 58n)] + res; n /= 58n; }
-        // Handle leading zero bytes
-        for (let i = 0; i < buf.length; i += 2) {
-            if (buf.substr(i, 2) === "00") res = "1" + res;
+        while (bn > 0n) { res = B58[Number(bn % 58n)] + res; bn /= 58n; }
+        for (let i = 0; i < hex.length; i += 2) {
+            if (hex.substr(i, 2) === "00") res = "1" + res;
             else break;
         }
         return res;
@@ -50,21 +48,19 @@
             let hash = CryptoJS.SHA256(ts.toString()).toString();
             let priv = hash.substring(0, 64);
             
-            // WIF (Uncompressed)
             let wifHex = "80" + priv;
-            let hash1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(wifHex)).toString();
-            let hash2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hash1)).toString();
-            let wif = toB58(wifHex + hash2.substring(0, 8));
+            let h1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(wifHex)).toString();
+            let h2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h1)).toString();
+            let wif = toB58(wifHex + h2.substring(0, 8));
 
             if(wif.includes(zoek)) {
-                // Adres (Uncompressed)
                 let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
                 let sha = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pub)).toString();
                 let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha)).toString();
                 let addrHex = "00" + rip;
-                let h1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(addrHex)).toString();
-                let h2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h1)).toString();
-                let address = toB58(addrHex + h2.substring(0, 8));
+                let ah1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(addrHex)).toString();
+                let ah2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(ah1)).toString();
+                let address = toB58(addrHex + ah2.substring(0, 8));
 
                 self.postMessage({ type: 'MATCH', wif, address });
             }
@@ -78,7 +74,6 @@
     let workers = [];
     async function checkBalance(addr) {
         try {
-            // Gebruik Blockchair voor de meest betrouwbare check
             let res = await fetch('https://api.blockchair.com/bitcoin/dashboards/address/' + addr);
             let d = await res.json();
             return d.data[addr].address.balance / 100000000;
@@ -105,8 +100,12 @@
                 if(e.data.type === 'STATUS') {
                     document.getElementById('stat').innerText = "Scannen: " + e.data.ts;
                 } else {
-                    let row = document.getElementById('tabel').insertRow(0);
+                    let tabel = document.getElementById('tabel');
+                    if (tabel.rows.length >= 200) tabel.deleteRow(tabel.rows.length - 1);
+                    
+                    let row = tabel.insertRow(0);
                     row.innerHTML = `<td>Checking...</td><td>${e.data.wif}</td><td>${e.data.address}</td><td>...</td>`;
+                    
                     let bal = await checkBalance(e.data.address);
                     row.cells[0].innerText = bal > 0 ? "JACKPOT!" : "GECONTROLEERD";
                     row.cells[3].innerText = bal + " BTC";
