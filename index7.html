@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>BTC Key Generator — 200 Rij Limiet</title>
+<title>BTC Key Generator — Volledige Versie</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
@@ -12,21 +12,22 @@
     th { background: #eee; }
     button, input { margin-bottom: 10px; padding: 8px 12px; }
     .error { color: red; font-weight: bold; }
-    .found { color: green; font-weight: bold; font-size: 18px; }
+    .found { color: green; font-weight: bold; }
     #testBtn { background-color: #ffa500; cursor: pointer; }
 </style>
 </head>
 <body>
-<h2>BTC Key Generator</h2>
-<label>Start (%):</label> <input type="number" id="startPercent" value="10" step="0.0001"><br>
-<label>Eind (%):</label> <input type="number" id="endPercent" value="20" step="0.0001"><br>
-<label>Jump after (keys):</label> <input type="number" id="jumpAfter" value="1000"><br>
-<label>Workers:</label> <input type="number" id="numWorkers" value="4"><br>
-<label>Zoekwoord in WIF:</label> <input type="text" id="zoekWoord" value="btc"><br>
+<h2>BTC Key Generator — Volledige Versie</h2>
+
+<label style="min-width: 150px;">Start (%):</label> <input type="number" id="startPercent" value="10" step="0.0001"><br>
+<label style="min-width: 150px;">Eind (%):</label> <input type="number" id="endPercent" value="20" step="0.0001"><br>
+<label style="min-width: 150px;">Jump after (keys):</label> <input type="number" id="jumpAfter" value="1000"><br>
+<label style="min-width: 150px;">Workers:</label> <input type="number" id="numWorkers" value="4"><br>
+<label style="min-width: 150px;">Zoekwoord in WIF:</label> <input type="text" id="zoekWoord" value="btc"><br>
 
 <button id="startBtn">Start zoeken</button>
 <button id="stopBtn" disabled>Stop</button>
-<button id="testBtn">Test Saldo API</button>
+<button id="testBtn">Test Saldo API (met link)</button>
 
 <div id="totaal" style="font-weight:bold; margin: 10px 0;">Totaal gescande adressen: 0</div>
 <div id="foundMsg"></div>
@@ -34,27 +35,33 @@
 <table id="resultTable"><thead><tr><th>#</th><th>Adres</th><th>WIF</th><th>Saldo Status</th></tr></thead><tbody></tbody></table>
 
 <h3>Worker status</h3>
-<table id="workerTable"><thead><tr><th>Worker ID</th><th>Gescande</th><th>Huidige Positie (Keyspace)</th></tr></thead><tbody></tbody></table>
+<table id="workerTable"><thead><tr><th>Worker ID</th><th>Gescande</th><th>Keyspace % (Detail)</th></tr></thead><tbody></tbody></table>
 
 <script>
 const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
 
 document.getElementById("testBtn").onclick = async () => {
-    const testAddress = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa";
+    const testAddr = '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'; 
     try {
-        let res = await fetch('https://blockchain.info/balance?active=' + testAddress);
+        let res = await fetch('https://blockchain.info/balance?active=' + testAddr);
         let data = await res.json();
-        let satoshis = data[testAddress] ? data[testAddress].final_balance : 0;
-        alert("API Test Geslaagd. Saldo: " + (satoshis/100000000) + " BTC");
-    } catch(err) { alert("API Fout: " + err); }
+        let saldo = (data[testAddr] ? data[testAddr].final_balance : 0) / 100000000;
+        let openLink = confirm("API Test Geslaagd!\nSaldo: " + saldo + " BTC\n\nWil je het adres openen in de BlockExplorer?");
+        if (openLink) window.open('https://www.blockchain.com/explorer/addresses/btc/' + testAddr, '_blank');
+    } catch(err) { alert("API Fout! Controleer je internetverbinding.\nFoutmelding: " + err); }
 };
 
 const workerCode = `
 self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
 const ec = new elliptic.ec("secp256k1");
-const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
 
-function randomBigIntBelow(max){ const arr=new Uint8Array(32); crypto.getRandomValues(arr); let r=0n; for(let i=0;i<32;i++) r=(r<<8n)+BigInt(arr[i]); return r%max; }
+function randomBigIntInRange(min, max){ 
+    const range = max - min;
+    const arr = new Uint8Array(32); crypto.getRandomValues(arr); 
+    let r = 0n; for(let i=0; i<32; i++) r = (r<<8n) + BigInt(arr[i]); 
+    return min + (r % range); 
+}
+
 function sha256(h){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h)).toString(); }
 function dsha256(h){ return sha256(sha256(h)); }
 function b58(h){ 
@@ -68,34 +75,35 @@ function b58(h){
 
 self.onmessage = async function(e) {
     const { id, start, end, jumpAfter, zoekWoord } = e.data;
-    let range = end - start;
-    let currentKey = start + randomBigIntBelow(range);
+    let currentKey = randomBigIntInRange(start, end);
     let scanned = 0, incrementCount = 0;
+    
     while(true) {
-        if(incrementCount >= jumpAfter) { currentKey = start + randomBigIntBelow(range); incrementCount = 0; }
+        if(incrementCount >= jumpAfter) { currentKey = randomBigIntInRange(start, end); incrementCount = 0; }
         currentKey = (currentKey + 1n);
         incrementCount++; scanned++;
-        if(scanned % 500 === 0) {
-            let p = currentKey.toString(16).padStart(64,'0');
-            let wif = b58("80"+p+dsha256("80"+p).slice(0,8));
-            if(wif.toLowerCase().includes(zoekWoord.toLowerCase())) {
-                let pub = ec.keyFromPrivate(p,'hex').getPublic(false,"array");
-                let pubHex = pub.map(b=>b.toString(16).padStart(2,'0')).join('');
-                let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256(pubHex))).toString();
-                let addr = b58("00"+rip+dsha256("00"+rip).slice(0,8));
-                let bal = 0;
-                try {
-                    let res = await fetch('https://blockchain.info/balance?active='+addr);
-                    let data = await res.json();
-                    bal = (data[addr] ? data[addr].final_balance : 0) / 100000000;
-                } catch(err) { bal = -1; }
-                self.postMessage({ id, addr, wif, bal, scanned, currentKey: currentKey.toString(), type: 'result' });
-                if(bal > 0) break;
-                await new Promise(r => setTimeout(r, 1000));
-            } else {
-                self.postMessage({ id, scanned, currentKey: currentKey.toString(), type: 'update' });
-            }
+        
+        let p = currentKey.toString(16).padStart(64,'0');
+        let wif = b58("80"+p+dsha256("80"+p).slice(0,8));
+        
+        if(wif.toLowerCase().includes(zoekWoord.toLowerCase())) {
+            let pub = ec.keyFromPrivate(p,'hex').getPublic(false,"array");
+            let pubHex = pub.map(b=>b.toString(16).padStart(2,'0')).join('');
+            let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256(pubHex))).toString();
+            let addr = b58("00"+rip+dsha256("00"+rip).slice(0,8));
+            
+            let bal = null;
+            try {
+                let res = await fetch('https://blockchain.info/balance?active='+addr);
+                let data = await res.json();
+                bal = (data[addr] ? data[addr].final_balance : 0) / 100000000;
+            } catch(err) { bal = "ERROR"; }
+            
+            self.postMessage({ id, addr, wif, bal, scanned, currentKey: currentKey.toString() });
+            if(bal > 0) break;
+            await new Promise(r => setTimeout(r, 1000));
         }
+        if(scanned % 500 === 0) self.postMessage({ id, scanned, currentKey: currentKey.toString() });
     }
 };
 `;
@@ -109,35 +117,33 @@ document.getElementById("startBtn").onclick = () => {
     document.getElementById("stopBtn").disabled = false;
     let s = (ORDER_N * BigInt(Math.floor(document.getElementById("startPercent").value * 10000))) / 1000000n;
     let e = (ORDER_N * BigInt(Math.floor(document.getElementById("endPercent").value * 10000))) / 1000000n;
+    
     for(let i=0; i < parseInt(document.getElementById("numWorkers").value); i++) {
         workerScans[i] = 0;
         let row = document.getElementById("workerTable").insertRow(-1);
-        row.innerHTML = `<td>Worker #${i+1}</td><td id="s${i}">0</td><td id="p${i}">0.0000000000%</td>`;
+        row.innerHTML = `<td>Worker #${i+1}</td><td id="s${i}">0</td><td id="p${i}">0.000000000000%</td>`;
         let w = new Worker(url);
         w.postMessage({id: i, start: s, end: e, jumpAfter: parseInt(document.getElementById("jumpAfter").value), zoekWoord: document.getElementById("zoekWoord").value});
+        
         w.onmessage = (e) => {
-            const { id, scanned, currentKey, addr, wif, bal, type } = e.data;
-            workerScans[id] = scanned;
-            document.getElementById("s"+id).textContent = scanned.toLocaleString();
-            let pct = (BigInt(currentKey) * 1000000000000n) / ORDER_N;
-            document.getElementById("p"+id).textContent = (Number(pct) / 10000000000).toFixed(10) + "%";
-            let totaal = Object.values(workerScans).reduce((a, b) => a + b, 0);
-            document.getElementById("totaal").textContent = "Totaal gescande adressen: " + totaal.toLocaleString();
-            if(type === 'result') {
+            workerScans[e.data.id] = e.data.scanned;
+            document.getElementById("s"+e.data.id).textContent = e.data.scanned.toLocaleString();
+            let pct = (BigInt(e.data.currentKey) * 100000000000000n / ORDER_N);
+            document.getElementById("p"+e.data.id).textContent = (Number(pct)/1000000000000).toFixed(12) + "%";
+            document.getElementById("totaal").textContent = "Totaal gescande adressen: " + Object.values(workerScans).reduce((a, b) => a + b, 0).toLocaleString();
+            
+            if(e.data.addr) {
                 let table = document.getElementById("resultTable").getElementsByTagName('tbody')[0];
                 let r = table.insertRow(0);
-                let status = bal === -1 ? '<span class="error">API FOUT</span>' : (bal > 0 ? '<span class="found">💰 ' + bal + '</span>' : '0 BTC');
-                r.innerHTML = `<td>${++counter}</td><td>${addr}</td><td>${wif}</td><td>${status}</td>`;
+                let status = e.data.bal === "ERROR" ? '<span class="error">API FOUT</span>' : (e.data.bal > 0 ? '<span class="found">💰 ' + e.data.bal + '</span>' : '0 BTC');
+                r.innerHTML = `<td>${++counter}</td><td>${e.data.addr}</td><td>${e.data.wif}</td><td>${status}</td>`;
                 if (table.rows.length > 200) table.deleteRow(200);
-                if (bal > 0) {
-                    document.getElementById("foundMsg").innerHTML = `<h2 class="found">GEVONDEN! Saldo: ${bal} BTC</h2><p>Adres: ${addr}</p><p>WIF: ${wif}</p>`;
-                    document.getElementById("stopBtn").click();
-                }
             }
         };
         workers.push(w);
     }
 };
+
 document.getElementById("stopBtn").onclick = () => {
     workers.forEach(w => w.terminate());
     workers = [];
