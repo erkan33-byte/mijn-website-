@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>BTC Pro Hunter: Custom Time</title>
+    <title>BTC Pro Hunter: Debug Mode</title>
     <style>
         body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
         input { background: #111; color: #0f0; border: 1px solid #333; padding: 5px; width: 150px; }
@@ -13,9 +13,9 @@
     </style>
 </head>
 <body>
-    <h2>BTC Pro Hunter (Custom Time)</h2>
+    <h2>BTC Pro Hunter (Met Error Tracking)</h2>
     Zoekwoord (WIF): <input type="text" id="zoek" value="5">
-    Start Timestamp: <input type="number" id="startTs" value="1230768000000">
+    Start Timestamp: <input type="number" id="startTs" value="1167782400000">
     <button id="startBtn" onclick="start()">START SCAN</button>
     <button id="stopBtn" onclick="stop()" disabled>STOP SCAN</button>
     <div id="stat">Status: Gereed</div>
@@ -76,9 +76,12 @@
     async function checkBalance(addr) {
         try {
             let res = await fetch('https://api.blockchair.com/bitcoin/dashboards/address/' + addr);
+            if (!res.ok) throw new Error('API Error');
             let d = await res.json();
-            return d.data[addr].address.balance / 100000000;
-        } catch(e) { return 0; }
+            return d.data[addr].address.balance / 100000000 + " BTC";
+        } catch(e) { 
+            return "ERROR";
+        }
     }
 
     function stop() {
@@ -109,9 +112,9 @@
                     row.innerHTML = `<td>Checking...</td><td>${e.data.wif}</td><td>${e.data.address}</td><td>...</td>`;
                     
                     let bal = await checkBalance(e.data.address);
-                    row.cells[0].innerText = bal > 0 ? "JACKPOT!" : "GECONTROLEERD";
-                    row.cells[3].innerText = bal + " BTC";
-                    if(bal > 0) { alert("SALDO GEVONDEN: " + bal); stop(); }
+                    row.cells[0].innerText = (bal !== "ERROR" && parseFloat(bal) > 0) ? "JACKPOT!" : (bal === "ERROR" ? "FOUT" : "GECONTROLEERD");
+                    row.cells[3].innerText = bal;
+                    if(bal !== "ERROR" && parseFloat(bal) > 0) { alert("SALDO GEVONDEN: " + bal); stop(); }
                 }
             };
             workers.push(w);
