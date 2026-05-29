@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>BTC Pro Hunter: Debug Mode</title>
+    <title>BTC Pro Hunter: Multi-API</title>
     <style>
         body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
         input { background: #111; color: #0f0; border: 1px solid #333; padding: 5px; width: 150px; }
@@ -13,7 +13,7 @@
     </style>
 </head>
 <body>
-    <h2>BTC Pro Hunter (Met Error Tracking)</h2>
+    <h2>BTC Pro Hunter (Multi-API Failover)</h2>
     Zoekwoord (WIF): <input type="text" id="zoek" value="5">
     Start Timestamp: <input type="number" id="startTs" value="1167782400000">
     <button id="startBtn" onclick="start()">START SCAN</button>
@@ -48,7 +48,6 @@
         while(true) {
             let hash = CryptoJS.SHA256(ts.toString()).toString();
             let priv = hash.substring(0, 64);
-            
             let wifHex = "80" + priv;
             let h1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(wifHex)).toString();
             let h2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h1)).toString();
@@ -62,7 +61,6 @@
                 let ah1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(addrHex)).toString();
                 let ah2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(ah1)).toString();
                 let address = toB58(addrHex + ah2.substring(0, 8));
-
                 self.postMessage({ type: 'MATCH', wif, address });
             }
             ts += 4;
@@ -73,15 +71,22 @@
 
 <script>
     let workers = [];
+
     async function checkBalance(addr) {
-        try {
-            let res = await fetch('https://api.blockchair.com/bitcoin/dashboards/address/' + addr);
-            if (!res.ok) throw new Error('API Error');
-            let d = await res.json();
-            return d.data[addr].address.balance / 100000000 + " BTC";
-        } catch(e) { 
-            return "ERROR";
+        // Lijst van API's om te proberen (Failover)
+        const apis = [
+            async (a) => (await fetch(`https://api.blockchair.com/bitcoin/dashboards/address/${a}`)).json().then(d => d.data[a].address.balance / 100000000),
+            async (a) => (await fetch(`https://blockchain.info/q/addressbalance/${a}`)).json().then(b => b / 100000000),
+            async (a) => (await fetch(`https://sochain.com/api/v2/get_address_balance/BTC/${a}`)).json().then(d => parseFloat(d.data.confirmed_balance))
+        ];
+
+        for (let api of apis) {
+            try {
+                let bal = await api(addr);
+                return bal + " BTC";
+            } catch(e) { continue; } // Probeer volgende API bij error
         }
+        return "ERROR";
     }
 
     function stop() {
@@ -107,7 +112,6 @@
                 } else {
                     let tabel = document.getElementById('tabel');
                     if (tabel.rows.length >= 200) tabel.deleteRow(tabel.rows.length - 1);
-                    
                     let row = tabel.insertRow(0);
                     row.innerHTML = `<td>Checking...</td><td>${e.data.wif}</td><td>${e.data.address}</td><td>...</td>`;
                     
