@@ -2,10 +2,10 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>BTC Pro Hunter: Limited View</title>
+    <title>BTC Pro Hunter: Custom Time</title>
     <style>
         body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
-        input { background: #111; color: #0f0; border: 1px solid #333; padding: 5px; }
+        input { background: #111; color: #0f0; border: 1px solid #333; padding: 5px; width: 150px; }
         button { font-weight: bold; padding: 5px 15px; cursor: pointer; }
         #startBtn { background: #0f0; } #stopBtn { background: #f00; color: #fff; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
@@ -13,8 +13,9 @@
     </style>
 </head>
 <body>
-    <h2>BTC Pro Hunter (Auto-limiet 200 rijen)</h2>
+    <h2>BTC Pro Hunter (Custom Time)</h2>
     Zoekwoord (WIF): <input type="text" id="zoek" value="5">
+    Start Timestamp: <input type="number" id="startTs" value="1230768000000">
     <button id="startBtn" onclick="start()">START SCAN</button>
     <button id="stopBtn" onclick="stop()" disabled>STOP SCAN</button>
     <div id="stat">Status: Gereed</div>
@@ -91,11 +92,12 @@
     function start() {
         document.getElementById('startBtn').disabled = true;
         document.getElementById('stopBtn').disabled = false;
+        const startVal = parseInt(document.getElementById('startTs').value);
         const blob = new Blob([document.getElementById('workerScript').textContent], {type: 'text/javascript'});
         
         for(let i=0; i<4; i++) {
             let w = new Worker(URL.createObjectURL(blob));
-            w.postMessage({ startTs: 1230768000000 + i, zoek: document.getElementById('zoek').value });
+            w.postMessage({ startTs: startVal + i, zoek: document.getElementById('zoek').value });
             w.onmessage = async (e) => {
                 if(e.data.type === 'STATUS') {
                     document.getElementById('stat').innerText = "Scannen: " + e.data.ts;
