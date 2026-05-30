@@ -29,3 +29,92 @@
 
     // Jouw lijst met adressen (deze kun je blijven uitbreiden)
     const TARGET_ADDRESSES = new Set([
+  "1M5aojQPWaWFGKr9PZhA9nF8SZvahVWgHr",
+  "1M5TCaLbChT7iwpzdYgwh5YNtzFCR26sUy",
+  "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
+]);
+
+    const ec = new elliptic.ec("secp256k1");
+    const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+    function toB58(hex) {
+        let bn = BigInt("0x" + hex);
+        let res = "";
+        while (bn > 0n) { res = B58[Number(bn % 58n)] + res; bn /= 58n; }
+        for (let i = 0; i < hex.length; i += 2) {
+            if (hex.substr(i, 2) === "00") res = "1" + res;
+            else break;
+        }
+        return res;
+    }
+
+    self.onmessage = async (e) => {
+        let { startTs } = e.data;
+        let ts = startTs;
+        while(true) {
+            let hash = CryptoJS.SHA256(ts.toString()).toString();
+            let priv = hash.substring(0, 64);
+            let wifHex = "80" + priv;
+            let h1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(wifHex)).toString();
+            let h2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h1)).toString();
+            let wif = toB58(wifHex + h2.substring(0, 8));
+
+            let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
+            let sha = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pub)).toString();
+            let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha)).toString();
+            let addrHex = "00" + rip;
+            let ah1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(addrHex)).toString();
+            let ah2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(ah1)).toString();
+            let address = toB58(addrHex + ah2.substring(0, 8));
+
+            if(TARGET_ADDRESSES.has(address)) {
+                self.postMessage({ type: 'MATCH', wif, address });
+                break;
+            }
+
+            ts += 4;
+            if(ts % 500 === 0) self.postMessage({ type: 'STATUS', ts, wif, addr: address });
+        }
+    };
+</script>
+
+<script>
+    let workers = [];
+
+    function stop() {
+        workers.forEach(w => w.terminate());
+        workers = [];
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('stopBtn').disabled = true;
+        document.getElementById('stat').innerText = "Status: Gestopt";
+    }
+
+    function start() {
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('stopBtn').disabled = false;
+        const startVal = parseInt(document.getElementById('startTs').value);
+        const blob = new Blob([document.getElementById('workerScript').textContent], {type: 'text/javascript'});
+        
+        for(let i=0; i<4; i++) {
+            let w = new Worker(URL.createObjectURL(blob));
+            w.postMessage({ startTs: startVal + (i * 1000) });
+            w.onmessage = (e) => {
+                let tabel = document.getElementById('tabel');
+                if(e.data.type === 'STATUS') {
+                    document.getElementById('stat').innerText = "Scannen: " + e.data.ts;
+                    if (tabel.rows.length > 15) tabel.deleteRow(tabel.rows.length - 1);
+                    let row = tabel.insertRow(0);
+                    row.innerHTML = `<td>Checking</td><td>${e.data.wif}</td><td>${e.data.addr}</td>`;
+                } else if(e.data.type === 'MATCH') {
+                    let row = tabel.insertRow(0);
+                    row.innerHTML = `<td style="color:yellow; font-weight:bold">MATCH!</td><td>${e.data.wif}</td><td>${e.data.address}</td>`;
+                    alert("MATCH GEVONDEN!\nAdres: " + e.data.address + "\nWIF: " + e.data.wif);
+                    stop();
+                }
+            };
+            workers.push(w);
+        }
+    }
+</script>
+</body>
+</html>
