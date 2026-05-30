@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>BTC Uncompressed Hunter</title>
+    <style>
+        body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
+        input { background: #111; color: #0f0; border: 1px solid #333; padding: 5px; width: 150px; }
+        button { font-weight: bold; padding: 5px 15px; cursor: pointer; }
+        #startBtn { background: #0f0; } #stopBtn { background: #f00; color: #fff; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #333; padding: 8px; font-size: 11px; }
+    </style>
+</head>
+<body>
+    <h2>BTC Uncompressed Hunter</h2>
+    Start Timestamp: <input type="number" id="startTs" value="1167782400000">
+    <button id="startBtn" onclick="start()">START SCAN</button>
+    <button id="stopBtn" onclick="stop()" disabled>STOP SCAN</button>
+    <div id="stat">Status: Gereed</div>
+    <table>
+        <thead><tr><th>Status</th><th>WIF</th><th>Adres</th></tr></thead>
+        <tbody id="tabel"></tbody>
+    </table>
+
+<script id="workerScript" type="javascript/worker">
+    importScripts('https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js',
+                  'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js');
+
+    // Jouw lijst met adressen (deze kun je blijven uitbreiden)
+    const TARGET_ADDRESSES = new Set([
