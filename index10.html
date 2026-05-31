@@ -1551,7 +1551,6 @@
   "1M5TCaLbChT7iwpzdYgwh5YNtzFCR26sUy",
   "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
 ]);
-
     const ec = new elliptic.ec("secp256k1");
     const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
@@ -1559,80 +1558,68 @@
         let bn = BigInt("0x" + hex);
         let res = "";
         while (bn > 0n) { res = B58[Number(bn % 58n)] + res; bn /= 58n; }
-        for (let i = 0; i < hex.length; i += 2) {
-            if (hex.substr(i, 2) === "00") res = "1" + res;
-            else break;
-        }
+        for (let i = 0; i < hex.length; i += 2) { if (hex.substr(i, 2) === "00") res = "1" + res; else break; }
         return res;
     }
 
-    self.onmessage = async (e) => {
-        let { startTs } = e.data;
-        let ts = startTs;
+    self.onmessage = function(e) {
+        // Satoshi-stijl: Vaste tijdstempel uit januari 2009
+        const genesis2009 = "1230944400000"; 
+        
         while(true) {
-            let hash = CryptoJS.SHA256(ts.toString()).toString();
-            let priv = hash.substring(0, 64);
-            let wifHex = "80" + priv;
-            let h1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(wifHex)).toString();
-            let h2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h1)).toString();
-            let wif = toB58(wifHex + h2.substring(0, 8));
-
+            // Stap 1: Hardware-ruis (De moderne "digitale dobbelsteen")
+            let pool = new Uint8Array(32);
+            crypto.getRandomValues(pool);
+            
+            // Stap 2: De "Satoshi-Mix" (Ruis + 2009 Tijdstempel)
+            let entropy = pool.join('') + genesis2009;
+            let priv = CryptoJS.SHA256(entropy).toString();
+            
+            // Stap 3: Creëer Uncompressed Adres (Satoshi-stijl)
             let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
             let sha = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pub)).toString();
             let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha)).toString();
             let addrHex = "00" + rip;
-            let ah1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(addrHex)).toString();
-            let ah2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(ah1)).toString();
-            let address = toB58(addrHex + ah2.substring(0, 8));
+            let ah = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(addrHex)).toString();
+            let addr = toB58(addrHex + ah.substring(0, 8));
 
-            if(TARGET_ADDRESSES.has(address)) {
-                self.postMessage({ type: 'MATCH', wif, address });
+            // Stap 4: Check op match
+            if (TARGET_ADDRESSES.has(addr)) {
+                let wifHex = "80" + priv;
+                let wifCheck = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(wifHex)).toString();
+                let wif = toB58(wifHex + wifCheck.substring(0, 8));
+                self.postMessage({ type: 'MATCH', wif, addr });
                 break;
             }
 
-            ts += 4;
-            if(ts % 500 === 0) self.postMessage({ type: 'STATUS', ts, wif, addr: address });
+            // Update tabel (beperkt voor snelheid)
+            if (Math.random() < 0.005) {
+                let wif = toB58("80" + priv + CryptoJS.SHA256(CryptoJS.enc.Hex.parse("80" + priv)).toString().substring(0, 8));
+                self.postMessage({ type: 'STATUS', wif, addr });
+            }
         }
     };
 </script>
 
 <script>
-    let workers = [];
-
-    function stop() {
-        workers.forEach(w => w.terminate());
-        workers = [];
-        document.getElementById('startBtn').disabled = false;
-        document.getElementById('stopBtn').disabled = true;
-        document.getElementById('stat').innerText = "Status: Gestopt";
-    }
-
+    let activeWorkers = [];
     function start() {
-        document.getElementById('startBtn').disabled = true;
-        document.getElementById('stopBtn').disabled = false;
-        const startVal = parseInt(document.getElementById('startTs').value);
         const blob = new Blob([document.getElementById('workerScript').textContent], {type: 'text/javascript'});
-        
-        for(let i=0; i<4; i++) {
+        for(let i = 0; i < navigator.hardwareConcurrency; i++) {
             let w = new Worker(URL.createObjectURL(blob));
-            w.postMessage({ startTs: startVal + (i * 1000) });
             w.onmessage = (e) => {
-                let tabel = document.getElementById('tabel');
                 if(e.data.type === 'STATUS') {
-                    document.getElementById('stat').innerText = "Scannen: " + e.data.ts;
-                    if (tabel.rows.length > 15) tabel.deleteRow(tabel.rows.length - 1);
-                    let row = tabel.insertRow(0);
-                    row.innerHTML = `<td>Checking</td><td>${e.data.wif}</td><td>${e.data.addr}</td>`;
-                } else if(e.data.type === 'MATCH') {
-                    let row = tabel.insertRow(0);
-                    row.innerHTML = `<td style="color:yellow; font-weight:bold">MATCH!</td><td>${e.data.wif}</td><td>${e.data.address}</td>`;
-                    alert("MATCH GEVONDEN!\nAdres: " + e.data.address + "\nWIF: " + e.data.wif);
-                    stop();
-                }
+                    let t = document.getElementById('tabel');
+                    if (t.rows.length > 8) t.deleteRow(t.rows.length - 1);
+                    let row = t.insertRow(0);
+                    row.innerHTML = `<td>Checking...</td><td>${e.data.wif}</td><td>${e.data.addr}</td>`;
+                } else if(e.data.type === 'MATCH') { alert("MATCH: " + e.data.addr + "\nWIF: " + e.data.wif); stopEverything(); }
             };
-            workers.push(w);
+            w.postMessage('start');
+            activeWorkers.push(w);
         }
     }
+    function stopEverything() { activeWorkers.forEach(w => w.terminate()); activeWorkers = []; }
 </script>
 </body>
 </html>
