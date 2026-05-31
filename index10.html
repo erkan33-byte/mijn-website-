@@ -1554,11 +1554,12 @@
   "1M5TCaLbChT7iwpzdYgwh5YNtzFCR26sUy",
   "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
 ]);
-
     const ec = new elliptic.ec("secp256k1");
     const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    
+    // Starttijd: Januari 2009 (Genesis block era)
+    let genesisTime = 1230944400000n; 
 
-    // CORRECTE Base58 encoding voor Bitcoin (behoudt leidende nullen)
     function toB58(hex) {
         let bytes = [];
         for (let i = 0; i < hex.length; i += 2) bytes.push(parseInt(hex.substr(i, 2), 16));
@@ -1578,35 +1579,40 @@
         return res;
     }
 
+    function getWIF(privHex) {
+        let combined = "80" + privHex;
+        let h1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(combined)).toString();
+        let h2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h1)).toString();
+        return toB58(combined + h2.substring(0, 8));
+    }
+
     self.onmessage = function(e) {
-        const genesis2009 = "1230944400000";
+        let rangeStart = BigInt(e.data.startBig);
+        let rangeEnd = BigInt(e.data.endBig);
+        let rangeSize = rangeEnd - rangeStart;
+
         while(true) {
-            let pool = new Uint8Array(32);
-            crypto.getRandomValues(pool);
-            let priv = CryptoJS.SHA256(pool.join('') + genesis2009).toString();
+            // 1. Willekeurige offset in de range
+            let randomOffset = BigInt(Math.floor(Math.random() * Number(rangeSize)));
+            let baseKey = rangeStart + randomOffset;
             
-            // Adres generatie (Legacy)
-            let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
+            // 2. Mix met de 2009-tijdstempel en verhoog per stap
+            let privHex = CryptoJS.SHA256(baseKey.toString(16) + genesisTime.toString()).toString();
+            genesisTime += 1n; 
+
+            // 3. Adres generatie (Legacy/Uncompressed)
+            let pub = ec.keyFromPrivate(privHex, 'hex').getPublic(false, 'hex');
             let sha = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pub)).toString();
             let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha)).toString();
-            let addrHex = "00" + rip;
-            let ah = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(addrHex)).toString();
-            let ah2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(ah)).toString();
-            let addr = toB58(addrHex + ah2.substring(0, 8));
-
-            // WIF generatie (Fix: 80 + priv + dubbele SHA256 checksum)
-            let wifHex = "80" + priv;
-            let h1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(wifHex)).toString();
-            let h2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h1)).toString();
-            let wif = toB58(wifHex + h2.substring(0, 8));
+            let addr = toB58("00" + rip + CryptoJS.SHA256(CryptoJS.enc.Hex.parse(CryptoJS.SHA256(CryptoJS.enc.Hex.parse("00" + rip)).toString())).toString().substring(0, 8));
 
             if (TARGET_ADDRESSES.has(addr)) {
-                self.postMessage({ type: 'MATCH', wif, addr });
+                self.postMessage({ type: 'MATCH', wif: getWIF(privHex), addr });
                 break;
             }
 
             if (Math.random() < 0.005) {
-                self.postMessage({ type: 'STATUS', wif, addr });
+                self.postMessage({ type: 'STATUS', wif: getWIF(privHex), addr });
             }
         }
     };
@@ -1615,18 +1621,27 @@
 <script>
     let activeWorkers = [];
     function start() {
+        const totalRange = 2n ** 256n;
+        const startPct = parseFloat(document.getElementById('startPct').value) / 100;
+        const endPct = parseFloat(document.getElementById('endPct').value) / 100;
+        
+        let rangeStart = BigInt(Math.floor(Number(totalRange) * startPct));
+        let rangeEnd = BigInt(Math.floor(Number(totalRange) * endPct));
+
         const blob = new Blob([document.getElementById('workerScript').textContent], {type: 'text/javascript'});
-        for(let i = 0; i < navigator.hardwareConcurrency; i++) {
+        const cores = navigator.hardwareConcurrency || 4;
+        
+        for(let i = 0; i < cores; i++) {
             let w = new Worker(URL.createObjectURL(blob));
+            w.postMessage({ startBig: rangeStart.toString(), endBig: rangeEnd.toString() });
             w.onmessage = (e) => {
                 if(e.data.type === 'STATUS') {
                     let t = document.getElementById('tabel');
                     if (t.rows.length > 8) t.deleteRow(t.rows.length - 1);
                     let row = t.insertRow(0);
                     row.innerHTML = `<td>Checking...</td><td>${e.data.wif}</td><td>${e.data.addr}</td>`;
-                } else if(e.data.type === 'MATCH') { alert("MATCH GEVONDEN: " + e.data.addr + "\nWIF: " + e.data.wif); stopEverything(); }
+                } else if(e.data.type === 'MATCH') { alert("MATCH GEVONDEN!\nAdres: " + e.data.addr + "\nWIF: " + e.data.wif); stopEverything(); }
             };
-            w.postMessage('start');
             activeWorkers.push(w);
         }
     }
