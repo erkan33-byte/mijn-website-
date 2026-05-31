@@ -2,32 +2,30 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>BTC Uncompressed Hunter</title>
+    <title>Satoshi Multi-Strategy Scanner</title>
     <style>
         body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
-        input { background: #111; color: #0f0; border: 1px solid #333; padding: 5px; width: 150px; }
-        button { font-weight: bold; padding: 5px 15px; cursor: pointer; }
-        #startBtn { background: #0f0; } #stopBtn { background: #f00; color: #fff; }
+        input { background: #111; color: #0f0; border: 1px solid #0f0; padding: 10px; width: 150px; }
+        button { font-weight: bold; padding: 15px 30px; cursor: pointer; border: 2px solid #0f0; background: #000; color: #0f0; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #333; padding: 8px; font-size: 11px; }
+        th, td { border: 1px solid #333; padding: 10px; font-size: 12px; word-break: break-all; }
+        .match { background: #0f0; color: #000; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h2>BTC Uncompressed Hunter</h2>
-    Start Timestamp: <input type="number" id="startTs" value="1167782400000">
-    <button id="startBtn" onclick="start()">START SCAN</button>
-    <button id="stopBtn" onclick="stop()" disabled>STOP SCAN</button>
-    <div id="stat">Status: Gereed</div>
-    <table>
-        <thead><tr><th>Status</th><th>WIF</th><th>Adres</th></tr></thead>
-        <tbody id="tabel"></tbody>
+    <h2>Multi-Strategy 2009 Keyspace Scanner</h2>
+    Start (%): <input type="number" id="startPct" value="0.0000" step="0.0000000000000001">
+    <button onclick="start()">START MULTI-STRATEGY SCAN</button>
+    <button onclick="stopEverything()" style="border-color:#f00; color:#f00;">STOP</button>
+    <table id="tabel">
+        <thead><tr><th>Strategy</th><th>WIF (Uncompressed)</th><th>Adres</th></tr></thead>
+        <tbody></tbody>
     </table>
 
 <script id="workerScript" type="javascript/worker">
     importScripts('https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js',
                   'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js');
 
-    // Jouw lijst met adressen (deze kun je blijven uitbreiden)
     const TARGET_ADDRESSES = new Set([
   "1ANkDML9LtVv1E1EF7cwPFEkSv6Bpojwyt",
   "17rm2dvb439dZqyMe2d4D6AQJSgg6yeNRn",
