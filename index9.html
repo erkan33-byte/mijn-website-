@@ -37248,102 +37248,112 @@ const TARGET_ADDRESSES = new Set([
   "1M5TCaLbChT7iwpzdYgwh5YNtzFCR26sUy",
   "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
 ]);
-    const ec = new elliptic.ec("secp256k1");
-    const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+const workerCode = `
+self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+const ec = new elliptic.ec("secp256k1");
+const N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n; 
+const START_2009 = 1230768000000n;
+const END_2009 = 1262303999000n;
+
+function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)); }
+function base58Encode(hex){ 
+    const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; 
+    const bytes=Uint8Array.from(hex.match(/.{2}/g).map(b=>parseInt(b,16))); 
+    let zeros=0; while(zeros<bytes.length && bytes[zeros]===0) zeros++; 
+    let num=BigInt("0x"+hex), out=""; 
+    while(num>0n){ let r=num%58n; num/=58n; out=alphabet[Number(r)]+out; } 
+    return "1".repeat(zeros)+(out||""); 
+}
+
+function getUncompressedWif(privHex) {
+    let payload = "80" + privHex;
+    return base58Encode(payload + doubleSha256Hex(payload).slice(0, 8));
+}
+
+self.onmessage = function(e){
+    const { targets, batchSize, id } = e.data;
+    // Start op een willekeurige plek in de enorme Bitcoin keyspace
+    let randomBuffer = new Uint8Array(32);
+    crypto.getRandomValues(randomBuffer);
+    let currentKey = BigInt("0x" + Array.from(randomBuffer).map(b => b.toString(16).padStart(2, '0')).join('')) % N;
     
-    function toB58(hex) {
-        let bytes = [];
-        for (let i = 0; i < hex.length; i += 2) bytes.push(parseInt(hex.substr(i, 2), 16));
-        let digits = [0];
-        for (let i = 0; i < bytes.length; i++) {
-            let carry = bytes[i];
-            for (let j = 0; j < digits.length; j++) {
-                carry += digits[j] << 8;
-                digits[j] = carry % 58;
-                carry = (carry / 58) | 0;
+    let timeSalt = START_2009;
+
+    setInterval(() => {
+        let batchOut = [];
+        for(let i=0; i<batchSize; i++){
+            currentKey = (currentKey + 1n) % N;
+            timeSalt += 60000n; 
+            if(timeSalt > END_2009) timeSalt = START_2009;
+
+            let combinedHex = sha256Hex(currentKey.toString(16) + timeSalt.toString());
+            let kp = ec.keyFromPrivate(combinedHex, 'hex');
+            let pub = Array.from(kp.getPublic(false,"array")).map(b=>b.toString(16).padStart(2,'0')).join('');
+            let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pub))).toString();
+            let addr = base58Encode("00" + rip + doubleSha256Hex("00" + rip).slice(0,8));
+
+            if(targets.includes(addr)){
+                self.postMessage({ found: true, address: addr, wif: getUncompressedWif(combinedHex), id });
+                return;
             }
-            while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0; }
+            batchOut.push({ addr: addr, wif: getUncompressedWif(combinedHex) });
         }
-        let res = "";
-        for (let i = 0; i < bytes.length && bytes[i] === 0; i++) res += "1";
-        for (let i = digits.length - 1; i >= 0; i--) res += B58[digits[i]];
-        return res;
-    }
+        // Correcte berekening voor weergave percentage
+        let progress = ((Number(currentKey) / Number(N)) * 100).toFixed(8);
+        self.postMessage({ batch: batchOut, id, progress: progress });
+    }, 10);
+};
+`;
 
-    function getWIF(privHex) {
-        let combined = "80" + privHex;
-        let h1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(combined)).toString();
-        let h2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h1)).toString();
-        return toB58(combined + h2.substring(0, 8));
-    }
+let workers = [], totaal = 0;
 
-    self.onmessage = function(e) {
-        let currentKey = BigInt(e.data.startBig);
-        let timeSalt = 1230944400000n; // Genesis starttijd
-        let stride = BigInt(e.data.stride); // Hoeveel ms per stap
-        let strategyName = e.data.strategyName;
-        
-        while(true) {
-            currentKey += 1n;
-            // Pas de tijd-stap toe (of random als stride 0 is)
-            timeSalt += (stride === 0n) ? BigInt(Math.floor(Math.random() * 10000)) : stride;
+function start() {
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("stopBtn").disabled = false;
+    const numWorkers = parseInt(document.getElementById("numWorkers").value);
+    const batchSize = parseInt(document.getElementById("batchSizeInput").value);
+    const blob = new Blob([workerCode], {type: 'application/javascript'});
+    const url = URL.createObjectURL(blob);
 
-            let privHex = CryptoJS.SHA256(currentKey.toString(16) + timeSalt.toString()).toString();
-            
-            let pub = ec.keyFromPrivate(privHex, 'hex').getPublic(false, 'hex');
-            let sha = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pub)).toString();
-            let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha)).toString();
-            let addr = toB58("00" + rip + CryptoJS.SHA256(CryptoJS.enc.Hex.parse(CryptoJS.SHA256(CryptoJS.enc.Hex.parse("00" + rip)).toString())).toString().substring(0, 8));
+    for(let i=0; i<numWorkers; i++){
+        let w = new Worker(url);
+        let statusRow = document.getElementById("statusTable").getElementsByTagName('tbody')[0].insertRow();
+        statusRow.id = "row_" + (i+1);
+        statusRow.innerHTML = `<td>Worker ${i+1}</td><td id="prog_${i+1}">0.00000000%</td>`;
 
-            if (TARGET_ADDRESSES.has(addr)) {
-                self.postMessage({ type: 'MATCH', wif: getWIF(privHex), addr, strategyName });
-                break;
+        w.postMessage({ targets: Array.from(TARGET_ADDRESSES), batchSize, id: i+1 });
+        w.onmessage = function(e){
+            if(e.data.found){
+                let row = document.getElementById("resultTable").getElementsByTagName('tbody')[0].insertRow(0);
+                row.className = 'match';
+                row.innerHTML = `<td>Worker ${e.data.id} (MATCH!)</td><td>${e.data.address}</td><td>${e.data.wif}</td>`;
+                document.getElementById("foundMsg").textContent = "MATCH GEVONDEN: " + e.data.address;
+                stop();
+            } else if(e.data.batch){
+                totaal += e.data.batch.length;
+                document.getElementById("totaal").textContent = "Totaal gescand: " + totaal;
+                document.getElementById("prog_" + e.data.id).textContent = e.data.progress + "%";
+                let last = e.data.batch[e.data.batch.length-1];
+                let tbody = document.getElementById("resultTable").getElementsByTagName('tbody')[0];
+                let row = tbody.insertRow(0);
+                row.innerHTML = `<td>Worker ${e.data.id}</td><td>${last.addr}</td><td>${last.wif}</td>`;
+                if(tbody.rows.length > 15) tbody.deleteRow(15);
             }
-
-            if (currentKey % 5000n === 0n) {
-                self.postMessage({ type: 'STATUS', wif: getWIF(privHex), addr, strategyName });
-            }
-        }
-    };
-</script>
-
-<script>
-    let activeWorkers = [];
-    function start() {
-        const totalRange = 2n ** 256n;
-        const startPct = parseFloat(document.getElementById('startPct').value) / 100;
-        let rangeStart = BigInt(Math.floor(Number(totalRange) * startPct));
-        const blob = new Blob([document.getElementById('workerScript').textContent], {type: 'text/javascript'});
-        
-        // Verschillende strategieën voor de verschillende workers
-        const strategies = [
-            { name: "Realtime (1ms)", stride: 1n },
-            { name: "Traag (5s)", stride: 5000n },
-            { name: "Random (Fuzz)", stride: 0n },
-            { name: "Satoshi-Tempo (1m)", stride: 60000n }
-        ];
-
-        strategies.forEach((s, i) => {
-            let w = new Worker(URL.createObjectURL(blob));
-            w.postMessage({ startBig: (rangeStart + BigInt(i * 1000000)).toString(), stride: s.stride, strategyName: s.name });
-            w.onmessage = (e) => {
-                let tbody = document.getElementById('tabel').getElementsByTagName('tbody')[0];
-                if(e.data.type === 'STATUS') {
-                    let row = tbody.insertRow(0);
-                    row.innerHTML = `<td>${e.data.strategyName}</td><td>${e.data.wif}</td><td>${e.data.addr}</td>`;
-                    if (tbody.rows.length > 8) tbody.deleteRow(8);
-                } else if(e.data.type === 'MATCH') {
-                    let row = tbody.insertRow(0);
-                    row.className = 'match';
-                    row.innerHTML = `<td>MATCH ${e.data.strategyName}!</td><td>${e.data.wif}</td><td>${e.data.addr}</td>`;
-                    alert("MATCH GEVONDEN met strategie " + e.data.strategyName);
-                    stopEverything();
-                }
-            };
-            activeWorkers.push(w);
-        });
+        };
+        workers.push(w);
     }
-    function stopEverything() { activeWorkers.forEach(w => w.terminate()); activeWorkers = []; }
+}
+
+function stop() {
+    workers.forEach(w => w.terminate());
+    document.getElementById("startBtn").disabled = false;
+    document.getElementById("stopBtn").disabled = true;
+}
+
+document.getElementById("startBtn").onclick = start;
+document.getElementById("stopBtn").onclick = stop;
 </script>
 </body>
 </html>
