@@ -1557,7 +1557,6 @@
     const ec = new elliptic.ec("secp256k1");
     const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
     
-    // Starttijd: Januari 2009 (Genesis block era)
     let genesisTime = 1230944400000n; 
 
     function toB58(hex) {
@@ -1587,20 +1586,15 @@
     }
 
     self.onmessage = function(e) {
-        let rangeStart = BigInt(e.data.startBig);
-        let rangeEnd = BigInt(e.data.endBig);
-        let rangeSize = rangeEnd - rangeStart;
-
+        let currentKey = BigInt(e.data.startBig);
+        
         while(true) {
-            // 1. Willekeurige offset in de range
-            let randomOffset = BigInt(Math.floor(Math.random() * Number(rangeSize)));
-            let baseKey = rangeStart + randomOffset;
-            
-            // 2. Mix met de 2009-tijdstempel en verhoog per stap
-            let privHex = CryptoJS.SHA256(baseKey.toString(16) + genesisTime.toString()).toString();
+            // Incrementeel verhogen van de sleutel en de tijd
+            currentKey += 1n;
             genesisTime += 1n; 
 
-            // 3. Adres generatie (Legacy/Uncompressed)
+            let privHex = CryptoJS.SHA256(currentKey.toString(16) + genesisTime.toString()).toString();
+            
             let pub = ec.keyFromPrivate(privHex, 'hex').getPublic(false, 'hex');
             let sha = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pub)).toString();
             let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha)).toString();
@@ -1611,7 +1605,8 @@
                 break;
             }
 
-            if (Math.random() < 0.005) {
+            // Update UI status minder vaak om CPU te sparen
+            if (currentKey % 1000n === 0n) {
                 self.postMessage({ type: 'STATUS', wif: getWIF(privHex), addr });
             }
         }
@@ -1623,23 +1618,20 @@
     function start() {
         const totalRange = 2n ** 256n;
         const startPct = parseFloat(document.getElementById('startPct').value) / 100;
-        const endPct = parseFloat(document.getElementById('endPct').value) / 100;
-        
         let rangeStart = BigInt(Math.floor(Number(totalRange) * startPct));
-        let rangeEnd = BigInt(Math.floor(Number(totalRange) * endPct));
 
         const blob = new Blob([document.getElementById('workerScript').textContent], {type: 'text/javascript'});
         const cores = navigator.hardwareConcurrency || 4;
         
         for(let i = 0; i < cores; i++) {
             let w = new Worker(URL.createObjectURL(blob));
-            w.postMessage({ startBig: rangeStart.toString(), endBig: rangeEnd.toString() });
+            w.postMessage({ startBig: (rangeStart + BigInt(i)).toString() });
             w.onmessage = (e) => {
                 if(e.data.type === 'STATUS') {
                     let t = document.getElementById('tabel');
-                    if (t.rows.length > 8) t.deleteRow(t.rows.length - 1);
+                    if (t.rows.length > 5) t.deleteRow(t.rows.length - 1);
                     let row = t.insertRow(0);
-                    row.innerHTML = `<td>Checking...</td><td>${e.data.wif}</td><td>${e.data.addr}</td>`;
+                    row.innerHTML = `<td>Scanning...</td><td>${e.data.wif}</td><td>${e.data.addr}</td>`;
                 } else if(e.data.type === 'MATCH') { alert("MATCH GEVONDEN!\nAdres: " + e.data.addr + "\nWIF: " + e.data.wif); stopEverything(); }
             };
             activeWorkers.push(w);
