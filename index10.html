@@ -2,24 +2,24 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Satoshi 2009 Incremental Scanner</title>
+    <title>Satoshi 2009-Locked Multi-Strategy Scanner</title>
     <style>
         body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
         input { background: #111; color: #0f0; border: 1px solid #0f0; padding: 10px; width: 150px; }
         button { font-weight: bold; padding: 15px 30px; cursor: pointer; border: 2px solid #0f0; background: #000; color: #0f0; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th, td { border: 1px solid #333; padding: 10px; font-size: 12px; word-break: break-all; }
+        .match { background: #0f0; color: #000; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h2>Satoshi 2009 Incremental Time-Range Scanner</h2>
-    Bereik (%): <input type="number" id="startPct" value="0.0000" step="0.0000000000000001"> tot 
-    <input type="number" id="endPct" value="0.0000000000000001" step="0.0000000000000001"> 
-    <button onclick="start()">START INCREMENTAL SCAN</button>
+    <h2>Satoshi 2009-Locked Multi-Strategy Scanner</h2>
+    Start (%): <input type="number" id="startPct" value="0.0000" step="0.0000000000000001">
+    <button onclick="start()">START SCAN (2009-LOCKED)</button>
     <button onclick="stopEverything()" style="border-color:#f00; color:#f00;">STOP</button>
-    <table>
-        <thead><tr><th>Status</th><th>WIF (Uncompressed)</th><th>Adres</th></tr></thead>
-        <tbody id="tabel"></tbody>
+    <table id="tabel">
+        <thead><tr><th>Strategy</th><th>WIF (Uncompressed)</th><th>Adres</th></tr></thead>
+        <tbody></tbody>
     </table>
 
 <script id="workerScript" type="javascript/worker">
