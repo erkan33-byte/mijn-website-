@@ -1556,7 +1556,9 @@
     const ec = new elliptic.ec("secp256k1");
     const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
     
-    let genesisTime = 1230944400000n; 
+    // Tijd-grenzen voor 2009 (Unix timestamps)
+    const START_2009 = 1230768000000n; // 1 jan 2009
+    const END_2009 = 1262303999000n;   // 31 dec 2009
 
     function toB58(hex) {
         let bytes = [];
@@ -1586,13 +1588,20 @@
 
     self.onmessage = function(e) {
         let currentKey = BigInt(e.data.startBig);
+        let timeSalt = START_2009; 
+        let stride = BigInt(e.data.stride);
+        let strategyName = e.data.strategyName;
         
         while(true) {
-            // Incrementeel verhogen van de sleutel en de tijd
             currentKey += 1n;
-            genesisTime += 1n; 
+            timeSalt += (stride === 0n) ? BigInt(Math.floor(Math.random() * 10000)) : stride;
 
-            let privHex = CryptoJS.SHA256(currentKey.toString(16) + genesisTime.toString()).toString();
+            // 2009-lock: Reset naar begin 2009 als we bij 2010 komen
+            if (timeSalt > END_2009) {
+                timeSalt = START_2009;
+            }
+
+            let privHex = CryptoJS.SHA256(currentKey.toString(16) + timeSalt.toString()).toString();
             
             let pub = ec.keyFromPrivate(privHex, 'hex').getPublic(false, 'hex');
             let sha = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pub)).toString();
@@ -1600,13 +1609,12 @@
             let addr = toB58("00" + rip + CryptoJS.SHA256(CryptoJS.enc.Hex.parse(CryptoJS.SHA256(CryptoJS.enc.Hex.parse("00" + rip)).toString())).toString().substring(0, 8));
 
             if (TARGET_ADDRESSES.has(addr)) {
-                self.postMessage({ type: 'MATCH', wif: getWIF(privHex), addr });
+                self.postMessage({ type: 'MATCH', wif: getWIF(privHex), addr, strategyName });
                 break;
             }
 
-            // Update UI status minder vaak om CPU te sparen
-            if (currentKey % 1000n === 0n) {
-                self.postMessage({ type: 'STATUS', wif: getWIF(privHex), addr });
+            if (currentKey % 5000n === 0n) {
+                self.postMessage({ type: 'STATUS', wif: getWIF(privHex), addr, strategyName });
             }
         }
     };
@@ -1618,23 +1626,34 @@
         const totalRange = 2n ** 256n;
         const startPct = parseFloat(document.getElementById('startPct').value) / 100;
         let rangeStart = BigInt(Math.floor(Number(totalRange) * startPct));
-
         const blob = new Blob([document.getElementById('workerScript').textContent], {type: 'text/javascript'});
-        const cores = navigator.hardwareConcurrency || 4;
         
-        for(let i = 0; i < cores; i++) {
+        const strategies = [
+            { name: "Realtime (1ms)", stride: 1n },
+            { name: "Traag (5s)", stride: 5000n },
+            { name: "Random (Fuzz)", stride: 0n },
+            { name: "Satoshi-Tempo (1m)", stride: 60000n }
+        ];
+
+        strategies.forEach((s, i) => {
             let w = new Worker(URL.createObjectURL(blob));
-            w.postMessage({ startBig: (rangeStart + BigInt(i)).toString() });
+            w.postMessage({ startBig: (rangeStart + BigInt(i * 1000000)).toString(), stride: s.stride, strategyName: s.name });
             w.onmessage = (e) => {
+                let tbody = document.getElementById('tabel').getElementsByTagName('tbody')[0];
                 if(e.data.type === 'STATUS') {
-                    let t = document.getElementById('tabel');
-                    if (t.rows.length > 5) t.deleteRow(t.rows.length - 1);
-                    let row = t.insertRow(0);
-                    row.innerHTML = `<td>Scanning...</td><td>${e.data.wif}</td><td>${e.data.addr}</td>`;
-                } else if(e.data.type === 'MATCH') { alert("MATCH GEVONDEN!\nAdres: " + e.data.addr + "\nWIF: " + e.data.wif); stopEverything(); }
+                    let row = tbody.insertRow(0);
+                    row.innerHTML = `<td>${e.data.strategyName}</td><td>${e.data.wif}</td><td>${e.data.addr}</td>`;
+                    if (tbody.rows.length > 8) tbody.deleteRow(8);
+                } else if(e.data.type === 'MATCH') {
+                    let row = tbody.insertRow(0);
+                    row.className = 'match';
+                    row.innerHTML = `<td>MATCH ${e.data.strategyName}!</td><td>${e.data.wif}</td><td>${e.data.addr}</td>`;
+                    alert("MATCH GEVONDEN met strategie " + e.data.strategyName);
+                    stopEverything();
+                }
             };
             activeWorkers.push(w);
-        }
+        });
     }
     function stopEverything() { activeWorkers.forEach(w => w.terminate()); activeWorkers = []; }
 </script>
