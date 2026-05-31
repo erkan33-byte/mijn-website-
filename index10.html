@@ -1551,50 +1551,58 @@
   "1M5TCaLbChT7iwpzdYgwh5YNtzFCR26sUy",
   "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
 ]);
+
     const ec = new elliptic.ec("secp256k1");
     const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
+    // CORRECTE Base58 encoding voor Bitcoin (behoudt leidende nullen)
     function toB58(hex) {
-        let bn = BigInt("0x" + hex);
+        let bytes = [];
+        for (let i = 0; i < hex.length; i += 2) bytes.push(parseInt(hex.substr(i, 2), 16));
+        let digits = [0];
+        for (let i = 0; i < bytes.length; i++) {
+            let carry = bytes[i];
+            for (let j = 0; j < digits.length; j++) {
+                carry += digits[j] << 8;
+                digits[j] = carry % 58;
+                carry = (carry / 58) | 0;
+            }
+            while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0; }
+        }
         let res = "";
-        while (bn > 0n) { res = B58[Number(bn % 58n)] + res; bn /= 58n; }
-        for (let i = 0; i < hex.length; i += 2) { if (hex.substr(i, 2) === "00") res = "1" + res; else break; }
+        for (let i = 0; i < bytes.length && bytes[i] === 0; i++) res += "1";
+        for (let i = digits.length - 1; i >= 0; i--) res += B58[digits[i]];
         return res;
     }
 
     self.onmessage = function(e) {
-        // Satoshi-stijl: Vaste tijdstempel uit januari 2009
-        const genesis2009 = "1230944400000"; 
-        
+        const genesis2009 = "1230944400000";
         while(true) {
-            // Stap 1: Hardware-ruis (De moderne "digitale dobbelsteen")
             let pool = new Uint8Array(32);
             crypto.getRandomValues(pool);
+            let priv = CryptoJS.SHA256(pool.join('') + genesis2009).toString();
             
-            // Stap 2: De "Satoshi-Mix" (Ruis + 2009 Tijdstempel)
-            let entropy = pool.join('') + genesis2009;
-            let priv = CryptoJS.SHA256(entropy).toString();
-            
-            // Stap 3: Creëer Uncompressed Adres (Satoshi-stijl)
+            // Adres generatie (Legacy)
             let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
             let sha = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pub)).toString();
             let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha)).toString();
             let addrHex = "00" + rip;
             let ah = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(addrHex)).toString();
-            let addr = toB58(addrHex + ah.substring(0, 8));
+            let ah2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(ah)).toString();
+            let addr = toB58(addrHex + ah2.substring(0, 8));
 
-            // Stap 4: Check op match
+            // WIF generatie (Fix: 80 + priv + dubbele SHA256 checksum)
+            let wifHex = "80" + priv;
+            let h1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(wifHex)).toString();
+            let h2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h1)).toString();
+            let wif = toB58(wifHex + h2.substring(0, 8));
+
             if (TARGET_ADDRESSES.has(addr)) {
-                let wifHex = "80" + priv;
-                let wifCheck = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(wifHex)).toString();
-                let wif = toB58(wifHex + wifCheck.substring(0, 8));
                 self.postMessage({ type: 'MATCH', wif, addr });
                 break;
             }
 
-            // Update tabel (beperkt voor snelheid)
             if (Math.random() < 0.005) {
-                let wif = toB58("80" + priv + CryptoJS.SHA256(CryptoJS.enc.Hex.parse("80" + priv)).toString().substring(0, 8));
                 self.postMessage({ type: 'STATUS', wif, addr });
             }
         }
@@ -1613,7 +1621,7 @@
                     if (t.rows.length > 8) t.deleteRow(t.rows.length - 1);
                     let row = t.insertRow(0);
                     row.innerHTML = `<td>Checking...</td><td>${e.data.wif}</td><td>${e.data.addr}</td>`;
-                } else if(e.data.type === 'MATCH') { alert("MATCH: " + e.data.addr + "\nWIF: " + e.data.wif); stopEverything(); }
+                } else if(e.data.type === 'MATCH') { alert("MATCH GEVONDEN: " + e.data.addr + "\nWIF: " + e.data.wif); stopEverything(); }
             };
             w.postMessage('start');
             activeWorkers.push(w);
