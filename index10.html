@@ -2,23 +2,27 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Satoshi 2009-Locked Multi-Strategy Scanner</title>
+    <title>Satoshi SECP256K1 Time-Locked Scanner</title>
     <style>
         body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
-        input { background: #111; color: #0f0; border: 1px solid #0f0; padding: 10px; width: 150px; }
-        button { font-weight: bold; padding: 15px 30px; cursor: pointer; border: 2px solid #0f0; background: #000; color: #0f0; }
+        input { background: #111; color: #0f0; border: 1px solid #0f0; padding: 5px; width: 80px; }
+        button { font-weight: bold; padding: 10px 20px; cursor: pointer; border: 2px solid #0f0; background: #000; color: #0f0; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #333; padding: 10px; font-size: 12px; word-break: break-all; }
+        th, td { border: 1px solid #333; padding: 8px; font-size: 11px; word-break: break-all; }
         .match { background: #0f0; color: #000; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h2>Satoshi 2009-Locked Multi-Strategy Scanner</h2>
-    Start (%): <input type="number" id="startPct" value="0.0000" step="0.0000000000000001">
-    <button onclick="start()">START SCAN (2009-LOCKED)</button>
-    <button onclick="stopEverything()" style="border-color:#f00; color:#f00;">STOP</button>
+    <h2>Satoshi SECP256K1 Time-Locked Scanner</h2>
+    <div>
+        Start (%): <input type="number" id="startPct" value="0.00" step="0.01">
+        Workers: <input type="number" id="numWorkers" value="4">
+        Batch: <input type="number" id="batchSize" value="500">
+        <button onclick="start()">START SCAN (TIME-LOCKED)</button>
+        <button onclick="stopEverything()" style="border-color:#f00; color:#f00;">STOP</button>
+    </div>
     <table id="tabel">
-        <thead><tr><th>Strategy</th><th>WIF (Uncompressed)</th><th>Adres</th></tr></thead>
+        <thead><tr><th>Worker</th><th>WIF (Uncompressed)</th><th>Adres</th></tr></thead>
         <tbody></tbody>
     </table>
 
@@ -26,7 +30,7 @@
     importScripts('https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js',
                   'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js');
 
-    const TARGET_ADDRESSES = new Set([
+    const TARGETS = new Set([
   "1ERPaMAp622R1iy8Gb7GonALQCzi8n1QGf",
   "19jRmjUaemvNtMX6Nh2p275BqWLdSJ4Qai",
   "1PiSjUazKd5h693VEFM7urJBYoTDF2iPyC",
