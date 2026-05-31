@@ -1555,14 +1555,11 @@
 ]);
     const ec = new elliptic.ec("secp256k1");
     const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-    
-    // Tijd-grenzen voor 2009 (Unix timestamps)
-    const START_2009 = 1230768000000n; // 1 jan 2009
-    const END_2009 = 1262303999000n;   // 31 dec 2009
+    const START_2009 = 1230768000000n; 
+    const END_2009 = 1262303999000n;
 
     function toB58(hex) {
-        let bytes = [];
-        for (let i = 0; i < hex.length; i += 2) bytes.push(parseInt(hex.substr(i, 2), 16));
+        let bytes = Uint8Array.from(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
         let digits = [0];
         for (let i = 0; i < bytes.length; i++) {
             let carry = bytes[i];
@@ -1586,35 +1583,38 @@
         return toB58(combined + h2.substring(0, 8));
     }
 
+    function getAddress(pubHex) {
+        let sha = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pubHex)).toString();
+        let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha)).toString();
+        let payload = "00" + rip;
+        let h1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(payload)).toString();
+        let h2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h1)).toString();
+        return toB58(payload + h2.substring(0, 8));
+    }
+
     self.onmessage = function(e) {
-        let currentKey = BigInt(e.data.startBig);
-        let timeSalt = START_2009; 
-        let stride = BigInt(e.data.stride);
-        let strategyName = e.data.strategyName;
+        let { start, batchSize, id } = e.data;
+        let priv = BigInt(start);
+        let timeSalt = START_2009;
         
         while(true) {
-            currentKey += 1n;
-            timeSalt += (stride === 0n) ? BigInt(Math.floor(Math.random() * 10000)) : stride;
+            priv += 1n;
+            timeSalt += 60000n; // 1 minuut per stap
+            if (timeSalt > END_2009) timeSalt = START_2009;
 
-            // 2009-lock: Reset naar begin 2009 als we bij 2010 komen
-            if (timeSalt > END_2009) {
-                timeSalt = START_2009;
-            }
-
-            let privHex = CryptoJS.SHA256(currentKey.toString(16) + timeSalt.toString()).toString();
+            // Combineer de keyspace (priv) met de tijd (timeSalt) voor extra entropie
+            let combinedHex = CryptoJS.SHA256(priv.toString(16) + timeSalt.toString()).toString();
             
-            let pub = ec.keyFromPrivate(privHex, 'hex').getPublic(false, 'hex');
-            let sha = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pub)).toString();
-            let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha)).toString();
-            let addr = toB58("00" + rip + CryptoJS.SHA256(CryptoJS.enc.Hex.parse(CryptoJS.SHA256(CryptoJS.enc.Hex.parse("00" + rip)).toString())).toString().substring(0, 8));
+            let pub = ec.keyFromPrivate(combinedHex, 'hex').getPublic(false, 'hex');
+            let addr = getAddress(pub);
 
-            if (TARGET_ADDRESSES.has(addr)) {
-                self.postMessage({ type: 'MATCH', wif: getWIF(privHex), addr, strategyName });
+            if (TARGETS.has(addr)) {
+                self.postMessage({ type: 'MATCH', addr, wif: getWIF(combinedHex), id });
                 break;
             }
 
-            if (currentKey % 5000n === 0n) {
-                self.postMessage({ type: 'STATUS', wif: getWIF(privHex), addr, strategyName });
+            if (priv % BigInt(batchSize) === 0n) {
+                self.postMessage({ type: 'STATUS', addr, wif: getWIF(combinedHex), id });
             }
         }
     };
@@ -1623,37 +1623,28 @@
 <script>
     let activeWorkers = [];
     function start() {
-        const totalRange = 2n ** 256n;
+        const numWorkers = parseInt(document.getElementById('numWorkers').value);
+        const batchSize = parseInt(document.getElementById('batchSize').value);
         const startPct = parseFloat(document.getElementById('startPct').value) / 100;
-        let rangeStart = BigInt(Math.floor(Number(totalRange) * startPct));
+        const rangeStart = BigInt(Math.floor(Number(2n**256n) * startPct));
+        
         const blob = new Blob([document.getElementById('workerScript').textContent], {type: 'text/javascript'});
         
-        const strategies = [
-            { name: "Realtime (1ms)", stride: 1n },
-            { name: "Traag (5s)", stride: 5000n },
-            { name: "Random (Fuzz)", stride: 0n },
-            { name: "Satoshi-Tempo (1m)", stride: 60000n }
-        ];
-
-        strategies.forEach((s, i) => {
+        for(let i=0; i<numWorkers; i++) {
             let w = new Worker(URL.createObjectURL(blob));
-            w.postMessage({ startBig: (rangeStart + BigInt(i * 1000000)).toString(), stride: s.stride, strategyName: s.name });
+            w.postMessage({ start: (rangeStart + BigInt(i * 1000000)).toString(), batchSize, id: i+1 });
             w.onmessage = (e) => {
                 let tbody = document.getElementById('tabel').getElementsByTagName('tbody')[0];
-                if(e.data.type === 'STATUS') {
-                    let row = tbody.insertRow(0);
-                    row.innerHTML = `<td>${e.data.strategyName}</td><td>${e.data.wif}</td><td>${e.data.addr}</td>`;
-                    if (tbody.rows.length > 8) tbody.deleteRow(8);
-                } else if(e.data.type === 'MATCH') {
-                    let row = tbody.insertRow(0);
+                let row = tbody.insertRow(0);
+                row.innerHTML = `<td>Worker ${e.data.id}</td><td>${e.data.wif}</td><td>${e.data.addr}</td>`;
+                if(e.data.type === 'MATCH') {
                     row.className = 'match';
-                    row.innerHTML = `<td>MATCH ${e.data.strategyName}!</td><td>${e.data.wif}</td><td>${e.data.addr}</td>`;
-                    alert("MATCH GEVONDEN met strategie " + e.data.strategyName);
-                    stopEverything();
+                    alert("MATCH GEVONDEN! \nWIF: " + e.data.wif);
                 }
+                if(tbody.rows.length > 10) tbody.deleteRow(10);
             };
             activeWorkers.push(w);
-        });
+        }
     }
     function stopEverything() { activeWorkers.forEach(w => w.terminate()); activeWorkers = []; }
 </script>
