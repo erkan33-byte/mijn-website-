@@ -2,124 +2,44 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BTC Vanity Matcher + Balance Check (Uncompressed)</title>
-
+<title>Satoshi 2009-TimeLocked Scanner (Sequentieel)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
-
 <style>
-body{
-  background:#111;
-  color:#eee;
-  font-family:Arial;
-  padding:20px;
-}
-
-h1{
-  color:#00ff99;
-}
-
-input,button{
-  padding:10px;
-  margin:5px 0;
-  border:none;
-  border-radius:6px;
-}
-
-button{
-  background:#00aa66;
-  color:white;
-  cursor:pointer;
-}
-
-button:hover{
-  background:#00cc88;
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-  margin-top:15px;
-}
-
-th,td{
-  border:1px solid #333;
-  padding:8px;
-  font-size:12px;
-  word-break:break-all;
-}
-
-th{
-  background:#222;
-  color:#00ff99;
-}
-
-#found{
-  margin-top:10px;
-  color:#00ff99;
-  font-weight:bold;
-}
+body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
+table { border-collapse: collapse; width: 100%; margin-top: 12px; background: #fff; }
+th, td { border: 1px solid #ccc; padding: 8px; font-size: 13px; word-break: break-all; text-align: left; }
+th { background: #e0e0e0; }
+button, input { margin-bottom: 10px; padding: 8px 12px; }
+#foundMsg { margin-top: 15px; font-weight: bold; font-size: 18px; color: #d9534f; padding: 10px; border: 2px solid #d9534f; }
+.match { background: #0f0; color: #000; font-weight: bold; }
 </style>
 </head>
-
 <body>
+<h2>Satoshi 2009-TimeLocked Scanner (Sequentieel oplopend per 1ms)</h2>
 
-<h1>BTC Vanity Matcher + Balance Check (Uncompressed)</h1>
+<label>Aantal workers: <input type="number" id="numWorkers" value="4"></label><br>
+<label>Batch grootte: <input type="number" id="batchSizeInput" value="100"></label><br>
+<button id="startBtn">Start 2009-TimeLocked Scan</button>
+<button id="stopBtn" disabled>Stop</button>
 
-<label>Batch per worker</label><br>
-<input id="batchSize" type="number" value="500"><br>
+<div id="totaal">Totaal gescand: 0</div>
+<div id="foundMsg"></div>
 
-<label>Workers</label><br>
-<input id="numWorkers" type="number" value="4"><br>
-
-<label>Match prefix length</label><br>
-<input id="matchLength" type="number" value="6"><br>
-
-<label>Keyspace range (%)</label><br>
-<input id="keyspaceMin" type="number" step="any" value="0" style="width: 80px;"> tot 
-<input id="keyspaceMax" type="number" step="any" value="100" style="width: 80px;"><br>
-
-<button id="startBtn">START</button>
-<button id="stopBtn" disabled>STOP</button>
-
-<h3 id="totaal">Totaal: 0</h3>
-<div id="found"></div>
-
-<h2>Matches</h2>
-
-<table>
-<thead>
-<tr>
-<th>#</th>
-<th>Generated (Uncompressed)</th>
-<th>Target</th>
-<th>Prefix</th>
-<th>WIF (Uncompressed)</th>
-<th>Balance (BTC)</th>
-</tr>
-</thead>
-<tbody id="results"></tbody>
+<h3>Worker Status</h3>
+<table id="statusTable">
+<thead><tr><th>Worker ID</th><th>Keyspace Progress</th></tr></thead>
+<tbody></tbody>
 </table>
 
-<h2>Workers</h2>
-
-<table>
-<thead>
-<tr>
-<th>ID</th>
-<th>Scanned</th>
-</tr>
-</thead>
-<tbody id="workers"></tbody>
+<h3>Resultaten (Laatste per batch)</h3>
+<table id="resultTable">
+<thead><tr><th>Strategy</th><th>Adres (TimeLocked)</th><th>Uncompressed WIF</th><th>Timestamp (Oplopend)</th></tr></thead>
+<tbody></tbody>
 </table>
 
 <script>
-
-// =======================
-// TARGETS
-// =======================
-const targets = [
+const TARGET_ADDRESSES = new Set([
   "1EUXN9yCnq5yur6ZUy3kGQd87KzGK2ywTZ",
   "16xzDttFSNK1T8BLGqBjJxf47Gjm5ufcmB",
   "149XtqTaQUB2q9XJFXPvb6NoSuvVRGRTZN",
