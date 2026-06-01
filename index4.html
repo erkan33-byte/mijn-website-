@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>Satoshi 2009-TimeLocked Scanner (Sequentieel)</title>
+<title>Satoshi 2008-2009 Entropy Pool Simulator (Grote Lijst Geoptimaliseerd)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
@@ -16,11 +16,11 @@ button, input { margin-bottom: 10px; padding: 8px 12px; }
 </style>
 </head>
 <body>
-<h2>Satoshi 2009-TimeLocked Scanner (Sequentieel oplopend per 1ms)</h2>
+<h2>Satoshi 2009 Entropy Pool Simulator (Geoptimaliseerd voor 40.000+ Adressen)</h2>
 
 <label>Aantal workers: <input type="number" id="numWorkers" value="4"></label><br>
-<label>Batch grootte: <input type="number" id="batchSizeInput" value="100"></label><br>
-<button id="startBtn">Start 2009-TimeLocked Scan</button>
+<label>Batch grootte: <input type="number" id="batchSizeInput" value="500"></label> <small>(Hogere batch is sneller bij grote lijsten)</small><br>
+<button id="startBtn">Start Satoshi-Effect Scan</button>
 <button id="stopBtn" disabled>Stop</button>
 
 <div id="totaal">Totaal gescand: 0</div>
@@ -28,18 +28,19 @@ button, input { margin-bottom: 10px; padding: 8px 12px; }
 
 <h3>Worker Status</h3>
 <table id="statusTable">
-<thead><tr><th>Worker ID</th><th>Keyspace Progress</th></tr></thead>
+<thead><tr><th>Worker ID</th><th>Gereconverteerde Systeemstatus (Random)</th></tr></thead>
 <tbody></tbody>
 </table>
 
 <h3>Resultaten (Laatste per batch)</h3>
 <table id="resultTable">
-<thead><tr><th>Strategy</th><th>Adres (TimeLocked)</th><th>Uncompressed WIF</th><th>Timestamp (Oplopend)</th></tr></thead>
+<thead><tr><th>Strategy</th><th>Adres (256-bit uitgesmeerd)</th><th>Full 256-bit WIF Private Key</th><th>Timestamp (Random)</th></tr></thead>
 <tbody></tbody>
 </table>
 
 <script>
-const TARGET_ADDRESSES = new Set([
+// PLAK HIER JOUW LIJST VAN 40.000 ADRESSEN TUSSEN DE HAKEN: ["adres1", "adres2", "adres3"]
+const LARGE_ADDRESS_LIST = [
   "13bF8ahiAD7pgo8C9nQUHLs1N928WqB6bK",
   "19WDqBTic1a9cwBNr3tBeMHF1AsxeSzNjT",
   "1AS9cbMTxVFCENWm6o55Tot3dTgGhQyxFm",
