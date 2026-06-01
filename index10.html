@@ -1,36 +1,45 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-    <meta charset="UTF-8">
-    <title>Satoshi SECP256K1 Time-Locked Scanner</title>
-    <style>
-        body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
-        input { background: #111; color: #0f0; border: 1px solid #0f0; padding: 5px; width: 80px; }
-        button { font-weight: bold; padding: 10px 20px; cursor: pointer; border: 2px solid #0f0; background: #000; color: #0f0; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #333; padding: 8px; font-size: 11px; word-break: break-all; }
-        .match { background: #0f0; color: #000; font-weight: bold; }
-    </style>
+<meta charset="UTF-8">
+<title>Satoshi 2009-TimeLocked Scanner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
+table { border-collapse: collapse; width: 100%; margin-top: 12px; background: #fff; }
+th, td { border: 1px solid #ccc; padding: 8px; font-size: 13px; word-break: break-all; text-align: left; }
+th { background: #e0e0e0; }
+button, input { margin-bottom: 10px; padding: 8px 12px; }
+#foundMsg { margin-top: 15px; font-weight: bold; font-size: 18px; color: #d9534f; padding: 10px; border: 2px solid #d9534f; }
+.match { background: #0f0; color: #000; font-weight: bold; }
+</style>
 </head>
 <body>
-    <h2>Satoshi SECP256K1 Time-Locked Scanner</h2>
-    <div>
-        Start (%): <input type="number" id="startPct" value="0.00" step="0.01">
-        Workers: <input type="number" id="numWorkers" value="4">
-        Batch: <input type="number" id="batchSize" value="500">
-        <button onclick="start()">START SCAN (TIME-LOCKED)</button>
-        <button onclick="stopEverything()" style="border-color:#f00; color:#f00;">STOP</button>
-    </div>
-    <table id="tabel">
-        <thead><tr><th>Worker</th><th>WIF (Uncompressed)</th><th>Adres</th></tr></thead>
-        <tbody></tbody>
-    </table>
+<h2>Satoshi 2009-TimeLocked Scanner</h2>
 
-<script id="workerScript" type="javascript/worker">
-    importScripts('https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js',
-                  'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js');
+<label>Aantal workers: <input type="number" id="numWorkers" value="4"></label><br>
+<label>Batch grootte: <input type="number" id="batchSizeInput" value="100"></label><br>
+<button id="startBtn">Start 2009-TimeLocked Scan</button>
+<button id="stopBtn" disabled>Stop</button>
 
-    const TARGETS = new Set([
+<div id="totaal">Totaal gescand: 0</div>
+<div id="foundMsg"></div>
+
+<h3>Worker Status</h3>
+<table id="statusTable">
+<thead><tr><th>Worker ID</th><th>Keyspace Progress</th></tr></thead>
+<tbody></tbody>
+</table>
+
+<h3>Resultaten (Laatste per batch)</h3>
+<table id="resultTable">
+<thead><tr><th>Strategy</th><th>Adres (TimeLocked)</th><th>Uncompressed WIF</th></tr></thead>
+<tbody></tbody>
+</table>
+
+<script>
+const TARGET_ADDRESSES = new Set([
   "1ERPaMAp622R1iy8Gb7GonALQCzi8n1QGf",
   "19jRmjUaemvNtMX6Nh2p275BqWLdSJ4Qai",
   "1PiSjUazKd5h693VEFM7urJBYoTDF2iPyC",
