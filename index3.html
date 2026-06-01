@@ -37241,152 +37241,140 @@ const LARGE_ADDRESS_LIST = [
   "1M5aojQPWaWFGKr9PZhA9nF8SZvahVWgHr",
   "1M5TCaLbChT7iwpzdYgwh5YNtzFCR26sUy",
   "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
-]; 
-const MAX_BTC_KEY = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
+];
 
 const workerCode = `
 self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
 const ec = new elliptic.ec("secp256k1");
 
-function getWif(priv) {
-    const p = "80" + priv;
-    const h1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(p));
-    const h2 = CryptoJS.SHA256(h1);
-    const hex = p + h2.toString().slice(0, 8);
-    const b = [];
-    for(let i=0; i<hex.length; i+=2) b.push(parseInt(hex.substr(i, 2), 16));
-    const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-    let digits = [0];
-    for (let i = 0; i < b.length; i++) {
-        let carry = b[i];
-        for (let j = 0; j < digits.length; j++) { carry += digits[j] << 8; digits[j] = carry % 58; carry = (carry / 58) | 0; }
-        while (carry) { digits.push(carry % 58); carry = (carry / 58) | 0; }
-    }
-    let str = "";
-    for (let i = 0; i < b.length && b[i] === 0; i++) str += "1";
-    for (let i = digits.length - 1; i >= 0; i--) str += alphabet[digits[i]];
-    return str;
+function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)); }
+function base58Encode(hex){ 
+    const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; 
+    const bytes=Uint8Array.from(hex.match(/.{1,2}/g).map(b=>parseInt(b,16))); 
+    let zeros=0; while(zeros<bytes.length && bytes[zeros]===0) zeros++; 
+    let num=BigInt("0x"+hex), out=""; 
+    while(num>0n){ let r=num%58n; num/=58n; out=alphabet[Number(r)]+out; } 
+    return "1".repeat(zeros)+(out||""); 
 }
 
-function getAddr(priv) {
-  const pub = ec.keyFromPrivate(priv, 'hex').getPublic().encode('array', false);
-  const h1 = CryptoJS.RIPEMD160(CryptoJS.SHA256(CryptoJS.lib.WordArray.create(pub))).toString();
-  const p = "00" + h1;
-  const cs = CryptoJS.SHA256(CryptoJS.SHA256(CryptoJS.enc.Hex.parse(p)).toString()).toString().slice(0, 8);
-  const f = p + cs;
-  const b = [];
-  for(let i=0; i<f.length; i+=2) b.push(parseInt(f.substr(i, 2), 16));
-  const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  let digits = [0];
-  for (let i = 0; i < b.length; i++) {
-      let carry = b[i];
-      for (let j = 0; j < digits.length; j++) { carry += digits[j] << 8; digits[j] = carry % 58; carry = (carry / 58) | 0; }
-      while (carry) { digits.push(carry % 58); carry = (carry / 58) | 0; }
-  }
-  let str = "";
-  for (let i = 0; i < b.length && b[i] === 0; i++) str += "1";
-  for (let i = digits.length - 1; i >= 0; i--) str += alphabet[digits[i]];
-  return str;
+function getUncompressedWif(privHex) {
+    let payload = "80" + privHex;
+    return base58Encode(payload + doubleSha256Hex(payload).slice(0, 8));
 }
+
+self.targetsSet = null;
 
 self.onmessage = function(e){
-  let { startKey, batch, stepLimit, minRange, maxRange, targets } = e.data;
-  let currentKey = BigInt("0x" + startKey);
-  let stepsCount = 0;
-  const targetSet = new Set(targets);
-  const rangeSize = BigInt("0x" + maxRange) - BigInt("0x" + minRange);
-  
-  function loop(){
-    for(let i=0; i<batch; i++){
-      currentKey += 1n;
-      stepsCount++;
-      if(stepsCount >= stepLimit) {
-         currentKey = BigInt("0x" + minRange) + (BigInt(Math.floor(Math.random() * 1000000000)) * (rangeSize / 1000000000n));
-         stepsCount = 0;
-      }
-      const priv = currentKey.toString(16).padStart(64, '0');
-      const addr = getAddr(priv);
-      if(i === 0) self.postMessage({live: addr, priv: priv, current: currentKey.toString(16), scanned: batch});
-      if(targetSet.has(addr)) self.postMessage({found: true, addr: addr, wif: getWif(priv)});
+    const { targets, batchSize, id, startTime, endTime } = e.data;
+    
+    if (!self.targetsSet) {
+        self.targetsSet = new Set(targets);
     }
-    // Zorg dat scanned ook meegaat als er geen live update is
-    self.postMessage({scanned: batch, current: currentKey.toString(16)});
-    setTimeout(loop, 0);
-  }
-  loop();
+    
+    const startBig = BigInt(startTime);
+    const endBig = BigInt(endTime);
+    const timeRange = Number(endBig - startBig);
+    
+    let lastStatusStr = "";
+    let lastTimeStr = "";
+
+    while(true) {
+        let batchOut = [];
+        for(let i=0; i<batchSize; i++){
+            
+            // 1. RANDOM COMPUTERRUIS (MAX 2^80)
+            let randBytes = new Uint8Array(10);
+            self.crypto.getRandomValues(randBytes);
+            let randomStatus = BigInt("0x" + Array.from(randBytes).map(b => b.toString(16).padStart(2, '0')).join(''));
+            
+            // 2. RANDOM TIJDSTEMPEL BINNEN JOUW GEKOZEN BEREIK
+            let randomOffset = timeRange > 0 ? BigInt(Math.floor(Math.random() * timeRange)) : 0n;
+            let timeSalt = startBig + randomOffset;
+
+            if(i === batchSize - 1) {
+                lastStatusStr = randomStatus.toString(16).padStart(20, '0');
+                lastTimeStr = timeSalt.toString();
+            }
+            
+            // SATOSHI EFFECT MIXER
+            let satoshiPrivKey = sha256Hex(randomStatus.toString(16).padStart(20, '0') + timeSalt.toString());
+
+            let kp = ec.keyFromPrivate(satoshiPrivKey, 'hex');
+            let pub = Array.from(kp.getPublic(false,"array")).map(b=>b.toString(16).padStart(2,'0')).join('');
+            let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pub))).toString();
+            let addr = base58Encode("00" + rip + doubleSha256Hex("00" + rip).slice(0,8));
+
+            if(self.targetsSet.has(addr)){
+                self.postMessage({ found: true, address: addr, wif: getUncompressedWif(satoshiPrivKey), id, time: timeSalt.toString() });
+                return; 
+            }
+            batchOut.push({ addr: addr, wif: getUncompressedWif(satoshiPrivKey), time: timeSalt.toString() });
+        }
+        
+        let progressStr = "Random Status: 0x" + lastStatusStr + " | Time: " + lastTimeStr;
+        self.postMessage({ batch: batchOut, id, progress: progressStr });
+    }
 };
 `;
 
-let workers = [];
-let totalScanned = 0;
-const blob = new Blob([workerCode], {type:"application/javascript"});
-const url = URL.createObjectURL(blob);
+let workers = [], totaal = 0;
 
-document.getElementById("startBtn").onclick = () => {
-  const num = parseInt(document.getElementById("numWorkers").value);
-  const minPct = parseFloat(document.getElementById("keyMin").value) / 100;
-  const maxPct = parseFloat(document.getElementById("keyMax").value) / 100;
-  const minRange = (MAX_BTC_KEY * BigInt(Math.floor(minPct * 1000000))) / 1000000n;
-  const maxRange = (MAX_BTC_KEY * BigInt(Math.floor(maxPct * 1000000))) / 1000000n;
-  const rangeSize = maxRange - minRange;
-  
-  document.getElementById("workerStatus").innerHTML = "";
-
-  for(let i=0; i<num; i++){
-    const w = new Worker(url);
-    const start = minRange + (BigInt(Math.floor(Math.random() * 1000000000)) * (rangeSize / 1000000000n));
+function start() {
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("stopBtn").disabled = false;
+    document.getElementById("statusTable").getElementsByTagName('tbody')[0].innerHTML = "";
+    document.getElementById("resultTable").getElementsByTagName('tbody')[0].innerHTML = "";
+    totaal = 0;
     
-    const row = document.getElementById("workerStatus").insertRow();
-    row.innerHTML = `<td>Worker ${i}</td><td id="workerPos${i}">0.000000%</td>`;
+    const numWorkers = parseInt(document.getElementById("numWorkers").value);
+    const batchSize = parseInt(document.getElementById("batchSizeInput").value);
+    const startTime = parseInt(document.getElementById("startTimeInput").value);
+    const endTime = parseInt(document.getElementById("endTimeInput").value);
     
-    w.postMessage({
-        startKey: start.toString(16), 
-        batch: parseInt(document.getElementById("batchSize").value), 
-        stepLimit: parseInt(document.getElementById("stepLimit").value),
-        minRange: minRange.toString(16),
-        maxRange: maxRange.toString(16),
-        targets: targetList
-    });
-    
-    w.onmessage = (e) => {
-      if(e.data.found){
-        const row = document.getElementById("results").insertRow(0);
-        row.innerHTML = `<td>${e.data.addr}</td><td>${e.data.wif}</td>`;
-        alert("MATCH GEVONDEN! " + e.data.addr);
-      }
-      
-      // Update teller altijd als deze wordt ontvangen
-      if(e.data.scanned) {
-        totalScanned += e.data.scanned;
-        document.getElementById("totaal").innerText = totalScanned.toLocaleString();
-      }
+    const blob = new Blob([workerCode], {type: 'application/javascript'});
+    const url = URL.createObjectURL(blob);
 
-      // Update positie en live tabel als data aanwezig is
-      if(e.data.current) {
-        if(e.data.live) {
-            const tbody = document.getElementById("liveGen");
-            const row = tbody.insertRow(0);
-            row.innerHTML = `<td>${e.data.live}</td><td>${e.data.priv.slice(0,16)}...</td>`;
-            if(tbody.rows.length > 50) tbody.deleteRow(50);
-        }
-        const currentBig = BigInt("0x" + e.data.current);
-        const tempPct = (currentBig * 10000000000n) / MAX_BTC_KEY; 
-        const pctString = (Number(tempPct) / 100000000).toFixed(6); 
-        document.getElementById(`workerPos${i}`).innerText = pctString + "%";
-      }
-    };
-    workers.push(w);
-  }
-  document.getElementById("startBtn").disabled = true;
-  document.getElementById("stopBtn").disabled = false;
-};
+    for(let i=0; i<numWorkers; i++){
+        let w = new Worker(url);
+        let statusRow = document.getElementById("statusTable").getElementsByTagName('tbody')[0].insertRow();
+        statusRow.id = "row_" + (i+1);
+        statusRow.innerHTML = `<td>Worker ${i+1}</td><td id="prog_${i+1}">Lijst inladen...</td>`;
 
-document.getElementById("stopBtn").onclick = () => {
-  workers.forEach(w => w.terminate());
-  workers = [];
-  document.getElementById("startBtn").disabled = false;
-  document.getElementById("stopBtn").disabled = true;
-};
+        // Stuur gegevens inclusief de ingevulde tijden naar de worker
+        w.postMessage({ targets: LARGE_ADDRESS_LIST, batchSize, id: i+1, startTime, endTime });
+        w.onmessage = function(e){
+            if(e.data.found){
+                let row = document.getElementById("resultTable").getElementsByTagName('tbody')[0].insertRow(0);
+                row.className = 'match';
+                row.innerHTML = `<td>Worker ${e.data.id} (MATCH!)</td><td>${e.data.address}</td><td>${e.data.wif}</td><td>${e.data.time}</td>`;
+                document.getElementById("foundMsg").textContent = "MATCH GEVONDEN: " + e.data.address;
+                stop();
+            } else if(e.data.batch){
+                totaal += e.data.batch.length;
+                document.getElementById("totaal").textContent = "Totaal gescand: " + totaal;
+                document.getElementById("prog_" + e.data.id).textContent = e.data.progress;
+                
+                let last = e.data.batch[e.data.batch.length-1];
+                let tbody = document.getElementById("resultTable").getElementsByTagName('tbody')[0];
+                let row = tbody.insertRow(0);
+                row.innerHTML = `<td>Worker ${e.data.id}</td><td>${last.addr}</td><td>${last.wif}</td><td>${last.time}</td>`;
+                if(tbody.rows.length > 15) tbody.deleteRow(15);
+            }
+        };
+        workers.push(w);
+    }
+}
+
+function stop() {
+    workers.forEach(w => w.terminate());
+    workers = [];
+    document.getElementById("startBtn").disabled = false;
+    document.getElementById("stopBtn").disabled = true;
+}
+
+document.getElementById("startBtn").onclick = start;
+document.getElementById("stopBtn").onclick = stop;
 </script>
 </body>
 </html>
