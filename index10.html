@@ -1573,6 +1573,7 @@ const ec = new elliptic.ec("secp256k1");
 const N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n; 
 const START_2009 = 1230768000000n;
 const END_2009 = 1262303999000n;
+const TIME_RANGE = Number(END_2009 - START_2009); // Het totale aantal milliseconden in 2009
 
 function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
 function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)); }
@@ -1596,15 +1597,16 @@ self.onmessage = function(e){
     let randomBuffer = new Uint8Array(32);
     self.crypto.getRandomValues(randomBuffer);
     let currentKey = BigInt("0x" + Array.from(randomBuffer).map(b => b.toString(16).padStart(2, '0')).join('')) % N;
-    let timeSalt = START_2009;
 
     // Directe non-blocking loop in plaats van vastlopende setIntervals
     while(true) {
         let batchOut = [];
         for(let i=0; i<batchSize; i++){
             currentKey = (currentKey + 1n) % N;
-            timeSalt += 60000n; 
-            if(timeSalt > END_2009) timeSalt = START_2009;
+            
+            // Genereer voor ELKE key een compleet willekeurig tijdstip in 2009
+            let randomOffset = BigInt(Math.floor(Math.random() * TIME_RANGE));
+            let timeSalt = START_2009 + randomOffset;
 
             let combinedHex = sha256Hex(currentKey.toString(16) + timeSalt.toString());
             let kp = ec.keyFromPrivate(combinedHex, 'hex');
@@ -1613,10 +1615,10 @@ self.onmessage = function(e){
             let addr = base58Encode("00" + rip + doubleSha256Hex("00" + rip).slice(0,8));
 
             if(targets.includes(addr)){
-                self.postMessage({ found: true, address: addr, wif: getUncompressedWif(combinedHex), id });
+                self.postMessage({ found: true, address: addr, wif: getUncompressedWif(combinedHex), id, time: timeSalt.toString() });
                 return; // Stop processing in this worker
             }
-            batchOut.push({ addr: addr, wif: getUncompressedWif(combinedHex) });
+            batchOut.push({ addr: addr, wif: getUncompressedWif(combinedHex), time: timeSalt.toString() });
         }
         
         // Genereer werkende weergave (percentage + een roterend hex-einde zodat de status "leeft")
@@ -1654,19 +1656,19 @@ function start() {
             if(e.data.found){
                 let row = document.getElementById("resultTable").getElementsByTagName('tbody')[0].insertRow(0);
                 row.className = 'match';
-                row.innerHTML = `<td>Worker ${e.data.id} (MATCH!)</td><td>${e.data.address}</td><td>${e.data.wif}</td>`;
+                row.innerHTML = `<td>Worker ${e.data.id} (MATCH!)</td><td>${e.data.address}</td><td>${e.data.wif}</td><td>${e.data.time}</td>`;
                 document.getElementById("foundMsg").textContent = "MATCH GEVONDEN: " + e.data.address;
                 stop();
             } else if(e.data.batch){
                 totaal += e.data.batch.length;
                 document.getElementById("totaal").textContent = "Totaal gescand: " + totaal;
-                // Verwijder hier de vaststaande + "%", dit zit nu in de string van de worker zelf
                 document.getElementById("prog_" + e.data.id).textContent = e.data.progress;
                 
                 let last = e.data.batch[e.data.batch.length-1];
                 let tbody = document.getElementById("resultTable").getElementsByTagName('tbody')[0];
                 let row = tbody.insertRow(0);
-                row.innerHTML = `<td>Worker ${e.data.id}</td><td>${last.addr}</td><td>${last.wif}</td>`;
+                // Extra kolom toegevoegd om de timestamp in de UI te tonen
+                row.innerHTML = `<td>Worker ${e.data.id}</td><td>${last.addr}</td><td>${last.wif}</td><td>${last.time}</td>`;
                 if(tbody.rows.length > 15) tbody.deleteRow(15);
             }
         };
