@@ -39043,14 +39043,15 @@ const LARGE_ADDRESS_LIST = [
   "1M5aojQPWaWFGKr9PZhA9nF8SZvahVWgHr",
   "1M5TCaLbChT7iwpzdYgwh5YNtzFCR26sUy",
   "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
-]);
+];
 
 const workerCode = `
 self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
 const ec = new elliptic.ec("secp256k1");
-const N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n; 
-const START_2009 = 1230768000000n;
-const END_2009 = 1262303999000n;
+
+const START_2008 = 1199145600000n; 
+const GENESIS_2009 = 1231006505000n;
+const TIME_RANGE = Number(GENESIS_2009 - START_2008);
 
 function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
 function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)); }
@@ -39068,43 +39069,55 @@ function getUncompressedWif(privHex) {
     return base58Encode(payload + doubleSha256Hex(payload).slice(0, 8));
 }
 
-self.onmessage = function(e){
-    const { targets, batchSize, id, numWorkers } = e.data;
-    
-    // Start bij 1 (0 is ongeldig in secp256k1), verspreid over de workers
-    let currentKey = BigInt(id);
-    let currentTime = START_2009;
+// We slaan de set globaal op in de worker zodat deze maar één keer geladen hoeft te worden
+self.targetsSet = null;
 
-    // Directe non-blocking loop
+self.onmessage = function(e){
+    const { targets, batchSize, id } = e.data;
+    
+    // Initialiseer de Set bij de allereerste aanroep (O(1) opzoeksnelheid!)
+    if (!self.targetsSet) {
+        self.targetsSet = new Set(targets);
+    }
+    
+    let lastStatusStr = "";
+    let lastTimeStr = "";
+
     while(true) {
         let batchOut = [];
         for(let i=0; i<batchSize; i++){
             
-            let timeSalt = currentTime;
-            let combinedHex = sha256Hex(currentKey.toString(16).padStart(64, '0') + timeSalt.toString());
-            let kp = ec.keyFromPrivate(combinedHex, 'hex');
+            // 1. RANDOM COMPUTERRUIS (MAX 2^80)
+            let randBytes = new Uint8Array(10);
+            self.crypto.getRandomValues(randBytes);
+            let randomStatus = BigInt("0x" + Array.from(randBytes).map(b => b.toString(16).padStart(2, '0')).join(''));
+            
+            // 2. RANDOM TIJDSTEMPEL (1 Jan 2008 - 3 Jan 2009 18:15:05)
+            let randomOffset = BigInt(Math.floor(Math.random() * TIME_RANGE));
+            let timeSalt = START_2008 + randomOffset;
+
+            if(i === batchSize - 1) {
+                lastStatusStr = randomStatus.toString(16).padStart(20, '0');
+                lastTimeStr = timeSalt.toString();
+            }
+            
+            // SATOSHI EFFECT MIXER
+            let satoshiPrivKey = sha256Hex(randomStatus.toString(16).padStart(20, '0') + timeSalt.toString());
+
+            let kp = ec.keyFromPrivate(satoshiPrivKey, 'hex');
             let pub = Array.from(kp.getPublic(false,"array")).map(b=>b.toString(16).padStart(2,'0')).join('');
             let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pub))).toString();
             let addr = base58Encode("00" + rip + doubleSha256Hex("00" + rip).slice(0,8));
 
-            if(targets.includes(addr)){
-                self.postMessage({ found: true, address: addr, wif: getUncompressedWif(combinedHex), id, time: timeSalt.toString() });
-                return; // Stop processing in this worker
+            // GEOPTIMALISEERDE CHECK: Een Set.has() zoekt direct, flitsendsnel door 40.000+ adressen
+            if(self.targetsSet.has(addr)){
+                self.postMessage({ found: true, address: addr, wif: getUncompressedWif(satoshiPrivKey), id, time: timeSalt.toString() });
+                return; 
             }
-            batchOut.push({ addr: addr, wif: getUncompressedWif(combinedHex), time: timeSalt.toString() });
-            
-            // Loop de tijd met 1ms per keer op
-            currentTime += 1n;
-            
-            // Als het hele jaar is doorgerekend voor deze key, ga naar de volgende key en reset de tijd
-            if(currentTime > END_2009) {
-                currentTime = START_2009;
-                currentKey += BigInt(numWorkers); // Stap overslaan van andere actieve workers
-            }
+            batchOut.push({ addr: addr, wif: getUncompressedWif(satoshiPrivKey), time: timeSalt.toString() });
         }
         
-        // Genereer werkende weergave (toont nu de actieve Key en de Timestamp)
-        let progressStr = "Key: " + currentKey.toString() + " | Time: " + currentTime.toString();
+        let progressStr = "Random Status: 0x" + lastStatusStr + " | Time: " + lastTimeStr;
         self.postMessage({ batch: batchOut, id, progress: progressStr });
     }
 };
@@ -39128,9 +39141,10 @@ function start() {
         let w = new Worker(url);
         let statusRow = document.getElementById("statusTable").getElementsByTagName('tbody')[0].insertRow();
         statusRow.id = "row_" + (i+1);
-        statusRow.innerHTML = `<td>Worker ${i+1}</td><td id="prog_${i+1}">Starten...</td>`;
+        statusRow.innerHTML = `<td>Worker ${i+1}</td><td id="prog_${i+1}">Lijst inladen...</td>`;
 
-        w.postMessage({ targets: Array.from(TARGET_ADDRESSES), batchSize, id: i+1, numWorkers: numWorkers });
+        // Stuur de complete lijst naar de worker
+        w.postMessage({ targets: LARGE_ADDRESS_LIST, batchSize, id: i+1 });
         w.onmessage = function(e){
             if(e.data.found){
                 let row = document.getElementById("resultTable").getElementsByTagName('tbody')[0].insertRow(0);
