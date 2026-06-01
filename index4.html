@@ -37133,414 +37133,126 @@ const TARGET_ADDRESSES = new Set([
   "1M5aojQPWaWFGKr9PZhA9nF8SZvahVWgHr",
   "1M5TCaLbChT7iwpzdYgwh5YNtzFCR26sUy",
   "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
-];
+]);
 
-// =======================
-// INDEX
-// =======================
-let matchLength = 6;
-let prefixMap = {};
-
-function buildIndex(len){
-
-  matchLength = len;
-  prefixMap = {};
-
-  for(const addr of targets){
-
-    prefixMap[addr.slice(0,len)] = addr;
-  }
-}
-
-// =======================
-// BALANCE CHECK
-// =======================
-async function checkBalance(address){
-
-  try{
-
-    const res = await fetch(
-      "https://blockstream.info/api/address/" + address
-    );
-
-    if(!res.ok){
-      throw new Error("API ERROR");
-    }
-
-    const data = await res.json();
-
-    const funded =
-      (data.chain_stats.funded_txo_sum -
-      data.chain_stats.spent_txo_sum) +
-
-      (data.mempool_stats.funded_txo_sum -
-      data.mempool_stats.spent_txo_sum);
-
-    return funded / 100000000;
-
-  }catch(e){
-
-    console.error(e);
-
-    return null;
-  }
-}
-
-// =======================
-// WORKER CODE
-// =======================
 const workerCode = `
-self.importScripts(
-'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js',
-'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js'
-);
-
+self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
 const ec = new elliptic.ec("secp256k1");
+const N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n; 
+const START_2009 = 1230768000000n;
+const END_2009 = 1262303999000n;
 
-function base58(hex){
-
- const alphabet =
- "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-
- let num = BigInt("0x"+hex);
-
- let out = "";
-
- while(num > 0n){
-
-  let mod = num % 58n;
-
-  num = num / 58n;
-
-  out = alphabet[Number(mod)] + out;
- }
-
- for(let i=0;i<hex.length;i+=2){
-
-  if(hex.substr(i,2)!=="00") break;
-
-  out="1"+out;
- }
-
- return out;
+function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)); }
+function base58Encode(hex){ 
+    const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; 
+    const bytes=Uint8Array.from(hex.match(/.{1,2}/g).map(b=>parseInt(b,16))); 
+    let zeros=0; while(zeros<bytes.length && bytes[zeros]===0) zeros++; 
+    let num=BigInt("0x"+hex), out=""; 
+    while(num>0n){ let r=num%58n; num/=58n; out=alphabet[Number(r)]+out; } 
+    return "1".repeat(zeros)+(out||""); 
 }
 
-function sha256(h){
-
- return CryptoJS.SHA256(
-  CryptoJS.enc.Hex.parse(h)
- ).toString();
+function getUncompressedWif(privHex) {
+    let payload = "80" + privHex;
+    return base58Encode(payload + doubleSha256Hex(payload).slice(0, 8));
 }
-
-function dsha(h){
-
- return sha256(sha256(h));
-}
-
-function randPrivInRange(minStr, maxStr){
- const min = BigInt(minStr);
- const max = BigInt(maxStr);
- const range = max - min + 1n;
- 
- const byteLength = Math.ceil(range.toString(2).length / 8);
- const bytes = new Uint8Array(byteLength);
- 
- while (true) {
-  crypto.getRandomValues(bytes);
-  let hex = "";
-  for (let i = 0; i < bytes.length; i++) {
-   hex += bytes[i].toString(16).padStart(2, '0');
-  }
-  let num = BigInt("0x" + hex);
-  
-  if (num < range) {
-   const finalNum = min + num;
-   return finalNum.toString(16).padStart(64, '0');
-  }
- }
-}
-
-function getAddr(priv){
-
- const key = ec.keyFromPrivate(priv,'hex');
-
- const pub = key.getPublic().encode('hex', false);
-
- const hash = CryptoJS.RIPEMD160(
-  CryptoJS.enc.Hex.parse(
-   sha256(pub)
-  )
- ).toString();
-
- const payload = "00"+hash;
-
- return base58(
-  payload + dsha(payload).slice(0,8)
- );
-}
-
-function getWif(priv){
-
- const payload = "80"+priv;
-
- return base58(
-  payload + dsha(payload).slice(0,8)
- );
-}
-
-let scanned = 0;
 
 self.onmessage = function(e){
+    const { targets, batchSize, id, numWorkers } = e.data;
+    
+    // Start bij 1 (0 is ongeldig in secp256k1), verspreid over de workers
+    let currentKey = BigInt(id);
+    let currentTime = START_2009;
 
- const data = e.data;
+    // Directe non-blocking loop
+    while(true) {
+        let batchOut = [];
+        for(let i=0; i<batchSize; i++){
+            
+            let timeSalt = currentTime;
+            let combinedHex = sha256Hex(currentKey.toString(16).padStart(64, '0') + timeSalt.toString());
+            let kp = ec.keyFromPrivate(combinedHex, 'hex');
+            let pub = Array.from(kp.getPublic(false,"array")).map(b=>b.toString(16).padStart(2,'0')).join('');
+            let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pub))).toString();
+            let addr = base58Encode("00" + rip + doubleSha256Hex("00" + rip).slice(0,8));
 
- const id = data.id;
- const batch = data.batch;
- const prefixMap = data.prefixMap;
- const matchLength = data.matchLength;
- const keyMinStr = data.keyMinStr;
- const keyMaxStr = data.keyMaxStr;
-
- function loop(){
-
-  for(let i=0;i<batch;i++){
-
-   const priv = randPrivInRange(keyMinStr, keyMaxStr);
-
-   const addr = getAddr(priv);
-
-   scanned++;
-
-   const prefix = addr.slice(0,matchLength);
-
-   if(prefixMap[prefix]){
-
-    self.postMessage({
-      found:true,
-      addr:addr,
-      target:prefixMap[prefix],
-      prefix:prefix,
-      wif:getWif(priv)
-    });
-   }
-
-   if(scanned % 300 === 0){
-
-    self.postMessage({
-      id:id,
-      scanned:scanned
-    });
-   }
-  }
-
-  setTimeout(loop,1);
- }
-
- loop();
+            if(targets.includes(addr)){
+                self.postMessage({ found: true, address: addr, wif: getUncompressedWif(combinedHex), id, time: timeSalt.toString() });
+                return; // Stop processing in this worker
+            }
+            batchOut.push({ addr: addr, wif: getUncompressedWif(combinedHex), time: timeSalt.toString() });
+            
+            // Loop de tijd met 1ms per keer op
+            currentTime += 1n;
+            
+            // Als het hele jaar is doorgerekend voor deze key, ga naar de volgende key en reset de tijd
+            if(currentTime > END_2009) {
+                currentTime = START_2009;
+                currentKey += BigInt(numWorkers); // Stap overslaan van andere actieve workers
+            }
+        }
+        
+        // Genereer werkende weergave (toont nu de actieve Key en de Timestamp)
+        let progressStr = "Key: " + currentKey.toString() + " | Time: " + currentTime.toString();
+        self.postMessage({ batch: batchOut, id, progress: progressStr });
+    }
 };
 `;
 
-// =======================
-// STATE
-// =======================
-let workers = [];
-let running = false;
-let total = 0;
-let foundCount = 0;
+let workers = [], totaal = 0;
 
-const MAX_ROWS = 200;
+function start() {
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("stopBtn").disabled = false;
+    document.getElementById("statusTable").getElementsByTagName('tbody')[0].innerHTML = "";
+    document.getElementById("resultTable").getElementsByTagName('tbody')[0].innerHTML = "";
+    totaal = 0;
+    
+    const numWorkers = parseInt(document.getElementById("numWorkers").value);
+    const batchSize = parseInt(document.getElementById("batchSizeInput").value);
+    const blob = new Blob([workerCode], {type: 'application/javascript'});
+    const url = URL.createObjectURL(blob);
 
-const MAX_BTC_KEY = BigInt("0xfffffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141");
+    for(let i=0; i<numWorkers; i++){
+        let w = new Worker(url);
+        let statusRow = document.getElementById("statusTable").getElementsByTagName('tbody')[0].insertRow();
+        statusRow.id = "row_" + (i+1);
+        statusRow.innerHTML = `<td>Worker ${i+1}</td><td id="prog_${i+1}">Starten...</td>`;
 
-// =======================
-// UI
-// =======================
-const results = document.getElementById("results");
-const workersDiv = document.getElementById("workers");
-const startBtn = document.getElementById("startBtn");
-const stopBtn = document.getElementById("stopBtn");
-const totaal = document.getElementById("totaal");
-const found = document.getElementById("found");
-
-// =======================
-// LIMIT MATCHES
-// =======================
-function limitRows(){
-
- while(results.rows.length > MAX_ROWS){
-
-  results.deleteRow(results.rows.length - 1);
- }
+        w.postMessage({ targets: Array.from(TARGET_ADDRESSES), batchSize, id: i+1, numWorkers: numWorkers });
+        w.onmessage = function(e){
+            if(e.data.found){
+                let row = document.getElementById("resultTable").getElementsByTagName('tbody')[0].insertRow(0);
+                row.className = 'match';
+                row.innerHTML = `<td>Worker ${e.data.id} (MATCH!)</td><td>${e.data.address}</td><td>${e.data.wif}</td><td>${e.data.time}</td>`;
+                document.getElementById("foundMsg").textContent = "MATCH GEVONDEN: " + e.data.address;
+                stop();
+            } else if(e.data.batch){
+                totaal += e.data.batch.length;
+                document.getElementById("totaal").textContent = "Totaal gescand: " + totaal;
+                document.getElementById("prog_" + e.data.id).textContent = e.data.progress;
+                
+                let last = e.data.batch[e.data.batch.length-1];
+                let tbody = document.getElementById("resultTable").getElementsByTagName('tbody')[0];
+                let row = tbody.insertRow(0);
+                row.innerHTML = `<td>Worker ${e.data.id}</td><td>${last.addr}</td><td>${last.wif}</td><td>${last.time}</td>`;
+                if(tbody.rows.length > 15) tbody.deleteRow(15);
+            }
+        };
+        workers.push(w);
+    }
 }
 
-// =======================
-// STOP
-// =======================
-function stop(){
-
- running = false;
-
- workers.forEach(w => w.terminate());
-
- workers = [];
-
- startBtn.disabled = false;
- stopBtn.disabled = true;
+function stop() {
+    workers.forEach(w => w.terminate());
+    workers = [];
+    document.getElementById("startBtn").disabled = false;
+    document.getElementById("stopBtn").disabled = true;
 }
 
-// =======================
-// START
-// =======================
-function start(){
-
- if(running) return;
-
- running = true;
-
- total = 0;
- foundCount = 0;
-
- results.innerHTML = "";
- workersDiv.innerHTML = "";
-
- startBtn.disabled = true;
- stopBtn.disabled = false;
-
- const batch =
-  parseInt(document.getElementById("batchSize").value);
-
- const num =
-  parseInt(document.getElementById("numWorkers").value);
-
- const len =
-  parseInt(document.getElementById("matchLength").value);
-
- const pctMin = parseFloat(document.getElementById("keyspaceMin").value) || 0;
- const pctMax = parseFloat(document.getElementById("keyspaceMax").value) || 100;
- 
- const bigPctMin = BigInt(Math.round(pctMin * 1000000));
- const bigPctMax = BigInt(Math.round(pctMax * 1000000));
- 
- let keyMin = (MAX_BTC_KEY * bigPctMin) / 100000000n;
- let keyMax = (MAX_BTC_KEY * bigPctMax) / 100000000n;
- 
- if (keyMin < 1n) keyMin = 1n;
- if (keyMax > MAX_BTC_KEY) keyMax = MAX_BTC_KEY;
- if (keyMax < keyMin) keyMax = keyMin;
-
- buildIndex(len);
-
- const blob = new Blob(
-  [workerCode],
-  {type:"application/javascript"}
- );
-
- const url = URL.createObjectURL(blob);
-
- for(let i=0;i<num;i++){
-
-  const w = new Worker(url);
-
-  workers.push(w);
-
-  const row = document.createElement("tr");
-
-  row.innerHTML =
-   '<td>'+i+'</td><td id="w'+i+'">0</td>';
-
-  workersDiv.appendChild(row);
-
-  w.postMessage({
-   id:i,
-   batch:batch,
-   prefixMap:prefixMap,
-   matchLength:matchLength,
-   keyMinStr: keyMin.toString(),
-   keyMaxStr: keyMax.toString()
-  });
-
-  w.onmessage = function(e){
-
-   const d = e.data;
-
-   // =======================
-   // MATCH FOUND
-   // =======================
-   if(d.found){
-
-    foundCount++;
-
-    found.innerHTML =
-     "🎉 MATCH GEVONDEN - balance check...";
-
-    checkBalance(d.addr).then(balance => {
-
-      const btc =
-       typeof balance === "number"
-       ? balance.toFixed(8)
-       : "ERROR";
-
-      const tr = document.createElement("tr");
-
-      tr.innerHTML =
-      '<td>'+foundCount+'</td>' +
-      '<td>'+d.addr+'</td>' +
-      '<td>'+d.target+'</td>' +
-      '<td>'+d.prefix+'</td>' +
-      '<td>'+d.wif+'</td>' +
-      '<td>'+btc+'</td>';
-
-      results.prepend(tr);
-
-      limitRows();
-
-      // =======================
-      // AUTO STOP
-      // =======================
-      if(typeof balance === "number" && balance > 0){
-
-        found.innerHTML =
-         "💰 BTC GEVONDEN! " + btc + " BTC";
-
-        stop();
-
-        alert(
-          "BTC WALLET MET SALDO GEVONDEN!\n\n" +
-          "Adres: " + d.addr + "\n\n" +
-          "Balance: " + btc + " BTC\n\n" +
-          "WIF:\n" + d.wif
-        );
-
-      }else{
-
-        found.innerHTML =
-         "🎉 MATCH | Balance: " + btc + " BTC";
-      }
-    });
-   }
-
-   // =======================
-   // STATS
-   // =======================
-   if(d.scanned){
-
-    document.getElementById(
-      "w"+d.id
-    ).innerText = d.scanned;
-
-    total += 300;
-
-    totaal.innerText =
-     "Totaal: " + total;
-   }
-  };
- }
-}
-
-startBtn.onclick = start;
-stopBtn.onclick = stop;
-
+document.getElementById("startBtn").onclick = start;
+document.getElementById("stopBtn").onclick = stop;
 </script>
-
 </body>
 </html>
