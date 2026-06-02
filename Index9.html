@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>Satoshi Entropy Pool Simulator (Handmatige Tijdinstelling)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
+table { border-collapse: collapse; width: 100%; margin-top: 12px; background: #fff; }
+th, td { border: 1px solid #ccc; padding: 8px; font-size: 13px; word-break: break-all; text-align: left; }
+th { background: #e0e0e0; }
+button, input { margin-bottom: 10px; padding: 8px 12px; }
+#foundMsg { margin-top: 15px; font-weight: bold; font-size: 18px; color: #d9534f; padding: 10px; border: 2px solid #d9534f; }
+.match { background: #0f0; color: #000; font-weight: bold; }
+</style>
+</head>
+<body>
+<h2>Satoshi 2009 Entropy Pool Simulator (Geoptimaliseerd voor 40.000+ Adressen)</h2>
+
+<label>Timestamp Begin (ms): <input type="number" id="startTimeInput" value="1199145600000" style="width: 150px;"></label><br>
+<label>Timestamp Eind (ms): <input type="number" id="endTimeInput" value="1231006505000" style="width: 150px;"></label><br>
+<label>Ruis Bereik Begin (%): <input type="number" id="noiseStartInput" value="49" min="0" max="100" step="0.0001" style="width: 80px;"></label><br>
+<label>Ruis Bereik Eind (%): <input type="number" id="noiseEndInput" value="50" min="0" max="100" step="0.0001" style="width: 80px;"></label><br>
+<label>Aantal workers: <input type="number" id="numWorkers" value="4"></label><br>
+<label>Batch grootte: <input type="number" id="batchSizeInput" value="500"></label> <small>(Hogere batch is sneller bij grote lijsten)</small><br>
+<button id="startBtn">Start Satoshi-Effect Scan</button>
+<button id="stopBtn" disabled>Stop</button>
+
+<div id="totaal">Totaal gescand: 0</div>
+<div id="foundMsg"></div>
+
+<h3>Worker Status</h3>
+<table id="statusTable">
+<thead><tr><th>Worker ID</th><th>Gereconverteerde Systeemstatus (Random)</th></tr></thead>
+<tbody></tbody>
+</table>
+
+<h3>Resultaten (Laatste per batch)</h3>
+<table id="resultTable">
+<thead><tr><th>Strategy</th><th>Adres (256-bit uitgesmeerd)</th><th>Full 256-bit WIF Private Key</th><th>Timestamp (Random)</th></tr></thead>
+<tbody></tbody>
+</table>
+
+<script>
+// PLAK HIER JOUW LIJST VAN 40.000 ADRESSEN TUSSEN DE HAKEN: ["adres1", "adres2", "adres3"]
+const LARGE_ADDRESS_LIST = [
+  "13bF8ahiAD7pgo8C9nQUHLs1N928WqB6bK",
+  "19WDqBTic1a9cwBNr3tBeMHF1AsxeSzNjT",
+  "1AS9cbMTxVFCENWm6o55Tot3dTgGhQyxFm",
+  "1KghXsyJZaT33LRwzBg1o8ZF43v4JcsZBM",
+  "1AJU94qurHSHobywbcsBWtggcWgjrB5nWU",
+  "12xqNT2yNzJzf7aa34t9NjmLXhyhczq8Mv",
+  "1QHqjqXQCn2z4pX4pjVBerd1aYFtFbD71t",
+  "1M5HXRJRnxxoqRX3fdPyoAWhd7jjfsqK4r"
+];
+
+const workerCode = `
+self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+const ec = new elliptic.ec("secp256k1");
+
+function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)); }
+function base58Encode(hex){ 
+    const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; 
+    const bytes=Uint8Array.from(hex.match(/.{1,2}/g).map(b=>parseInt(b,16))); 
+    let zeros=0; while(zeros<bytes.length && bytes[zeros]===0) zeros++; 
+    let num=BigInt("0x"+hex), out=""; 
+    while(num>0n){ let r=num%58n; num/=58n; out=alphabet[Number(r)]+out; } 
+    return "1".repeat(zeros)+(out||""); 
+}
+
+function getUncompressedWif(privHex) {
+    let payload = "80" + privHex;
+    return base58Encode(payload + doubleSha256Hex(payload).slice(0, 8));
+}
+
+function getRandomBigIntInRange(minBI, maxBI) {
+    const rangeBI = maxBI - minBI;
+    if (rangeBI <= 0n) return minBI;
+    const bits = rangeBI.toString(2).length;
+    const bytesCount = Math.ceil(bits / 8);
+    let randBytes = new Uint8Array(bytesCount);
+    while (true) {
+        self.crypto.getRandomValues(randBytes);
+        let hex = Array.from(randBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+        let num = BigInt("0x" + hex);
+        if (num <= rangeBI) {
+            return minBI + num;
+        }
+    }
+}
+
+self.targetsSet = null;
+
+self.onmessage = function(e){
+    const { targets, batchSize, id, startTime, endTime, noiseStartHex, noiseEndHex } = e.data;
+    
+    if (!self.targetsSet) {
+        self.targetsSet = new Set(targets);
+    }
+    
+    const startBig = BigInt(startTime);
+    const endBig = BigInt(endTime);
+    
+    const minNoiseBI = BigInt(noiseStartHex);
+    const maxNoiseBI = BigInt(noiseEndHex);
+    
+    // Initialiseer de basistoestanden buiten de lus om ze vast te kunnen houden
+    let currentStatus = getRandomBigIntInRange(minNoiseBI, maxNoiseBI);
+    let currentTime = startBig;
+
+    let lastStatusStr = "";
+    let lastTimeStr = "";
+
+    while(true) {
+        let batchOut = [];
+
+        for(let i=0; i<batchSize; i++){
+            
+            // Controleer EERST of de tijdlimiet is overschreden, zo ja: reset tijd en kies NIEUWE ruis
+            if (currentTime > endBig) {
+                currentStatus = getRandomBigIntInRange(minNoiseBI, maxNoiseBI);
+                currentTime = startBig;
+            } 
+            // Als de tijd binnen de range is, maar we bereiken de 100-grens van OpenSSL: hernieuw ruis/tijd NIET, hoog ze alleen op
+            else if (i > 0 && i % 100 === 0) {
+                currentStatus = getRandomBigIntInRange(minNoiseBI, maxNoiseBI);
+                // We behouden de huidige lineaire tijd om geen gaten te laten vallen
+            }
+
+            if(i === batchSize - 1) {
+                lastStatusStr = currentStatus.toString(16).padStart(20, '0');
+                lastTimeStr = currentTime.toString();
+            }
+            
+            let satoshiPrivKey = sha256Hex(currentStatus.toString(16).padStart(20, '0') + currentTime.toString());
+
+            let kp = ec.keyFromPrivate(satoshiPrivKey, 'hex');
+            let pub = Array.from(kp.getPublic(false,"array")).map(b=>b.toString(16).padStart(2,'0')).join('');
+            let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pub))).toString();
+            let addr = base58Encode("00" + rip + doubleSha256Hex("00" + rip).slice(0,8));
+
+            if(self.targetsSet.has(addr)){
+                self.postMessage({ found: true, address: addr, wif: getUncompressedWif(satoshiPrivKey), id, time: currentTime.toString() });
+                return; 
+            }
+            batchOut.push({ addr: addr, wif: getUncompressedWif(satoshiPrivKey), time: currentTime.toString() });
+
+            // Sla de klok en ruis-status 1 stapje omhoog voor de volgende key in de reeks
+            currentStatus += 1n;
+            currentTime += 1n;
+        }
+        
+        let progressStr = "Status: 0x" + lastStatusStr + " | Time: " + lastTimeStr;
+        self.postMessage({ batch: batchOut, id, progress: progressStr });
+    }
+};
+`;
+
+let workers = [], totaal = 0;
+
+function start() {
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("stopBtn").disabled = false;
+    document.getElementById("statusTable").getElementsByTagName('tbody')[0].innerHTML = "";
+    document.getElementById("resultTable").getElementsByTagName('tbody')[0].innerHTML = "";
+    totaal = 0;
+    
+    const numWorkers = parseInt(document.getElementById("numWorkers").value);
+    const batchSize = parseInt(document.getElementById("batchSizeInput").value);
+    const startTime = parseInt(document.getElementById("startTimeInput").value);
+    const endTime = parseInt(document.getElementById("endTimeInput").value);
+    
+    const pctStart = parseFloat(document.getElementById("noiseStartInput").value) / 100;
+    const pctEnd = parseFloat(document.getElementById("noiseEndInput").value) / 100;
+    
+    const maxNoiseSpace = BigInt("1208925819614629174706175"); 
+    
+    const noiseStartBI = BigInt(Math.floor(Number(maxNoiseSpace) * pctStart));
+    const noiseEndBI = BigInt(Math.floor(Number(maxNoiseSpace) * pctEnd));
+    
+    const noiseStartHex = "0x" + noiseStartBI.toString(16);
+    const noiseEndHex = "0x" + noiseEndBI.toString(16);
+    
+    const blob = new Blob([workerCode], {type: 'application/javascript'});
+    const url = URL.createObjectURL(blob);
+
+    for(let i=0; i<numWorkers; i++){
+        let w = new Worker(url);
+        let statusRow = document.getElementById("statusTable").getElementsByTagName('tbody')[0].insertRow();
+        statusRow.id = "row_" + (i+1);
+        statusRow.innerHTML = `<td>Worker ${i+1}</td><td id="prog_${i+1}">Lijst inladen...</td>`;
+
+        w.postMessage({ 
+            targets: LARGE_ADDRESS_LIST, 
+            batchSize, 
+            id: i+1, 
+            startTime, 
+            endTime,
+            noiseStartHex,
+            noiseEndHex
+        });
+        w.onmessage = function(e){
+            if(e.data.found){
+                let row = document.getElementById("resultTable").getElementsByTagName('tbody')[0].insertRow(0);
+                row.className = 'match';
+                row.innerHTML = `<td>Worker ${e.data.id} (MATCH!)</td><td>${e.data.address}</td><td>${e.data.wif}</td><td>${e.data.time}</td>`;
+                document.getElementById("foundMsg").textContent = "MATCH GEVONDEN: " + e.data.address;
+                stop();
+            } else if(e.data.batch){
+                totaal += e.data.batch.length;
+                document.getElementById("totaal").textContent = "Totaal gescand: " + totaal;
+                document.getElementById("prog_" + e.data.id).textContent = e.data.progress;
+                
+                let last = e.data.batch[e.data.batch.length-1];
+                let tbody = document.getElementById("resultTable").getElementsByTagName('tbody')[0];
+                let row = tbody.insertRow(0);
+                row.innerHTML = `<td>Worker ${e.data.id}</td><td>${last.addr}</td><td>${last.wif}</td><td>${last.time}</td>`;
+                if(tbody.rows.length > 15) tbody.deleteRow(15);
+            }
+        };
+        workers.push(w);
+    }
+}
+
+function stop() {
+    workers.forEach(w => w.terminate());
+    workers = [];
+    document.getElementById("startBtn").disabled = false;
+    document.getElementById("stopBtn").disabled = true;
+}
+
+document.getElementById("startBtn").onclick = start;
+document.getElementById("stopBtn").onclick = stop;
+</script>
+</body>
+</html>
