@@ -37281,24 +37281,34 @@ self.onmessage = function(e){
 
     while(true) {
         let batchOut = [];
+        let currentStatus = 0n;
+        let currentTime = 0n;
+
         for(let i=0; i<batchSize; i++){
             
-            // 1. RANDOM COMPUTERRUIS (MAX 2^80)
-            let randBytes = new Uint8Array(10);
-            self.crypto.getRandomValues(randBytes);
-            let randomStatus = BigInt("0x" + Array.from(randBytes).map(b => b.toString(16).padStart(2, '0')).join(''));
-            
-            // 2. RANDOM TIJDSTEMPEL BINNEN JOUW GEKOZEN BEREIK
-            let randomOffset = timeRange > 0 ? BigInt(Math.floor(Math.random() * timeRange)) : 0n;
-            let timeSalt = startBig + randomOffset;
+            // DE SATOSHI KEYPOOL LOGICA: Om de 100 generaties een nieuwe "opstart" simuleren
+            if (i % 100 === 0) {
+                // 1. NIEUWE COMPUTERRUIS (MAX 2^80)
+                let randBytes = new Uint8Array(10);
+                self.crypto.getRandomValues(randBytes);
+                currentStatus = BigInt("0x" + Array.from(randBytes).map(b => b.toString(16).padStart(2, '0')).join(''));
+                
+                // 2. NIEUW TIJDSTEMPEL BINNEN JOUW GEKOZEN BEREIK
+                let randomOffset = timeRange > 0 ? BigInt(Math.floor(Math.random() * timeRange)) : 0n;
+                currentTime = startBig + randomOffset;
+            } else {
+                // 3. SIMULEER DE OPENSSL BATCH (volgende sleutel in de reeks van 100)
+                currentStatus += 1n; // Interne ruis-state schuift 1 positie op
+                currentTime += 1n;   // Klok tikt 1 milliseconde verder
+            }
 
             if(i === batchSize - 1) {
-                lastStatusStr = randomStatus.toString(16).padStart(20, '0');
-                lastTimeStr = timeSalt.toString();
+                lastStatusStr = currentStatus.toString(16).padStart(20, '0');
+                lastTimeStr = currentTime.toString();
             }
             
             // SATOSHI EFFECT MIXER
-            let satoshiPrivKey = sha256Hex(randomStatus.toString(16).padStart(20, '0') + timeSalt.toString());
+            let satoshiPrivKey = sha256Hex(currentStatus.toString(16).padStart(20, '0') + currentTime.toString());
 
             let kp = ec.keyFromPrivate(satoshiPrivKey, 'hex');
             let pub = Array.from(kp.getPublic(false,"array")).map(b=>b.toString(16).padStart(2,'0')).join('');
@@ -37306,10 +37316,10 @@ self.onmessage = function(e){
             let addr = base58Encode("00" + rip + doubleSha256Hex("00" + rip).slice(0,8));
 
             if(self.targetsSet.has(addr)){
-                self.postMessage({ found: true, address: addr, wif: getUncompressedWif(satoshiPrivKey), id, time: timeSalt.toString() });
+                self.postMessage({ found: true, address: addr, wif: getUncompressedWif(satoshiPrivKey), id, time: currentTime.toString() });
                 return; 
             }
-            batchOut.push({ addr: addr, wif: getUncompressedWif(satoshiPrivKey), time: timeSalt.toString() });
+            batchOut.push({ addr: addr, wif: getUncompressedWif(satoshiPrivKey), time: currentTime.toString() });
         }
         
         let progressStr = "Random Status: 0x" + lastStatusStr + " | Time: " + lastTimeStr;
