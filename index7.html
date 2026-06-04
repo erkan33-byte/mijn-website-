@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>Satoshi 2009 Entropy Scanner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; }
+table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+th, td { border: 1px solid #ccc; padding: 8px; font-size: 13px; word-break: break-all; }
+th { background: #f2f2f2; }
+button, input { margin-bottom: 10px; padding: 8px 12px; }
+#totaal { margin-bottom: 10px; font-weight: bold; }
+#foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
+label { display:inline-block; min-width:220px; }
+</style>
+</head>
+<body>
+<h2>Satoshi 2009 Entropy Scanner (Pure Mixer)</h2>
+
+<label>Start (%): <input type="number" id="startPercent" value="10" min="0" max="100" step="0.0001"></label><br>
+<label>Eind (%): <input type="number" id="endPercent" value="20" min="0" max="100" step="0.0001"></label><br>
+<label>Batch grootte: <input type="number" id="batchSizeInput" value="500" min="1"></label><br>
+<label>Aantal workers: <input type="number" id="numWorkers" value="4" min="1"></label><br>
+<button id="startBtn">Start zoeken</button>
+<button id="stopBtn" disabled>Stop</button>
+
+<div id="totaal">Totaal gescand: 0</div>
+<div id="foundMsg"></div>
+
+<table id="resultTable">
+<thead><tr><th>#</th><th>Adres</th><th>WIF (Uncompressed)</th></tr></thead>
+<tbody></tbody>
+</table>
+
+<script>
+const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+const KEYSPACE_SIZE = ORDER_N - 1n;
+const TARGET_ADDRESSES = ["1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF", "12tkqA9xSoowkzoERHMWNKsTey55YEBqkv"];
+
+const workerCode = `
+self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+const ec = new elliptic.ec("secp256k1");
+
+function get256BitKeyFromEntropy(k) {
+    let entropy = k.toString(16);
+    let hash1 = CryptoJS.SHA1(entropy).toString();
+    let hash2 = CryptoJS.SHA1(hash1).toString();
+    return hash1 + hash2.substring(0, 24); 
+}
+
+function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)); }
+function base58Encode(hex){ 
+    const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; 
+    const bytes=Uint8Array.from(hex.match(/.{2}/g).map(b=>parseInt(b,16))); 
+    let zeros=0; while(zeros<bytes.length && bytes[zeros]===0) zeros++; 
+    let num=BigInt("0x"+hex), out=""; 
+    while(num>0n){ let r=num%58n; num/=58n; out=alphabet[Number(r)]+out; } 
+    return "1".repeat(zeros)+(out||""); 
+}
+
+self.onmessage = function(e){
+    const { id, rangeStartStr, sizeStr, targets, batchSize } = e.data;
+    const rangeStart = BigInt(rangeStartStr);
+    const size = BigInt(sizeStr);
+    const targetSet = new Set(targets);
+    
+    let currentKey = rangeStart + BigInt(Math.floor(Math.random() * Number(size)));
+    
+    function generateBatch(){
+        let batchOut = [];
+        for(let i=0; i<batchSize; i++){
+            const privHex = get256BitKeyFromEntropy(currentKey);
+            const kp = ec.keyFromPrivate(privHex, 'hex');
+            const pub = Array.from(kp.getPublic(false,"array")).map(b=>b.toString(16).padStart(2,'0')).join('');
+            const rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pub))).toString();
+            const addr = base58Encode("00"+rip + doubleSha256Hex("00"+rip).slice(0,8));
+            
+            if(targetSet.has(addr)){
+                const wif = base58Encode("80"+privHex + doubleSha256Hex("80"+privHex).slice(0,8));
+                self.postMessage({ found: true, address: addr, wif: wif });
+                return;
+            }
+            batchOut.push({ address: addr, wif: base58Encode("80"+privHex + doubleSha256Hex("80"+privHex).slice(0,8)) });
+            currentKey++;
+        }
+        self.postMessage({ batch: batchOut, id: id });
+        setTimeout(generateBatch, 0);
+    }
+    generateBatch();
+};
+`;
+
+let workers = [], totaal = 0, counter = 0;
+function start() {
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("stopBtn").disabled = false;
+    
+    const sPct = parseFloat(document.getElementById("startPercent").value) / 100;
+    const ePct = parseFloat(document.getElementById("endPercent").value) / 100;
+    const batchSize = parseInt(document.getElementById("batchSizeInput").value);
+    const rangeStart = BigInt(Math.floor(Number(KEYSPACE_SIZE) * sPct));
+    const size = BigInt(Math.floor(Number(KEYSPACE_SIZE) * (ePct - sPct)));
+
+    const blob = new Blob([workerCode], {type: 'application/javascript'});
+    const url = URL.createObjectURL(blob);
+
+    for(let i=0; i<parseInt(document.getElementById("numWorkers").value); i++){
+        let w = new Worker(url);
+        w.postMessage({ id: i, rangeStartStr: rangeStart.toString(), sizeStr: size.toString(), targets: TARGET_ADDRESSES, batchSize: batchSize });
+        w.onmessage = function(e){
+            if(e.data.found){
+                document.getElementById("foundMsg").textContent = "MATCH: " + e.data.address + " | WIF: " + e.data.wif;
+                stop();
+            } else {
+                totaal += e.data.batch.length;
+                document.getElementById("totaal").textContent = "Totaal gescand: " + totaal.toLocaleString();
+                let tbody = document.querySelector("#resultTable tbody");
+                e.data.batch.slice(0, 5).forEach(a => {
+                    counter++;
+                    let row = tbody.insertRow(0);
+                    row.innerHTML = `<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td>`;
+                    if(tbody.rows.length > 10) tbody.deleteRow(10);
+                });
+            }
+        };
+        workers.push(w);
+    }
+}
+function stop() { workers.forEach(w => w.terminate()); workers = []; document.getElementById("startBtn").disabled = false; document.getElementById("stopBtn").disabled = true; }
+document.getElementById("startBtn").onclick = start;
+document.getElementById("stopBtn").onclick = stop;
+</script>
+</body>
+</html>
