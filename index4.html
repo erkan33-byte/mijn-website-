@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>Satoshi 108-Byte Mixer (Full Detail)</title>
+<style>
+    body { font-family: 'Courier New', monospace; background: #000; color: #0f0; padding: 20px; }
+    .controls { background: #111; padding: 15px; border: 1px solid #333; margin-bottom: 20px; }
+    input { width: 80px; background: #222; color: #0f0; border: 1px solid #444; padding: 5px; }
+    button { padding: 10px 20px; cursor: pointer; border: none; background: #28a745; color: white; }
+    #stopBtn { background: #dc3545; }
+    table { width: 100%; border-collapse: collapse; color: #fff; }
+    th, td { border: 1px solid #333; padding: 5px; font-size: 11px; word-break: break-all; }
+</style>
+</head>
+<body>
+<h2>Satoshi 2008/2009 108-Byte Mixer (Full WIF Output)</h2>
+
+<div class="controls">
+    <label>Workers:</label><input id="numW" value="4">
+    <label>Batch grootte:</label><input id="batchS" value="1000">
+    <button id="startBtn">Start Scan</button><button id="stopBtn">Stop</button>
+</div>
+
+<div id="totaal">Totaal gescand: 0</div>
+<table id="resultTable"><thead><tr><th>Adres</th><th>WIF</th><th>Pool Hash (108b)</th></tr></thead><tbody></tbody></table>
+
+<script>
+const TARGET_ADDRESSES = ["1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF", "12tkqA9xSoowkzoERHMWNKsTey55YEBqkv"];
+
+const workerCode = `
+importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+const ec = new elliptic.ec("secp256k1");
+
+function getRandomHex(len) {
+    let hex = "";
+    for(let i = 0; i < len; i++) hex += Math.floor(Math.random() * 16).toString(16);
+    return hex;
+}
+
+function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function ripemd160(hex) { return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function base58(hex) {
+    const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let bytes = Uint8Array.from(hex.match(/.{1,2}/g).map(b => parseInt(b, 16)));
+    let zeros = 0; while(zeros < bytes.length && bytes[zeros] === 0) zeros++;
+    let num = BigInt("0x" + hex), out = "";
+    while(num > 0n) { out = alphabet[Number(num % 58n)] + out; num /= 58n; }
+    return "1".repeat(zeros) + out;
+}
+
+self.onmessage = function(e){
+    const { targets, batch } = e.data;
+    const targetSet = new Set(targets);
+    
+    while(true) {
+        let lastResult = null;
+        for(let i = 0; i < batch; i++) {
+            let poolHex = getRandomHex(216); 
+            let poolHash = CryptoJS.SHA1(CryptoJS.enc.Hex.parse(poolHex)).toString();
+            
+            let priv = sha256(poolHash);
+            let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
+            let addr = base58("00" + ripemd160(sha256(pub)));
+            let wif = base58("80" + priv + sha256(sha256("80" + priv)).substring(0,8));
+            
+            if(targetSet.has(addr)) {
+                self.postMessage({ match: true, addr: addr, wif: wif, pool: poolHash.substring(0,10) });
+                return;
+            }
+            lastResult = { addr, wif, pool: poolHash.substring(0,10) };
+        }
+        self.postMessage({ match: false, count: batch, sample: lastResult });
+    }
+};
+`;
+
+let workers = [], totaal = 0;
+document.getElementById("startBtn").onclick = function() {
+    const numW = parseInt(document.getElementById("numW").value);
+    const batch = parseInt(document.getElementById("batchS").value);
+    for(let i=0; i<numW; i++) {
+        let w = new Worker(URL.createObjectURL(new Blob([workerCode])));
+        w.postMessage({ targets: TARGET_ADDRESSES, batch: batch });
+        w.onmessage = function(e) {
+            if(e.data.match) { alert("MATCH GEVONDEN: " + e.data.addr + "\nWIF: " + e.data.wif); stop(); return; }
+            totaal += e.data.count;
+            document.getElementById("totaal").innerText = "Totaal: " + totaal;
+            let row = document.getElementById("resultTable").tBodies[0].insertRow(0);
+            row.innerHTML = `<td>${e.data.sample.addr}</td><td>${e.data.sample.wif}</td><td>${e.data.sample.pool}</td>`;
+            if(row.rowIndex > 5) document.getElementById("resultTable").deleteRow(5);
+        };
+        workers.push(w);
+    }
+};
+
+function stop() { workers.forEach(w => w.terminate()); workers = []; }
+document.getElementById("stopBtn").onclick = stop;
+</script>
+</body>
+</html>
