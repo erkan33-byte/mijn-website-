@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>BTC Key Generator — Exacte WIF Opeenvolging</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; color: #333; }
+table { border-collapse: collapse; width: 100%; margin-top: 12px; background: #fff; }
+th, td { border: 1px solid #ccc; padding: 8px; font-size: 13px; word-break: break-all; text-align: left; }
+th { background: #f2f2f2; }
+button, input { margin-bottom: 10px; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; }
+input[type="text"], input[type="number"] { width: 450px; font-family: monospace; }
+#totaal { margin-top: 10px; margin-bottom: 10px; font-weight: bold; font-size: 15px; }
+#foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: #28a745; background: #e2f0d9; padding: 10px; border: 1px solid #28a745; display: none; }
+label { display: inline-block; min-width: 280px; font-weight: bold; }
+.worker-status { margin-top: 20px; }
+#startBtn { background: #28a745; color: white; border: none; font-weight: bold; cursor: pointer; }
+#startBtn:hover { background: #218838; }
+#stopBtn { background: #dc3545; color: white; border: none; font-weight: bold; cursor: pointer; }
+#stopBtn:hover { background: #c82333; }
+</style>
+</head>
+<body>
+<h2>BTC Key Generator — Opeenvolgend vanaf WIF (+1 per worker)</h2>
+<p>De workers starten nu exact op en rondom het startpunt van jouw WIF-sleutel en lopen synchroon in dezelfde range.</p>
+<hr>
+
+<label for="startWif">Start vanaf jouw WIF Private Key:</label>
+<input type="text" id="startWif" value="5K1TsaktS9zJmYwaeBhygtLo5tuW8aNtDj8WsfKMu9HzoaTAVr7"><br>
+
+<label for="batchSizeInput">Batch grootte per worker:</label>
+<input type="number" id="batchSizeInput" value="500" min="1" style="width:100px;"><br>
+
+<label for="numWorkers">Aantal workers:</label>
+<input type="number" id="numWorkers" value="4" min="1" style="width:100px;"><br>
+
+<label for="zoekWoord">Zoekwoord in WIF (optioneel filter):</label>
+<input type="text" id="zoekWoord" value=""><br>
+
+<button id="startBtn">Start zoeken</button>
+<button id="stopBtn" disabled>Stop</button>
+
+<div id="totaal">Totaal gescande adressen: 0</div>
+<div id="foundMsg"></div>
+
+<h3>Worker status (Live bereik in dezelfde nauwe range)</h3>
+<table id="workerTable" class="worker-status">
+<thead>
+  <tr>
+    <th>Worker ID</th>
+    <th>Actuele Exacte Hex Positie</th>
+    <th>Gescande adressen</th>
+    <th>Huidige Positie Keyspace % (Absoluut)</th>
+  </tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<h3>Gevonden adressen</h3>
+<table id="resultTable">
+<thead>
+<tr><th>#</th><th>Adres</th><th>Gegenereerde WIF</th><th>Type</th></tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<script>
+const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+const KEYSPACE_SIZE = ORDER_N - 1n;
+
+const TARGET_ADDRESSES = new Set([
+"1EUXN9yCnq5yur6ZUy3kGQd87KzGK2ywTZ",
+"16xzDttFSNK1T8BLGqBjJxf47Gjm5ufcmB",
+"149XtqTaQUB2q9XJFXPvb6NoSuvVRGRTZN",
+"1K8UwymjZLxKLL83LD7GQ2Q44De3zBCFiD",
+"1BvzpNhp1abjnkpSkRGVoNb67PPLcSnZLx",
+"1JJq1ef9BcA36PMDXpsPHDhQfq8Rs7hM9C",
+"19UYDoMMBMSVaDnEFxdUJkadj15gggfhaN",
+"14nqqSEAQ77a3a1D68GS3uDn8MbkjSeWsv",
+"1BDzGEsDWxPwFh1Xawu3PQ8iTFu546os22",
+"1C2CdjzSoY7A1oiEqpKzEwghWbm6L5cZbN",
+"19iieAweWDGeDChfDbPMGHyJiBq7rHEae2",
+"1J2j5EK7UpoECeZasZDL14MBwWBfWUxnVP",
+"1GoiGSxfARvBgRgXKQFwstvENAis5W32mN",
+"1GL59uivMHiRCX3yaU4c58Nb6tJpu95aDi",
+"1GoEGp5LxydquYXp7zuBpVWnp8gzsNgQQS",
+"1GDWUJyvtsyFKNjBvH6hpLE3CdaXx33dxP",
+"1GDu4EUz2KgeYT4CukDS3qNkiCzg1UfqRA"
+]);
+
+let zoeken = false, totaal = 0, counter = 0;
+let workers = [], workerStats = {}, uiUpdateInterval = null;
+
+// Base58 naar hex/BigInt converter die rekening houdt met de 5K... prefix compressie-check van Satoshi
+function wifToBigInt(wif) {
+    const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let num = 0n;
+    for (let i = 0; i < wif.length; i++) {
+        const idx = BigInt(alphabet.indexOf(wif[i]));
+        if (idx === -1n) throw new Error("Ongeldig Base58 karakter");
+        num = num * 58n + idx;
+    }
+    let hex = num.toString(16);
+    // Verwijder versiebyte '80' vooraan en checksum (laatste 8 hex karakters) achteraan
+    if (hex.startsWith("80")) hex = hex.substring(2);
+    if (hex.length > 8) hex = hex.substring(0, hex.length - 8);
+    return BigInt("0x" + hex);
+}
+
+function formatPercentFromFraction(num, denom, decimals=12){
+  const SCALE = 10n**BigInt(decimals);
+  const scaledNum = num * (100n * SCALE);
+  const scaled = scaledNum / denom;
+  const intPart = scaled / SCALE;
+  const fracPart = scaled % SCALE;
+  return `${intPart.toString()}.${fracPart.toString().padStart(decimals,'0')} %`;
+}
+
+const workerCode = `
+self.importScripts(
+  'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js'
+);
+
+const ec = new elliptic.ec("secp256k1");
+
+function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)); }
+
+function base58Encode(hex){ 
+    const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; 
+    const bytes=Uint8Array.from(hex.match(/.{2}/g).map(b=>parseInt(b,16))); 
+    let zeros=0; while(zeros<bytes.length && bytes[zeros]===0) zeros++; 
+    let num=BigInt("0x"+hex), out=""; 
+    while(num>0n){ let r=num%58n; num/=58n; out=alphabet[Number(r)]+out; } 
+    return "1".repeat(zeros)+(out||""); 
+}
+
+function generateAddressOnly(k){ 
+    const privHex=k.toString(16).padStart(64,'0'); 
+    const kp=ec.keyFromPrivate(privHex,'hex'); 
+    const pub=Array.from(kp.getPublic(false,"array")).map(b=>b.toString(16).padStart(2,'0')).join(''); 
+    const rip=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pub))).toString(); 
+    const payload="00"+rip; 
+    const checksum=doubleSha256Hex(payload).slice(0,8); 
+    return base58Encode(payload+checksum); 
+}
+
+function computeWif(k){ 
+    const privHex=k.toString(16).padStart(64,'0'); 
+    const payload="80"+privHex; 
+    const checksum=doubleSha256Hex(payload).slice(0,8); 
+    return base58Encode(payload+checksum); 
+}
+
+self.onmessage=function(e){
+  const { id, startKeyStr, stepSize, batchSize, targets, zoekWoord }=e.data;
+  let currentKey = BigInt(startKeyStr);
+  const step = BigInt(stepSize);
+  const TARGET_SET = new Set(targets);
+  const zoekWoordLower = zoekWoord.toLowerCase();
+  let scanned = 0;
+
+  function generateBatch(){
+    const batchOut=[];
+    for(let i=0; i<batchSize; i++){
+      const k = currentKey;
+      
+      // Verspring direct met de stepSize (aantal workers) om overlap te voorkomen
+      currentKey += step;
+      scanned++;
+
+      const wif = computeWif(k);
+      const addr = generateAddressOnly(k);
+
+      if(TARGET_SET.has(addr)){
+          self.postMessage({ id, found:true, address: addr, wif, currentKey: k.toString(), scanned });
+          return true;
+      }
+
+      if(zoekWoordLower === "" || wif.toLowerCase().includes(zoekWoordLower)){
+          batchOut.push({ address: addr, wif });
+      }
+    }
+
+    self.postMessage({ id, batch: batchOut, scanned, currentKey: currentKey.toString() });
+    return false;
+  }
+
+  setInterval(()=>{ generateBatch(); }, 5);
+};
+`;
+
+function starten(){
+  if(zoeken) return;
+  
+  let startKey = 1n;
+  const wifInput = document.getElementById("startWif").value.trim();
+  
+  try {
+      startKey = wifToBigInt(wifInput);
+  } catch(e) {
+      alert("Ongeldige WIF sleutel ingevoerd. Controleer de tekens.");
+      return;
+  }
+
+  zoeken=true;
+  document.getElementById("startBtn").disabled=true;
+  document.getElementById("stopBtn").disabled=false;
+  document.getElementById("foundMsg").style.display = "none";
+  totaal=0; counter=0;
+  document.querySelector("#resultTable tbody").innerHTML='';
+  document.querySelector("#workerTable tbody").innerHTML='';
+
+  const batchSize=parseInt(document.getElementById("batchSizeInput").value)||500;
+  const numWorkers=parseInt(document.getElementById("numWorkers").value)||4;
+  const zoekWoord=document.getElementById("zoekWoord").value;
+
+  workerStats={}; workers=[];
+
+  const blob=new Blob([workerCode],{ type:'application/javascript' });
+  const url=URL.createObjectURL(blob);
+  const workerTbody=document.querySelector("#workerTable tbody");
+
+  for(let i=0; i<numWorkers; i++){
+    // Elk van de workers start exact +1 opeenvolgend vanaf de basis WIF sleutel
+    // Worker 1 start op startKey, Worker 2 op startKey+1, Worker 3 op startKey+2, enz.
+    const wStart = startKey + BigInt(i);
+
+    const r=document.createElement('tr');
+    r.innerHTML=`
+      <td>Worker #${i+1}</td>
+      <td id="w_hex_${i}" style="font-family:monospace; font-size:12px;">Uitlezen...</td>
+      <td id="w_scanned_${i}">0</td>
+      <td id="w_abs_${i}" style="font-family:monospace;">Calculatie...</td>
+    `;
+    workerTbody.appendChild(r);
+
+    const w=new Worker(url);
+    workers.push(w);
+    workerStats[i]={ scanned:0, currentKeyStr: wStart.toString() };
+
+    w.postMessage({ 
+        id: i, 
+        startKeyStr: wStart.toString(), 
+        stepSize: numWorkers, // Verspringer is gelijk aan het aantal actieve workers (interleaving)
+        batchSize, 
+        targets: Array.from(TARGET_ADDRESSES), 
+        zoekWoord 
+    });
+
+    w.onmessage=function(ev){
+      const d=ev.data;
+
+      if(d.found){
+        document.getElementById("foundMsg").innerHTML=`🎉 <strong>TARGET MATCH GEVONDEN!</strong><br>Adres: ${d.address}<br>WIF Key: ${d.wif}`;
+        document.getElementById("foundMsg").style.display = "block";
+        stoppen();
+        return;
+      }
+
+      if(d.batch){
+        if(d.id!==undefined) {
+          workerStats[d.id].scanned = d.scanned;
+          workerStats[d.id].currentKeyStr = d.currentKey;
+        }
+
+        const tbody=document.querySelector("#resultTable tbody");
+        for(const a of d.batch){
+          counter++;
+          const row=document.createElement('tr');
+          row.innerHTML=`<td>${counter}</td><td>${a.address}</td><td>${a.wif}</td><td>Uncompressed</td>`;
+          tbody.appendChild(row);
+          if(tbody.rows.length > 30) tbody.deleteRow(0);
+        }
+
+        totaal=0; 
+        for(const st of Object.values(workerStats)) totaal+=st.scanned;
+        document.getElementById("totaal").textContent="Totaal gescande adressen: "+totaal.toLocaleString();
+      }
+    };
+  }
+
+  if(uiUpdateInterval) clearInterval(uiUpdateInterval);
+  uiUpdateInterval=setInterval(()=>{
+    for(const [idStr, st] of Object.entries(workerStats)){
+      const id=idStr|0;
+      document.getElementById("w_scanned_"+id).textContent=st.scanned.toLocaleString();
+      try{
+        const kBig=BigInt(st.currentKeyStr);
+        document.getElementById("w_hex_"+id).textContent = kBig.toString(16).substring(0,16) + "...";
+        document.getElementById("w_abs_"+id).textContent = formatPercentFromFraction(kBig, KEYSPACE_SIZE, 12);
+      }catch(e){}
+    }
+  },500);
+}
+
+function stoppen(){
+  zoeken=false;
+  for(const w of workers) try{ w.terminate(); }catch(e){}
+  workers=[];
+  if(uiUpdateInterval){ clearInterval(uiUpdateInterval); uiUpdateInterval=null; }
+  document.getElementById("startBtn").disabled=false;
+  document.getElementById("stopBtn").disabled=true;
+}
+
+document.getElementById("startBtn").addEventListener("click", starten);
+document.getElementById("stopBtn").addEventListener("click", stoppen);
+</script>
+</body>
+</html>
