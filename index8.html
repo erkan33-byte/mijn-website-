@@ -2,12 +2,12 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>Satoshi 2009 Entropy Pool Mixer (108-Byte XP Kernel)</title>
+<title>Satoshi 2009 Advanced Entropy Scanner</title>
 <style>
     body { font-family: 'Courier New', Courier, monospace; background: #000; color: #0f0; padding: 20px; }
     .form-group { margin-bottom: 5px; }
-    label { display: inline-block; width: 150px; color: #fff; font-size: 12px; }
-    input { width: 120px; background: #222; color: #0f0; border: 1px solid #444; padding: 2px; }
+    label { display: inline-block; width: 160px; color: #fff; font-size: 12px; }
+    input { width: 100px; background: #222; color: #0f0; border: 1px solid #444; padding: 2px; }
     button { padding: 10px 20px; cursor: pointer; border: none; margin-top: 10px; margin-right: 5px; }
     #startBtn { background: #28a745; color: white; }
     #stopBtn { background: #dc3545; color: white; }
@@ -16,38 +16,39 @@
 </style>
 </head>
 <body>
-<h2>Satoshi 2009 Pool Mixer (108-Byte Kernel Mode)</h2>
+<h2>Satoshi 2009 Advanced Entropy Scanner</h2>
 
 <div id="inputs">
     <div class="form-group"><label>Time:</label><input id="tS" value="1231665341"><input id="tE" value="1231665400"></div>
     <div class="form-group"><label>QPC:</label><input id="qS" value="700000000000"><input id="qE" value="701000000000"></div>
     <div class="form-group"><label>Tick:</label><input id="tkS" value="0"><input id="tkE" value="65535"></div>
-    <div class="form-group"><label>PID (Step 4):</label><input id="pS" value="4"><input id="pE" value="16384"></div>
-    <div class="form-group"><label>TID (Step 4):</label><input id="tiS" value="4"><input id="tiE" value="16384"></div>
+    <div class="form-group"><label>PID:</label><input id="pS" value="4"><input id="pE" value="16384"></div>
+    <div class="form-group"><label>TID:</label><input id="tiS" value="4"><input id="tiE" value="16384"></div>
     <div class="form-group"><label>RAM:</label><input id="rS" value="0"><input id="rE" value="1000000"></div>
     <div class="form-group"><label>Sys:</label><input id="sS" value="0"><input id="sE" value="1000000"></div>
     <div class="form-group"><label>Disk:</label><input id="dS" value="0"><input id="dE" value="1000000"></div>
+    <div class="form-group"><label>Mouse X:</label><input id="mX" value="512"></div>
+    <div class="form-group"><label>Mouse Y:</label><input id="mY" value="384"></div>
+    <div class="form-group"><label>Env Hash:</label><input id="eH" value="12345678"></div>
+    <div class="form-group"><label>Vol Serial:</label><input id="vS" value="A1B2C3D4"></div>
+    <div class="form-group"><label>Proc Type:</label><input id="pT" value="586"></div>
+    <div class="form-group"><label>Display Res:</label><input id="dR" value="04000300"></div>
     <div class="form-group"><label>Workers:</label><input id="numW" value="4" style="width:50px"></div>
 </div>
 
 <button id="startBtn">Start Scan</button><button id="stopBtn" disabled>Stop</button>
 <div id="totaal">Totaal gescand: 0</div>
-<table id="resultTable"><thead><tr><th>Adres</th><th>WIF</th><th>Pool State (SHA1)</th></tr></thead><tbody></tbody></table>
+<table id="resultTable"><thead><tr><th>Adres</th><th>WIF</th><th>Lengte</th></tr></thead><tbody></tbody></table>
 
 <script>
-// Vul hier je 40.000 adressen in
 const TARGET_ADDRESSES = ["1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF", "12tkqA9xSoowkzoERHMWNKsTey55YEBqkv"]; 
 
 const workerCode = `
 importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
 const ec = new elliptic.ec("secp256k1");
 
-function getRandomBytes(len) {
-    let bytes = "";
-    for(let i = 0; i < len; i++) bytes += Math.floor(Math.random() * 256).toString(16).padStart(2, '0');
-    return bytes;
-}
-
+function toHex(n, len) { return BigInt(n).toString(16).padStart(len, '0'); }
+function getRnd(min, max) { return Math.floor(Math.random() * (Number(max) - Number(min) + 1)) + Number(min); }
 function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
 function ripemd160(hex) { return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString(); }
 function base58(hex) {
@@ -63,20 +64,19 @@ self.onmessage = function(e){
     const { r, targets } = e.data;
     const targetSet = new Set(targets);
     
-    let currentPID = parseInt(r.pS);
-    let currentTID = parseInt(r.tiS);
-    
     while(true) {
-        currentPID = (currentPID + 4 > parseInt(r.pE)) ? parseInt(r.pS) : currentPID + 4;
-        currentTID = (currentTID + 4 > parseInt(r.tiE)) ? parseInt(r.tiS) : currentTID + 4;
-
-        // 32 bytes uit jouw velden
-        let d = [BigInt(r.tS), BigInt(r.qS), BigInt(r.tkS), BigInt(currentPID), BigInt(currentTID), BigInt(r.rS), BigInt(r.sS), BigInt(r.dS)];
-        let poolHex = "";
-        d.forEach(v => { poolHex += v.toString(16).padStart(8, '0'); });
+        let byteLength = getRnd(100, 118);
+        let hexLength = byteLength * 2;
         
-        // 76 bytes aan extra 'noise' (systeem-ruis) om op 108 bytes te komen
-        poolHex += getRandomBytes(76);
+        // 14 velden x 4 bytes = 56 bytes kern
+        let poolHex = toHex(getRnd(r.tS, r.tE), 8) + toHex(getRnd(r.qS, r.qE), 8) + 
+                      toHex(getRnd(r.tkS, r.tkE), 8) + toHex(getRnd(r.pS, r.pE), 8) + 
+                      toHex(getRnd(r.tiS, r.tiE), 8) + toHex(getRnd(r.rS, r.rE), 8) + 
+                      toHex(getRnd(r.sS, r.sE), 8) + toHex(getRnd(r.dS, r.dE), 8) + 
+                      toHex(r.mX, 8) + toHex(r.mY, 8) + toHex("0x"+r.eH, 8) +
+                      toHex("0x"+r.vS, 8) + toHex(r.pT, 8) + toHex("0x"+r.dR, 8);
+        
+        while(poolHex.length < hexLength) poolHex += toHex(getRnd(0, 255), 2);
         
         let poolHash = CryptoJS.SHA1(CryptoJS.enc.Hex.parse(poolHex)).toString();
         let priv = sha256(poolHash);
@@ -85,10 +85,10 @@ self.onmessage = function(e){
         let wif = base58("80" + priv + sha256(sha256("80" + priv)).substring(0,8));
         
         if(targetSet.has(addr)) {
-            self.postMessage({ match: true, addr: addr, wif: wif, pool: poolHash.substring(0,10) });
+            self.postMessage({ match: true, addr: addr, wif: wif, len: byteLength });
             break;
         }
-        self.postMessage({ match: false, addr: addr, wif: wif, pool: poolHash.substring(0,10) });
+        if(Math.random() > 0.9999) self.postMessage({ match: false, addr: addr, wif: wif, len: byteLength });
     }
 };
 `;
@@ -98,17 +98,17 @@ let workers = [], totaal = 0;
 document.getElementById("startBtn").onclick = function() {
     document.getElementById("startBtn").disabled = true;
     document.getElementById("stopBtn").disabled = false;
-    const r = { tS: document.getElementById("tS").value, tE: document.getElementById("tE").value, qS: document.getElementById("qS").value, qE: document.getElementById("qE").value, tkS: document.getElementById("tkS").value, tkE: document.getElementById("tkE").value, pS: document.getElementById("pS").value, pE: document.getElementById("pE").value, tiS: document.getElementById("tiS").value, tiE: document.getElementById("tiE").value, rS: document.getElementById("rS").value, rE: document.getElementById("rE").value, sS: document.getElementById("sS").value, sE: document.getElementById("sE").value, dS: document.getElementById("dS").value, dE: document.getElementById("dE").value };
+    const r = { tS: document.getElementById("tS").value, tE: document.getElementById("tE").value, qS: document.getElementById("qS").value, qE: document.getElementById("qE").value, tkS: document.getElementById("tkS").value, tkE: document.getElementById("tkE").value, pS: document.getElementById("pS").value, pE: document.getElementById("pE").value, tiS: document.getElementById("tiS").value, tiE: document.getElementById("tiE").value, rS: document.getElementById("rS").value, rE: document.getElementById("rE").value, sS: document.getElementById("sS").value, sE: document.getElementById("sE").value, dS: document.getElementById("dS").value, dE: document.getElementById("dE").value, mX: document.getElementById("mX").value, mY: document.getElementById("mY").value, eH: document.getElementById("eH").value, vS: document.getElementById("vS").value, pT: document.getElementById("pT").value, dR: document.getElementById("dR").value };
     
-    for(let i=0; i<parseInt(document.getElementById("numW").value); i++) {
+    for(let i=0; i<parseInt(document.getElementById("numW").value || 4); i++) {
         let w = new Worker(URL.createObjectURL(new Blob([workerCode])));
         w.postMessage({ r, targets: TARGET_ADDRESSES });
         w.onmessage = function(e) {
-            if(e.data.match) { alert("MATCH GEVONDEN: " + e.data.addr + "\nWIF: " + e.data.wif); stop(); return; }
-            totaal++;
+            if(e.data.match) { alert("MATCH: " + e.data.addr); stop(); return; }
+            totaal += 1000;
             document.getElementById("totaal").innerText = "Totaal: " + totaal;
             let row = document.getElementById("resultTable").tBodies[0].insertRow(0);
-            row.innerHTML = `<td>${e.data.addr}</td><td>${e.data.wif}</td><td>${e.data.pool}</td>`;
+            row.innerHTML = `<td>${e.data.addr}</td><td>${e.data.wif}</td><td>${e.data.len} bytes</td>`;
             if(document.getElementById("resultTable").rows.length > 5) document.getElementById("resultTable").deleteRow(5);
         };
         workers.push(w);
