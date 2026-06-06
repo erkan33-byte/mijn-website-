@@ -29,7 +29,7 @@
     <div class="form-group"><label>Disk (Hex):</label><input id="dS" value="00000000"><input id="dE" value="FFFFFFFF"></div>
     <div class="form-group"><label>Mouse X:</label><input id="mXS" value="0"><input id="mXE" value="1024"></div>
     <div class="form-group"><label>Mouse Y:</label><input id="mYS" value="0"><input id="mYE" value="768"></div>
-    <div class="form-group"><label>Env Hash (Hex):</label><input id="eH" value="12345678"></div>
+    <div class="form-group"><label>Env Hash:</label><input id="eH" value="12345678"></div>
     <div class="form-group"><label>Vol Serial (Hex):</label><input id="vSS" value="00000000"><input id="vSE" value="FFFFFFFF"></div>
     <div class="form-group"><label>BIOS Date:</label><input id="bS" value="1136073600"><input id="bE" value="1230768000"></div>
     <div class="form-group"><label>BIOS Hash (Hex):</label><input id="bH" value="A1B2C3D4"></div>
@@ -106,6 +106,8 @@ self.onmessage = function(e){
 };
 `;
 
+let workers = [], totaal = 0;
+
 document.getElementById("startBtn").onclick = function() {
     document.getElementById("startBtn").disabled = true;
     document.getElementById("stopBtn").disabled = false;
@@ -117,7 +119,7 @@ document.getElementById("startBtn").onclick = function() {
         w.onmessage = function(e) {
             if(e.data.match) { alert("MATCH: " + e.data.addr); stop(); return; }
             totaal += 1000;
-            document.getElementById("totaal").innerText = "Totaal: " + totaal;
+            document.getElementById("totaal").innerText = "Totaal gescand: " + totaal;
             let row = document.getElementById("resultTable").tBodies[0].insertRow(0);
             row.innerHTML = `<td>${e.data.addr}</td><td>${e.data.wif}</td><td>${e.data.len} bytes</td>`;
             if(document.getElementById("resultTable").rows.length > 5) document.getElementById("resultTable").deleteRow(5);
