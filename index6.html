@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>BTC Key Generator — Windows 2009 Simulator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; }
+table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+th, td { border: 1px solid #ccc; padding: 8px; font-size: 13px; word-break: break-all; text-align: left; }
+th { background: #f2f2f2; }
+button, input { margin-bottom: 10px; padding: 8px 12px; }
+#totaal, #progressAbs, #progressRel { margin-bottom: 10px; font-weight: bold; }
+#foundMsg { margin-top: 15px; font-weight: bold; font-size: 16px; color: green; }
+label { display:inline-block; min-width:220px; }
+.worker-status { margin-top: 20px; }
+.small { font-size: 12px; color: #555; }
+</style>
+</head>
+<body>
+<h2>BTC Key Generator — Windows 2009 Simulator</h2>
+
+<label for="startPercent">Start (%):</label>
+<input type="number" id="startPercent" value="10" min="0" max="100" step="0.0001"><br>
+<label for="endPercent">Eind (%):</label>
+<input type="number" id="endPercent" value="20" min="0" max="100" step="0.0001"><br>
+<label for="jumpAfter">Aantal sleutels per reeks:</label>
+<input type="number" id="jumpAfter" value="1000" min="1"><br>
+<label for="batchSizeInput">Batch grootte per worker:</label>
+<input type="number" id="batchSizeInput" value="2" min="1"><br>
+<label for="gokkerMode">Gokker modus:</label>
+<input type="checkbox" id="gokkerMode"><br>
+<label for="numWorkers">Aantal workers:</label>
+<input type="number" id="numWorkers" value="4" min="1"><br>
+<label for="zoekWoord">Zoekwoord in WIF:</label>
+<input type="text" id="zoekWoord" value="btc"><br>
+
+<button id="startBtn">Start zoeken</button>
+<button id="stopBtn" disabled>Stop</button>
+
+<div id="totaal">Totaal gescande adressen: 0</div>
+<div id="progressAbs">Voortgang (voorbeeld): 0.000000000000000000000000000000 %</div>
+<div id="progressRel">Voortgang in interval (voorbeeld): 0.000000 %</div>
+<div id="foundMsg"></div>
+
+<table id="resultTable">
+<thead><tr><th>#</th><th>Adres</th><th>WIF</th><th>Type</th></tr></thead>
+<tbody></tbody>
+</table>
+
+<h3>Worker status</h3>
+<table id="workerTable" class="worker-status">
+<thead><tr><th>Worker ID</th><th>Gescande adressen</th><th>Keyspace % (absoluut)</th><th>Interval %</th></tr></thead>
+<tbody></tbody>
+</table>
+
+<script>
+const ORDER_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+const KEYSPACE_SIZE = ORDER_N - 1n;
+const TARGET_ADDRESSES = new Set([
+"1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF", "12tkqA9xSoowkzoERHMWNKsTey55YEBqkv",
+"1GoEGp5LxydquYXp7zuBpVWnp8gzsNgQQS", "1GDWUJyvtsyFKNjBvH6hpLE3CdaXx33dxP",
+"1GDu4EUz2KgeYT4CukDS3qNkiCzg1UfqRA"
+]);
+
+let zoeken = false, totaal = 0, counter = 0;
+let workers = [], workerStats = {}, uiUpdateInterval = null;
+
+function normalizePercentInput(v){ return Math.min(Math.max(Number(v),0),100); }
+function formatPercentFromFraction(num, denom, decimals=30){
+  const SCALE = 10n**BigInt(decimals);
+  const scaledNum = num*(100n*SCALE);
+  const scaled = scaledNum/denom;
+  const intPart = scaled / SCALE;
+  return `${intPart.toString()}.${(scaled % SCALE).toString().padStart(decimals,'0')} %`;
+}
+function formatPercentWithinRange(currentKey, rangeStart, size, decimals=6){
+  if(size === 0n) return "0.000000 %";
+  const SCALE = 10n**BigInt(decimals);
+  let offset = ((currentKey - rangeStart) % size + size) % size;
+  const scaled = (offset * (100n*SCALE)) / size;
+  return `${(scaled/SCALE).toString()}.${(scaled%SCALE).toString().padStart(decimals,'0')} %`;
+}
+function computeRangeScaled(){
+  const sPct = BigInt(Math.floor(normalizePercentInput(document.getElementById("startPercent").value)*1e6));
+  const ePct = BigInt(Math.floor(normalizePercentInput(document.getElementById("endPercent").value)*1e6));
+  const rangeStart = (KEYSPACE_SIZE*(sPct*1000000n))/(100n*1000000000000n);
+  const rangeEnd   = (KEYSPACE_SIZE*(ePct*1000000n))/(100n*1000000000000n);
+  return {rangeStart, size: rangeEnd - rangeStart > 0n ? rangeEnd - rangeStart : 1n};
+}
+
+const workerCode = `
+self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+const ec = new elliptic.ec("secp256k1");
+
+// --- WINDOWS 2009 ENTROPY SIMULATOR ---
+function getWindows2009Key() {
+    let poolSize = 80 + Math.floor(Math.random() * 60);
+    let pool = new Uint8Array(poolSize);
+    for (let i = 0; i < poolSize; i++) {
+        pool[i] = (performance.now() * 1000 + i + Math.random() * 255) % 256;
+    }
+    let poolHex = Array.from(pool).map(b => b.toString(16).padStart(2, '0')).join('');
+    let mixedSeed = CryptoJS.SHA1(CryptoJS.enc.Hex.parse(poolHex)).toString();
+    return BigInt("0x" + CryptoJS.SHA256(CryptoJS.enc.Hex.parse(mixedSeed)).toString());
+}
+
+function sha256Hex(h){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h)).toString(); }
+function doubleSha256Hex(h){ return sha256Hex(sha256Hex(h)); }
+function base58Encode(h){ 
+    const alpha="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    const b=Uint8Array.from(h.match(/.{2}/g).map(x=>parseInt(x,16)));
+    let z=0; while(z<b.length && b[z]===0) z++;
+    let n=BigInt("0x"+h), o="";
+    while(n>0n){ o=alpha[Number(n%58n)]+o; n/=58n; }
+    return "1".repeat(z)+o; 
+}
+function generateAddress(k){
+    const privHex=k.toString(16).padStart(64,'0');
+    const pub=ec.keyFromPrivate(privHex,'hex').getPublic(false,'hex');
+    const rip=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pub))).toString();
+    return base58Encode("00"+rip+doubleSha256Hex("00"+rip).slice(0,8));
+}
+
+self.onmessage=function(e){
+  const { targets, zoekWoord, batchSize } = e.data;
+  const TARGET_SET = new Set(targets);
+  
+  setInterval(()=>{
+    let batch = [];
+    for(let i=0; i<batchSize; i++){
+      let k = getWindows2009Key() % ${ORDER_N}n;
+      let wif = base58Encode("80" + k.toString(16).padStart(64,'0') + doubleSha256Hex("80" + k.toString(16).padStart(64,'0')).slice(0,8));
+      if(wif.toLowerCase().includes(zoekWoord.toLowerCase())){
+        let addr = generateAddress(k);
+        if(TARGET_SET.has(addr)) self.postMessage({found:true, address:addr, wif});
+        batch.push({address:addr, wif});
+      }
+    }
+    self.postMessage({batch, scanned: batchSize});
+  }, 10);
+};
+`;
+
+function starten(){
+  if(zoeken) return;
+  zoeken=true;
+  document.getElementById("startBtn").disabled=true;
+  document.getElementById("stopBtn").disabled=false;
+  totaal=0; counter=0;
+  
+  const { rangeStart } = computeRangeScaled();
+  const numWorkers = parseInt(document.getElementById("numWorkers").value);
+  const targets = Array.from(TARGET_ADDRESSES);
+  
+  for(let i=0; i<numWorkers; i++){
+    const w = new Worker(URL.createObjectURL(new Blob([workerCode],{type:'application/javascript'})));
+    w.postMessage({ targets, zoekWoord: document.getElementById("zoekWoord").value, batchSize: parseInt(document.getElementById("batchSizeInput").value) });
+    w.onmessage = function(ev){
+      if(ev.data.found) { alert("MATCH: "+ev.data.address); stoppen(); }
+      if(ev.data.batch){
+        totaal += ev.data.scanned;
+        document.getElementById("totaal").textContent = "Totaal gescande adressen: " + totaal.toLocaleString();
+        let tbody = document.getElementById("resultTable").tBodies[0];
+        ev.data.batch.forEach(a => {
+            let row = tbody.insertRow(0);
+            row.innerHTML = `<td>${++counter}</td><td>${a.address}</td><td>${a.wif}</td><td>Windows 2009 Sim</td>`;
+            if(tbody.rows.length > 50) tbody.deleteRow(50);
+        });
+      }
+    };
+    workers.push(w);
+  }
+}
+
+function stoppen(){
+  zoeken=false;
+  workers.forEach(w => w.terminate());
+  workers=[];
+  document.getElementById("startBtn").disabled=false;
+  document.getElementById("stopBtn").disabled=true;
+}
+
+document.getElementById("startBtn").addEventListener("click", starten);
+document.getElementById("stopBtn").addEventListener("click", stoppen);
+</script>
+</body>
+</html>
