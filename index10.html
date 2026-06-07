@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>Satoshi 2009 Advanced Entropy Scanner</title>
+<style>
+    body { font-family: 'Courier New', Courier, monospace; background: #000; color: #0f0; padding: 20px; }
+    .form-group { margin-bottom: 5px; }
+    label { display: inline-block; width: 160px; color: #fff; font-size: 12px; }
+    input { width: 100px; background: #222; color: #0f0; border: 1px solid #444; padding: 2px; }
+    button { padding: 10px 20px; cursor: pointer; border: none; margin-top: 10px; margin-right: 5px; }
+    #startBtn { background: #28a745; color: white; }
+    #stopBtn { background: #dc3545; color: white; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; color: #fff; }
+    th, td { border: 1px solid #333; padding: 5px; font-size: 11px; word-break: break-all; }
+    .match-row { background-color: #052e16 !important; color: #0f0 !important; font-weight: bold; }
+</style>
+</head>
+<body>
+<h2>Satoshi 2009 Advanced Entropy Scanner</h2>
+
+<div id="inputs">
+    <div class="form-group"><label>Time:</label><input id="tS" value="1231006505"><input id="tE" value="1262303999"></div>
+    <div class="form-group"><label>QPC:</label><input id="qS" value="1000000"><input id="qE" value="1000000000"></div>
+    <div class="form-group"><label>Tick:</label><input id="tkS" value="0"><input id="tkE" value="65535"></div>
+    <div class="form-group"><label>PID:</label><input id="pS" value="4"><input id="pE" value="16384"></div>
+    <div class="form-group"><label>TID:</label><input id="tiS" value="4"><input id="tiE" value="16384"></div>
+    <div class="form-group"><label>RAM:</label><input id="rS" value="512"><input id="rE" value="2048"></div>
+    <div class="form-group"><label>Sys:</label><input id="sS" value="1"><input id="sE" value="3600000"></div>
+    <div class="form-group"><label>Disk (Hex):</label><input id="dS" value="00000000"><input id="dE" value="FFFFFFFF"></div>
+    <div class="form-group"><label>Mouse X:</label><input id="mXS" value="0"><input id="mXE" value="1024"></div>
+    <div class="form-group"><label>Mouse Y:</label><input id="mYS" value="0"><input id="mYE" value="768"></div>
+    <div class="form-group"><label>Env Hash (Hex):</label><input id="eHS" value="00000000"><input id="eHE" value="FFFFFFFF"></div>
+    <div class="form-group"><label>Vol Serial (Hex):</label><input id="vSS" value="00000000"><input id="vSE" value="FFFFFFFF"></div>
+    <div class="form-group"><label>BIOS Date:</label><input id="bS" value="1136073600"><input id="bE" value="1230768000"></div>
+    <div class="form-group"><label>BIOS Hash (Hex):</label><input id="bHS" value="00000000"><input id="bHE" value="FFFFFFFF"></div>
+    <div class="form-group"><label>Proc Types (3x):</label><input id="pT1" value="586" style="width:30px"><input id="pT2" value="686" style="width:30px"><input id="pT3" value="1586" style="width:30px"></div>
+    <div class="form-group"><label>Display Res (Hex):</label><input id="dR" value="04000300"></div>
+    <div class="form-group"><label>Workers:</label><input id="numW" value="4" style="width:50px"></div>
+    <div class="form-group"><label>Batchgrootte:</label><input id="batchSize" value="100" style="width:50px"></div>
+</div>
+
+<button id="startBtn">Start Scan</button><button id="stopBtn" disabled>Stop</button>
+<div id="totaal">Totaal gescand: 0</div>
+<table id="resultTable"><thead><tr><th>Adres</th><th>WIF</th><th>Lengte</th></tr></thead><tbody></tbody></table>
+
+<script>
+const TARGET_ADDRESSES = ["1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", "12c6DSiU4Rq3P4ZxziKxzrL5LmM8zZRJXN"]; 
+
+const workerCode = `
+importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+const ec = new elliptic.ec("secp256k1");
+
+function getRnd(min, max, isHex = false, step = 1) {
+    let nMin = isHex ? parseInt(min, 16) : parseInt(min);
+    let nMax = isHex ? parseInt(max, 16) : parseInt(max);
+    let range = Math.floor((nMax - nMin) / step);
+    return (Math.floor(Math.random() * (range + 1)) * step) + nMin;
+}
+
+function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function ripemd160(hex) { return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString(); }
+
+function base58(hex) {
+    const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let bytes = [];
+    for (let i = 0; i < hex.length; i += 2) bytes.push(parseInt(hex.substr(i, 2), 16));
+    let digits = [0];
+    for (let i = 0; i < bytes.length; i++) {
+        let carry = bytes[i];
+        for (let j = 0; j < digits.length; j++) {
+            carry += digits[j] << 8;
+            digits[j] = carry % 58;
+            carry = (carry / 58) | 0;
+        }
+        while (carry) { digits.push(carry % 58); carry = (carry / 58) | 0; }
+    }
+    let string = "";
+    for (let i = 0; i < bytes.length && bytes[i] === 0; i++) string += ALPHABET[0];
+    for (let i = digits.length - 1; i >= 0; i--) string += ALPHABET[digits[i]];
+    return string;
+}
+
+self.onmessage = function(e){
+    const { r, targets, batch } = e.data;
+    const targetSet = new Set(targets);
+    const procTypes = [r.pT1, r.pT2, r.pT3];
+    
+    while(true) {
+        let p = "";
+        p += getRnd(r.tS, r.tE).toString(16) + getRnd(r.qS, r.qE).toString(16) +
+             getRnd(r.tkS, r.tkE).toString(16) + 
+             getRnd(r.pS, r.pE, false, 4).toString(16) + 
+             getRnd(r.tiS, r.tiE, false, 4).toString(16) + 
+             getRnd(r.rS, r.rE).toString(16) +
+             getRnd(r.sS, r.sE).toString(16) + getRnd(r.dS, r.dE, true).toString(16) +
+             getRnd(r.mXS, r.mXE).toString(16) + getRnd(r.mYS, r.mYE).toString(16) +
+             getRnd(r.eHS, r.eHE, true).toString(16) + getRnd(r.vSS, r.vSE, true).toString(16) + 
+             getRnd(r.bS, r.bE).toString(16) + getRnd(r.bHS, r.bHE, true).toString(16) + 
+             procTypes[Math.floor(Math.random() * 3)] + r.dR;
+             
+        let pool = p + performance.now().toString() + Math.random().toString(36);
+        while(pool.length < 2048) pool += Math.random().toString(16).substring(2);
+        
+        let poolHash = CryptoJS.SHA1(CryptoJS.enc.Hex.parse(pool.substring(0, 2048))).toString();
+        let priv = sha256(poolHash);
+        let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
+        
+        let addr = base58("00" + ripemd160(sha256(pub)));
+        let hash256 = sha256(sha256("80" + priv));
+        let wif = base58("80" + priv + hash256.substring(0, 8));
+        
+        if(targetSet.has(addr)) {
+            self.postMessage({ match: true, addr: addr, wif: wif });
+            break;
+        }
+        if(Math.random() < (1 / batch)) {
+            self.postMessage({ match: false, addr: addr, wif: wif, batch: batch });
+        }
+    }
+};
+`;
+
+let workers = [], totaal = 0;
+
+document.getElementById("startBtn").onclick = function() {
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("stopBtn").disabled = false;
+    const inputs = document.querySelectorAll('#inputs input');
+    const r = {}; inputs.forEach(i => r[i.id] = i.value);
+    const batch = parseInt(document.getElementById("batchSize").value) || 100;
+    
+    for(let i=0; i<parseInt(document.getElementById("numW").value || 4); i++) {
+        let w = new Worker(URL.createObjectURL(new Blob([workerCode])));
+        w.postMessage({ r, targets: TARGET_ADDRESSES, batch: batch });
+        w.onmessage = function(e) {
+            if(e.data.match) { 
+                let row = document.getElementById("resultTable").tBodies[0].insertRow(0);
+                row.className = "match-row";
+                row.innerHTML = `<td>${e.data.addr} (MATCH!)</td><td>${e.data.wif}</td><td>1024 bytes</td>`;
+                alert("MATCH GEVONDEN: " + e.data.addr); 
+                stop(); 
+                return; 
+            }
+            totaal += e.data.batch;
+            document.getElementById("totaal").innerText = "Totaal gescand: " + totaal;
+            let row = document.getElementById("resultTable").tBodies[0].insertRow(0);
+            row.innerHTML = `<td>${e.data.addr}</td><td>${e.data.wif}</td><td>1024 bytes</td>`;
+            if(document.getElementById("resultTable").rows.length > 5) document.getElementById("resultTable").deleteRow(5);
+        };
+        workers.push(w);
+    }
+};
+
+function stop() {
+    workers.forEach(w => w.terminate());
+    workers = [];
+    document.getElementById("startBtn").disabled = false;
+    document.getElementById("stopBtn").disabled = true;
+}
+document.getElementById("stopBtn").onclick = stop;
+</script>
+</body>
+</html>
