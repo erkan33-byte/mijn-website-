@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>BTC Key Generator — Satoshi Jitter + Batch Fixed</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
+table { border-collapse: collapse; width: 100%; margin-top: 10px; background: #fff; }
+th, td { border: 1px solid #ccc; padding: 8px; font-size: 12px; }
+input { padding: 5px; width: 300px; }
+#foundMsg { color: green; font-weight: bold; margin: 15px 0; display: none; padding: 10px; border: 1px solid green; background: #e2f0d9; }
+</style>
+</head>
+<body>
+<h2>BTC Key Generator — Satoshi Jitter + Batch (Fixed)</h2>
+
+<label>Start WIF:</label><br>
+<input type="text" id="startWif" value="5K1TsaktS9zJmYwaeBhygtLo5tuW8aNtDj8WsfKMu9HzoaTAVr7"><br>
+<label>Batch grootte:</label><br>
+<input type="number" id="batchSize" value="500"><br>
+<label>Jitter bereik:</label><br>
+<input type="number" id="jitter" value="100"><br>
+<label>Workers:</label><br>
+<input type="number" id="numWorkers" value="4"><br>
+<button id="startBtn">Start</button>
+<button id="stopBtn">Stop</button>
+
+<div id="totaal">Totaal gescande adressen: 0</div>
+<div id="foundMsg"></div>
+
+<h3>Laatste scans</h3>
+<table id="resultTable">
+<thead><tr><th>Adres</th><th>WIF Key</th></tr></thead>
+<tbody></tbody>
+</table>
+
+<script>
+const TARGET_ADDRESSES = new Set([
+"1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF", "12tkqA9xSoowkzoERHMWNKsTey55YEBqkv",
+"12ib7dApVFvg82TXKycWBNpN8kFyiAN1dr", "1PeizMg76Cf96nUQrYg8xuoZWLQozU5zGW",
+"198aMn6ZYAczwrE5NvNTUMyJ5qkfy4g3Hi", "1HLvaTs3zR3oev9ya7Pzp3GB9Gqfg6XYJT",
+"1Du2jAQsBQnkkVZkN4oqC46tS78k7WMkVq", "1GDWUJyvtsyFKNjBvH6hpLE3CdaXx33dxP",
+"1GDu4EUz2KgeYT4CukDS3qNkiCzg1UfqRA"
+]);
+
+const workerCode = `
+self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+const ec = new elliptic.ec("secp256k1");
+function sha256Hex(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function doubleSha256Hex(hex){ return sha256Hex(sha256Hex(hex)); }
+
+// Correcte base58Encode die rekening houdt met voorloopnullen
+function base58Encode(hex){ 
+    const alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"; 
+    const bytes=Uint8Array.from(hex.match(/.{2}/g).map(b=>parseInt(b,16))); 
+    let zeros=0; while(zeros<bytes.length && bytes[zeros]===0) zeros++; 
+    let num=BigInt("0x"+hex), out=""; 
+    while(num>0n){ let r=num%58n; num/=58n; out=alphabet[Number(r)]+out; } 
+    return "1".repeat(zeros)+(out||""); 
+}
+
+function genAddr(k){ 
+    const privHex=k.toString(16).padStart(64,'0'); 
+    const kp=ec.keyFromPrivate(privHex,'hex'); 
+    const pub=Array.from(kp.getPublic(false,"array")).map(b=>b.toString(16).padStart(2,'0')).join(''); 
+    const rip=CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256Hex(pub))).toString(); 
+    const payload = "00" + rip;
+    return base58Encode(payload + doubleSha256Hex(payload).slice(0,8)); 
+}
+
+function genWif(k){
+    const privHex=k.toString(16).padStart(64,'0');
+    const p="80"+privHex;
+    return base58Encode(p+doubleSha256Hex(p).slice(0,8));
+}
+
+self.onmessage=function(e){
+  const { startKey, step, jitter, batch, targets } = e.data;
+  let currentKey = BigInt(startKey);
+  const TARGET_SET = new Set(targets);
+  
+  setInterval(() => {
+    let batchOut = [];
+    for(let i=0; i<batch; i++){
+      let jitterVal = BigInt(Math.floor(Math.random() * (jitter * 2 + 1)) - jitter);
+      let k = currentKey + jitterVal;
+      let addr = genAddr(k);
+      let wif = genWif(k);
+      
+      if(TARGET_SET.has(addr)){
+        self.postMessage({ found: true, addr, wif });
+        return;
+      }
+      batchOut.push({ addr, wif });
+      currentKey += BigInt(step);
+    }
+    self.postMessage({ batch: batchOut });
+  }, 10);
+};
+`;
+
+let workers = [], totaal = 0;
+function wifToBigInt(wif) {
+    const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let num = 0n;
+    for (let char of wif) num = num * 58n + BigInt(alphabet.indexOf(char));
+    let hex = num.toString(16);
+    if (hex.startsWith("80")) hex = hex.substring(2);
+    if (hex.length > 8) hex = hex.substring(0, hex.length - 8);
+    return BigInt("0x" + hex);
+}
+
+document.getElementById("startBtn").onclick = () => {
+    const startKey = wifToBigInt(document.getElementById("startWif").value);
+    const batch = parseInt(document.getElementById("batchSize").value);
+    const jitter = parseInt(document.getElementById("jitter").value);
+    const numWorkers = parseInt(document.getElementById("numWorkers").value);
+    const blob = new Blob([workerCode], {type: 'application/javascript'});
+    const url = URL.createObjectURL(blob);
+
+    for(let i=0; i<numWorkers; i++){
+        let w = new Worker(url);
+        w.postMessage({ startKey: startKey + BigInt(i), step: numWorkers, jitter, batch, targets: Array.from(TARGET_ADDRESSES) });
+        w.onmessage = e => {
+            if(e.data.found){
+                document.getElementById("foundMsg").innerHTML = "MATCH: " + e.data.addr + "<br>WIF: " + e.data.wif;
+                document.getElementById("foundMsg").style.display = "block";
+            } else if(e.data.batch) {
+                let tbody = document.querySelector("#resultTable tbody");
+                e.data.batch.forEach(item => {
+                    let r = tbody.insertRow(0);
+                    r.insertCell(0).innerText = item.addr;
+                    r.insertCell(1).innerText = item.wif;
+                    if(tbody.rows.length > 30) tbody.deleteRow(30);
+                });
+                totaal += batch;
+                document.getElementById("totaal").innerText = "Totaal gescand: " + totaal;
+            }
+        };
+        workers.push(w);
+    }
+};
+
+document.getElementById("stopBtn").onclick = () => { workers.forEach(w => w.terminate()); workers = []; };
+</script>
+</body>
+</html>
