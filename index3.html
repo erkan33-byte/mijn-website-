@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>Satoshi 2009 1024-Byte Random Mixer</title>
+<title>Satoshi 2009 Precision Entropy Scanner</title>
 <style>
     body { font-family: 'Courier New', Courier, monospace; background: #000; color: #0f0; padding: 20px; }
     .form-group { margin-bottom: 5px; }
@@ -17,7 +17,7 @@
 </style>
 </head>
 <body>
-<h2>Satoshi 2009 1024-Byte Random Mixer</h2>
+<h2>Satoshi 2009 Precision Entropy Scanner</h2>
 
 <div id="inputs">
     <div class="form-group"><label style="color:yellow">Keyspace Start %:</label><input id="kS" value="21.1"></div>
@@ -25,20 +25,14 @@
     <hr>
     <div class="form-group"><label>Time:</label><input id="tS" value="1231006505"><input id="tE" value="1262303999"></div>
     <div class="form-group"><label>QPC:</label><input id="qS" value="1000000"><input id="qE" value="1000000000"></div>
-    <div class="form-group"><label>Tick:</label><input id="tkS" value="0"><input id="tkE" value="65535"></div>
-    <div class="form-group"><label>PID:</label><input id="pS" value="4"><input id="pE" value="16384"></div>
-    <div class="form-group"><label>TID:</label><input id="tiS" value="4"><input id="tiE" value="16384"></div>
+    <div class="form-group"><label>PID (Stap 4):</label><input id="pS" value="4"><input id="pE" value="16384"></div>
+    <div class="form-group"><label>TID (Stap 4):</label><input id="tiS" value="4"><input id="tiE" value="16384"></div>
     <div class="form-group"><label>RAM:</label><input id="rS" value="512"><input id="rE" value="2048"></div>
-    <div class="form-group"><label>Sys:</label><input id="sS" value="1"><input id="sE" value="3600000"></div>
     <div class="form-group"><label>Disk (Hex):</label><input id="dS" value="00000000"><input id="dE" value="FFFFFFFF"></div>
     <div class="form-group"><label>Mouse X:</label><input id="mXS" value="0"><input id="mXE" value="1024"></div>
     <div class="form-group"><label>Mouse Y:</label><input id="mYS" value="0"><input id="mYE" value="768"></div>
-    <div class="form-group"><label>Env Hash (Hex):</label><input id="eHS" value="00000000"><input id="eHE" value="FFFFFFFF"></div>
-    <div class="form-group"><label>Vol Serial (Hex):</label><input id="vSS" value="00000000"><input id="vSE" value="FFFFFFFF"></div>
-    <div class="form-group"><label>BIOS Date:</label><input id="bS" value="1136073600"><input id="bE" value="1230768000"></div>
-    <div class="form-group"><label>BIOS Hash (Hex):</label><input id="bHS" value="00000000"><input id="bHE" value="FFFFFFFF"></div>
     <div class="form-group"><label>Proc Types (3x):</label><input id="pT1" value="586" style="width:30px"><input id="pT2" value="686" style="width:30px"><input id="pT3" value="1586" style="width:30px"></div>
-    <div class="form-group"><label>Display Res (Hex):</label><input id="dR" value="04000300"></div>
+    <div class="form-group"><label>Disp Res (Hex):</label><input id="dR" value="04000300"></div>
     <div class="form-group"><label>Workers:</label><input id="numW" value="4" style="width:50px"></div>
     <div class="form-group"><label>Batchgrootte:</label><input id="batchSize" value="100" style="width:50px"></div>
 </div>
@@ -75,25 +69,36 @@ function base58(hex) {
 self.onmessage = function(e){
     const { r, targets, batch } = e.data;
     const targetSet = new Set(targets);
-    
-    let inputStr = Object.values(r).join('');
-    
     const minK = (N * BigInt(Math.floor(r.kS * 1000))) / 100000n;
     const maxK = (N * BigInt(Math.floor(r.kE * 1000))) / 100000n;
     const range = maxK - minK;
-    
     let counter = 0;
 
+    // Vooraf stapgroottes bepalen voor PID/TID
+    const pSteps = Math.floor((parseInt(r.pE) - parseInt(r.pS)) / 4);
+    const tiSteps = Math.floor((parseInt(r.tiE) - parseInt(r.tiS)) / 4);
+
     while(true) {
-        // 1024 bytes aan willekeur per poging
+        let d = {
+            t: Math.floor(Math.random() * (parseInt(r.tE) - parseInt(r.tS)) + parseInt(r.tS)),
+            q: Math.floor(Math.random() * (parseInt(r.qE) - parseInt(r.qS)) + parseInt(r.qS)),
+            // PID en TID in stappen van 4
+            p: parseInt(r.pS) + (Math.floor(Math.random() * (pSteps + 1)) * 4),
+            ti: parseInt(r.tiS) + (Math.floor(Math.random() * (tiSteps + 1)) * 4),
+            r: Math.floor(Math.random() * (parseInt(r.rE) - parseInt(r.rS)) + parseInt(r.rS)),
+            d: Math.floor(Math.random() * (parseInt(r.dE, 16) - parseInt(r.dS, 16)) + parseInt(r.dS, 16)).toString(16),
+            mx: Math.floor(Math.random() * (parseInt(r.mXE) - parseInt(r.mXS)) + parseInt(r.mXS)),
+            my: Math.floor(Math.random() * (parseInt(r.mYE) - parseInt(r.mYS)) + parseInt(r.mYS)),
+            pt: [r.pT1, r.pT2, r.pT3][Math.floor(Math.random()*3)],
+            dr: r.dR
+        };
+        
+        let inputStr = Object.values(d).join('');
         let randomBuffer = new Uint8Array(1024);
         self.crypto.getRandomValues(randomBuffer);
         let randomHex = Array.from(randomBuffer).map(b => b.toString(16).padStart(2, '0')).join('');
         
-        // Input-data mengen met 1024-byte entropie
         let mix = sha256(inputStr + randomHex);
-        
-        // Sleutel binnen range genereren
         let privBig = minK + (BigInt("0x" + mix) % range);
         let priv = privBig.toString(16).padStart(64, '0');
         
@@ -123,7 +128,7 @@ document.getElementById("startBtn").onclick = function() {
         w.postMessage({ r, targets: TARGET_ADDRESSES, batch: parseInt(r.batchSize) });
         w.onmessage = function(e) {
             let row = document.getElementById("resultTable").tBodies[0].insertRow(0);
-            row.innerHTML = `<td>${e.data.addr}</td><td>${e.data.wif}</td><td>1024</td>`;
+            row.innerHTML = `<td>${e.data.addr}</td><td>${e.data.wif}</td><td>DYN</td>`;
             if(e.data.match) { row.className = "match-row"; alert("Gevonden: " + e.data.addr); stop(); }
             if(document.getElementById("resultTable").rows.length > 20) document.getElementById("resultTable").deleteRow(20);
             totaal += e.data.batch || 0;
@@ -138,6 +143,3 @@ document.getElementById("stopBtn").onclick = stop;
 </script>
 </body>
 </html>
-
-
-
