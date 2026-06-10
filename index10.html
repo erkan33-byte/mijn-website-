@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>Satoshi 2009 Hussel-Simulator</title>
+<style>
+    body { font-family: 'Courier New', Courier, monospace; background: #000; color: #0f0; padding: 20px; }
+    .form-group { margin-bottom: 5px; }
+    label { display: inline-block; width: 160px; color: #fff; font-size: 12px; }
+    input { width: 100px; background: #222; color: #0f0; border: 1px solid #444; padding: 2px; }
+    button { padding: 10px 20px; cursor: pointer; border: none; margin-top: 10px; margin-right: 5px; }
+    #startBtn { background: #28a745; color: white; }
+    #stopBtn { background: #dc3545; color: white; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; color: #fff; }
+    th, td { border: 1px solid #333; padding: 5px; font-size: 11px; word-break: break-all; }
+</style>
+</head>
+<body>
+<h2>Satoshi 2009 Hussel-Simulator (Individuele Hashing)</h2>
+
+<div id="inputs">
+    <div class="form-group"><label style="color:yellow">Keyspace Start %:</label><input id="kS" value="21.1"></div>
+    <div class="form-group"><label style="color:yellow">Keyspace End %:</label><input id="kE" value="21.2"></div>
+    <hr>
+    <div class="form-group"><label>Time:</label><input id="tS" value="1231006505"><input id="tE" value="1262303999"></div>
+    <div class="form-group"><label>QPC:</label><input id="qS" value="1000000"><input id="qE" value="1000000000"></div>
+    <div class="form-group"><label>Tick:</label><input id="tkS" value="0"><input id="tkE" value="65535"></div>
+    <div class="form-group"><label>PID:</label><input id="pS" value="4"><input id="pE" value="16384"></div>
+    <div class="form-group"><label>TID:</label><input id="tiS" value="4"><input id="tiE" value="16384"></div>
+    <div class="form-group"><label>RAM:</label><input id="rS" value="512"><input id="rE" value="2048"></div>
+    <div class="form-group"><label>Sys:</label><input id="sS" value="1"><input id="sE" value="3600000"></div>
+    <div class="form-group"><label>Disk (Hex):</label><input id="dS" value="00000000"><input id="dE" value="FFFFFFFF"></div>
+    <div class="form-group"><label>Mouse X:</label><input id="mXS" value="0"><input id="mXE" value="1024"></div>
+    <div class="form-group"><label>Mouse Y:</label><input id="mYS" value="0"><input id="mYE" value="768"></div>
+    <div class="form-group"><label>Workers:</label><input id="numW" value="4" style="width:50px"></div>
+    <div class="form-group"><label>Batchgrootte:</label><input id="batchSize" value="100" style="width:50px"></div>
+</div>
+
+<button id="startBtn">Start Hussel Scan</button><button id="stopBtn" disabled>Stop</button>
+<div id="totaal">Totaal gescand: 0</div>
+<table id="resultTable"><thead><tr><th>Adres</th><th>WIF</th><th>Status</th></tr></thead><tbody></tbody></table>
+
+<script>
+const TARGET_ADDRESSES = ["1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF","12tkqA9xSoowkzoERHMWNKsTey55YEBqkv","1GDu4EUz2KgeYT4CukDS3qNkiCzg1UfqRA"]; 
+
+const workerCode = `
+importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+const ec = new elliptic.ec("secp256k1");
+const N = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
+
+function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function ripemd160(hex) { return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function getRnd(min, max, isHex = false, step = 1) {
+    let nMin = isHex ? parseInt(min, 16) : parseInt(min);
+    let nMax = isHex ? parseInt(max, 16) : parseInt(max);
+    let val = (Math.floor(Math.random() * ((nMax - nMin) / step + 1)) * step) + nMin;
+    return isHex ? val.toString(16) : val.toString();
+}
+function base58(hex) {
+    const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let bytes = []; for (let i = 0; i < hex.length; i += 2) bytes.push(parseInt(hex.substr(i, 2), 16));
+    let digits = [0];
+    for (let i = 0; i < bytes.length; i++) {
+        let carry = bytes[i];
+        for (let j = 0; j < digits.length; j++) { carry += digits[j] << 8; digits[j] = carry % 58; carry = (carry / 58) | 0; }
+        while (carry) { digits.push(carry % 58); carry = (carry / 58) | 0; }
+    }
+    let string = "";
+    for (let i = 0; i < bytes.length && bytes[i] === 0; i++) string += ALPHABET[0];
+    for (let i = digits.length - 1; i >= 0; i--) string += ALPHABET[digits[i]];
+    return string;
+}
+
+self.onmessage = function(e){
+    const { r, targets, batch } = e.data;
+    const targetSet = new Set(targets);
+    const minK = (N * BigInt(Math.floor(r.kS * 1000))) / 100000n;
+    const maxK = (N * BigInt(Math.floor(r.kE * 1000))) / 100000n;
+    const range = maxK - minK;
+
+    while(true) {
+        // HUSSELEN: Elke variabele apart hashen (Voorkomt collisies)
+        let m1 = sha256(getRnd(r.tS, r.tE));
+        let m2 = sha256(getRnd(r.qS, r.qE));
+        let m3 = sha256(getRnd(r.tkS, r.tkE));
+        let m4 = sha256(getRnd(r.pS, r.pE, false, 4));
+        let m5 = sha256(getRnd(r.tiS, r.tiE, false, 4));
+        let m6 = sha256(getRnd(r.rS, r.rE));
+        let m7 = sha256(getRnd(r.sS, r.sE));
+        let m8 = sha256(getRnd(r.dS, r.dE, true));
+        let m9 = sha256(getRnd(r.mXS, r.mXE));
+        let m10 = sha256(getRnd(r.mYS, r.mYE));
+        
+        // MasterMix: De 'Hussel' fase
+        let masterMix = sha256(m1 + m2 + m3 + m4 + m5 + m6 + m7 + m8 + m9 + m10);
+        
+        // Final Entropy
+        let finalEntropy = sha256(masterMix + Math.random().toString());
+        
+        let privBig = minK + (BigInt("0x" + finalEntropy) % range);
+        let priv = privBig.toString(16).padStart(64, '0');
+        
+        let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
+        let hash160 = "00" + ripemd160(sha256(pub));
+        let addr = base58(hash160 + sha256(sha256(hash160)).substring(0, 8));
+        let wif = base58("80" + priv + sha256(sha256("80" + priv)).substring(0, 8));
+        
+        if(targetSet.has(addr)) { self.postMessage({ match: true, addr: addr, wif: wif }); break; }
+        self.postMessage({ match: false, addr: addr, wif: wif, batch: 1 });
+    }
+};
+`;
+
+let workers = [], totaal = 0;
+document.getElementById("startBtn").onclick = function() {
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("stopBtn").disabled = false;
+    const r = {}; document.querySelectorAll('#inputs input').forEach(i => r[i.id] = i.value);
+    for(let i=0; i<parseInt(r.numW); i++) {
+        let w = new Worker(URL.createObjectURL(new Blob([workerCode])));
+        w.postMessage({ r, targets: TARGET_ADDRESSES, batch: parseInt(r.batchSize) });
+        w.onmessage = function(e) {
+            totaal++;
+            if(totaal % parseInt(r.batchSize) === 0) {
+                document.getElementById("totaal").innerText = "Totaal gescand: " + totaal;
+                let row = document.getElementById("resultTable").tBodies[0].insertRow(0);
+                row.innerHTML = `<td>${e.data.addr}</td><td>${e.data.wif}</td><td>HUSSLED</td>`;
+                if(document.getElementById("resultTable").rows.length > 10) document.getElementById("resultTable").deleteRow(10);
+            }
+            if(e.data.match) { alert("Gevonden: " + e.data.addr); stop(); }
+        };
+        workers.push(w);
+    }
+};
+function stop() { workers.forEach(w => w.terminate()); workers = []; document.getElementById("startBtn").disabled = false; document.getElementById("stopBtn").disabled = true; }
+document.getElementById("stopBtn").onclick = stop;
+</script>
+</body>
+</html>
