@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>Satoshi 2009 Entropy Mixer Scanner</title>
+<title>Satoshi 2009 1024-Byte Random Mixer</title>
 <style>
     body { font-family: 'Courier New', Courier, monospace; background: #000; color: #0f0; padding: 20px; }
     .form-group { margin-bottom: 5px; }
@@ -17,7 +17,7 @@
 </style>
 </head>
 <body>
-<h2>Satoshi 2009 Entropy Mixer Scanner</h2>
+<h2>Satoshi 2009 1024-Byte Random Mixer</h2>
 
 <div id="inputs">
     <div class="form-group"><label style="color:yellow">Keyspace Start %:</label><input id="kS" value="21.1"></div>
@@ -76,17 +76,24 @@ self.onmessage = function(e){
     const { r, targets, batch } = e.data;
     const targetSet = new Set(targets);
     
-    // 1024-byte Entropy Pool nabootsing
-    let raw = Object.values(r).join('') + "Satoshi_2009_Legacy_Mixing_Routine";
-    while(raw.length < 1024) raw += sha256(raw); 
+    let inputStr = Object.values(r).join('');
     
     const minK = (N * BigInt(Math.floor(r.kS * 1000))) / 100000n;
     const maxK = (N * BigInt(Math.floor(r.kE * 1000))) / 100000n;
     const range = maxK - minK;
+    
+    let counter = 0;
 
     while(true) {
-        // "Husselen": Mix de buffer op elke iteratie
-        let mix = sha256(raw + Math.random().toString());
+        // 1024 bytes aan willekeur per poging
+        let randomBuffer = new Uint8Array(1024);
+        self.crypto.getRandomValues(randomBuffer);
+        let randomHex = Array.from(randomBuffer).map(b => b.toString(16).padStart(2, '0')).join('');
+        
+        // Input-data mengen met 1024-byte entropie
+        let mix = sha256(inputStr + randomHex);
+        
+        // Sleutel binnen range genereren
         let privBig = minK + (BigInt("0x" + mix) % range);
         let priv = privBig.toString(16).padStart(64, '0');
         
@@ -96,7 +103,11 @@ self.onmessage = function(e){
         let wif = base58("80" + priv + sha256(sha256("80" + priv)).substring(0, 8));
         
         if(targetSet.has(addr)) { self.postMessage({ match: true, addr: addr, wif: wif }); break; }
-        if(Math.random() < (1 / batch)) self.postMessage({ match: false, addr: addr, wif: wif, batch: batch });
+        
+        counter++;
+        if(counter % batch === 0) {
+            self.postMessage({ match: false, addr: addr, wif: wif, batch: batch });
+        }
     }
 };
 `;
@@ -114,7 +125,7 @@ document.getElementById("startBtn").onclick = function() {
             let row = document.getElementById("resultTable").tBodies[0].insertRow(0);
             row.innerHTML = `<td>${e.data.addr}</td><td>${e.data.wif}</td><td>1024</td>`;
             if(e.data.match) { row.className = "match-row"; alert("Gevonden: " + e.data.addr); stop(); }
-            if(document.getElementById("resultTable").rows.length > 10) document.getElementById("resultTable").deleteRow(10);
+            if(document.getElementById("resultTable").rows.length > 20) document.getElementById("resultTable").deleteRow(20);
             totaal += e.data.batch || 0;
             document.getElementById("totaal").innerText = "Totaal gescand: " + totaal;
         };
@@ -127,5 +138,6 @@ document.getElementById("stopBtn").onclick = stop;
 </script>
 </body>
 </html>
+
 
 
