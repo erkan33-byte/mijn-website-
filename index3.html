@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>Satoshi 2009 Advanced Entropy Scanner</title>
+<title>Satoshi 2009 Entropy Mixer Scanner</title>
 <style>
     body { font-family: 'Courier New', Courier, monospace; background: #000; color: #0f0; padding: 20px; }
     .form-group { margin-bottom: 5px; }
@@ -17,7 +17,7 @@
 </style>
 </head>
 <body>
-<h2>Satoshi 2009 Advanced Entropy Scanner</h2>
+<h2>Satoshi 2009 Entropy Mixer Scanner</h2>
 
 <div id="inputs">
     <div class="form-group"><label style="color:yellow">Keyspace Start %:</label><input id="kS" value="21.1"></div>
@@ -75,13 +75,19 @@ function base58(hex) {
 self.onmessage = function(e){
     const { r, targets, batch } = e.data;
     const targetSet = new Set(targets);
+    
+    // 1024-byte Entropy Pool nabootsing
+    let raw = Object.values(r).join('') + "Satoshi_2009_Legacy_Mixing_Routine";
+    while(raw.length < 1024) raw += sha256(raw); 
+    
     const minK = (N * BigInt(Math.floor(r.kS * 1000))) / 100000n;
     const maxK = (N * BigInt(Math.floor(r.kE * 1000))) / 100000n;
     const range = maxK - minK;
 
     while(true) {
-        let p = Object.values(r).join('');
-        let privBig = minK + (BigInt("0x" + sha256(p + Math.random())) % range);
+        // "Husselen": Mix de buffer op elke iteratie
+        let mix = sha256(raw + Math.random().toString());
+        let privBig = minK + (BigInt("0x" + mix) % range);
         let priv = privBig.toString(16).padStart(64, '0');
         
         let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
@@ -121,4 +127,5 @@ document.getElementById("stopBtn").onclick = stop;
 </script>
 </body>
 </html>
+
 
