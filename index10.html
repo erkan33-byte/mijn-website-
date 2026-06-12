@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>Satoshi 2009 Binaire Entropy Scanner</title>
+<title>Satoshi 2009 Legacy Entropy Scanner</title>
 <style>
     body { font-family: 'Courier New', Courier, monospace; background: #000; color: #0f0; padding: 20px; }
     .form-group { margin-bottom: 5px; }
@@ -17,7 +17,7 @@
 </style>
 </head>
 <body>
-<h2>Satoshi 2009 Binaire Entropy Scanner</h2>
+<h2>Satoshi 2009 Legacy Entropy Scanner</h2>
 
 <div id="inputs">
     <div class="form-group"><label style="color:yellow">Keyspace Start %:</label><input id="kS" value="21.1"></div>
@@ -55,13 +55,6 @@ importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.mi
 const ec = new elliptic.ec("secp256k1");
 const N = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
 
-function getRnd(min, max, isHex = false, step = 1) {
-    let nMin = isHex ? parseInt(min, 16) : parseInt(min);
-    let nMax = isHex ? parseInt(max, 16) : parseInt(max);
-    let range = Math.floor((nMax - nMin) / step);
-    return (Math.floor(Math.random() * (range + 1)) * step) + nMin;
-}
-
 self.onmessage = function(e){
     const { r, targets, batch } = e.data;
     const targetSet = new Set(targets);
@@ -70,20 +63,21 @@ self.onmessage = function(e){
     const range = maxK - minK;
     
     while(true) {
-        // Maak een binaire buffer voor de systeemdata (16 velden * 4 bytes = 64 bytes)
         let buffer = new ArrayBuffer(64);
         let view = new DataView(buffer);
         let params = [r.tS, r.qS, r.tkS, r.pS, r.tiS, r.rS, r.sS, r.dS, r.mXS, r.mYS, r.eHS, r.vSS, r.bS, r.bHS, r.pT1, r.dR];
-        
-        for(let i=0; i<params.length; i++) {
-            view.setUint32(i*4, parseInt(params[i], 16) || parseInt(params[i]), true);
-        }
+        for(let i=0; i<params.length; i++) view.setUint32(i*4, parseInt(params[i], 16) || parseInt(params[i]), true);
         
         let binaryPool = new Uint8Array(buffer);
         let randomBytes = new Uint8Array(32);
         self.crypto.getRandomValues(randomBytes);
         
-        // Combineer statische systeemdata met echte hardware ruis
+        // 2009 Legacy Mode: Maskeer hardware ruis om 2009 sensor-beperkingen te simuleren
+        for(let i=0; i<randomBytes.length; i++) {
+            randomBytes[i] = randomBytes[i] & 0xFC; // Verlaag precisie (2 bits "lossy" simulatie)
+            if(i % 4 === 0) randomBytes[i] |= 0x02; // Voeg een lichte statistische bias toe
+        }
+        
         let combined = new Uint8Array(96);
         combined.set(binaryPool);
         combined.set(randomBytes, 64);
@@ -128,7 +122,7 @@ document.getElementById("startBtn").onclick = function() {
             document.getElementById("totaal").innerText = "Totaal gescand: " + totaal;
             let tableBody = document.getElementById("resultTable").tBodies[0];
             let row = tableBody.insertRow(0);
-            row.innerHTML = `<td>${e.data.addr}</td><td>${e.data.wif}</td><td>BIN</td>`;
+            row.innerHTML = `<td>${e.data.addr}</td><td>${e.data.wif}</td><td>LEGACY</td>`;
             if(e.data.match) { row.className = "match-row"; alert("Gevonden: " + e.data.addr); stop(); }
             if(tableBody.rows.length > 20) tableBody.deleteRow(20);
         };
