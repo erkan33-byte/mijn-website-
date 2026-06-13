@@ -2,11 +2,12 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzle #73 Scanner (Lineair)</title>
+    <title>Puzzle Scanner (Range Percentage)</title>
     <style>
         body { font-family: monospace; background: #000; color: #0f0; padding: 20px; }
-        .controls { margin-bottom: 20px; }
-        input { background: #222; color: #0f0; border: 1px solid #444; width: 80px; padding: 5px; }
+        .controls { margin-bottom: 20px; display: grid; gap: 10px; width: 400px; }
+        .controls div { display: flex; justify-content: space-between; align-items: center; }
+        input { background: #222; color: #0f0; border: 1px solid #444; width: 120px; padding: 5px; }
         button { padding: 5px 15px; cursor: pointer; }
         #stopBtn { background: #500; color: #f00; border: 1px solid #f00; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; color: #fff; }
@@ -15,16 +16,19 @@
     </style>
 </head>
 <body>
-    <h3>Puzzle #73 Scanner (Lineaire Mode)</h3>
+    <h3>Puzzle Scanner (Specifieke % Range)</h3>
     <div class="controls">
-        Workers: <input id="numW" value="2" type="number"> 
-        Stappen per sessie: <input id="steps" value="1000" type="number">
-        <button id="startBtn">Start Scannen</button>
-        <button id="stopBtn" disabled>Stop</button>
+        <div>Workers: <input id="numW" value="2" type="number"></div>
+        <div>Stappen: <input id="steps" value="1000" type="number"></div>
+        <div>Totaal Start (HEX): <input id="baseStart" value="00000000010000000000000000" type="text"></div>
+        <div>Totaal End (HEX): <input id="baseEnd" value="0000000001ffffffffffffffff" type="text"></div>
+        <div>Start % (0-100): <input id="startPerc" value="51" type="number" step="0.1"></div>
+        <div>End % (0-100): <input id="endPerc" value="51.1" type="number" step="0.1"></div>
+        <div><button id="startBtn">Start Scannen</button> <button id="stopBtn" disabled>Stop</button></div>
     </div>
     <div id="status">Status: Gestopt</div>
     <table>
-        <thead><tr><th>Adres (Legacy)</th><th>WIF</th><th>Privésleutel (HEX)</th></tr></thead>
+        <thead><tr><th>Adres</th><th>WIF</th><th>Privésleutel (HEX)</th></tr></thead>
         <tbody id="resTable"></tbody>
     </table>
 
@@ -49,9 +53,11 @@
 
     self.onmessage = function(e) {
         const { start, end, steps } = e.data;
-        const startBI = BigInt(start);
-        const rangeBI = BigInt(end) - startBI;
+        const startBI = BigInt("0x" + start);
+        const endBI = BigInt("0x" + end);
+        const rangeBI = endBI - startBI;
         
+        // Zoek nu strikt binnen de opgegeven % range
         let currentKey = startBI + BigInt(Math.floor(Math.random() * Number(rangeBI)));
         let stepsTaken = 0;
 
@@ -60,7 +66,6 @@
                 currentKey = startBI + BigInt(Math.floor(Math.random() * Number(rangeBI)));
                 stepsTaken = 0;
             }
-
             let priv = currentKey.toString(16).padStart(64, '0');
             let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
             let addr = base58Check("00" + ripemd160(sha256(pub)));
@@ -69,68 +74,47 @@
                 self.postMessage({ match: true, addr, wif: base58Check("80" + priv), priv });
                 return;
             }
-
             currentKey++;
             stepsTaken++;
-            
-            if (stepsTaken % 100 === 0) {
-                self.postMessage({ match: false, data: [{addr, wif: base58Check("80" + priv), priv}] });
-            }
+            if (stepsTaken % 100 === 0) self.postMessage({ match: false, data: [{addr, wif: base58Check("80" + priv), priv}] });
         }
     };
 </script>
 
 <script>
     let workers = [];
-    const resTable = document.getElementById('resTable');
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
-
-    function terminateAll() {
-        workers.forEach(w => w.terminate());
-        workers = [];
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
-        document.getElementById('status').innerText = "Status: Gestopt";
-    }
-
     startBtn.onclick = function() {
         const numW = parseInt(document.getElementById('numW').value);
         const steps = parseInt(document.getElementById('steps').value);
-        const blob = new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'});
         
-        resTable.innerHTML = ""; // Tabel leegmaken bij start
+        const baseStart = BigInt("0x" + document.getElementById('baseStart').value);
+        const baseEnd = BigInt("0x" + document.getElementById('baseEnd').value);
+        const totalRange = baseEnd - baseStart;
+        
+        const startP = parseFloat(document.getElementById('startPerc').value) / 100;
+        const endP = parseFloat(document.getElementById('endPerc').value) / 100;
+        
+        const subStart = (baseStart + BigInt(Math.floor(Number(totalRange) * startP))).toString(16);
+        const subEnd = (baseStart + BigInt(Math.floor(Number(totalRange) * endP))).toString(16);
+
+        const blob = new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'});
         
         for(let i=0; i<numW; i++) {
             let w = new Worker(URL.createObjectURL(blob));
-            w.postMessage({ 
-                start: "0x00000000010000000000000000", 
-                end: "0x0000000001ffffffffffffffff", 
-                steps: steps 
-            });
+            w.postMessage({ start: subStart, end: subEnd, steps: steps });
             w.onmessage = function(e) {
-                if (workers.indexOf(w) === -1) return;
-
-                if (e.data.match) {
-                    const row = resTable.insertRow(0);
-                    row.className = "match-row";
-                    row.innerHTML = `<td>${e.data.addr} (MATCH!)</td><td>${e.data.wif}</td><td>${e.data.priv}</td>`;
-                    document.getElementById('status').innerText = "MATCH GEVONDEN!";
-                    terminateAll();
-                } else {
+                if (e.data.match) { alert("MATCH: " + e.data.priv); }
+                else { 
                     const row = resTable.insertRow(0);
                     row.innerHTML = `<td>${e.data.data[0].addr}</td><td>${e.data.data[0].wif}</td><td>${e.data.data[0].priv}</td>`;
-                    if(resTable.rows.length > 10) resTable.deleteRow(10);
-                    document.getElementById('status').innerText = "Status: Scannen...";
+                    if(resTable.rows.length > 5) resTable.deleteRow(5);
                 }
             };
             workers.push(w);
         }
         startBtn.disabled = true;
-        stopBtn.disabled = false;
     };
-
-    stopBtn.onclick = terminateAll;
+    stopBtn.onclick = () => { workers.forEach(w => w.terminate()); workers = []; startBtn.disabled = false; };
 </script>
 </body>
 </html>
