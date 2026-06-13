@@ -5,28 +5,28 @@
     <title>Puzzle Scanner (Range Percentage)</title>
     <style>
         body { font-family: monospace; background: #000; color: #0f0; padding: 20px; }
-        .controls { margin-bottom: 20px; display: grid; gap: 10px; width: 400px; }
+        .controls { margin-bottom: 20px; display: grid; gap: 10px; width: 450px; }
         .controls div { display: flex; justify-content: space-between; align-items: center; }
         input { background: #222; color: #0f0; border: 1px solid #444; width: 150px; padding: 5px; }
         button { padding: 5px 15px; cursor: pointer; }
-        #stopBtn { background: #500; color: #f00; border: 1px solid #f00; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; color: #fff; }
         th, td { border: 1px solid #333; padding: 5px; font-size: 11px; word-break: break-all; }
         .match-row { background-color: #052e16 !important; color: #0f0 !important; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h3>Puzzle #73 Scanner (Specifieke % Range)</h3>
+    <h3>Puzzle #73 Scanner</h3>
     <div class="controls">
         <div>Workers: <input id="numW" value="2" type="number"></div>
-        <div>Stappen: <input id="steps" value="1000" type="number"></div>
+        <div>Batch grootte (sleutels per batch): <input id="batchSize" value="500" type="number"></div>
+        <div>Incr. stappen per worker: <input id="steps" value="10000" type="number"></div>
         <div>Totaal Start (HEX): <input id="baseStart" value="1000000000000000000" type="text"></div>
         <div>Totaal End (HEX): <input id="baseEnd" value="1ffffffffffffffffff" type="text"></div>
         <div>Start % (0-100): <input id="startPerc" value="0" type="number" step="0.001"></div>
         <div>End % (0-100): <input id="endPerc" value="100" type="number" step="0.001"></div>
         <div><button id="startBtn">Start Scannen</button> <button id="stopBtn" disabled>Stop</button></div>
     </div>
-    <div id="status">Status: Gestopt</div>
+    <div id="status">Status: Gestopt | Totaal gescand: <span id="totalCount">0</span></div>
     <table>
         <thead><tr><th>Adres</th><th>WIF</th><th>Privésleutel (HEX)</th></tr></thead>
         <tbody id="resTable"></tbody>
@@ -37,58 +37,62 @@
     const ec = new elliptic.ec("secp256k1");
     
     const TARGETS = [
-        "1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU", "1JTK7s9YVYywfm5XUH7RNhHJH1LshCaRFR",
-        "12VVRNPi4SJqUTsp6FmqDqY5sGosDtysn4", "1FWGcVDK3JGzCC3WtkYetULPszMaK2Jksv",
-        "1DJh2eHFYQfACPmrvpyWc8MSTYKh7w9eRF", "1Bxk4CQdqL9p22JEtDfdXMsng1XacifUtE",
-        "15qF6X51huDjqTmF9BJgxXdt1xcj46Jmhb", "1ARk8HWJMn8js8tQmGUJeQHjSE7KRkn2t8",
-        "15qsCm78whspNQFydGJQk5rexzxTQopnHZ", "13zYrYhhJxp6Ui1VV7pqa5WDhNWM45ARAC",
-        "14MdEb4eFcT3MVG5sPFG4jGLuHJSnt1Dk2", "1CMq3SvFcVEcpLMuuH8PUcNiqsK1oicG2D",
-        "1K3x5L6G57Y494fDqBfrojD28UJv4s5JcK", "1PxH3K1Shdjb7gSEoTX7UPDZ6SH4qGPrvq",
+        "1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU",
+        "1JTK7s9YVYywfm5XUH7RNhHJH1LshCaRFR",
+        "12VVRNPi4SJqUTsp6FmqDqY5sGosDtysn4",
+        "1FWGcVDK3JGzCC3WtkYetULPszMaK2Jksv",
+        "1DJh2eHFYQfACPmrvpyWc8MSTYKh7w9eRF",
+        "1Bxk4CQdqL9p22JEtDfdXMsng1XacifUtE",
+        "15qF6X51huDjqTmF9BJgxXdt1xcj46Jmhb",
+        "1ARk8HWJMn8js8tQmGUJeQHjSE7KRkn2t8",
+        "15qsCm78whspNQFydGJQk5rexzxTQopnHZ",
+        "13zYrYhhJxp6Ui1VV7pqa5WDhNWM45ARAC",
+        "14MdEb4eFcT3MVG5sPFG4jGLuHJSnt1Dk2",
+        "1CMq3SvFcVEcpLMuuH8PUcNiqsK1oicG2D",
+        "1K3x5L6G57Y494fDqBfrojD28UJv4s5JcK",
+        "1PxH3K1Shdjb7gSEoTX7UPDZ6SH4qGPrvq",
         "16AbnZjZZipwHMkYKBSfswGWKDmXHjEpSf"
     ];
 
     function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
     function ripemd160(hex) { return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString(); }
     
-    function base58Check(payloadHex) {
+    function base58Check(payloadHex, prefix = "00") {
         const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-        let checksum = sha256(sha256(payloadHex)).substring(0, 8);
-        let hex = payloadHex + checksum;
-        let n = BigInt("0x" + hex);
+        let hex = prefix + payloadHex;
+        let checksum = sha256(sha256(hex)).substring(0, 8);
+        let n = BigInt("0x" + hex + checksum);
         let s = "";
         while (n > 0n) { s = ALPHABET[Number(n % 58n)] + s; n /= 58n; }
-        for (let i = 0; i < payloadHex.length && payloadHex.substr(i, 2) === "00"; i += 2) s = ALPHABET[0] + s;
+        for (let i = 0; i < hex.length && hex.substr(i, 2) === "00"; i += 2) s = ALPHABET[0] + s;
         return s;
     }
 
-    // Cryptografisch veilige random HEX generator
-    function getRandomKey(minBI, rangeBI) {
-        let bytes = new Uint8Array(32);
-        self.crypto.getRandomValues(bytes);
-        let randBI = BigInt("0x" + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(''));
-        return minBI + (randBI % rangeBI);
-    }
-
     self.onmessage = function(e) {
-        const { start, end } = e.data;
+        const { start, end, batchSize, steps } = e.data;
         const startBI = BigInt("0x" + start);
         const endBI = BigInt("0x" + end);
         const rangeBI = endBI - startBI;
 
         while(true) {
-            let currentKey = getRandomKey(startBI, rangeBI);
-            let priv = currentKey.toString(16).padStart(64, '0');
-            let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
-            let addr = base58Check("00" + ripemd160(sha256(pub)));
-            
-            if (TARGETS.includes(addr)) {
-                self.postMessage({ match: true, addr, wif: base58Check("80" + priv), priv });
-                return;
-            }
-            
-            // Update UI elke 100 checks
-            if (Math.random() < 0.01) {
-                self.postMessage({ match: false, data: [{addr, wif: base58Check("80" + priv), priv}] });
+            let bytes = new Uint8Array(32);
+            self.crypto.getRandomValues(bytes);
+            let currentKey = startBI + (BigInt("0x" + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')) % rangeBI);
+            let limit = currentKey + BigInt(steps);
+
+            while(currentKey < limit && currentKey <= endBI) {
+                for(let i = 0; i < batchSize; i++) {
+                    let priv = currentKey.toString(16).padStart(64, '0');
+                    let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
+                    let addr = base58Check(ripemd160(sha256(pub)), "00");
+                    
+                    if (TARGETS.includes(addr)) {
+                        self.postMessage({ match: true, addr, wif: base58Check(priv, "80"), priv });
+                        return;
+                    }
+                    currentKey++;
+                }
+                self.postMessage({ match: false, count: batchSize, lastAddr: base58Check(ripemd160(sha256(ec.keyFromPrivate(currentKey.toString(16), 'hex').getPublic(false, 'hex'))), "00"), lastWif: base58Check(currentKey.toString(16).padStart(64, '0'), "80"), lastPriv: currentKey.toString(16) });
             }
         }
     };
@@ -96,53 +100,36 @@
 
 <script>
     let workers = [];
+    let totalScanned = 0;
     startBtn.onclick = function() {
-        const numW = parseInt(document.getElementById('numW').value);
-        
+        totalScanned = 0;
         const baseStart = BigInt("0x" + document.getElementById('baseStart').value);
         const baseEnd = BigInt("0x" + document.getElementById('baseEnd').value);
         const totalRange = baseEnd - baseStart;
-        
-        const startP = parseFloat(document.getElementById('startPerc').value) / 100;
-        const endP = parseFloat(document.getElementById('endPerc').value) / 100;
-        
-        const subStart = (baseStart + BigInt(Math.floor(Number(totalRange) * startP))).toString(16);
-        const subEnd = (baseStart + BigInt(Math.floor(Number(totalRange) * endP))).toString(16);
+        const subStart = (baseStart + BigInt(Math.floor(Number(totalRange) * (parseFloat(document.getElementById('startPerc').value) / 100)))).toString(16);
+        const subEnd = (baseStart + BigInt(Math.floor(Number(totalRange) * (parseFloat(document.getElementById('endPerc').value) / 100)))).toString(16);
 
         const blob = new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'});
-        
-        for(let i=0; i<numW; i++) {
+        for(let i=0; i<parseInt(document.getElementById('numW').value); i++) {
             let w = new Worker(URL.createObjectURL(blob));
-            w.postMessage({ start: subStart, end: subEnd });
+            w.postMessage({ start: subStart, end: subEnd, batchSize: parseInt(document.getElementById('batchSize').value), steps: parseInt(document.getElementById('steps').value) });
             w.onmessage = function(e) {
                 if (e.data.match) { 
-                    const row = resTable.insertRow(0);
-                    row.className = "match-row";
+                    const row = resTable.insertRow(0); row.className = "match-row";
                     row.innerHTML = `<td>${e.data.addr} (MATCH!)</td><td>${e.data.wif}</td><td>${e.data.priv}</td>`;
-                    document.getElementById('status').innerText = "MATCH GEVONDEN!";
-                    alert("GEWONNEN! De WIF en Privésleutel staan in de tabel.");
-                    terminateAll(); 
+                    alert("GEWONNEN!"); terminateAll(); 
                 } else { 
-                    const row = resTable.insertRow(0);
-                    row.innerHTML = `<td>${e.data.data[0].addr}</td><td>${e.data.data[0].wif}</td><td>${e.data.data[0].priv}</td>`;
+                    totalScanned += e.data.count;
+                    document.getElementById('totalCount').innerText = totalScanned.toLocaleString();
+                    const row = resTable.insertRow(0); row.innerHTML = `<td>${e.data.lastAddr}</td><td>${e.data.lastWif}</td><td>${e.data.lastPriv}</td>`;
                     if(resTable.rows.length > 5) resTable.deleteRow(5);
-                    document.getElementById('status').innerText = "Status: Scannen...";
                 }
             };
             workers.push(w);
         }
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
-        document.getElementById('status').innerText = "Status: Scannen...";
+        startBtn.disabled = true; stopBtn.disabled = false;
     };
-
-    function terminateAll() {
-        workers.forEach(w => w.terminate());
-        workers = [];
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
-        document.getElementById('status').innerText = "Status: Gestopt";
-    }
+    function terminateAll() { workers.forEach(w => w.terminate()); workers = []; startBtn.disabled = false; stopBtn.disabled = true; }
     stopBtn.onclick = terminateAll;
 </script>
 </body>
