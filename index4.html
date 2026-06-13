@@ -102,13 +102,22 @@
     let workers = [];
     let totalScanned = 0;
 
+    // Cryptografisch veilige random BigInt functie
+    function getCryptoRandomBigInt(maxRange) {
+        let hex = "";
+        let array = new Uint32Array(8); // Genoeg voor 256 bits
+        window.crypto.getRandomValues(array);
+        for(let val of array) hex += val.toString(16).padStart(8, '0');
+        return BigInt("0x" + hex) % maxRange;
+    }
+
     function createWorker(workerIndex) {
         const baseStart = BigInt("0x" + document.getElementById('baseStart').value);
         const baseEnd = BigInt("0x" + document.getElementById('baseEnd').value);
         const subStart = baseStart + BigInt(Math.floor(Number(baseEnd - baseStart) * (parseFloat(document.getElementById('startPerc').value) / 100)));
         const activeRange = (baseStart + BigInt(Math.floor(Number(baseEnd - baseStart) * (parseFloat(document.getElementById('endPerc').value) / 100)))) - subStart;
         
-        let randomStart = (subStart + BigInt(Math.floor(Math.random() * Number(activeRange)))).toString(16);
+        let randomStart = (subStart + getCryptoRandomBigInt(activeRange)).toString(16);
         
         let w = new Worker(URL.createObjectURL(new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'})));
         w.postMessage({ start: randomStart, batchSize: parseInt(document.getElementById('batchSize').value), steps: document.getElementById('steps').value });
