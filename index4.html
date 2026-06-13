@@ -7,6 +7,8 @@
         body { font-family: monospace; background: #000; color: #0f0; padding: 20px; }
         .controls { margin-bottom: 20px; }
         input { background: #222; color: #0f0; border: 1px solid #444; width: 80px; padding: 5px; }
+        button { padding: 5px 15px; cursor: pointer; }
+        #stopBtn { background: #500; color: #f00; border: 1px solid #f00; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; color: #fff; }
         th, td { border: 1px solid #333; padding: 5px; font-size: 11px; word-break: break-all; }
         .match-row { background-color: #052e16 !important; color: #0f0 !important; font-weight: bold; }
@@ -71,7 +73,6 @@
             currentKey++;
             stepsTaken++;
             
-            // Stuur batch-updates om de UI niet te overbelasten
             if (stepsTaken % 100 === 0) {
                 self.postMessage({ match: false, data: [{addr, wif: base58Check("80" + priv), priv}] });
             }
@@ -81,10 +82,24 @@
 
 <script>
     let workers = [];
-    document.getElementById('startBtn').onclick = function() {
+    const resTable = document.getElementById('resTable');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+
+    function terminateAll() {
+        workers.forEach(w => w.terminate());
+        workers = [];
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        document.getElementById('status').innerText = "Status: Gestopt";
+    }
+
+    startBtn.onclick = function() {
         const numW = parseInt(document.getElementById('numW').value);
         const steps = parseInt(document.getElementById('steps').value);
         const blob = new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'});
+        
+        resTable.innerHTML = ""; // Tabel leegmaken bij start
         
         for(let i=0; i<numW; i++) {
             let w = new Worker(URL.createObjectURL(blob));
@@ -94,23 +109,28 @@
                 steps: steps 
             });
             w.onmessage = function(e) {
+                if (workers.indexOf(w) === -1) return;
+
                 if (e.data.match) {
-                    const row = document.getElementById('resTable').insertRow(0);
+                    const row = resTable.insertRow(0);
                     row.className = "match-row";
                     row.innerHTML = `<td>${e.data.addr} (MATCH!)</td><td>${e.data.wif}</td><td>${e.data.priv}</td>`;
-                    workers.forEach(w => w.terminate());
+                    document.getElementById('status').innerText = "MATCH GEVONDEN!";
+                    terminateAll();
                 } else {
-                    const row = document.getElementById('resTable').insertRow(0);
+                    const row = resTable.insertRow(0);
                     row.innerHTML = `<td>${e.data.data[0].addr}</td><td>${e.data.data[0].wif}</td><td>${e.data.data[0].priv}</td>`;
-                    if(document.getElementById('resTable').rows.length > 10) document.getElementById('resTable').deleteRow(10);
+                    if(resTable.rows.length > 10) resTable.deleteRow(10);
+                    document.getElementById('status').innerText = "Status: Scannen...";
                 }
             };
             workers.push(w);
         }
-        document.getElementById('startBtn').disabled = true;
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
     };
 
-    document.getElementById('stopBtn').onclick = () => { location.reload(); };
+    stopBtn.onclick = terminateAll;
 </script>
 </body>
 </html>
