@@ -2,23 +2,23 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzle Scanner (Range Percentage)</title>
+    <title>Puzzle #73 Scanner</title>
     <style>
         body { font-family: monospace; background: #000; color: #0f0; padding: 20px; }
         .controls { margin-bottom: 20px; display: grid; gap: 10px; width: 450px; }
         .controls div { display: flex; justify-content: space-between; align-items: center; }
         input { background: #222; color: #0f0; border: 1px solid #444; width: 150px; padding: 5px; }
         button { padding: 5px 15px; cursor: pointer; }
+        #stopBtn { background: #500; color: #f00; border: 1px solid #f00; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; color: #fff; }
         th, td { border: 1px solid #333; padding: 5px; font-size: 11px; word-break: break-all; }
-        .match-row { background-color: #052e16 !important; color: #0f0 !important; font-weight: bold; }
     </style>
 </head>
 <body>
     <h3>Puzzle #73 Scanner</h3>
     <div class="controls">
         <div>Workers: <input id="numW" value="2" type="number"></div>
-        <div>Batch grootte (sleutels per batch): <input id="batchSize" value="500" type="number"></div>
+        <div>Batch grootte: <input id="batchSize" value="100" type="number"></div>
         <div>Incr. stappen per worker: <input id="steps" value="10000" type="number"></div>
         <div>Totaal Start (HEX): <input id="baseStart" value="1000000000000000000" type="text"></div>
         <div>Totaal End (HEX): <input id="baseEnd" value="1ffffffffffffffffff" type="text"></div>
@@ -26,7 +26,7 @@
         <div>End % (0-100): <input id="endPerc" value="100" type="number" step="0.001"></div>
         <div><button id="startBtn">Start Scannen</button> <button id="stopBtn" disabled>Stop</button></div>
     </div>
-    <div id="status">Status: Gestopt | Totaal gescand: <span id="totalCount">0</span></div>
+    <div id="status">Status: <span id="statusTxt">Gestopt</span> | Totaal gescand: <span id="totalCount">0</span></div>
     <table>
         <thead><tr><th>Adres</th><th>WIF</th><th>Privésleutel (HEX)</th></tr></thead>
         <tbody id="resTable"></tbody>
@@ -35,101 +35,91 @@
 <script id="workerCode" type="javascript/worker">
     importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
     const ec = new elliptic.ec("secp256k1");
-    
-    const TARGETS = [
-        "1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU",
-        "1JTK7s9YVYywfm5XUH7RNhHJH1LshCaRFR",
-        "12VVRNPi4SJqUTsp6FmqDqY5sGosDtysn4",
-        "1FWGcVDK3JGzCC3WtkYetULPszMaK2Jksv",
-        "1DJh2eHFYQfACPmrvpyWc8MSTYKh7w9eRF",
-        "1Bxk4CQdqL9p22JEtDfdXMsng1XacifUtE",
-        "15qF6X51huDjqTmF9BJgxXdt1xcj46Jmhb",
-        "1ARk8HWJMn8js8tQmGUJeQHjSE7KRkn2t8",
-        "15qsCm78whspNQFydGJQk5rexzxTQopnHZ",
-        "13zYrYhhJxp6Ui1VV7pqa5WDhNWM45ARAC",
-        "14MdEb4eFcT3MVG5sPFG4jGLuHJSnt1Dk2",
-        "1CMq3SvFcVEcpLMuuH8PUcNiqsK1oicG2D",
-        "1K3x5L6G57Y494fDqBfrojD28UJv4s5JcK",
-        "1PxH3K1Shdjb7gSEoTX7UPDZ6SH4qGPrvq",
-        "16AbnZjZZipwHMkYKBSfswGWKDmXHjEpSf"
-    ];
+    const TARGETS = ["1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU", "1JTK7s9YVYywfm5XUH7RNhHJH1LshCaRFR", "12VVRNPi4SJqUTsp6FmqDqY5sGosDtysn4", "1FWGcVDK3JGzCC3WtkYetULPszMaK2Jksv", "1DJh2eHFYQfACPmrvpyWc8MSTYKh7w9eRF", "1Bxk4CQdqL9p22JEtDfdXMsng1XacifUtE", "15qF6X51huDjqTmF9BJgxXdt1xcj46Jmhb", "1ARk8HWJMn8js8tQmGUJeQHjSE7KRkn2t8", "15qsCm78whspNQFydGJQk5rexzxTQopnHZ", "13zYrYhhJxp6Ui1VV7pqa5WDhNWM45ARAC", "14MdEb4eFcT3MVG5sPFG4jGLuHJSnt1Dk2", "1CMq3SvFcVEcpLMuuH8PUcNiqsK1oicG2D", "1K3x5L6G57Y494fDqBfrojD28UJv4s5JcK", "1PxH3K1Shdjb7gSEoTX7UPDZ6SH4qGPrvq", "16AbnZjZZipwHMkYKBSfswGWKDmXHjEpSf"];
 
     function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
     function ripemd160(hex) { return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString(); }
-    
-    function base58Check(payloadHex, prefix = "00") {
+    function toBase58(hex) {
         const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-        let hex = prefix + payloadHex;
-        let checksum = sha256(sha256(hex)).substring(0, 8);
-        let n = BigInt("0x" + hex + checksum);
+        let bytes = hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16));
+        let digits = [0];
+        for (let i = 0; i < bytes.length; i++) {
+            let carry = bytes[i];
+            for (let j = 0; j < digits.length; j++) { carry += digits[j] << 8; digits[j] = carry % 58; carry = (carry / 58) | 0; }
+            while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0; }
+        }
         let s = "";
-        while (n > 0n) { s = ALPHABET[Number(n % 58n)] + s; n /= 58n; }
-        for (let i = 0; i < hex.length && hex.substr(i, 2) === "00"; i += 2) s = ALPHABET[0] + s;
+        for (let i = 0; i < bytes.length && bytes[i] === 0; i++) s += ALPHABET[0];
+        for (let i = digits.length - 1; i >= 0; i--) s += ALPHABET[digits[i]];
         return s;
     }
 
     self.onmessage = function(e) {
-        const { start, end, batchSize, steps } = e.data;
-        const startBI = BigInt("0x" + start);
-        const endBI = BigInt("0x" + end);
-        const rangeBI = endBI - startBI;
+        let { start, batchSize, steps } = e.data;
+        let currentKey = BigInt("0x" + start);
+        let maxSteps = BigInt(steps);
+        let countScanned = 0n;
 
-        while(true) {
-            let bytes = new Uint8Array(32);
-            self.crypto.getRandomValues(bytes);
-            let currentKey = startBI + (BigInt("0x" + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')) % rangeBI);
-            let limit = currentKey + BigInt(steps);
-
-            while(currentKey < limit && currentKey <= endBI) {
-                for(let i = 0; i < batchSize; i++) {
-                    let priv = currentKey.toString(16).padStart(64, '0');
-                    let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
-                    let addr = base58Check(ripemd160(sha256(pub)), "00");
-                    
-                    if (TARGETS.includes(addr)) {
-                        self.postMessage({ match: true, addr, wif: base58Check(priv, "80"), priv });
-                        return;
-                    }
-                    currentKey++;
-                }
-                self.postMessage({ match: false, count: batchSize, lastAddr: base58Check(ripemd160(sha256(ec.keyFromPrivate(currentKey.toString(16), 'hex').getPublic(false, 'hex'))), "00"), lastWif: base58Check(currentKey.toString(16).padStart(64, '0'), "80"), lastPriv: currentKey.toString(16) });
+        while(countScanned < maxSteps) {
+            let priv = currentKey.toString(16).padStart(64, '0');
+            let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
+            let addr = toBase58("00" + ripemd160(sha256(pub)) + sha256(sha256("00" + ripemd160(sha256(pub)))).substr(0, 8));
+            
+            if (TARGETS.includes(addr)) {
+                self.postMessage({ match: true, addr, wif: toBase58("80" + priv + sha256(sha256("80" + priv)).substr(0, 8)), priv });
+                return;
             }
+
+            // Stuur elke batch-grootte een update naar de tabel
+            if (countScanned % BigInt(batchSize) === 0n) {
+                self.postMessage({ match: false, count: batchSize, addr, wif: toBase58("80" + priv + sha256(sha256("80" + priv)).substr(0, 8)), priv: priv });
+            }
+
+            currentKey++;
+            countScanned++;
         }
+        self.postMessage({ match: false, requestNewStart: true });
     };
 </script>
 
 <script>
     let workers = [];
     let totalScanned = 0;
-    startBtn.onclick = function() {
-        totalScanned = 0;
+
+    function createWorker(workerIndex) {
         const baseStart = BigInt("0x" + document.getElementById('baseStart').value);
         const baseEnd = BigInt("0x" + document.getElementById('baseEnd').value);
-        const totalRange = baseEnd - baseStart;
-        const subStart = (baseStart + BigInt(Math.floor(Number(totalRange) * (parseFloat(document.getElementById('startPerc').value) / 100)))).toString(16);
-        const subEnd = (baseStart + BigInt(Math.floor(Number(totalRange) * (parseFloat(document.getElementById('endPerc').value) / 100)))).toString(16);
+        const subStart = baseStart + BigInt(Math.floor(Number(baseEnd - baseStart) * (parseFloat(document.getElementById('startPerc').value) / 100)));
+        const activeRange = (baseStart + BigInt(Math.floor(Number(baseEnd - baseStart) * (parseFloat(document.getElementById('endPerc').value) / 100)))) - subStart;
+        
+        let randomStart = (subStart + BigInt(Math.floor(Math.random() * Number(activeRange)))).toString(16);
+        
+        let w = new Worker(URL.createObjectURL(new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'})));
+        w.postMessage({ start: randomStart, batchSize: parseInt(document.getElementById('batchSize').value), steps: document.getElementById('steps').value });
+        
+        w.onmessage = function(e) {
+            if (e.data.match) { alert("GEVONDEN: " + e.data.priv); terminateAll(); }
+            else if (e.data.requestNewStart) { w.terminate(); workers[workerIndex] = createWorker(workerIndex); }
+            else {
+                totalScanned += e.data.count;
+                document.getElementById('totalCount').innerText = totalScanned.toLocaleString();
+                let row = resTable.insertRow(0);
+                row.innerHTML = `<td>${e.data.addr}</td><td>${e.data.wif}</td><td>${e.data.priv}</td>`;
+                if(resTable.rows.length > 10) resTable.deleteRow(10);
+            }
+        };
+        return w;
+    }
 
-        const blob = new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'});
-        for(let i=0; i<parseInt(document.getElementById('numW').value); i++) {
-            let w = new Worker(URL.createObjectURL(blob));
-            w.postMessage({ start: subStart, end: subEnd, batchSize: parseInt(document.getElementById('batchSize').value), steps: parseInt(document.getElementById('steps').value) });
-            w.onmessage = function(e) {
-                if (e.data.match) { 
-                    const row = resTable.insertRow(0); row.className = "match-row";
-                    row.innerHTML = `<td>${e.data.addr} (MATCH!)</td><td>${e.data.wif}</td><td>${e.data.priv}</td>`;
-                    alert("GEWONNEN!"); terminateAll(); 
-                } else { 
-                    totalScanned += e.data.count;
-                    document.getElementById('totalCount').innerText = totalScanned.toLocaleString();
-                    const row = resTable.insertRow(0); row.innerHTML = `<td>${e.data.lastAddr}</td><td>${e.data.lastWif}</td><td>${e.data.lastPriv}</td>`;
-                    if(resTable.rows.length > 5) resTable.deleteRow(5);
-                }
-            };
-            workers.push(w);
-        }
+    startBtn.onclick = function() {
+        totalScanned = 0;
+        document.getElementById('totalCount').innerText = "0";
+        document.getElementById('statusTxt').innerText = "Scannen...";
+        const numWorkers = parseInt(document.getElementById('numW').value);
+        for(let i = 0; i < numWorkers; i++) workers.push(createWorker(i));
         startBtn.disabled = true; stopBtn.disabled = false;
     };
-    function terminateAll() { workers.forEach(w => w.terminate()); workers = []; startBtn.disabled = false; stopBtn.disabled = true; }
+    function terminateAll() { workers.forEach(w => w.terminate()); workers = []; startBtn.disabled = false; stopBtn.disabled = true; document.getElementById('statusTxt').innerText = "Gestopt"; }
     stopBtn.onclick = terminateAll;
 </script>
 </body>
