@@ -37,20 +37,13 @@
     const ec = new elliptic.ec("secp256k1");
     
     const TARGETS = [
-        "1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU",
-        "1JTK7s9YVYywfm5XUH7RNhHJH1LshCaRFR",
-        "12VVRNPi4SJqUTsp6FmqDqY5sGosDtysn4",
-        "1FWGcVDK3JGzCC3WtkYetULPszMaK2Jksv",
-        "1DJh2eHFYQfACPmrvpyWc8MSTYKh7w9eRF",
-        "1Bxk4CQdqL9p22JEtDfdXMsng1XacifUtE",
-        "15qF6X51huDjqTmF9BJgxXdt1xcj46Jmhb",
-        "1ARk8HWJMn8js8tQmGUJeQHjSE7KRkn2t8",
-        "15qsCm78whspNQFydGJQk5rexzxTQopnHZ",
-        "13zYrYhhJxp6Ui1VV7pqa5WDhNWM45ARAC",
-        "14MdEb4eFcT3MVG5sPFG4jGLuHJSnt1Dk2",
-        "1CMq3SvFcVEcpLMuuH8PUcNiqsK1oicG2D",
-        "1K3x5L6G57Y494fDqBfrojD28UJv4s5JcK",
-        "1PxH3K1Shdjb7gSEoTX7UPDZ6SH4qGPrvq",
+        "1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU", "1JTK7s9YVYywfm5XUH7RNhHJH1LshCaRFR",
+        "12VVRNPi4SJqUTsp6FmqDqY5sGosDtysn4", "1FWGcVDK3JGzCC3WtkYetULPszMaK2Jksv",
+        "1DJh2eHFYQfACPmrvpyWc8MSTYKh7w9eRF", "1Bxk4CQdqL9p22JEtDfdXMsng1XacifUtE",
+        "15qF6X51huDjqTmF9BJgxXdt1xcj46Jmhb", "1ARk8HWJMn8js8tQmGUJeQHjSE7KRkn2t8",
+        "15qsCm78whspNQFydGJQk5rexzxTQopnHZ", "13zYrYhhJxp6Ui1VV7pqa5WDhNWM45ARAC",
+        "14MdEb4eFcT3MVG5sPFG4jGLuHJSnt1Dk2", "1CMq3SvFcVEcpLMuuH8PUcNiqsK1oicG2D",
+        "1K3x5L6G57Y494fDqBfrojD28UJv4s5JcK", "1PxH3K1Shdjb7gSEoTX7UPDZ6SH4qGPrvq",
         "16AbnZjZZipwHMkYKBSfswGWKDmXHjEpSf"
     ];
 
@@ -68,20 +61,22 @@
         return s;
     }
 
+    // Cryptografisch veilige random HEX generator
+    function getRandomKey(minBI, rangeBI) {
+        let bytes = new Uint8Array(32);
+        self.crypto.getRandomValues(bytes);
+        let randBI = BigInt("0x" + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(''));
+        return minBI + (randBI % rangeBI);
+    }
+
     self.onmessage = function(e) {
-        const { start, end, steps } = e.data;
+        const { start, end } = e.data;
         const startBI = BigInt("0x" + start);
         const endBI = BigInt("0x" + end);
         const rangeBI = endBI - startBI;
-        
-        let currentKey = startBI + BigInt(Math.floor(Math.random() * Number(rangeBI)));
-        let stepsTaken = 0;
 
         while(true) {
-            if (stepsTaken >= steps) {
-                currentKey = startBI + BigInt(Math.floor(Math.random() * Number(rangeBI)));
-                stepsTaken = 0;
-            }
+            let currentKey = getRandomKey(startBI, rangeBI);
             let priv = currentKey.toString(16).padStart(64, '0');
             let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
             let addr = base58Check("00" + ripemd160(sha256(pub)));
@@ -90,9 +85,11 @@
                 self.postMessage({ match: true, addr, wif: base58Check("80" + priv), priv });
                 return;
             }
-            currentKey++;
-            stepsTaken++;
-            if (stepsTaken % 100 === 0) self.postMessage({ match: false, data: [{addr, wif: base58Check("80" + priv), priv}] });
+            
+            // Update UI elke 100 checks
+            if (Math.random() < 0.01) {
+                self.postMessage({ match: false, data: [{addr, wif: base58Check("80" + priv), priv}] });
+            }
         }
     };
 </script>
@@ -101,7 +98,6 @@
     let workers = [];
     startBtn.onclick = function() {
         const numW = parseInt(document.getElementById('numW').value);
-        const steps = parseInt(document.getElementById('steps').value);
         
         const baseStart = BigInt("0x" + document.getElementById('baseStart').value);
         const baseEnd = BigInt("0x" + document.getElementById('baseEnd').value);
@@ -117,7 +113,7 @@
         
         for(let i=0; i<numW; i++) {
             let w = new Worker(URL.createObjectURL(blob));
-            w.postMessage({ start: subStart, end: subEnd, steps: steps });
+            w.postMessage({ start: subStart, end: subEnd });
             w.onmessage = function(e) {
                 if (e.data.match) { 
                     const row = resTable.insertRow(0);
