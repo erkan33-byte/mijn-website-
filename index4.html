@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzle #73 Scanner</title>
+    <title>Puzzle #73 Scanner (Optimized)</title>
     <style>
         body { font-family: monospace; background: #000; color: #0f0; padding: 20px; }
         .controls { margin-bottom: 20px; display: grid; gap: 10px; width: 450px; }
@@ -15,7 +15,7 @@
     </style>
 </head>
 <body>
-    <h3>Puzzle #73 Scanner</h3>
+    <h3>Puzzle #73 Scanner (Point Addition)</h3>
     <div class="controls">
         <div>Workers: <input id="numW" value="2" type="number"></div>
         <div>Batch grootte: <input id="batchSize" value="100" type="number"></div>
@@ -35,7 +35,8 @@
 <script id="workerCode" type="javascript/worker">
     importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
     const ec = new elliptic.ec("secp256k1");
-    
+    const G = ec.g; 
+
     const TARGETS = [
         "1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU",
         "1JTK7s9YVYywfm5XUH7RNhHJH1LshCaRFR",
@@ -73,25 +74,30 @@
 
     self.onmessage = function(e) {
         let { start, batchSize, steps } = e.data;
-        let currentKey = BigInt("0x" + start);
+        let privKey = BigInt("0x" + start);
+        let point = ec.keyFromPrivate(privKey.toString(16).padStart(64, '0'), 'hex').getPublic();
+        
         let maxSteps = BigInt(steps);
         let countScanned = 0n;
 
         while(countScanned < maxSteps) {
-            let priv = currentKey.toString(16).padStart(64, '0');
-            let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
+            let privHex = privKey.toString(16).padStart(64, '0');
+            let pub = point.encode('hex', false);
             let addr = toBase58("00" + ripemd160(sha256(pub)) + sha256(sha256("00" + ripemd160(sha256(pub)))).substr(0, 8));
             
+            let wif = toBase58("80" + privHex + sha256(sha256("80" + privHex)).substr(0, 8));
+            
             if (TARGETS.includes(addr)) {
-                self.postMessage({ match: true, addr, wif: toBase58("80" + priv + sha256(sha256("80" + priv)).substr(0, 8)), priv });
+                self.postMessage({ match: true, addr, wif, priv: privHex });
                 return;
             }
 
             if (countScanned % BigInt(batchSize) === 0n) {
-                self.postMessage({ match: false, count: batchSize, addr, wif: toBase58("80" + priv + sha256(sha256("80" + priv)).substr(0, 8)), priv: priv });
+                self.postMessage({ match: false, count: batchSize, addr, wif, priv: privHex });
             }
 
-            currentKey++;
+            point = point.add(G);
+            privKey++;
             countScanned++;
         }
         self.postMessage({ match: false, requestNewStart: true });
@@ -102,10 +108,9 @@
     let workers = [];
     let totalScanned = 0;
 
-    // Cryptografisch veilige random BigInt functie
     function getCryptoRandomBigInt(maxRange) {
         let hex = "";
-        let array = new Uint32Array(8); // Genoeg voor 256 bits
+        let array = new Uint32Array(8);
         window.crypto.getRandomValues(array);
         for(let val of array) hex += val.toString(16).padStart(8, '0');
         return BigInt("0x" + hex) % maxRange;
