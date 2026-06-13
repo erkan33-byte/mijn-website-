@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>Puzzle #73 Scanner (Lineair)</title>
+    <style>
+        body { font-family: monospace; background: #000; color: #0f0; padding: 20px; }
+        .controls { margin-bottom: 20px; }
+        input { background: #222; color: #0f0; border: 1px solid #444; width: 80px; padding: 5px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; color: #fff; }
+        th, td { border: 1px solid #333; padding: 5px; font-size: 11px; word-break: break-all; }
+        .match-row { background-color: #052e16 !important; color: #0f0 !important; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h3>Puzzle #73 Scanner (Lineaire Mode)</h3>
+    <div class="controls">
+        Workers: <input id="numW" value="2" type="number"> 
+        Stappen per sessie: <input id="steps" value="1000" type="number">
+        <button id="startBtn">Start Scannen</button>
+        <button id="stopBtn" disabled>Stop</button>
+    </div>
+    <div id="status">Status: Gestopt</div>
+    <table>
+        <thead><tr><th>Adres (Legacy)</th><th>WIF</th><th>Privésleutel (HEX)</th></tr></thead>
+        <tbody id="resTable"></tbody>
+    </table>
+
+<script id="workerCode" type="javascript/worker">
+    importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+    const ec = new elliptic.ec("secp256k1");
+    const TARGETS = ["12VVRNPi4SJqUTsp6FmqDqY5sGosDtysn4"];
+
+    function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+    function ripemd160(hex) { return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString(); }
+    
+    function base58Check(payloadHex) {
+        const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+        let checksum = sha256(sha256(payloadHex)).substring(0, 8);
+        let hex = payloadHex + checksum;
+        let n = BigInt("0x" + hex);
+        let s = "";
+        while (n > 0n) { s = ALPHABET[Number(n % 58n)] + s; n /= 58n; }
+        for (let i = 0; i < payloadHex.length && payloadHex.substr(i, 2) === "00"; i += 2) s = ALPHABET[0] + s;
+        return s;
+    }
+
+    self.onmessage = function(e) {
+        const { start, end, steps } = e.data;
+        const startBI = BigInt(start);
+        const rangeBI = BigInt(end) - startBI;
+        
+        let currentKey = startBI + BigInt(Math.floor(Math.random() * Number(rangeBI)));
+        let stepsTaken = 0;
+
+        while(true) {
+            if (stepsTaken >= steps) {
+                currentKey = startBI + BigInt(Math.floor(Math.random() * Number(rangeBI)));
+                stepsTaken = 0;
+            }
+
+            let priv = currentKey.toString(16).padStart(64, '0');
+            let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
+            let addr = base58Check("00" + ripemd160(sha256(pub)));
+            
+            if (TARGETS.includes(addr)) {
+                self.postMessage({ match: true, addr, wif: base58Check("80" + priv), priv });
+                return;
+            }
+
+            currentKey++;
+            stepsTaken++;
+            
+            // Stuur batch-updates om de UI niet te overbelasten
+            if (stepsTaken % 100 === 0) {
+                self.postMessage({ match: false, data: [{addr, wif: base58Check("80" + priv), priv}] });
+            }
+        }
+    };
+</script>
+
+<script>
+    let workers = [];
+    document.getElementById('startBtn').onclick = function() {
+        const numW = parseInt(document.getElementById('numW').value);
+        const steps = parseInt(document.getElementById('steps').value);
+        const blob = new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'});
+        
+        for(let i=0; i<numW; i++) {
+            let w = new Worker(URL.createObjectURL(blob));
+            w.postMessage({ 
+                start: "0x1000000000000000000000", 
+                end: "0x1ffffffffffffffffffffff", 
+                steps: steps 
+            });
+            w.onmessage = function(e) {
+                if (e.data.match) {
+                    const row = document.getElementById('resTable').insertRow(0);
+                    row.className = "match-row";
+                    row.innerHTML = `<td>${e.data.addr} (MATCH!)</td><td>${e.data.wif}</td><td>${e.data.priv}</td>`;
+                    workers.forEach(w => w.terminate());
+                } else {
+                    const row = document.getElementById('resTable').insertRow(0);
+                    row.innerHTML = `<td>${e.data.data[0].addr}</td><td>${e.data.data[0].wif}</td><td>${e.data.data[0].priv}</td>`;
+                    if(document.getElementById('resTable').rows.length > 10) document.getElementById('resTable').deleteRow(10);
+                }
+            };
+            workers.push(w);
+        }
+        document.getElementById('startBtn').disabled = true;
+    };
+
+    document.getElementById('stopBtn').onclick = () => { location.reload(); };
+</script>
+</body>
+</html>
