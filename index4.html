@@ -35,7 +35,24 @@
 <script id="workerCode" type="javascript/worker">
     importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
     const ec = new elliptic.ec("secp256k1");
-    const TARGETS = ["1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU", "1JTK7s9YVYywfm5XUH7RNhHJH1LshCaRFR", "12VVRNPi4SJqUTsp6FmqDqY5sGosDtysn4", "1FWGcVDK3JGzCC3WtkYetULPszMaK2Jksv", "1DJh2eHFYQfACPmrvpyWc8MSTYKh7w9eRF", "1Bxk4CQdqL9p22JEtDfdXMsng1XacifUtE", "15qF6X51huDjqTmF9BJgxXdt1xcj46Jmhb", "1ARk8HWJMn8js8tQmGUJeQHjSE7KRkn2t8", "15qsCm78whspNQFydGJQk5rexzxTQopnHZ", "13zYrYhhJxp6Ui1VV7pqa5WDhNWM45ARAC", "14MdEb4eFcT3MVG5sPFG4jGLuHJSnt1Dk2", "1CMq3SvFcVEcpLMuuH8PUcNiqsK1oicG2D", "1K3x5L6G57Y494fDqBfrojD28UJv4s5JcK", "1PxH3K1Shdjb7gSEoTX7UPDZ6SH4qGPrvq", "16AbnZjZZipwHMkYKBSfswGWKDmXHjEpSf"];
+    
+    const TARGETS = [
+        "1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU",
+        "1JTK7s9YVYywfm5XUH7RNhHJH1LshCaRFR",
+        "12VVRNPi4SJqUTsp6FmqDqY5sGosDtysn4",
+        "1FWGcVDK3JGzCC3WtkYetULPszMaK2Jksv",
+        "1DJh2eHFYQfACPmrvpyWc8MSTYKh7w9eRF",
+        "1Bxk4CQdqL9p22JEtDfdXMsng1XacifUtE",
+        "15qF6X51huDjqTmF9BJgxXdt1xcj46Jmhb",
+        "1ARk8HWJMn8js8tQmGUJeQHjSE7KRkn2t8",
+        "15qsCm78whspNQFydGJQk5rexzxTQopnHZ",
+        "13zYrYhhJxp6Ui1VV7pqa5WDhNWM45ARAC",
+        "14MdEb4eFcT3MVG5sPFG4jGLuHJSnt1Dk2",
+        "1CMq3SvFcVEcpLMuuH8PUcNiqsK1oicG2D",
+        "1K3x5L6G57Y494fDqBfrojD28UJv4s5JcK",
+        "1PxH3K1Shdjb7gSEoTX7UPDZ6SH4qGPrvq",
+        "16AbnZjZZipwHMkYKBSfswGWKDmXHjEpSf"
+    ];
 
     function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
     function ripemd160(hex) { return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString(); }
@@ -70,7 +87,6 @@
                 return;
             }
 
-            // Stuur elke batch-grootte een update naar de tabel
             if (countScanned % BigInt(batchSize) === 0n) {
                 self.postMessage({ match: false, count: batchSize, addr, wif: toBase58("80" + priv + sha256(sha256("80" + priv)).substr(0, 8)), priv: priv });
             }
