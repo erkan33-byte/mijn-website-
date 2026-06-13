@@ -35,7 +35,24 @@
 <script id="workerCode" type="javascript/worker">
     importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
     const ec = new elliptic.ec("secp256k1");
-    const TARGETS = ["12VVRNPi4SJqUTsp6FmqDqY5sGosDtysn4"];
+    
+    const TARGETS = [
+        "1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU",
+        "1JTK7s9YVYywfm5XUH7RNhHJH1LshCaRFR",
+        "12VVRNPi4SJqUTsp6FmqDqY5sGosDtysn4",
+        "1FWGcVDK3JGzCC3WtkYetULPszMaK2Jksv",
+        "1DJh2eHFYQfACPmrvpyWc8MSTYKh7w9eRF",
+        "1Bxk4CQdqL9p22JEtDfdXMsng1XacifUtE",
+        "15qF6X51huDjqTmF9BJgxXdt1xcj46Jmhb",
+        "1ARk8HWJMn8js8tQmGUJeQHjSE7KRkn2t8",
+        "15qsCm78whspNQFydGJQk5rexzxTQopnHZ",
+        "13zYrYhhJxp6Ui1VV7pqa5WDhNWM45ARAC",
+        "14MdEb4eFcT3MVG5sPFG4jGLuHJSnt1Dk2",
+        "1CMq3SvFcVEcpLMuuH8PUcNiqsK1oicG2D",
+        "1K3x5L6G57Y494fDqBfrojD28UJv4s5JcK",
+        "1PxH3K1Shdjb7gSEoTX7UPDZ6SH4qGPrvq",
+        "16AbnZjZZipwHMkYKBSfswGWKDmXHjEpSf"
+    ];
 
     function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
     function ripemd160(hex) { return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString(); }
@@ -102,8 +119,14 @@
             let w = new Worker(URL.createObjectURL(blob));
             w.postMessage({ start: subStart, end: subEnd, steps: steps });
             w.onmessage = function(e) {
-                if (e.data.match) { alert("MATCH: " + e.data.priv); terminateAll(); }
-                else { 
+                if (e.data.match) { 
+                    const row = resTable.insertRow(0);
+                    row.className = "match-row";
+                    row.innerHTML = `<td>${e.data.addr} (MATCH!)</td><td>${e.data.wif}</td><td>${e.data.priv}</td>`;
+                    document.getElementById('status').innerText = "MATCH GEVONDEN!";
+                    alert("GEWONNEN! De WIF en Privésleutel staan in de tabel.");
+                    terminateAll(); 
+                } else { 
                     const row = resTable.insertRow(0);
                     row.innerHTML = `<td>${e.data.data[0].addr}</td><td>${e.data.data[0].wif}</td><td>${e.data.data[0].priv}</td>`;
                     if(resTable.rows.length > 5) resTable.deleteRow(5);
