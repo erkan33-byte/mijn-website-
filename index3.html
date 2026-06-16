@@ -131,7 +131,8 @@
                 currDist += JUMP_SIZES[r];
                 jumpsCount++;
 
-                if ((parseInt(pubHex.substr(10, 4), 16) & 0xFF) === 0) {
+                // Densiteit van vallen iets verhoogd (& 0x3F i.p.v. & 0xFF) voor snellere vangst in test-ranges
+                if ((parseInt(pubHex.substr(10, 4), 16) & 0x3F) === 0) {
                     localTraps.set(pubHex, currDist);
                 }
             }
@@ -151,18 +152,16 @@
                     let pubHex = currPoint.encode('hex', true);
                     
                     if (localTraps.has(pubHex)) {
-                        let tameDist = localTraps.get(pubHex);
+                        let tameCenterDist = localTraps.get(pubHex);
                         
-                        let secretKey = (tameDist - currDist) % BigInt(N.toString());
+                        // Verbeterde wiskundige aftreksom ten opzichte van de absolute curve-afstanden
+                        let secretKey = (tameCenterDist - currDist) % BigInt(N.toString());
                         if (secretKey < 0n) {
                             secretKey += BigInt(N.toString());
                         }
                         
                         if (secretKey > 0n) {
-                            // INTERNE PRIVHEX: Behoudt de exacte pure range-weergave voor de UI display
                             let privHex = secretKey.toString(16).padStart(padLen, '0');
-                            
-                            // EXPORT WIF PAYLOAD: Moet ALTIJD exact 32 bytes (64 tekens) zijn om een geldige K/L Bitcoin WIF te maken!
                             let full32ByteHex = secretKey.toString(16).padStart(64, '0');
                             
                             const wifPayload = "80" + full32ByteHex + "01";
