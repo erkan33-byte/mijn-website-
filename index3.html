@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Bitcoin Puzzle - Kangaroo Solver (Official WIF Fix)</title>
+    <title>Bitcoin Puzzle - Kangaroo Solver (Dynamic Fix)</title>
     <style>
         body { font-family: monospace; background: #0b0f19; color: #00ff66; padding: 20px; }
         .container { max-width: 650px; margin: 0 auto; background: #111827; padding: 20px; border-radius: 8px; border: 1px solid #00ff66; }
@@ -23,7 +23,7 @@
 
 <div class="container">
     <h3>🦘 Bitcoin Puzzle - Kangaroo Solver</h3>
-    <p style="color: #9ca3af; font-size: 13px;">Volledig aanpasbare solver met unieke, willekeurige Tame-startpunten per worker.</p>
+    <p style="color: #9ca3af; font-size: 13px;">Gecorrigeerde versie met dynamisch schalende spronggroottes en parallelle Tame-offsets.</p>
     
     <div class="controls">
         <div>Workers (CPU Cores): <input id="numW" value="4" type="number"></div>
@@ -32,8 +32,8 @@
         
         <hr style="border: 0; border-top: 1px dashed #374151; width: 100%;">
         
-        <div>Start % (0-100): <input id="startPerc" value="25" type="number" step="0.001"></div>
-        <div>End % (0-100): <input id="endPerc" value="75" type="number" step="0.001"></div>
+        <div>Start % (0-100): <input id="startPerc" value="0" type="number" step="0.001"></div>
+        <div>End % (0-100): <input id="endPerc" value="100" type="number" step="0.001"></div>
         
         <hr style="border: 0; border-top: 1px dashed #374151; width: 100%;">
         
@@ -78,12 +78,6 @@
     const JUMP_SIZES = [];
     const JUMP_POINTS = [];
 
-    for (let i = 0; i < NUM_STEPS; i++) {
-        let size = BigInt(1) << BigInt(i);
-        JUMP_SIZES.push(size);
-        JUMP_POINTS.push(G.mul(size.toString(16)));
-    }
-
     function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
     function toBase58(hex) {
         const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -101,11 +95,35 @@
     }
 
     self.onmessage = function(e) {
-        const { type, subStartStr, subEndStr, targetPubHex, traps, workerId, padLen } = e.data;
+        const { type, subStartStr, subEndStr, targetPubHex, traps, workerId, padLen, workerOffsetStr } = e.data;
         
         let targetPubKey = ec.keyFromPublic(targetPubHex, 'hex').getPublic();
+        let subStart = BigInt("0x" + subStartStr);
         let subEnd = BigInt("0x" + subEndStr);
         
+        // Dynamisch genereren van jump sizes gebaseerd op de werkelijke sub-range omvang
+        if (JUMP_SIZES.length === 0) {
+            let W = subEnd - subStart;
+            if (W < 1000n) W = 1000n; // Veilige ondergrens voor minusculle test-ranges
+            
+            // Bereken de BigInt vierkantswortel (sqrt) van de range omtrek
+            let sqrtW = 0n;
+            let x0 = W / 2n;
+            if (x0 > 0n) {
+                let x1 = (x0 + W / x0) / 2n;
+                while (x1 < x0) { x0 = x1; x1 = (x0 + W / x0) / 2n; }
+                sqrtW = x0;
+            } else { sqrtW = W; }
+
+            // Lineaire schaling zodat de gemiddelde sprong exact rond 0.5 * sqrt(W) ligt
+            for (let i = 0; i < NUM_STEPS; i++) {
+                let size = (sqrtW * BigInt(i + 1)) / 32n;
+                if (size === 0n) size = 1n;
+                JUMP_SIZES.push(size);
+                JUMP_POINTS.push(G.mul(size.toString(16)));
+            }
+        }
+
         let localTraps = new Map();
         if (traps) {
             for (let [k, v] of Object.entries(traps)) {
@@ -114,12 +132,13 @@
         }
 
         if (type === "TAME") {
-            // Officiële methode: Tamme kangoeroe start exact op het sub-einde en springt VOORUIT
-            let currDist = 0n; 
-            let currPoint = G.mul(subEnd.toString(16));
+            let workerOffset = BigInt("0x" + workerOffsetStr);
+            let currDist = workerOffset; 
+            let currPoint = G.mul((subEnd + workerOffset).toString(16));
             let jumpsCount = 0;
+            let tameSteps = 100000; // Vaste diepe vallen-lijn
 
-            for (let i = 0; i < 250000; i++) {
+            for (let i = 0; i < tameSteps; i++) {
                 let pubHex = currPoint.encode('hex', true);
                 let r = parseInt(pubHex.substr(2, 8), 16) % NUM_STEPS;
                 
@@ -127,6 +146,7 @@
                 currDist += JUMP_SIZES[r];
                 jumpsCount++;
 
+                // Sla een val op zodra bitmask matcht (Gemiddeld 1 op de 64 stappen)
                 if ((parseInt(pubHex.substr(10, 4), 16) & 0x3F) === 0) {
                     localTraps.set(pubHex, currDist);
                 }
@@ -138,10 +158,9 @@
         } 
         
         else if (type === "WILD") {
-            // Wilde kangoeroe start op de target public key en springt eveneens VOORUIT
             let currPoint = targetPubKey;
             let currDist = 0n; 
-            let batchSize = 40000;
+            let batchSize = 20000;
 
             while (true) {
                 for (let i = 0; i < batchSize; i++) {
@@ -150,11 +169,9 @@
                     if (localTraps.has(pubHex)) {
                         let tameDist = localTraps.get(pubHex);
                         
-                        // Officiële sluitende formule: Sleutel = subEnd + tameDist - wildDist
+                        // Sluitende formule: Sleutel = subEnd + tameDist - wildDist
                         let secretKey = (subEnd + tameDist - currDist) % BigInt(N.toString());
-                        if (secretKey < 0n) {
-                            secretKey += BigInt(N.toString());
-                        }
+                        if (secretKey < 0n) secretKey += BigInt(N.toString());
                         
                         if (secretKey > 0n) {
                             let privHex = secretKey.toString(16).padStart(padLen, '0');
@@ -231,13 +248,26 @@
 
         document.getElementById('subEndHex').innerText = "0x" + subEndStr;
 
+        let W = subEnd - subStart;
+        let sqrtW = 1000n;
+        let x0 = W / 2n;
+        if (x0 > 0n) {
+            let x1 = (x0 + W / x0) / 2n;
+            while (x1 < x0) { x0 = x1; x1 = (x0 + W / x0) / 2n; }
+            sqrtW = x0;
+        } else { sqrtW = W; }
+        if (sqrtW < 10n) sqrtW = 10n;
+
         const numWorkers = parseInt(document.getElementById('numW').value);
         log("Doelgebied ingesteld op: " + startPercVal + "% tot " + endPercVal + "%");
-        log("Uitzetten van de Tamme Kangoeroes vanaf sub-eindpunt posities...");
+        log("Uitzetten van de Tamme Kangoeroes met unieke parallelle offsets...");
 
         for (let i = 0; i < numWorkers; i++) {
             let w = new Worker(URL.createObjectURL(new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'})));
             workers.push(w);
+
+            // Elke worker start op een unieke, verspreide positie vanaf subEnd
+            let workerOffset = (sqrtW / BigInt(numWorkers)) * BigInt(i);
 
             w.postMessage({
                 type: "TAME",
@@ -245,7 +275,8 @@
                 subEndStr: subEndStr,
                 targetPubHex: document.getElementById('pubKey').value.trim(),
                 workerId: i,
-                padLen: targetLen
+                padLen: targetLen,
+                workerOffsetStr: workerOffset.toString(16)
             });
 
             w.onmessage = function(e) {
@@ -253,7 +284,7 @@
                     Object.assign(globalTraps, e.data.traps);
                     totalJumps += e.data.Jumps;
                     tameWorkersFinished++;
-                    log("Worker " + e.data.workerId + ": Vallen succesvol geplaatst.");
+                    log("Worker " + e.data.workerId + ": Vallenveld uitgelegd.");
 
                     if (tameWorkersFinished === numWorkers) {
                         startWildPhase(numWorkers, subStartStr, subEndStr, targetLen);
