@@ -101,12 +101,10 @@
         let subStart = BigInt("0x" + subStartStr);
         let subEnd = BigInt("0x" + subEndStr);
         
-        // Dynamisch genereren van jump sizes gebaseerd op de werkelijke sub-range omvang
         if (JUMP_SIZES.length === 0) {
             let W = subEnd - subStart;
-            if (W < 1000n) W = 1000n; // Veilige ondergrens voor minusculle test-ranges
+            if (W < 1000n) W = 1000n; 
             
-            // Bereken de BigInt vierkantswortel (sqrt) van de range omtrek
             let sqrtW = 0n;
             let x0 = W / 2n;
             if (x0 > 0n) {
@@ -115,7 +113,6 @@
                 sqrtW = x0;
             } else { sqrtW = W; }
 
-            // Lineaire schaling zodat de gemiddelde sprong exact rond 0.5 * sqrt(W) ligt
             for (let i = 0; i < NUM_STEPS; i++) {
                 let size = (sqrtW * BigInt(i + 1)) / 32n;
                 if (size === 0n) size = 1n;
@@ -136,20 +133,20 @@
             let currDist = workerOffset; 
             let currPoint = G.mul((subEnd + workerOffset).toString(16));
             let jumpsCount = 0;
-            let tameSteps = 100000; // Vaste diepe vallen-lijn
+            let tameSteps = 100000; 
 
             for (let i = 0; i < tameSteps; i++) {
                 let pubHex = currPoint.encode('hex', true);
-                let r = parseInt(pubHex.substr(2, 8), 16) % NUM_STEPS;
                 
-                currPoint = currPoint.add(JUMP_POINTS[r]);
-                currDist += JUMP_SIZES[r];
-                jumpsCount++;
-
-                // Sla een val op zodra bitmask matcht (Gemiddeld 1 op de 64 stappen)
+                // FIX: Eerst controleren en opslaan vóórdat de sprong en afstand wijzigen!
                 if ((parseInt(pubHex.substr(10, 4), 16) & 0x3F) === 0) {
                     localTraps.set(pubHex, currDist);
                 }
+
+                let r = parseInt(pubHex.substr(2, 8), 16) % NUM_STEPS;
+                currPoint = currPoint.add(JUMP_POINTS[r]);
+                currDist += JUMP_SIZES[r];
+                jumpsCount++;
             }
             
             let trapsObj = {};
@@ -169,7 +166,6 @@
                     if (localTraps.has(pubHex)) {
                         let tameDist = localTraps.get(pubHex);
                         
-                        // Sluitende formule: Sleutel = subEnd + tameDist - wildDist
                         let secretKey = (subEnd + tameDist - currDist) % BigInt(N.toString());
                         if (secretKey < 0n) secretKey += BigInt(N.toString());
                         
@@ -266,7 +262,6 @@
             let w = new Worker(URL.createObjectURL(new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'})));
             workers.push(w);
 
-            // Elke worker start op een unieke, verspreide positie vanaf subEnd
             let workerOffset = (sqrtW / BigInt(numWorkers)) * BigInt(i);
 
             w.postMessage({
