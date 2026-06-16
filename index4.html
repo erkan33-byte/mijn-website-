@@ -12,6 +12,7 @@
         #stopBtn { background: #500; color: #f00; border: 1px solid #f00; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; color: #fff; }
         th, td { border: 1px solid #333; padding: 5px; font-size: 11px; word-break: break-all; }
+        .match-row { background: #800 !important; color: #fff !important; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -67,6 +68,7 @@
 
     function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
     function ripemd160(hex) { return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString(); }
+    
     function toBase58(hex) {
         const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
         let bytes = hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16));
@@ -93,16 +95,25 @@
         while(countScanned < maxSteps) {
             let privHex = privKey.toString(16).padStart(64, '0');
             let pub = point.encode('hex', true); 
-            let addr = toBase58("00" + ripemd160(sha256(pub)) + sha256(sha256("00" + ripemd160(sha256(pub)))).substr(0, 8));
+            
+            let hash1 = sha256(pub);
+            let hash2 = ripemd160(hash1);
+            let networkPayload = "00" + hash2;
+            let checksum = sha256(sha256(networkPayload)).slice(0, 8);
+            let addr = toBase58(networkPayload + checksum);
             
             if (TARGETS.has(addr)) {
-                let wif = toBase58("80" + privHex + "01" + sha256(sha256("80" + privHex + "01")).substr(0, 8));
+                let wifPayload = "80" + privHex + "01";
+                let wifChecksum = sha256(sha256(wifPayload)).slice(0, 8);
+                let wif = toBase58(wifPayload + wifChecksum);
                 self.postMessage({ match: true, addr, wif, priv: privHex });
                 return;
             }
 
             if (countScanned % BigInt(batchSize) === 0n) {
-                let wif = toBase58("80" + privHex + "01" + sha256(sha256("80" + privHex + "01")).substr(0, 8));
+                let wifPayload = "80" + privHex + "01";
+                let wifChecksum = sha256(sha256(wifPayload)).slice(0, 8);
+                let wif = toBase58(wifPayload + wifChecksum);
                 self.postMessage({ match: false, count: batchSize, addr, wif, priv: privHex });
             }
 
@@ -117,6 +128,7 @@
 <script>
     let workers = [];
     let totalScanned = 0;
+    const resTable = document.getElementById('resTable');
 
     function getCryptoRandomBigInt(maxRange) {
         let array = new Uint32Array(8);
@@ -129,12 +141,12 @@
         const baseStart = BigInt("0x" + document.getElementById('baseStart').value.trim());
         const baseEnd = BigInt("0x" + document.getElementById('baseEnd').value.trim());
         
-        const startPerc = parseFloat(document.getElementById('startPerc').value) / 100;
-        const endPerc = parseFloat(document.getElementById('endPerc').value) / 100;
+        const startPercFactor = BigInt(Math.floor(parseFloat(document.getElementById('startPerc').value) * 1000));
+        const endPercFactor = BigInt(Math.floor(parseFloat(document.getElementById('endPerc').value) * 1000));
         
         const range = baseEnd - baseStart;
-        const subStart = baseStart + BigInt(Math.floor(Number(range) * startPerc));
-        const activeRange = BigInt(Math.floor(Number(range) * (endPerc - startPerc)));
+        const subStart = baseStart + ((range * startPercFactor) / 100000n);
+        const activeRange = (range * (endPercFactor - startPercFactor)) / 100000n;
         
         let randomStart = (subStart + getCryptoRandomBigInt(activeRange)).toString(16);
         
@@ -142,9 +154,19 @@
         w.postMessage({ start: randomStart, batchSize: parseInt(document.getElementById('batchSize').value), steps: document.getElementById('steps').value });
         
         w.onmessage = function(e) {
-            if (e.data.match) { alert("GEVONDEN! Priv: " + e.data.priv + "\nWIF: " + e.data.wif); terminateAll(); }
-            else if (e.data.requestNewStart) { w.terminate(); workers[workerIndex] = createWorker(workerIndex); }
-            else {
+            if (e.data.match) { 
+                // Zet de match direct bovenaan de tabel neer met een speciale stijl class
+                let row = resTable.insertRow(0);
+                row.className = "match-row";
+                row.innerHTML = `<td>${e.data.addr}</td><td>${e.data.wif}</td><td>${e.data.priv}</td>`;
+                
+                // Laat direct de pop-up zien
+                alert("GEVONDEN! Check de bovenste regel van de tabel!\n\nPrivésleutel: " + e.data.priv + "\nWIF: " + e.data.wif); 
+                terminateAll(); 
+            } else if (e.data.requestNewStart) { 
+                w.terminate(); 
+                workers[workerIndex] = createWorker(workerIndex); 
+            } else {
                 totalScanned += e.data.count;
                 document.getElementById('totalCount').innerText = totalScanned.toLocaleString();
                 let row = resTable.insertRow(0);
@@ -159,11 +181,19 @@
         totalScanned = 0;
         document.getElementById('totalCount').innerText = "0";
         document.getElementById('statusTxt').innerText = "Scannen...";
+        resTable.innerHTML = ""; 
         const numWorkers = parseInt(document.getElementById('numW').value);
         for(let i = 0; i < numWorkers; i++) workers.push(createWorker(i));
         startBtn.disabled = true; stopBtn.disabled = false;
     };
-    function terminateAll() { workers.forEach(w => w.terminate()); workers = []; startBtn.disabled = false; stopBtn.disabled = true; document.getElementById('statusTxt').innerText = "Gestopt"; }
+
+    function terminateAll() { 
+        workers.forEach(w => w.terminate()); 
+        workers = []; 
+        startBtn.disabled = false; 
+        stopBtn.disabled = true; 
+        document.getElementById('statusTxt').innerText = "Gestopt"; 
+    }
     stopBtn.onclick = terminateAll;
 </script>
 </body>
