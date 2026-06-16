@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Bitcoin Puzzle - Kangaroo Solver (Customizable)</title>
+    <title>Bitcoin Puzzle - Kangaroo Solver (Fixed)</title>
     <style>
         body { font-family: monospace; background: #0b0f19; color: #00ff66; padding: 20px; }
         .container { max-width: 650px; margin: 0 auto; background: #111827; padding: 20px; border-radius: 8px; border: 1px solid #00ff66; }
@@ -32,8 +32,8 @@
         
         <hr style="border: 0; border-top: 1px dashed #374151; width: 100%;">
         
-        <div>Start % (0-100): <input id="startPerc" value="0" type="number" step="0.001"></div>
-        <div>End % (0-100): <input id="endPerc" value="1" type="number" step="0.001"></div>
+        <div>Start % (0-100): <input id="startPerc" value="25" type="number" step="0.001"></div>
+        <div>End % (0-100): <input id="endPerc" value="75" type="number" step="0.001"></div>
         
         <hr style="border: 0; border-top: 1px dashed #374151; width: 100%;">
         
@@ -100,7 +100,7 @@
     }
 
     self.onmessage = function(e) {
-        const { type, subStartStr, subEndStr, targetPubHex, traps, workerId } = e.data;
+        const { type, subStartStr, subEndStr, targetPubHex, traps, workerId, padLen } = e.data;
         
         let targetPubKey = ec.keyFromPublic(targetPubHex, 'hex').getPublic();
         let subStart = BigInt("0x" + subStartStr);
@@ -154,7 +154,7 @@
                         let secretKey = tameDist - currDist;
                         
                         if (secretKey > 0n) {
-                            let privHex = secretKey.toString(16).padStart(64, '0');
+                            let privHex = secretKey.toString(16).padStart(padLen, '0');
                             let wif = toBase58("80" + privHex + "01" + sha256(sha256("80" + privHex + "01")).substr(0, 8));
                             self.postMessage({ type: "FOUND", privHex, wif });
                             return;
@@ -200,23 +200,30 @@
         stopBtn.disabled = false;
         startTime = Date.now();
 
-        const absStart = BigInt("0x" + document.getElementById('rangeStart').value.trim());
-        const absEnd = BigInt("0x" + document.getElementById('rangeEnd').value.trim());
+        const rawStart = document.getElementById('rangeStart').value.trim();
+        const rawEnd = document.getElementById('rangeEnd').value.trim();
+        const targetLen = Math.max(rawStart.length, rawEnd.length);
+
+        const absStart = BigInt("0x" + rawStart);
+        const absEnd = BigInt("0x" + rawEnd);
         const fullRange = absEnd - absStart;
 
-        const startFactor = BigInt(Math.floor(parseFloat(document.getElementById('startPerc').value) * 1000));
-        const endFactor = BigInt(Math.floor(parseFloat(document.getElementById('endPerc').value) * 1000));
+        const startPercVal = parseFloat(document.getElementById('startPerc').value);
+        const endPercVal = parseFloat(document.getElementById('endPerc').value);
+        
+        const startFactor = BigInt(Math.floor(startPercVal * 10000));
+        const endFactor = BigInt(Math.floor(endPercVal * 10000));
 
-        const subStart = absStart + (fullRange * startFactor) / 100000n;
-        const subEnd = absStart + (fullRange * endFactor) / 100000n;
+        const subStart = absStart + (fullRange * startFactor) / 1000000n;
+        const subEnd = absStart + (fullRange * endFactor) / 1000000n;
 
-        const subStartStr = subStart.toString(16).padStart(64, '0');
-        const subEndStr = subEnd.toString(16).padStart(64, '0');
+        const subStartStr = subStart.toString(16).padStart(targetLen, '0');
+        const subEndStr = subEnd.toString(16).padStart(targetLen, '0');
 
-        document.getElementById('subEndHex').innerText = "0x" + subEndStr.substring(0, 14) + "...";
+        document.getElementById('subEndHex').innerText = "0x" + subEndStr;
 
         const numWorkers = parseInt(document.getElementById('numW').value);
-        log("Doelgebied ingesteld op: " + document.getElementById('startPerc').value + "% tot " + document.getElementById('endPerc').value + "%");
+        log("Doelgebied ingesteld op: " + startPercVal + "% tot " + endPercVal + "%");
         log("Uitzetten van de Tamme Kangoeroes op unieke willekeurige startposities...");
 
         for (let i = 0; i < numWorkers; i++) {
@@ -228,7 +235,8 @@
                 subStartStr: subStartStr,
                 subEndStr: subEndStr,
                 targetPubHex: document.getElementById('pubKey').value.trim(),
-                workerId: i
+                workerId: i,
+                padLen: targetLen
             });
 
             w.onmessage = function(e) {
@@ -239,16 +247,16 @@
                     log("Worker " + e.data.workerId + ": Vallen succesvol geplaatst.");
 
                     if (tameWorkersFinished === numWorkers) {
-                        startWildPhase(numWorkers, subStartStr, subEndStr);
+                        startWildPhase(numWorkers, subStartStr, subEndStr, targetLen);
                     }
                 }
             };
         }
     };
 
-    function startWildPhase(numWorkers, subStartStr, subEndStr) {
+    function startWildPhase(numWorkers, subStartStr, subEndStr, targetLen) {
         log("Totaal aantal unieke sub-vallen geladen: " + Object.keys(globalTraps).length);
-        log("🚀 Starten van de Wilde jacht binnen de " + document.getElementById('startPerc').value + "-" + document.getElementById('endPerc').value + "% zone...");
+        log("🚀 Starten van de Wilde jacht binnen de zone...");
         document.getElementById('statusTxt').innerText = "Wilde jacht bezig...";
         document.getElementById('statusTxt').style.color = "#00ff66";
 
@@ -262,7 +270,8 @@
                 subStartStr: subStartStr,
                 subEndStr: subEndStr,
                 targetPubHex: document.getElementById('pubKey').value.trim(),
-                traps: globalTraps
+                traps: globalTraps,
+                padLen: targetLen
             });
 
             w.onmessage = function(e) {
