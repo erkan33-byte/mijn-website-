@@ -72,6 +72,7 @@
     
     const ec = new elliptic.ec("secp256k1");
     const G = ec.g;
+    const N = ec.n;
 
     const NUM_STEPS = 32;
     const JUMP_SIZES = [];
@@ -151,14 +152,25 @@
                     
                     if (localTraps.has(pubHex)) {
                         let tameDist = localTraps.get(pubHex);
-                        let secretKey = tameDist - currDist;
+                        
+                        // Correcte kangoeroe wiskunde: modulo curve order N toepassen
+                        let secretKey = (tameDist - currDist) % BigInt(N.toString());
+                        if (secretKey < 0n) {
+                            secretKey += BigInt(N.toString());
+                        }
                         
                         if (secretKey > 0n) {
-                            // FIX: Privésleutel MOET exact 64 tekens lang zijn voor een geldige Bitcoin checksum-berekening
-                            let privHex = secretKey.toString(16).padStart(64, '0');
+                            // Dynamische opvulling op basis van de invoerlengte (padLen)
+                            let privHex = secretKey.toString(16).padStart(padLen, '0');
                             
-                            // Bereken de WIF conform de geldige mainnet gecomprimeerde structuur (80 + 32-bytes privkey + 01)
-                            const wifPayload = "80" + privHex + "01";
+                            // Zorg voor geldige bytes (even lengte) bij zeer kleine ranges
+                            let internalHex = privHex;
+                            if (internalHex.length % 2 !== 0) {
+                                internalHex = "0" + internalHex;
+                            }
+                            
+                            // Bereken WIF met gecorrigeerde payload structuur
+                            const wifPayload = "80" + internalHex + "01";
                             const doubleSha = sha256(sha256(wifPayload));
                             const checksum = doubleSha.substr(0, 8);
                             let wif = toBase58(wifPayload + checksum);
