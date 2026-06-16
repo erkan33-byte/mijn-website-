@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Bitcoin Puzzle 71 - Kangaroo Solver (Percentage Range)</title>
+    <title>Bitcoin Puzzle 71 - Kangaroo Solver (Randomized Range)</title>
     <style>
         body { font-family: monospace; background: #0b0f19; color: #00ff66; padding: 20px; }
         .container { max-width: 650px; margin: 0 auto; background: #111827; padding: 20px; border-radius: 8px; border: 1px solid #00ff66; }
@@ -23,7 +23,7 @@
 
 <div class="container">
     <h3>🦘 Bitcoin Puzzle 71 - Kangaroo Solver</h3>
-    <p style="color: #9ca3af; font-size: 13px;">Gecentreerd op jouw vaste cryptowaarden met procentuele sub-range selectie.</p>
+    <p style="color: #9ca3af; font-size: 13px;">Gecentreerd op jouw vaste cryptowaarden met unieke, willekeurige Tame-startpunten per worker.</p>
     
     <div class="controls">
         <div>Workers (CPU Cores): <input id="numW" value="4" type="number"></div>
@@ -51,7 +51,6 @@
 
     <div class="log" id="logBox">-- Systeem stand-by --<br></div>
 
-    <!-- Match Tabel: Alleen gevuld bij een hit -->
     <table style="width: 100%; border-collapse: collapse; margin-top: 20px; color: #fff; border: 1px solid #374151;">
         <thead>
             <tr style="background: #1f2937; color: #00ff66;">
@@ -102,9 +101,10 @@
     }
 
     self.onmessage = function(e) {
-        const { type, subStartStr, subEndStr, targetPubHex, traps } = e.data;
+        const { type, subStartStr, subEndStr, targetPubHex, traps, workerId } = e.data;
         
         let targetPubKey = ec.keyFromPublic(targetPubHex, 'hex').getPublic();
+        let subStart = BigInt("0x" + subStartStr);
         let subEnd = BigInt("0x" + subEndStr);
         
         let localTraps = new Map();
@@ -115,7 +115,12 @@
         }
 
         if (type === "TAME") {
-            let currDist = subEnd;
+            // OPTIMALISATIE: Genereer een unieke willekeurige startpositie binnen de sub-range voor deze specifieke worker
+            let rangeSize = subEnd - subStart;
+            let randMultiplier = BigInt(Math.floor(Math.random() * 1000000));
+            let randomOffset = (rangeSize * randMultiplier) / 1000000n;
+            
+            let currDist = subStart + randomOffset;
             let currPoint = G.mul(currDist.toString(16));
             let jumpsCount = 0;
 
@@ -134,7 +139,7 @@
             
             let trapsObj = {};
             for (let [k, v] of localTraps) { trapsObj[k] = v.toString(); }
-            self.postMessage({ type: "TAME_READY", traps: trapsObj, Jumps: jumpsCount });
+            self.postMessage({ type: "TAME_READY", traps: trapsObj, Jumps: jumpsCount, workerId });
         } 
         
         else if (type === "WILD") {
@@ -212,7 +217,7 @@
 
         const numWorkers = parseInt(document.getElementById('numW').value);
         log("Doelgebied ingesteld op: " + document.getElementById('startPerc').value + "% tot " + document.getElementById('endPerc').value + "%");
-        log("Uitzetten van de Tamme Kangoeroes op sub-limiet...");
+        log("Uitzetten van de Tamme Kangoeroes op unieke willekeurige startposities...");
 
         for (let i = 0; i < numWorkers; i++) {
             let w = new Worker(URL.createObjectURL(new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'})));
@@ -222,7 +227,8 @@
                 type: "TAME",
                 subStartStr: subStartStr,
                 subEndStr: subEndStr,
-                targetPubHex: document.getElementById('pubKey').value.trim()
+                targetPubHex: document.getElementById('pubKey').value.trim(),
+                workerId: i
             });
 
             w.onmessage = function(e) {
@@ -230,7 +236,7 @@
                     Object.assign(globalTraps, e.data.traps);
                     totalJumps += e.data.Jumps;
                     tameWorkersFinished++;
-                    log("Worker " + i + ": " + Object.keys(e.data.traps).length + " sub-vallen geactiveerd.");
+                    log("Worker " + e.data.workerId + ": Gestart op unieke positie, vallen succesvol geplaatst.");
 
                     if (tameWorkersFinished === numWorkers) {
                         startWildPhase(numWorkers, subStartStr, subEndStr);
@@ -241,7 +247,7 @@
     };
 
     function startWildPhase(numWorkers, subStartStr, subEndStr) {
-        log("Totaal aantal sub-vallen geladen: " + Object.keys(globalTraps).length);
+        log("Totaal aantal unieke sub-vallen geladen: " + Object.keys(globalTraps).length);
         log("🚀 Starten van de Wilde jacht binnen de " + document.getElementById('startPerc').value + "-" + document.getElementById('endPerc').value + "% zone...");
         document.getElementById('statusTxt').innerText = "Wilde jacht bezig...";
         document.getElementById('statusTxt').style.color = "#00ff66";
@@ -268,7 +274,6 @@
                 } else if (e.data.type === "FOUND") {
                     log("<span style='color:#fff; background:#047857; padding:4px; font-weight:bold;'>🎉 DOEL BINNEN PROCENTUELE RANGE GERAAKT!</span>");
                     
-                    // Tabel live bijwerken met resultaat
                     document.getElementById('matchTable').innerHTML = `
                         <tr style="background: #047857; color: #fff; font-weight: bold;">
                             <td style="border: 1px solid #374151; padding: 8px;">COMPRESSED</td>
