@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>Bitcoin Puzzle 71 - Kangaroo Solver (Percentage Range)</title>
+    <style>
+        body { font-family: monospace; background: #0b0f19; color: #00ff66; padding: 20px; }
+        .container { max-width: 650px; margin: 0 auto; background: #111827; padding: 20px; border-radius: 8px; border: 1px solid #00ff66; }
+        h3 { margin-top: 0; color: #fff; text-shadow: 0 0 10px #00ff66; }
+        .controls { display: grid; gap: 12px; margin-bottom: 20px; }
+        .controls div { display: flex; justify-content: space-between; align-items: center; }
+        input { background: #1f2937; color: #00ff66; border: 1px solid #00ff66; width: 420px; padding: 6px; font-family: monospace; }
+        input[type="number"] { width: 100px; }
+        button { padding: 10px; font-weight: bold; cursor: pointer; border-radius: 4px; }
+        #startBtn { background: #047857; color: #fff; border: none; }
+        #stopBtn { background: #b91c1c; color: #fff; border: none; }
+        #startBtn:disabled, #stopBtn:disabled { background: #4b5563; color: #9ca3af; cursor: not-allowed; }
+        .stats-box { background: #1f2937; padding: 15px; border-radius: 4px; border: 1px solid #374151; margin-top: 15px; }
+        .log { background: #000; color: #00ff66; height: 160px; overflow-y: scroll; padding: 10px; font-size: 12px; margin-top: 15px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h3>🦘 Bitcoin Puzzle 71 - Kangaroo Solver</h3>
+    <p style="color: #9ca3af; font-size: 13px;">Gecentreerd op jouw vaste cryptowaarden met procentuele sub-range selectie.</p>
+    
+    <div class="controls">
+        <div>Workers (CPU Cores): <input id="numW" value="4" type="number"></div>
+        <div>Target Public Key: <input id="pubKey" value="02e0a8b039282faf6fe0fd769cfbc4b6b4cf8758ba68220eac420e32b91ddfa673" type="text" disabled></div>
+        <div>Target BTC Adres: <input id="btcAddr" value="1NBC8uXJy1GiJ6drkiZa1WuKn51ps7EPTv" type="text" disabled></div>
+        
+        <hr style="border: 0; border-top: 1px dashed #374151; width: 100%;">
+        
+        <div>Start % (0-100): <input id="startPerc" value="0" type="number" step="0.001"></div>
+        <div>End % (0-100): <input id="endPerc" value="1" type="number" step="0.001"></div>
+        
+        <hr style="border: 0; border-top: 1px dashed #374151; width: 100%;">
+        
+        <div>Absoluut Start (Vast): <input id="rangeStart" value="8000000000000000000000000000000000000000" type="text" disabled></div>
+        <div>Absoluut Eind (Vast): <input id="rangeEnd" value="ffffffffffffffffffffffffffffffffffffffff" type="text" disabled></div>
+        <div><button id="startBtn">Start sub-range Jacht</button> <button id="stopBtn" disabled>Stop</button></div>
+    </div>
+
+    <div class="stats-box">
+        <div>Status: <span id="statusTxt" style="color: #ef4444; font-weight: bold;">Gestopt</span></div>
+        <div>Actieve Sub-Eind (HEX): <span id="subEndHex" style="color: #fff;">-</span></div>
+        <div>Totaal aantal sprongen: <span id="totalJumps">0</span></div>
+        <div>Snelheid: <span id="speed">0</span> sprongen/s</div>
+    </div>
+
+    <div class="log" id="logBox">-- Systeem stand-by --<br></div>
+
+    <!-- Match Tabel: Alleen gevuld bij een hit -->
+    <table style="width: 100%; border-collapse: collapse; margin-top: 20px; color: #fff; border: 1px solid #374151;">
+        <thead>
+            <tr style="background: #1f2937; color: #00ff66;">
+                <th style="border: 1px solid #374151; padding: 8px; text-align: left;">Type</th>
+                <th style="border: 1px solid #374151; padding: 8px; text-align: left;">WIF (Compressed Private Key)</th>
+                <th style="border: 1px solid #374151; padding: 8px; text-align: left;">Privésleutel (HEX)</th>
+            </tr>
+        </thead>
+        <tbody id="matchTable">
+            <tr>
+                <td colspan="3" style="border: 1px solid #374151; padding: 8px; text-align: center; color: #6b7280;">Nog geen match gevonden...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<script id="workerCode" type="javascript/worker">
+    importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+    
+    const ec = new elliptic.ec("secp256k1");
+    const G = ec.g;
+
+    const NUM_STEPS = 32;
+    const JUMP_SIZES = [];
+    const JUMP_POINTS = [];
+
+    for (let i = 0; i < NUM_STEPS; i++) {
+        let size = BigInt(1) << BigInt(i);
+        JUMP_SIZES.push(size);
+        JUMP_POINTS.push(G.mul(size.toString(16)));
+    }
+
+    function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+    function ripemd160(hex) { return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString(); }
+    function toBase58(hex) {
+        const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+        let bytes = hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16));
+        let digits = [0];
+        for (let i = 0; i < bytes.length; i++) {
+            let carry = bytes[i];
+            for (let j = 0; j < digits.length; j++) { carry += digits[j] << 8; digits[j] = carry % 58; carry = (carry / 58) | 0; }
+            while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0; }
+        }
+        let s = "";
+        for (let i = 0; i < bytes.length && bytes[i] === 0; i++) s += ALPHABET[0];
+        for (let i = digits.length - 1; i >= 0; i--) s += ALPHABET[digits[i]];
+        return s;
+    }
+
+    self.onmessage = function(e) {
+        const { type, subStartStr, subEndStr, targetPubHex, traps } = e.data;
+        
+        let targetPubKey = ec.keyFromPublic(targetPubHex, 'hex').getPublic();
+        let subEnd = BigInt("0x" + subEndStr);
+        
+        let localTraps = new Map();
+        if (traps) {
+            for (let [k, v] of Object.entries(traps)) {
+                localTraps.set(k, BigInt(v));
+            }
+        }
+
+        if (type === "TAME") {
+            let currDist = subEnd;
+            let currPoint = G.mul(currDist.toString(16));
+            let jumpsCount = 0;
+
+            for (let i = 0; i < 200000; i++) {
+                let pubHex = currPoint.encode('hex', true);
+                let r = parseInt(pubHex.substr(2, 8), 16) % NUM_STEPS;
+                
+                currPoint = currPoint.add(JUMP_POINTS[r]);
+                currDist += JUMP_SIZES[r];
+                jumpsCount++;
+
+                if ((parseInt(pubHex.substr(10, 4), 16) & 0xFF) === 0) {
+                    localTraps.set(pubHex, currDist);
+                }
+            }
+            
+            let trapsObj = {};
+            for (let [k, v] of localTraps) { trapsObj[k] = v.toString(); }
+            self.postMessage({ type: "TAME_READY", traps: trapsObj, Jumps: jumpsCount });
+        } 
+        
+        else if (type === "WILD") {
+            let currPoint = targetPubKey;
+            let currDist = 0n; 
+            let batchSize = 40000;
+
+            while (true) {
+                for (let i = 0; i < batchSize; i++) {
+                    let pubHex = currPoint.encode('hex', true);
+                    
+                    if (localTraps.has(pubHex)) {
+                        let tameDist = localTraps.get(pubHex);
+                        let secretKey = tameDist - currDist;
+                        
+                        let privHex = secretKey.toString(16).padStart(64, '0');
+                        let wif = toBase58("80" + privHex + "01" + sha256(sha256("80" + privHex + "01")).substr(0, 8));
+                        self.postMessage({ type: "FOUND", privHex, wif });
+                        return;
+                    }
+
+                    let r = parseInt(pubHex.substr(2, 8), 16) % NUM_STEPS;
+                    currPoint = currPoint.add(JUMP_POINTS[r]);
+                    currDist += JUMP_SIZES[r];
+                }
+                
+                self.postMessage({ type: "PROGRESS", jumps: batchSize });
+            }
+        }
+    };
+</script>
+
+<script>
+    let workers = [];
+    let globalTraps = {};
+    let totalJumps = 0;
+    let startTime = 0;
+    let tameWorkersFinished = 0;
+
+    const logBox = document.getElementById('logBox');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+
+    function log(msg) {
+        logBox.innerHTML += msg + "<br>";
+        logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    startBtn.onclick = function() {
+        totalJumps = 0;
+        tameWorkersFinished = 0;
+        globalTraps = {};
+        document.getElementById('totalJumps').innerText = "0";
+        document.getElementById('statusTxt').innerText = "Berekenen sub-range...";
+        document.getElementById('statusTxt').style.color = "#eab308";
+        document.getElementById('matchTable').innerHTML = `<tr><td colspan="3" style="border: 1px solid #374151; padding: 8px; text-align: center; color: #6b7280;">Scannen is bezig...</td></tr>`;
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        startTime = Date.now();
+
+        const absStart = BigInt("0x" + document.getElementById('rangeStart').value.trim());
+        const absEnd = BigInt("0x" + document.getElementById('rangeEnd').value.trim());
+        const fullRange = absEnd - absStart;
+
+        const startPerc = parseFloat(document.getElementById('startPerc').value) / 100;
+        const endPerc = parseFloat(document.getElementById('endPerc').value) / 100;
+
+        const subStart = absStart + BigInt(Math.floor(Number(fullRange) * startPerc));
+        const subEnd = absStart + BigInt(Math.floor(Number(fullRange) * endPerc));
+
+        const subStartStr = subStart.toString(16);
+        const subEndStr = subEnd.toString(16);
+
+        document.getElementById('subEndHex').innerText = "0x" + subEndStr.substring(0, 12) + "...";
+
+        const numWorkers = parseInt(document.getElementById('numW').value);
+        log("Doelgebied ingesteld op: " + document.getElementById('startPerc').value + "% tot " + document.getElementById('endPerc').value + "%");
+        log("Uitzetten van de Tamme Kangoeroes op sub-limiet...");
+
+        for (let i = 0; i < numWorkers; i++) {
+            let w = new Worker(URL.createObjectURL(new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'})));
+            workers.push(w);
+
+            w.postMessage({
+                type: "TAME",
+                subStartStr: subStartStr,
+                subEndStr: subEndStr,
+                targetPubHex: document.getElementById('pubKey').value.trim()
+            });
+
+            w.onmessage = function(e) {
+                if (e.data.type === "TAME_READY") {
+                    Object.assign(globalTraps, e.data.traps);
+                    totalJumps += e.data.Jumps;
+                    tameWorkersFinished++;
+                    log("Worker " + i + ": " + Object.keys(e.data.traps).length + " sub-vallen geactiveerd.");
+
+                    if (tameWorkersFinished === numWorkers) {
+                        startWildPhase(numWorkers, subStartStr, subEndStr);
+                    }
+                }
+            };
+        }
+    };
+
+    function startWildPhase(numWorkers, subStartStr, subEndStr) {
+        log("Totaal aantal sub-vallen geladen: " + Object.keys(globalTraps).length);
+        log("🚀 Starten van de Wilde jacht binnen de " + document.getElementById('startPerc').value + "-" + document.getElementById('endPerc').value + "% zone...");
+        document.getElementById('statusTxt').innerText = "Wilde jacht bezig...";
+        document.getElementById('statusTxt').style.color = "#00ff66";
+
+        for (let i = 0; i < numWorkers; i++) {
+            workers[i].terminate();
+            let w = new Worker(URL.createObjectURL(new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'})));
+            workers[i] = w;
+
+            w.postMessage({
+                type: "WILD",
+                subStartStr: subStartStr,
+                subEndStr: subEndStr,
+                targetPubHex: document.getElementById('pubKey').value.trim(),
+                traps: globalTraps
+            });
+
+            w.onmessage = function(e) {
+                if (e.data.type === "PROGRESS") {
+                    totalJumps += e.data.jumps;
+                    document.getElementById('totalJumps').innerText = totalJumps.toLocaleString();
+                    let elapsed = (Date.now() - startTime) / 1000;
+                    document.getElementById('speed').innerText = Math.floor(totalJumps / elapsed).toLocaleString();
+                } else if (e.data.type === "FOUND") {
+                    log("<span style='color:#fff; background:#047857; padding:4px; font-weight:bold;'>🎉 DOEL BINNEN PROCENTUELE RANGE GERAAKT!</span>");
+                    
+                    // Tabel live bijwerken met resultaat
+                    document.getElementById('matchTable').innerHTML = `
+                        <tr style="background: #047857; color: #fff; font-weight: bold;">
+                            <td style="border: 1px solid #374151; padding: 8px;">COMPRESSED</td>
+                            <td style="border: 1px solid #374151; padding: 8px; word-break: break-all;">${e.data.wif}</td>
+                            <td style="border: 1px solid #374151; padding: 8px; word-break: break-all;">${e.data.privHex}</td>
+                        </tr>`;
+
+                    alert("!!! PUZZEL OPGELOST !!!\n\nBekijk de tabel onderaan voor je WIF!");
+                    terminateAll();
+                }
+            };
+        }
+    }
+
+    function terminateAll() {
+        workers.forEach(w => w.terminate());
+        workers = [];
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        document.getElementById('statusTxt').innerText = "Gestopt";
+        document.getElementById('statusTxt').style.color = "#ef4444";
+        log("Scanner uitgeschakeld.");
+    }
+
+    stopBtn.onclick = terminateAll;
+</script>
+
+</body>
+</html>
