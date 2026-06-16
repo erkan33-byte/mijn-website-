@@ -1,127 +1,437 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-<meta charset="UTF-8">
-<title>Satoshi 2009 Entropy Simulator - Full View</title>
-<style>
-    body { font-family: 'Courier New', monospace; background: #0a0a0a; color: #00ff00; padding: 20px; }
-    h2 { border-bottom: 1px solid #00ff00; padding-bottom: 10px; }
-    .form-group { margin-bottom: 5px; }
-    label { display: inline-block; width: 180px; color: #ccc; font-size: 11px; }
-    input { width: 70px; background: #111; color: #00ff00; border: 1px solid #333; padding: 2px; font-size: 11px; }
-    button { padding: 10px 20px; cursor: pointer; border: 1px solid #00ff00; margin-top: 10px; margin-right: 5px; font-weight: bold; }
-    #startBtn { background: #003300; } #stopBtn { background: #330000; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 10px; color: #fff; }
-    th, td { border: 1px solid #222; padding: 6px; text-align: left; word-break: break-all; }
-    th { background: #1a1a1a; }
-</style>
+    <meta charset="UTF-8">
+    <title>Bitcoin Puzzle 71 - Multi-Kangaroo Solver (Uncompressed Targets)</title>
+    <style>
+        body { font-family: monospace; background: #0b0f19; color: #00ff66; padding: 20px; }
+        .container { max-width: 850px; margin: 0 auto; background: #111827; padding: 20px; border-radius: 8px; border: 1px solid #00ff66; }
+        h3 { margin-top: 0; color: #fff; text-shadow: 0 0 10px #00ff66; }
+        .controls { display: grid; gap: 12px; margin-bottom: 20px; }
+        .controls div { display: flex; justify-content: space-between; align-items: center; }
+        input { background: #1f2937; color: #00ff66; border: 1px solid #00ff66; width: 550px; padding: 6px; font-family: monospace; }
+        input[type="number"] { width: 100px; }
+        button { padding: 10px; font-weight: bold; cursor: pointer; border-radius: 4px; }
+        #startBtn { background: #047857; color: #fff; border: none; }
+        #stopBtn { background: #b91c1c; color: #fff; border: none; }
+        #startBtn:disabled, #stopBtn:disabled { background: #4b5563; color: #9ca3af; cursor: not-allowed; }
+        .stats-box { background: #1f2937; padding: 15px; border-radius: 4px; border: 1px solid #374151; margin-top: 15px; }
+        .log { background: #000; color: #00ff66; height: 140px; overflow-y: scroll; padding: 10px; font-size: 12px; margin-top: 15px; border-radius: 4px; }
+        .target-list { background: #111827; border: 1px solid #374151; height: 120px; overflow-y: scroll; padding: 5px; font-size: 11px; color: #9ca3af; width: 550px; }
+    </style>
 </head>
 <body>
-<h2>Satoshi 2009 Environment Mixer (Full View)</h2>
-<div id="inputs">
-    <div class="form-group"><label>Time (Start/End):</label><input id="tS" value="1231665341"><input id="tE" value="1231665400"></div>
-    <div class="form-group"><label>QueryPerfCounter:</label><input id="qS" value="700000000"><input id="qE" value="701000000"></div>
-    <div class="form-group"><label>Windows Tick:</label><input id="tkS" value="0"><input id="tkE" value="65535"></div>
-    <div class="form-group"><label>PID (Start/End):</label><input id="pS" type="number" value="4" step="4" min="4"><input id="pE" type="number" value="1024" step="4" min="4"></div>
-    <div class="form-group"><label>TID (Start/End):</label><input id="tiS" type="number" value="1024" step="4" min="4"><input id="tiE" type="number" value="4096" step="4" min="4"></div>
-    <div class="form-group"><label>RAM (Avail/Used):</label><input id="rS" value="512"><input id="rE" value="2048"></div>
-    <div class="form-group"><label>System Uptime (ms):</label><input id="sS" value="10000"><input id="sE" value="3600000"></div>
-    <div class="form-group"><label>Disk Serial (Min/Max):</label><input id="dS" value="A1B2C3D4"><input id="dE" value="A1B2C3D4"></div>
-    <div class="form-group"><label>Vol Serial (Min/Max):</label><input id="vS" value="E5F67890"><input id="vE" value="E5F67890"></div>
-    <div class="form-group"><label>Env Hash (Min/Max):</label><input id="eS" value="10000000"><input id="eE" value="FFFFFFFF"></div>
-    <div class="form-group"><label>Workers:</label><input id="numW" value="4" style="width:50px"></div>
+
+<div class="container">
+    <h3>🦘 Bitcoin Puzzle 71 - Multi-Kangaroo Solver (Uncompressed)</h3>
+    <p style="color: #9ca3af; font-size: 13px;">Parallelle jacht geoptimaliseerd voor **Uncompressed** public keys en adressen.</p>
+    
+    <div class="controls">
+        <div>Workers (CPU Cores): <input id="numW" value="4" type="number"></div>
+        <div style="align-items: flex-start;">Actieve Targets (Vaste Lijst): 
+            <div id="targetDisplay" class="target-list">Lijst wordt geladen...</div>
+        </div>
+        
+        <hr style="border: 0; border-top: 1px dashed #374151; width: 100%;">
+        
+        <div>Start % (0-100): <input id="startPerc" value="0" type="number" step="0.001"></div>
+        <div>End % (0-100): <input id="endPerc" value="1" type="number" step="0.001"></div>
+        
+        <hr style="border: 0; border-top: 1px dashed #374151; width: 100%;">
+        
+        <div>Absoluut Start (Vast): <input id="rangeStart" value="8000000000000000000000000000000000000000" type="text" disabled></div>
+        <div>Absoluut Eind (Vast): <input id="rangeEnd" value="ffffffffffffffffffffffffffffffffffffffff" type="text" disabled></div>
+        <div><button id="startBtn">Start Multi-range Jacht</button> <button id="stopBtn" disabled>Stop</button></div>
+    </div>
+
+    <div class="stats-box">
+        <div>Status: <span id="statusTxt" style="color: #ef4444; font-weight: bold;">Gestopt</span></div>
+        <div>Actieve Sub-Eind (HEX): <span id="subEndHex" style="color: #fff;">-</span></div>
+        <div>Totaal aantal sprongen: <span id="totalJumps">0</span></div>
+        <div>Snelheid: <span id="speed">0</span> sprongen/s</div>
+    </div>
+
+    <div class="log" id="logBox">-- Systeem stand-by --<br></div>
+
+    <table style="width: 100%; border-collapse: collapse; margin-top: 20px; color: #fff; border: 1px solid #374151;">
+        <thead>
+            <tr style="background: #1f2937; color: #00ff66;">
+                <th style="border: 1px solid #374151; padding: 8px; text-align: left;">Gevonden BTC Adres</th>
+                <th style="border: 1px solid #374151; padding: 8px; text-align: left;">WIF (Uncompressed)</th>
+                <th style="border: 1px solid #374151; padding: 8px; text-align: left;">Privésleutel (HEX)</th>
+                <th style="border: 1px solid #374151; padding: 8px; text-align: left;">Gekoppelde PubKey</th>
+            </tr>
+        </thead>
+        <tbody id="matchTable">
+            <tr>
+                <td colspan="4" style="border: 1px solid #374151; padding: 8px; text-align: center; color: #6b7280;">Nog geen match gevonden...</td>
+            </tr>
+        </tbody>
+    </table>
 </div>
 
-<button id="startBtn">Start Scan</button><button id="stopBtn" disabled>Stop</button>
-<div id="totaal" style="margin-top:10px;">Totaal gescand: 0</div>
-<table id="resultTable"><thead><tr><th style="width: 30%;">BTC Adres</th><th style="width: 60%;">WIF Private Key</th><th style="width: 10%;">Status</th></tr></thead><tbody></tbody></table>
+<script id="workerCode" type="javascript/worker">
+    importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+    
+    const ec = new elliptic.ec("secp256k1");
+    const G = ec.g;
+
+    const NUM_STEPS = 32;
+    const JUMP_SIZES = [];
+    const JUMP_POINTS = [];
+
+    for (let i = 0; i < NUM_STEPS; i++) {
+        let size = BigInt(1) << BigInt(i);
+        JUMP_SIZES.push(size);
+        JUMP_POINTS.push(G.mul(size.toString(16)));
+    }
+
+    function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+    function ripemd160(hex) { return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString(); }
+    
+    function toBase58(hex) {
+        const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+        let bytes = hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16));
+        let digits = [0];
+        for (let i = 0; i < bytes.length; i++) {
+            let carry = bytes[i];
+            for (let j = 0; j < digits.length; j++) { carry += digits[j] << 8; digits[j] = carry % 58; carry = (carry / 58) | 0; }
+            while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0; }
+        }
+        let s = "";
+        for (let i = 0; i < bytes.length && bytes[i] === 0; i++) s += ALPHABET[0];
+        for (let i = digits.length - 1; i >= 0; i--) s += ALPHABET[digits[i]];
+        return s;
+    }
+
+    // Aangepast naar Uncompressed (gebruikt de volledige x en y coördinaten)
+    function pubKeyToBtcAddress(pubHex) {
+        let sha = sha256(pubHex);
+        let ripe = ripemd160(sha);
+        let versionedRipe = "00" + ripe; 
+        let checksum = sha256(sha256(versionedRipe)).substr(0, 8);
+        return toBase58(versionedRipe + checksum);
+    }
+
+    self.onmessage = function(e) {
+        const { type, subStartStr, subEndStr, targetPubHexList, traps, workerId } = e.data;
+        
+        let subStart = BigInt("0x" + subStartStr);
+        let subEnd = BigInt("0x" + subEndStr);
+        
+        let localTraps = new Map();
+        if (traps) {
+            for (let [k, v] of Object.entries(traps)) {
+                localTraps.set(k, BigInt(v));
+            }
+        }
+
+        if (type === "TAME") {
+            let rangeSize = subEnd - subStart;
+            let randMultiplier = BigInt(Math.floor(Math.random() * 1000000));
+            let randomOffset = (rangeSize * randMultiplier) / 1000000n;
+            
+            let currDist = subStart + randomOffset;
+            let currPoint = G.mul(currDist.toString(16));
+            let jumpsCount = 0;
+
+            for (let i = 0; i < 200000; i++) {
+                // De kangoeroe vergelijkt intern met compressed pubkeys om geheugen/snelheid te besparen
+                let pubHex = currPoint.encode('hex', true);
+                let r = parseInt(pubHex.substr(2, 8), 16) % NUM_STEPS;
+                
+                currPoint = currPoint.add(JUMP_POINTS[r]);
+                currDist += JUMP_SIZES[r];
+                jumpsCount++;
+
+                if ((parseInt(pubHex.substr(10, 4), 16) & 0xFF) === 0) {
+                    localTraps.set(pubHex, currDist);
+                }
+            }
+            
+            let trapsObj = {};
+            for (let [k, v] of localTraps) { trapsObj[k] = v.toString(); }
+            self.postMessage({ type: "TAME_READY", traps: trapsObj, Jumps: jumpsCount, workerId });
+        } 
+        
+        else if (type === "WILD") {
+            // Zet de geladen uncompressed targets om naar EC-points om mee te springen
+            let wildKangaroos = targetPubHexList.map(pubHex => {
+                return {
+                    point: ec.keyFromPublic(pubHex, 'hex').getPublic(),
+                    dist: 0n,
+                    initialPub: pubHex
+                };
+            });
+
+            let batchSize = 10000;
+
+            while (true) {
+                for (let kgoe of wildKangaroos) {
+                    for (let i = 0; i < batchSize; i++) {
+                        // Match checken op basis van compressed representatie (sneller)
+                        let pubHex = kgoe.point.encode('hex', true);
+                        
+                        if (localTraps.has(pubHex)) {
+                            let tameDist = localTraps.get(pubHex);
+                            let secretKey = tameDist - kgoe.dist;
+                            
+                            let privHex = secretKey.toString(16).padStart(64, '0');
+                            
+                            // UNCOMPRESSED WIF: Geen "01" suffix toevoegen! Begint met een '5'.
+                            let wif = toBase58("80" + privHex + sha256(sha256("80" + privHex)).substr(0, 8));
+                            let btcAddress = pubKeyToBtcAddress(kgoe.initialPub);
+                            
+                            self.postMessage({ type: "FOUND", privHex, wif, targetPubHex: kgoe.initialPub, btcAddress });
+                            return;
+                        }
+
+                        let r = parseInt(pubHex.substr(2, 8), 16) % NUM_STEPS;
+                        kgoe.point = kgoe.point.add(JUMP_POINTS[r]);
+                        kgoe.dist += JUMP_SIZES[r];
+                    }
+                }
+                self.postMessage({ type: "PROGRESS", jumps: batchSize * wildKangaroos.length });
+            }
+        }
+    };
+</script>
 
 <script>
-const TARGETS = [
-    "1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF", "12tkqA9xSoowkzoERHMWNKsTey55YEBqkv",
-    "12ib7dApVFvg82TXKycWBNpN8kFyiAN1dr", "1PeizMg76Cf96nUQrYg8xuoZWLQozU5zGW",
-    "198aMn6ZYAczwrE5NvNTUMyJ5qkfy4g3Hi", "1HLvaTs3zR3oev9ya7Pzp3GB9Gqfg6XYJT",
-    "1Kf33BbrJDuAVC91w9ACtRgf6KJrLWSkHV", "167ZWTT8n6s4ya8cGjqNNQjDwDGY31vmHg",
-    "1GoEGp5LxydquYXp7zuBpVWnp8gzsNgQQS", "1GDWUJyvtsyFKNjBvH6hpLE3CdaXx33dxP",
-    "1GDu4EUz2KgeYT4CukDS3qNkiCzg1UfqRA"
-];
+    // Jouw lijst met targets (Uncompressed Pubkeys)
+    const TARGET_DATA = [
+        {"address":"1FpqQnKQCgDkJFMC94JL8FpRyHTZ3uRVZ1","pub":"0404bccfa33a95fdbbd9ccba4e0617769de39fec6b8b053f1ddfdc51cf9e18b3393dbc30994ae3eea8ea72c42b9b9ac52b165cdac020710bf25ab1052d0839d015"},
+        {"address":"18eY9oWL2mkXCL1VVwPme2NMmAVhX6EfyM","pub":"0465c1d2cadf9178ed4bf739205dad4ab20b52a0c4ff64e5bcb6acc9f4a3d1964805d11ad5ebb4f3fc7f4c2b4ea9fd13b000350750d682497e03833e1112b8e9ed"},
+        {"address":"1FvUkW8thcqG6HP7gAvAjcR52fR7CYodBx","pub":"040b8a0382802e12fc345e9bace8b99f6aed6b90fbfd796e8027ca9bb5f472778db863952bdb6e9e399e34f941cab2fa6c244e65af2d15244fee2d795b3f6e222d"},
+        {"address":"1HDNfSr5ExyGfe77GX681PPZtN2deoewfd","pub":"040351657bb7ea4bcfa251d1baed92e6b62097cb25c0528b7e6a9da26cc9138aaf43976b2baca734a4168d8fabbe210f501ff9b3f86684e3e54503c5e68d60a0fa"},
+        {"address":"18hFBPU81kC8V4Dp4iwdwQHakKa5TW2ZkJ","pub":"047b0a8d52f02e2ef5d73a5312c02c8b4008c4c327c3843c06f873a6cdf4f3ce870d6441d86f2b4f52c7117c51a4033318f786111266df6df3b09a4539c55bbf8d"},
+        {"address":"1BVMFfPXJy2TY1x6wm8gow3N5Amw4Etm5h","pub":"04394ba350510f702a3f56e1bdc99373f1f9830b6e2b414975fda87590a498766e9fc6f123a8f0e25d444e8d6a82bfc8066fa2e333ebe263b6046514634c69ca68"},
+        {"address":"1D6iTqvbgcqenbkKNsFsi9zN21KH4KPPEa","pub":"046b51a99be642287cfaa684fd18919602117cb719a16867451587157bb1427436b40abd271345e6be07f054562a497f1f868d6dc899921943072eb3c3ef515895"},
+        {"address":"1KmaiBSWEwmLcmq1TZzEJqwvmchS6t2n3E","pub":"04ce65d66931b77e198370b9effdf2fe9c11371f5fc7f73929b5cf737dffaf48fea8f7fe6129a360941b22bde116af8b7dabd3793cc8453fecd9b3b972a1bfac4e"},
+        {"address":"1FrGUN1UC45FYcRT1rjU7rb6h7bYg7bKDp","pub":"04a7d4ece2400732b524998ee46bdda69c4c1867c3b1102df296c6a51b5db662cadef997879b6029673a3cf2059782cab0b6b0c7af3fa03dd34b958b27f2ff7696"},
+        {"address":"1JaPNwMXt2AuVkWmkUHbsw78MbGorTfmm2","pub":"043b5bec2c8c46f9b8bf3407a9fdf928b674b6f8b294a10041ea32ecda2ec018ac0e072b1c00a275e4d0e1ff3f77f18938868b8f3ae8221d321e82bd53d808c738"},
+        {"address":"1NB3ZXxs3vfq1hRhuSAZ3zPdQNrXBQB6ZX","pub":"04bba2927e56edd5b1335cf292e02085a0ca3d14aad1da644e38b6aafb73a24df1b105c19291a376936a4d41bed737ac1f086ead67b820a222ae0f21c46518b959"},
+        {"address":"1Mnc9YWgfSyyut8wdKDNznYhi2NvYnsqCw","pub":"04429bbe12f6b8a17fe96ffe219e090c5c1195c7c5ef54d7f3be7af93646e47937d25119ee51d2e81b09f366494f54ca03fa5405cfd7aa31b943253d338d209a6a"},
+        {"address":"1Dp1yVTFmgb6oL5WoNVsLsZso4ATMzxD1M","pub":"0481a0c8e73fa3661fe136b437d2af40a8f07d47590dd49ade98222946b45ed006218f8534c5bf3c23b4c1c32b6295484c1473ce4bd628ae258acbb955a0fcb75e"},
+        {"address":"1FXavuV1rjJicYau2md7pa22Q3P4HEcMLN","pub":"04cf62ff81cc183cc04258983a18878a0ad51f799cce0ed13da4116b8d85991f3a28c3fbcb132079b6f7bbcc85a12aab16fc646865efa7ae5e3b286421c09c3272"},
+        {"address":"1KVyYVs7qbzuZt4s6M1hKRwtQZm2QQZLiA","pub":"0436b2b125c8feea47f32ca037faf154df3409c1cbf636584fcdef091e70fd7f3bf3400f3d8abf45916790a5f2618adfa87c6f8e050c19ea61248f15a4f1918cc3"},
+        {"address":"1HZNsUqQxKVLmfPfCAzLwrnVDzx8CxwxnM","pub":"0412d3a537741c4c34c8bc5fb2c57edf6b3bb49c3fd50b45a6af807e048bf701843c39688648234facf44afaea053fa01c9a70ecad0e4607bf07dd6cfd446d0a3a"},
+        {"address":"1PdSv4K7zbjTArEQZYzRs4Gq3UnSzEZMjS","pub":"04db4826225e38b04368cf59b15541d1ec626ec89217d773bac3bbf374b70ef65d441add472b774a4fc45cce39b798146847ec068f63bb0a52c22ab18c15fd275f"},
+        {"address":"13FKHnREotr4jrjiSJwPUpecogVT7Rj7bu","pub":"044d07e8287a763128c8c6448d3aa200947049530bfbc991d3483d5e19ff803144620957ee508ccae12591177cb4549ecfd60a9fe3bb12fed061fe21c5b2d6fd80"},
+        {"address":"1NFx9FETuduha8qJ6ehPYufTqVirB1Jf1D","pub":"0445b1f47f1770580f281bf309fc4fc469a40c02cd24775cffcd9f7ab87c1e8eb9ae1cc9c550e477555f24d1e5ac882c018ef6802398793cb47c244c5bf515b0ea"},
+        {"address":"1DXnCCDog6rCfGBrUTFw56jkMRN2J7Evbw","pub":"040e8ee0d3a767ba2cf9fc196ae2f4bf3b859ba974745a2ce58b276b7f3bfaee742f491cf319f1c9dedf9c869b9510df6e9f9269e36ed38933a9b073d96c2213cc"},
+        {"address":"174NVbudzKV1jZnZvRzKvauZxnq25NfG4v","pub":"04dd2d8f6c816579484f037c148c8fc220bd388e726f357941519a60347b098ee29d580fff6321a90f96c25b5516a594c47c750adc4456103f15af54b10c80a9f8"},
+        {"address":"14ResTzJYh5t9xDqtEsgCfXNjaWNSuA5uQ","pub":"0401f362b63933e5717f9a3b7986f7cae2ce2e74f9ded3987f07fbfdd94c0c48c574a12ffabfe92029e52f2e4b2467b405d30d30d647cd7789a1feb1b294b80d53"},
+        {"address":"1An4jHFsSz31TjW49vsZtCt2SXKV7oHRWb","pub":"0499043b08148cce81642af01efc113804e80312ddac5668d22f9ccb349c59fa16a09a29913e281c40845d8deef828297e75d515901e100e2d5d10a473519a7fab"},
+        {"address":"1Gm6kRDZmsHhAFNBpA4h8iFqiCHHgcX8mU","pub":"0476747e04593657218c1d68ed2ad65f8edc9faa4350f7f66fa1eff1b0ec9f744739aca3352267a87a6ec5ccf1827508324123e63248c02fe4d568ea28735ac4ac"},
+        {"address":"1ZhKkzRLLfpNGNHf8qDDH7uRZtaMue7tR","pub":"043ed41a8a6f4a29b92e6c9f46588903816f57c1a08c8b70e8e7dfad34e14513c5f08764d3ca275b7bcb50d32b509d399557517c212743fa692cbaf48362a7dc7e"},
+        {"address":"15j8Z16JSxdTjQcdKQJbnh2F3kuZUMYCay","pub":"0447a7ef2ddddc2824a1306be2ab00edbeb757e18e44a09d3705e3b5e81200413f82a8cee9213e10c61e079b07afbc7f48efdfbc53268545f2d648f785166220d3"},
+        {"address":"17eSZivDJpuJp9TxezTXVxkgLbsr3XZM1i","pub":"04dc2f6ef3189205ccbe71848160ab99fe7d8c84e101b6162746bfbf3e07eca9f337beac488621cd920c6fea2d2ff84070b5ba6e138fa6b12df5509673994276c9"},
+        {"address":"1CH6MnWRU2pN2BYMMydZYaySNcsegRuazF","pub":"04b17771aa6439dcdcab5233d4ca5c273926ef5a3938ec75eb19fde0abfc84cfa840932ebfab99ed117276b70e5259fe19117e4df914e24b940e0b9349216b9f01"},
+        {"address":"12Tzj6dBg1RXss4NyMNvW1T3SkBXNdaKPq","pub":"043ba7df09da0e5913a6e86f228fc509a3852ac1d37c2aee5db04fbda5f8be80681324595114d19787d4e3187a05867496e75c15b6ab5051aab807e18c7738f3a4"},
+        {"address":"1JXKXFuB4HZf18JnpKADe2R3J8taoCcQEE","pub":"04b394f740558f5bac8a9e29727d94a188cc906a78e31ac1c4956d9ba9a0ee916ee3887a9642b0e5923ef828b78397d79e8d72c99b6a22f3a5809726c7aaad547f"},
+        {"address":"1AFZ8S29PHneb49zdFB2BbVSZtcxtUo9ff","pub":"0445fcc5484c5882b64314ae7435811294f1620474ef4805e30e9c020330e147d2b0a4480a9ea3b3210f63f86f387703e9e2616022d7fc2fdde4416b05f121e97b"},
+        {"address":"15eSCVaJFFXbFitzNxWwUUCEwpS2dkZK2G","pub":"043656a8ebf2940322bda639683b63a9b69e99caa4a28d3e965ce6cad6917fb4cb4b01db8a5e888063a8a3075215d263b65a452ef72a2cf6ef48cfefeeae743ad295e"}, // uncompressed versie van 32/33 beginnend met 04 hersteld via EC point.
+        {"address":"1F998Z8bFCvTfaNkQ2C9Gz66to9HUsJFtw","pub":"04f0af5a5c210513122e5ac5e98c7122534d76ee004000e3445db9f5d47f80ad7b2661bebe100a08e1eb6f3d14902be344d2b27072670be0e5880b91e550cb55cb"}, 
+        {"address":"1LDfQUkRtX9ZNY6nUuQyPPNcyXXAMq29zt","pub":"04414313c4f52833188006f26c8cae230d1df19148a408aafe58badaa9e479198b0d167d625bffe5dbb209a34c96e7da7c4ffdb84986dfc874c1953129eba37317"},
+        {"address":"143qHHMF6UWucgFkGEtVu5iTs7Sywkw6PS","pub":"04be0cff6a0d256f199feb8ba174a1caea0817ea4937b75ffdc415c6321d0ba73f04b04d74ec44235f64559854114df8c7e5eac35ce2d3fa33f8b6f9bb9899928f"},
+        {"address":"1QBHX5fgDgjJraTzP9vFLdDWuKRugzW6Mk","pub":"0463fb19f5638a58383350a729768afda2ed03f2c3e11f631f3a3aef222caad0466c4383beb344504b99dba1af990716668b0e4130857464e4c9e53bcc0730ddf3"},
+        {"address":"1Mdks71WqGBWM55StC2ZpDbYq6Thx1HYFT","pub":"04ff9ae80fbd421cbdc6bce40f8f6aa7e28ceab415e7fc95702fe147338a1bfa3ce71e5365895a9a1aa4587677a02533dd06de9c713506a920d78423f70785b233"},
+        {"address":"1GbQE34Ejh1XjWHkmXq6pftThmnTXJX9Zf","pub":"048bacba08d5dd8b3f35e6ab474f92745fabe1fe495d1d0ec7d7bccecd53331f6e548bc6a9f084ddb5f8c425161471ac35b313c0799ed983c13e9e28afed4d87d2"},
+        {"address":"13ggk9GP6jFMqcHeSyM6Pr34XuZ2uiYpmf","pub":"045601eaa2f85a26a6c6f4788ca6ee667d48ca6d8f8b8848d4d4469f72219f80f4797d4e097a67b8f27e19e97f42706c4ec93d2dad490161a664a85b3d6a90693f"},
+        {"address":"18BXouHEUjZdcXMTBWYS3NTzuiN8nfC785","pub":"049da74b844ba46f05d66d9eaf70726094a16702bcbf49d53f0f0a1846833fa3757a3e74a946b8b408df5522b918db49cb37667ff469eb5c4535359b3f3f01b3da"},
+        {"address":"1C76ALSqbG8FbXWB2P24hmrSJ11h6kRYdG","pub":"040be0ab3c45346e1b2b672514a35537d235ad82bdf3b4385a42a587316b5893bd72dfb7009477eb3cb911d2792610b75ee389e60228303f8f17a9446ff2e03bd6"},
+        {"address":"1MJJ5ZyBzHgZRk8vVZWTQpcTxJ676oHUfE","pub":"04537c4eddba063c38f13ff2b99294bda5b9eff00c826a11d9f96a7372a9af0da7c8e2bfa5ecd367ad4586bf4a320e29578e58833332f9e0a36abdd84cfdbfb71e"},
+        {"address":"1B6d8Ww3aE8qrQMfFh8qWkZdeJWajd1JkN","pub":"046e86064188853da23638eb72dfca735de7eeb663ae770d8c0a77d0aba7f56627f3f11fdaf3e81c4bc469d0f93e17fb623b07205d8c025bd6fdcf2f752c145844"},
+        {"address":"17ZD3W1v8uXnoQf8vE6i32dZ38tCV7UV1d","pub":"04766671d3b6d67717b38a4ef1653ad2e39e695a70d535e996b0825635698fa2338d5d81be10736c67f61aabc6d260caaf65ec8bc6b8ae7b14604cab07665e8db1"},
+        {"address":"1Dak7HUArj2ztjBHq6FaKKtbpy4AQ8Bs2H","pub":"04772ac3a46db8f82f4f0267052416743ac647dfbf5867769dd5db6aae34b8624cba7b004e3ca8c295beb4403fdfaa92aacc2143e21c5320c05ac5669f97fcc5ab"},
+        {"address":"19q3KqXfxEv3s9vi7MLQohRgu9tQzYdkYW","pub":"042b42f098d30f0e54ea925032d309838aaac014f9d8d5faeced2c1f9c94b7d6f8bdcf9bed7edaeaf584a0617deb8dc8c6c6a539b5b206fef73d74728d76fb1386"},
+        {"address":"18Bu2YGPCs4XMMDodwb8MWctNd7nCzbkbM","pub":"04b29774b29cb2d66db081f95aa52990ac27b20ae4379033dfc00a33632a30fd5c84d6349c2d131f478832a820464f1d2c676d7f8d591873130c25a0b7b13be244"},
+        {"address":"1MBMUXZWvTGE1KCqSZCRGpdonvNjzT7UCf","pub":"04f4e22d90b41e9cf77a3c5f2fbf848e522cbae0c73873f0a1a0a34ed72637e48410bd8e00a6f3855e83efb2aa9d97c306004e2cc19eaafec4e8950c1f6af35255"},
+        {"address":"139zswpgwYzrShLPRPidKoB1weskDP9VQh","pub":"04ae77b233b348d7c0c89edbe7365890cd42a8cbde0c46ecfd4f2456901d48a5ba4b2799c5f1950aa43436c20026d242422f68b3ea4cfd5e34857001bf58d140c3"},
+        {"address":"12u6hecWRHEPceLYZ9yhubZvhgKYuLGf1J","pub":"046bd20f8fe764c28f5fe1c4eba69d26e0af42bf1853213d593a5098e075344d6fdc998e9c1e469cad7d799a0891f3bc47ae1f6a1eb6caabd62890a7994f4b6d5f"},
+        {"address":"1ZisineWaFFUmGdHPtGkKSympQ3QvZTeE","pub":"04c83663eb044f3ac09f644ab3caaf34896ab4ec498d889e0b9a2182d0ca76dc214a44629b4c5cb50019eb37a2282f9c8cbf89a2111daed941d8f62c48d08bfded"},
+        {"address":"1MCmcihDCtUYGSULnk4qBmeHLfP1V6aFVw","pub":"04533aa2de34e954efb2c52c6319e67e8ef893328b649d59494a4403dd0e3ad93cd6c91a02951bc47900b41bf372dbfef8bc3571d604b6b6df1166687498c0d9ec0"},
+        {"address":"1KmwtEgTWRnZfDero25nZGK8Qn23ckGiEN","pub":"0424b1d1758a47e2f34d31ccbd67a9d50effb5df286cbdc7faa9d0b2958d77454c78dd03960fcec6121bedb578692dbaa9223fc7e5a9e0bb01f229448ef56c9ec6"},
+        {"address":"1PVgK7vJff3ftdbNukkWQFk2Qx5HzXNeXx","pub":"045bd6efc3cda23e2d8b40fde2a92a02d78319b74d42326e24b2892cd93cdb2f341293cfcd1c741c528a01075d885af58ba028e11d9c9a72ed909c1c411a641257"},
+        {"address":"1CKS5Wo9N2rGteNjskGEUQiiSSvRVEE33A","pub":"04591dd7602eb4f928b2960858dafe2578d04d6bf965a587ee97247b3cc23f70cd5206ccdb2f26707328bf5c4d688cf64735235804358bbef7b2df82e66db6787c"},
+        {"address":"183ERa7V3yHrzgrgTjXjundtYBaKFgJYGB","pub":"0483b8110f4b0786bd1aff1abd632be5acd18573003509fdaf3486690f9dfd7f00b39eeb4062d87de60c58dc0eacbdb9e45c83362c681520c106021219183b68ce"},
+        {"address":"16a7dYtHXh5xJ2iMEH9WQuhsUanHFHR7gM","pub":"0402357262dbd8832ba97901b9444711f5e1d6c13aad067d9da5f6f7ea3581eac73d7d175394d8151726ab722d0d0ac844fa959384d3b94cc866380fcecf221223"},
+        {"address":"15hMprBNTVjuMss3kpdgh1WTxXcU4Fo1Ts","pub":"04b5ed925effd8b487c4d9198961eac907ce7be1c8ab12fc033c8c6838aeacf1e6ff0cda1d61a547071cd68bd173d4a7eeff51ecb6bf57853bebe1838a06a1579a"},
+        {"address":"1FJBeYLRArReqVTiqwYTEc9hAfypGx8MyN","pub":"042aefcd4f571aac1e52f2f58a8dbb9af7ddd2737d363c54b1b2a4b08eaacea2aea54bd0a78ddf207072144f036a0723a2841bc58ffc84cd0901a4937c515ea6b9"},
+        {"address":"1Nwd3pwC1RfcCFxJgKQEu3hdpsFQdtFSih","pub":"047897a1928e589725da70f4a07cee74e3d333ab48df01bd7e7e3b1ff41489e768d4b0aa6f98d567722e7110ce6067ab0199e2eaadfae31f1d02fedd593560fc7c"},
+        {"address":"132FHD3NuEry9ncGdMceJxq6MBV6nsVyNn","pub":"04508e60f4ebc26c313ce64a96c4465c1b91ef8318024e7be9ef576bd8a9f8837b718ed7e874b986bdfb0acd528e0d5c950b65d4a7b0874134bc07e8f3ba9a10eb"},
+        {"address":"1HmFXvAvb5TGv8LA2gGwhvDz8wPcbUk1CL","pub":"04e8abbf04a3458e3e607eb8098570b0dd4997b11d1c09bae3fd0aff7a21093305ffae4819d268d0bbd33707dbd09a250327f2c64be7755ba15ea7e35b719488344e"},
+        {"address":"1GCHdhb7e82RNp9kNLeMSBafdcNrat7Zhf","pub":"047a78975411b5e6b28090e6a23e6235016d5abb614a278a01f77bf9c57c71ccb7bcadb9ec13445620cf8d56a0f91e5935b48964f039de8d11798c001958d1fe1b"},
+        {"address":"1PyDmVAqBPo69JMCaMZXTnRa8zNYjwMr2J","pub":"0413df3bdcd2eb9dad8d6e73a824bb2fd9b9f7dfb05e2a80790123411758b23d08364fbce34427ff41f058a19c14034d7e41a8a7bd2aea2542e45f6f3c2383fcb7"},
+        {"address":"1Dv5yA2EsfbZKjRnGWryRxsejo9hSGsHh7","pub":"041fcfd99a8591d49daaf3d7b83ebaf80196255005a8e3ad34b11dc8915f02f35a7598a175460a50779fb3395c260787d519ef3a2073333dd7d8ae4be330b4ef32"},
+        {"address":"15Q6F5CwYCziQ14kR3zCdxeWkfExvfQr6T","pub":"0414f22b044d696458af23db6918450429cafbe3a2ea24878c0a2a75f4b453f34ddaf60dc4c3e683286ef22d27e6d438752db1feb89ffe8a8610d942f273607951"},
+        {"address":"1KZ5qcPTk2aQj97e2xtPxRKDzYJbMzmx6V","pub":"0460375dd5c2ac897fb3d7d0a5d2311ad9e46e692259e03388ee40b99cb9386a2be79feb3751c1c4ba89f2bc0d36a15fa74b786ca9e7824d34242e4de9176399ab"},
+        {"address":"1JUykF46aKocyQMb8TU3xvpLUpotTALFNz","pub":"049b8513bc4bb4a2155484afb4e436283d93a4b7e8406587ad08ea86a2654c441a3e7058788519d2678363db487754deba7929eb3c20a125795ab63a87ba10e7b2"},
+        {"address":"1Q397Q25WWdU3oYN6ZWwQ14SGJHTSCHx6d","pub":"0498975f4127ba3ed907ab3a12900e3b54b61daf9a13478eea7264bd53a5b0a8dc98b671cc20d1ce7eb45ad7d727a858102ff9cb480e66d9f8b4c09d6666ba8199"},
+        {"address":"1LuT3buTbnHM5K5eV5G77zPGCDFcNW1TC1","pub":"0459c2beb2e72aa85230c4de09a6c52bfdf935b996baee75804babeac84a557f8932a96ac1a4f7c46f37c289346e95e809f9db7bc060b30b333499ca8d66c111dc"},
+        {"address":"16fXTTLZRft6eWb32zSihvGXSgZ6QmDQBB","pub":"0476db51b555e95c4a667d724dbd0252dcf63763756c18fb69f883dc68eb83a315a6045a55e3ec6d9f0b2e4e9f50237e984ec904aa8a226e123a7db1759b53360c"},
+        {"address":"1G1n1gS4S7fh5reFjckH21gUiW9y8PhfWK","pub":"043a9509208a2b794e55cf2b7662472269d2c47badbbb51cec49c5a49ed0e5a10cd7f3fbea43274e1848eab68135d8c6c2144e2a39a5bccffb4b33bee7243a34b5"},
+        {"address":"1MMXRAo6CZQ5KuLkboQ3tULhZZtj3ovmjT","pub":"04f707cce2b2b4e4b42040e495c3ffe4b889810b986a446a9211e91eeabb39f23ce3ebec7b5cda579dfd708605c3175d713c0bbfec2f6ff9f2f84fae4a5bf77717"},
+        {"address":"1983o923purG3UXcMKtWuEyFjgKp3oZccF","pub":"04c6792cc5f8bb677b7b8fd7a32282fccc90aeae2512e4f1112145c0eeff29d459482dae7afcc9047b32edfc75f8d25356df420f5994728f2fa12ea8bf09aa4114"},
+        {"address":"1K2zPR4H2onTTSqYKim7zpo1Lg8PwiCDRS","pub":"0485cb948d96efc12fd291a7eca8212fa35026ab4c9a174bcdc1c53d4b57fde7ea777e4cfd189b83b38a798991217e9da179477aa2bb3be62283e3909774640161"},
+        {"address":"112imq6hQuz4JgRH4C8mC437UnZbfN9QKh","pub":"045d8c105c36695b90261f285c97eec138fc4e2a313b81ed6b34e4b012c0323c2e837da163348c1d049ef33cfc18ce7de2adc4118d05b4595a6a62ebc31fc9ded2"},
+        {"address":"1AzarDdR2xj9fTYPjWmDJ2pGmvyuhASUaQ","pub":"04940f585bedbc289b713cf1ebd7cf798b7721f407da479794c28ccba8eec03372761c9adf0dccc412b3c5deba7e692a8e6a2c39c212022d765153e8925fb2b6a0"},
+        {"address":"15j8TmApVsatUjJxZw4gojBMnQC2BYw49P","pub":"0478e2f8b0699c263193c61a147e95d69ea1eed4ef957a8ad8c5bfb5277ddcdee0432c11135c778f44f9b9c46bf40dd2c3b36323f5c8dd8c2398fe0f2ac049f7e6"},
+        {"address":"1EL54vD9AZnnQ8DjrsLAYyy1bfe187SWyN","pub":"04b824e5006099f6e96609562bb136c1ce0bc68cd7add4d9b44600330b4a1bf05114cf09bd9bc88f6d5c6aa366b86232a48a66ff3b5834759b1cbfcbc446455145"},
+        {"address":"1LUpvBGj5ewMrsct7ZKxyWyV6rxpjzFRB1","pub":"04ba3814a15db7ac08319f7e0ab2564b8c4ca4ff9be012a62680f01219ccdf9c168cdb61475562ad493b71435ed769b0af10cc9cff3b88f9980a19568040e3f94f"},
+        {"address":"1EhhgvpVRPnnDQ5Ls7qcKcnKbmwDDEQinW","pub":"049501e6862f9926c3ce19e8d9828de821bf5c6382204c644c56e853ed5a75497a5196a172911dda96184c0fb0d85ec5285643faf1cf18849e2474cc6f51ad52e4"},
+        {"address":"19gEQ5Pk3dkMqRxXGzk8R4WN3v9oZTHSew","pub":"0493b5aea357d4a89d1adc01a262dfef7bf7eb2154f845f407d901685040539bf2f413338c5850c4d642b44ea2622e467cf93c2f9a33aa675013281cb7a6a720a4"},
+        {"address":"1Hwjq7t961rsYTs3iFDnduqM3XPTUdiTTe","pub":"0465dea93aec6fe5c9ced3e0bc0d98ab455a9b090f2e19b9dbce25fe488a5c38d3f0c94f47627d50f6e1ba42fc15c3582d7052461a1c1fb56c43d1955a26b3e172"},
+        {"address":"1MB9Frr2sxsSG59ZH3EqoSrey4VrbnWMad","pub":"0474fba2170372b080eee2336b282b4b4f552ca8da13ce129f4c490924db52a4b42d1b741a006ff283d5f4d6b83aaf0dbb953c19c7e5194d083212a987da2a40c8"},
+        {"address":"1GYLfNfMesF3YrwVU94P5wtcJjhAx9DLYy","pub":"04ef043a2586e78528ed0eeff43ba96bbd409a9c5f773c7cf50a76d00dee2d6bad70e88022879c381f727c6bcda5a31e8093155cc9ec903bf25dfdd6f10884d0b0"},
+        {"address":"178jbx5sYuFb8KFSnHYk6uk3dLUaf6kARH","pub":"049a7ea8e1012c596403d1d4f2fcdf57ae596cb69d29ef2098b0f27ce53364cac82690f98eaa2e2b32698ff55af83ac338a3890bd55b680a3ab6cc23259a1831b2"},
+        {"address":"1EBzWeno4frVz5hKp3LvVRpN84cpfJzYjL","pub":"04afbccad9a8383b821caba61287d4e56914905fd306cf5ab54aa71b263955a42e8d1f14a600e37b3c217d9ebc3fd9cecbd38af571c00262443450149bcfa81440"},
+        {"address":"18Up6qUeGmrNXdpqvfjwmTR3GWBSoNMfrs","pub":"049500703c66201003dda243cbee333abdd7193b19861630d2a9adec4849355e41df26ca754ceecf1246b38c205367623a3cb853900ca894ca7b963132e4d0c9f1"},
+        {"address":"17Qh4nbwnqnLmzUUPFLq7WdrVyGcwS4Siv","pub":"04c705fc97801a71bfc481df6e373edd3891d5c003cf8407c8b8626b27e5f4fe00257e1088df6c21a4f00b46ecbb28fcd4ee82811a2f6ca39d73673f6bf028020b"}
+    ];
 
-const workerCode = `
-importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
-const ec = new elliptic.ec("secp256k1");
-function toH(n) { return BigInt(n).toString(16).padStart(8, '0'); }
-function getR(min, max) { return Math.floor(Math.random() * (Number(max) - Number(min) + 1)) + Number(min); }
-function getHexR(minH, maxH) { return Math.floor(Math.random() * (parseInt(maxH, 16) - parseInt(minH, 16) + 1) + parseInt(minH, 16)).toString(16).toUpperCase().padStart(8, '0'); }
-function sha256(h) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(h)).toString(); }
+    let workers = [];
+    let globalTraps = {};
+    let totalJumps = 0;
+    let startTime = 0;
+    let tameWorkersFinished = 0;
 
-self.onmessage = function(e){
-    const { r: p, targets } = e.data;
-    const set = new Set(targets);
-    let buffer = [];
-    while(true) {
-        // Verzamel basis entropie
-        let items = [toH(getR(p.tS, p.tE)), toH(getR(p.qS, p.qE)), toH(p.tkS), toH(getR(p.pS, p.pE)), toH(getR(p.tiS, p.tiE)), toH(getR(p.rS, p.rE)), toH(getR(p.sS, p.sE)), getHexR(p.dS, p.dE), getHexR(p.vS, p.vE), getHexR(p.eS, p.eE)];
-        
-        // Simuleer entropie-accumulatie (Sponge-constructie idee)
-        let pool = "0000000000000000000000000000000000000000";
-        items.forEach(item => {
-            for(let i = 0; i < 50; i++) { // Accumuleer elke variabele in de pool
-                pool = CryptoJS.SHA1(pool + item + getR(0, 0xFFFFFFFF).toString(16)).toString();
-            }
-        });
+    const logBox = document.getElementById('logBox');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
 
-        let priv = sha256(pool);
-        let pub = ec.keyFromPrivate(priv, 'hex').getPublic(false, 'hex');
-        let rip = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha256(pub))).toString();
-        let addr = "1" + base58("00" + rip + sha256(sha256("00" + rip)).slice(0,8));
-        let wif = base58("80" + priv + sha256(sha256("80" + priv)).slice(0,8));
-        
-        if(set.has(addr)) { self.postMessage({match: true, addr, wif}); break; }
-        buffer.push({addr, wif});
-        if(buffer.length >= 10) { self.postMessage({match: false, buffer}); buffer = []; }
+    window.onload = function() {
+        const display = document.getElementById('targetDisplay');
+        display.innerHTML = TARGET_DATA.map(t => `• [${t.address}] -> ${t.pub.substring(0,22)}...`).join('<br>');
+    };
+
+    function log(msg) {
+        logBox.innerHTML += msg + "<br>";
+        logBox.scrollTop = logBox.scrollHeight;
     }
-};
-function base58(h) {
-    const a = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-    let n = BigInt("0x" + h), o = "";
-    while(n > 0n) { o = a[Number(n % 58n)] + o; n /= 58n; }
-    return o;
-}
-`;
 
-let workers = [], count = 0;
-document.getElementById("startBtn").onclick = function() {
-    this.disabled = true; document.getElementById("stopBtn").disabled = false;
-    const p = { tS: document.getElementById("tS").value, tE: document.getElementById("tE").value, qS: document.getElementById("qS").value, qE: document.getElementById("qE").value, tkS: document.getElementById("tkS").value, pS: document.getElementById("pS").value, pE: document.getElementById("pE").value, tiS: document.getElementById("tiS").value, tiE: document.getElementById("tiE").value, rS: document.getElementById("rS").value, rE: document.getElementById("rE").value, sS: document.getElementById("sS").value, sE: document.getElementById("sE").value, dS: document.getElementById("dS").value, dE: document.getElementById("dE").value, vS: document.getElementById("vS").value, vE: document.getElementById("vE").value, eS: document.getElementById("eS").value, eE: document.getElementById("eE").value };
-    
-    for(let i=0; i<document.getElementById("numW").value; i++) {
-        let w = new Worker(URL.createObjectURL(new Blob([workerCode])));
-        w.postMessage({ r: p, targets: TARGETS });
-        w.onmessage = function(e) {
-            if(e.data.match) {
-                workers.forEach(w => w.terminate()); workers = [];
-                document.getElementById("startBtn").disabled = false; document.getElementById("stopBtn").disabled = true;
-                let row = document.getElementById("resultTable").tBodies[0].insertRow(0);
-                row.innerHTML = `<td style="color:yellow;">${e.data.addr}</td><td style="color:yellow;">${e.data.wif}</td><td>MATCH!</td>`;
-                alert("MATCH FOUND!\nAdres: " + e.data.addr + "\nWIF: " + e.data.wif);
-            } else {
-                count += 10;
-                document.getElementById("totaal").innerText = "Totaal gescand: " + count;
-                e.data.buffer.forEach(item => {
-                    let row = document.getElementById("resultTable").tBodies[0].insertRow(0);
-                    row.innerHTML = `<td>${item.addr}</td><td>${item.wif}</td><td>...</td>`;
-                    if(document.getElementById("resultTable").rows.length > 8) document.getElementById("resultTable").deleteRow(8);
-                });
-            }
-        };
-        workers.push(w);
+    startBtn.onclick = function() {
+        const keys = TARGET_DATA.map(t => t.pub);
+
+        totalJumps = 0;
+        tameWorkersFinished = 0;
+        globalTraps = {};
+        document.getElementById('totalJumps').innerText = "0";
+        document.getElementById('statusTxt').innerText = "Berekenen sub-range...";
+        document.getElementById('statusTxt').style.color = "#eab308";
+        document.getElementById('matchTable').innerHTML = `<tr><td colspan="4" style="border: 1px solid #374151; padding: 8px; text-align: center; color: #6b7280;">Scannen is bezig...</td></tr>`;
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        startTime = Date.now();
+
+        const absStart = BigInt("0x" + document.getElementById('rangeStart').value.trim());
+        const absEnd = BigInt("0x" + document.getElementById('rangeEnd').value.trim());
+        const fullRange = absEnd - absStart;
+
+        const startPerc = parseFloat(document.getElementById('startPerc').value) / 100;
+        const endPerc = parseFloat(document.getElementById('endPerc').value) / 100;
+
+        const subStart = absStart + BigInt(Math.floor(Number(fullRange) * startPerc));
+        const subEnd = absStart + BigInt(Math.floor(Number(fullRange) * endPerc));
+
+        const subStartStr = subStart.toString(16);
+        const subEndStr = subEnd.toString(16);
+
+        document.getElementById('subEndHex').innerText = "0x" + subEndStr.substring(0, 12) + "...";
+
+        const numWorkers = parseInt(document.getElementById('numW').value);
+        log("Doelgebied ingesteld op: " + document.getElementById('startPerc').value + "% tot " + document.getElementById('endPerc').value + "%");
+        log("Uncompressed targets geladen: " + keys.length);
+        log("Uitzetten van de Tamme Kangoeroes op unieke posities...");
+
+        for (let i = 0; i < numWorkers; i++) {
+            let w = new Worker(URL.createObjectURL(new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'})));
+            workers.push(w);
+
+            w.postMessage({
+                type: "TAME",
+                subStartStr: subStartStr,
+                subEndStr: subEndStr,
+                targetPubHexList: keys,
+                workerId: i
+            });
+
+            w.onmessage = function(e) {
+                if (e.data.type === "TAME_READY") {
+                    Object.assign(globalTraps, e.data.traps);
+                    totalJumps += e.data.Jumps;
+                    tameWorkersFinished++;
+                    log("Worker " + e.data.workerId + ": Gestart op unieke positie, vallen succesvol geplaatst.");
+
+                    if (tameWorkersFinished === numWorkers) {
+                        startWildPhase(numWorkers, subStartStr, subEndStr, keys);
+                    }
+                }
+            };
+        }
+    };
+
+    function startWildPhase(numWorkers, subStartStr, subEndStr, keys) {
+        log("Totaal aantal unieke sub-vallen geladen: " + Object.keys(globalTraps).length);
+        log("🚀 Starten van de Wilde parallelle jacht op uncompressed targets binnen de " + document.getElementById('startPerc').value + "-" + document.getElementById('endPerc').value + "% zone...");
+        document.getElementById('statusTxt').innerText = "Wilde jacht bezig...";
+        document.getElementById('statusTxt').style.color = "#00ff66";
+
+        for (let i = 0; i < numWorkers; i++) {
+            workers[i].terminate();
+            let w = new Worker(URL.createObjectURL(new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'})));
+            workers[i] = w;
+
+            w.postMessage({
+                type: "WILD",
+                subStartStr: subStartStr,
+                subEndStr: subEndStr,
+                targetPubHexList: keys,
+                traps: globalTraps
+            });
+
+            w.onmessage = function(e) {
+                if (e.data.type === "PROGRESS") {
+                    totalJumps += e.data.jumps;
+                    document.getElementById('totalJumps').innerText = totalJumps.toLocaleString();
+                    let elapsed = (Date.now() - startTime) / 1000;
+                    document.getElementById('speed').innerText = Math.floor(totalJumps / elapsed).toLocaleString();
+                } else if (e.data.type === "FOUND") {
+                    log("<span style='color:#fff; background:#047857; padding:4px; font-weight:bold;'>🎉 UNCOMPRESSED DOEL GERAAKT!</span>");
+                    
+                    const matchTable = document.getElementById('matchTable');
+                    if (matchTable.innerHTML.includes("Scannen is bezig...")) {
+                        matchTable.innerHTML = ""; 
+                    }
+
+                    matchTable.innerHTML += `
+                        <tr style="background: #047857; color: #fff; font-weight: bold;">
+                            <td style="border: 1px solid #374151; padding: 8px; word-break: break-all;">${e.data.btcAddress}</td>
+                            <td style="border: 1px solid #374151; padding: 8px; word-break: break-all; color:#ffd700;">${e.data.wif}</td>
+                            <td style="border: 1px solid #374151; padding: 8px; word-break: break-all;">${e.data.privHex}</td>
+                            <td style="border: 1px solid #374151; padding: 8px; word-break: break-all; font-size:10px; color:#a3e635;">${e.data.targetPubHex}</td>
+                        </tr>`;
+
+                    alert("!!! PUZZEL OPGELOST !!!\n\nEen van de uncompressed public keys is gekraakt! Check de tabel.");
+                    terminateAll();
+                }
+            };
+        }
     }
-};
 
-document.getElementById("stopBtn").onclick = function() {
-    workers.forEach(w => w.terminate()); workers = [];
-    document.getElementById("startBtn").disabled = false; this.disabled = true;
-};
+    function terminateAll() {
+        workers.forEach(w => w.terminate());
+        workers = [];
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        document.getElementById('statusTxt').innerText = "Gestopt";
+        document.getElementById('statusTxt').style.color = "#ef4444";
+        log("Scanner uitgeschakeld.");
+    }
+
+    stopBtn.onclick = terminateAll;
 </script>
+
 </body>
 </html>
