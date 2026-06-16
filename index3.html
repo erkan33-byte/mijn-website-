@@ -104,7 +104,6 @@
         const { type, subStartStr, subEndStr, targetPubHex, traps, workerId, padLen } = e.data;
         
         let targetPubKey = ec.keyFromPublic(targetPubHex, 'hex').getPublic();
-        let subStart = BigInt("0x" + subStartStr);
         let subEnd = BigInt("0x" + subEndStr);
         
         let localTraps = new Map();
@@ -115,15 +114,12 @@
         }
 
         if (type === "TAME") {
-            let rangeSize = subEnd - subStart;
-            let randMultiplier = BigInt(Math.floor(Math.random() * 1000000));
-            let randomOffset = (rangeSize * randMultiplier) / 1000000n;
-            
-            let currDist = subStart + randomOffset;
-            let currPoint = G.mul(currDist.toString(16));
+            // Officiële methode: Tamme kangoeroe start exact op het sub-einde en springt VOORUIT
+            let currDist = 0n; 
+            let currPoint = G.mul(subEnd.toString(16));
             let jumpsCount = 0;
 
-            for (let i = 0; i < 200000; i++) {
+            for (let i = 0; i < 250000; i++) {
                 let pubHex = currPoint.encode('hex', true);
                 let r = parseInt(pubHex.substr(2, 8), 16) % NUM_STEPS;
                 
@@ -131,7 +127,6 @@
                 currDist += JUMP_SIZES[r];
                 jumpsCount++;
 
-                // Densiteit van vallen iets verhoogd (& 0x3F i.p.v. & 0xFF) voor snellere vangst in test-ranges
                 if ((parseInt(pubHex.substr(10, 4), 16) & 0x3F) === 0) {
                     localTraps.set(pubHex, currDist);
                 }
@@ -143,6 +138,7 @@
         } 
         
         else if (type === "WILD") {
+            // Wilde kangoeroe start op de target public key en springt eveneens VOORUIT
             let currPoint = targetPubKey;
             let currDist = 0n; 
             let batchSize = 40000;
@@ -152,10 +148,10 @@
                     let pubHex = currPoint.encode('hex', true);
                     
                     if (localTraps.has(pubHex)) {
-                        let tameCenterDist = localTraps.get(pubHex);
+                        let tameDist = localTraps.get(pubHex);
                         
-                        // Verbeterde wiskundige aftreksom ten opzichte van de absolute curve-afstanden
-                        let secretKey = (tameCenterDist - currDist) % BigInt(N.toString());
+                        // Officiële sluitende formule: Sleutel = subEnd + tameDist - wildDist
+                        let secretKey = (subEnd + tameDist - currDist) % BigInt(N.toString());
                         if (secretKey < 0n) {
                             secretKey += BigInt(N.toString());
                         }
@@ -237,7 +233,7 @@
 
         const numWorkers = parseInt(document.getElementById('numW').value);
         log("Doelgebied ingesteld op: " + startPercVal + "% tot " + endPercVal + "%");
-        log("Uitzetten van de Tamme Kangoeroes op unieke willekeurige startposities...");
+        log("Uitzetten van de Tamme Kangoeroes vanaf sub-eindpunt posities...");
 
         for (let i = 0; i < numWorkers; i++) {
             let w = new Worker(URL.createObjectURL(new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'})));
