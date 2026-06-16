@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Bitcoin Puzzle - Kangaroo Solver (Fixed)</title>
+    <title>Bitcoin Puzzle - Kangaroo Solver (Official WIF Fix)</title>
     <style>
         body { font-family: monospace; background: #0b0f19; color: #00ff66; padding: 20px; }
         .container { max-width: 650px; margin: 0 auto; background: #111827; padding: 20px; border-radius: 8px; border: 1px solid #00ff66; }
@@ -153,24 +153,19 @@
                     if (localTraps.has(pubHex)) {
                         let tameDist = localTraps.get(pubHex);
                         
-                        // Correcte kangoeroe wiskunde: modulo curve order N toepassen
                         let secretKey = (tameDist - currDist) % BigInt(N.toString());
                         if (secretKey < 0n) {
                             secretKey += BigInt(N.toString());
                         }
                         
                         if (secretKey > 0n) {
-                            // Dynamische opvulling op basis van de invoerlengte (padLen)
+                            // INTERNE PRIVHEX: Behoudt de exacte pure range-weergave voor de UI display
                             let privHex = secretKey.toString(16).padStart(padLen, '0');
                             
-                            // Zorg voor geldige bytes (even lengte) bij zeer kleine ranges
-                            let internalHex = privHex;
-                            if (internalHex.length % 2 !== 0) {
-                                internalHex = "0" + internalHex;
-                            }
+                            // EXPORT WIF PAYLOAD: Moet ALTIJD exact 32 bytes (64 tekens) zijn om een geldige K/L Bitcoin WIF te maken!
+                            let full32ByteHex = secretKey.toString(16).padStart(64, '0');
                             
-                            // Bereken WIF met gecorrigeerde payload structuur
-                            const wifPayload = "80" + internalHex + "01";
+                            const wifPayload = "80" + full32ByteHex + "01";
                             const doubleSha = sha256(sha256(wifPayload));
                             const checksum = doubleSha.substr(0, 8);
                             let wif = toBase58(wifPayload + checksum);
