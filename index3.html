@@ -154,8 +154,15 @@
                         let secretKey = tameDist - currDist;
                         
                         if (secretKey > 0n) {
-                            let privHex = secretKey.toString(16).padStart(padLen, '0');
-                            let wif = toBase58("80" + privHex + "01" + sha256(sha256("80" + privHex + "01")).substr(0, 8));
+                            // FIX: Privésleutel MOET exact 64 tekens lang zijn voor een geldige Bitcoin checksum-berekening
+                            let privHex = secretKey.toString(16).padStart(64, '0');
+                            
+                            // Bereken de WIF conform de geldige mainnet gecomprimeerde structuur (80 + 32-bytes privkey + 01)
+                            const wifPayload = "80" + privHex + "01";
+                            const doubleSha = sha256(sha256(wifPayload));
+                            const checksum = doubleSha.substr(0, 8);
+                            let wif = toBase58(wifPayload + checksum);
+                            
                             self.postMessage({ type: "FOUND", privHex, wif });
                             return;
                         }
