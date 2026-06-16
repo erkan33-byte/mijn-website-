@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Bitcoin Puzzle 71 - Kangaroo Solver (Randomized Range)</title>
+    <title>Bitcoin Puzzle - Kangaroo Solver (Customizable)</title>
     <style>
         body { font-family: monospace; background: #0b0f19; color: #00ff66; padding: 20px; }
         .container { max-width: 650px; margin: 0 auto; background: #111827; padding: 20px; border-radius: 8px; border: 1px solid #00ff66; }
@@ -22,13 +22,13 @@
 <body>
 
 <div class="container">
-    <h3>🦘 Bitcoin Puzzle 71 - Kangaroo Solver</h3>
-    <p style="color: #9ca3af; font-size: 13px;">Gecentreerd op jouw vaste cryptowaarden met unieke, willekeurige Tame-startpunten per worker.</p>
+    <h3>🦘 Bitcoin Puzzle - Kangaroo Solver</h3>
+    <p style="color: #9ca3af; font-size: 13px;">Volledig aanpasbare solver met unieke, willekeurige Tame-startpunten per worker.</p>
     
     <div class="controls">
         <div>Workers (CPU Cores): <input id="numW" value="4" type="number"></div>
-        <div>Target Public Key: <input id="pubKey" value="02e0a8b039282faf6fe0fd769cfbc4b6b4cf8758ba68220eac420e32b91ddfa673" type="text" disabled></div>
-        <div>Target BTC Adres: <input id="btcAddr" value="1NBC8uXJy1GiJ6drkiZa1WuKn51ps7EPTv" type="text" disabled></div>
+        <div>Target Public Key: <input id="pubKey" value="02e0a8b039282faf6fe0fd769cfbc4b6b4cf8758ba68220eac420e32b91ddfa673" type="text"></div>
+        <div>Target BTC Adres: <input id="btcAddr" value="1NBC8uXJy1GiJ6drkiZa1WuKn51ps7EPTv" type="text"></div>
         
         <hr style="border: 0; border-top: 1px dashed #374151; width: 100%;">
         
@@ -37,9 +37,9 @@
         
         <hr style="border: 0; border-top: 1px dashed #374151; width: 100%;">
         
-        <div>Absoluut Start (Vast): <input id="rangeStart" value="8000000000000000000000000000000000000000" type="text" disabled></div>
-        <div>Absoluut Eind (Vast): <input id="rangeEnd" value="ffffffffffffffffffffffffffffffffffffffff" type="text" disabled></div>
-        <div><button id="startBtn">Start sub-range Jacht</button> <button id="stopBtn" disabled>Stop</button></div>
+        <div>Absoluut Start (HEX): <input id="rangeStart" value="8000000000000000000000000000000000000000" type="text"></div>
+        <div>Absoluut Eind (HEX): <input id="rangeEnd" value="ffffffffffffffffffffffffffffffffffffffff" type="text"></div>
+        <div><button id="startBtn">Start Jacht</button> <button id="stopBtn" disabled>Stop</button></div>
     </div>
 
     <div class="stats-box">
@@ -84,7 +84,6 @@
     }
 
     function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
-    function ripemd160(hex) { return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString(); }
     function toBase58(hex) {
         const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
         let bytes = hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16));
@@ -115,7 +114,6 @@
         }
 
         if (type === "TAME") {
-            // OPTIMALISATIE: Genereer een unieke willekeurige startpositie binnen de sub-range voor deze specifieke worker
             let rangeSize = subEnd - subStart;
             let randMultiplier = BigInt(Math.floor(Math.random() * 1000000));
             let randomOffset = (rangeSize * randMultiplier) / 1000000n;
@@ -155,10 +153,12 @@
                         let tameDist = localTraps.get(pubHex);
                         let secretKey = tameDist - currDist;
                         
-                        let privHex = secretKey.toString(16).padStart(64, '0');
-                        let wif = toBase58("80" + privHex + "01" + sha256(sha256("80" + privHex + "01")).substr(0, 8));
-                        self.postMessage({ type: "FOUND", privHex, wif });
-                        return;
+                        if (secretKey > 0n) {
+                            let privHex = secretKey.toString(16).padStart(64, '0');
+                            let wif = toBase58("80" + privHex + "01" + sha256(sha256("80" + privHex + "01")).substr(0, 8));
+                            self.postMessage({ type: "FOUND", privHex, wif });
+                            return;
+                        }
                     }
 
                     let r = parseInt(pubHex.substr(2, 8), 16) % NUM_STEPS;
@@ -204,16 +204,16 @@
         const absEnd = BigInt("0x" + document.getElementById('rangeEnd').value.trim());
         const fullRange = absEnd - absStart;
 
-        const startPerc = parseFloat(document.getElementById('startPerc').value) / 100;
-        const endPerc = parseFloat(document.getElementById('endPerc').value) / 100;
+        const startFactor = BigInt(Math.floor(parseFloat(document.getElementById('startPerc').value) * 1000));
+        const endFactor = BigInt(Math.floor(parseFloat(document.getElementById('endPerc').value) * 1000));
 
-        const subStart = absStart + BigInt(Math.floor(Number(fullRange) * startPerc));
-        const subEnd = absStart + BigInt(Math.floor(Number(fullRange) * endPerc));
+        const subStart = absStart + (fullRange * startFactor) / 100000n;
+        const subEnd = absStart + (fullRange * endFactor) / 100000n;
 
-        const subStartStr = subStart.toString(16);
-        const subEndStr = subEnd.toString(16);
+        const subStartStr = subStart.toString(16).padStart(64, '0');
+        const subEndStr = subEnd.toString(16).padStart(64, '0');
 
-        document.getElementById('subEndHex').innerText = "0x" + subEndStr.substring(0, 12) + "...";
+        document.getElementById('subEndHex').innerText = "0x" + subEndStr.substring(0, 14) + "...";
 
         const numWorkers = parseInt(document.getElementById('numW').value);
         log("Doelgebied ingesteld op: " + document.getElementById('startPerc').value + "% tot " + document.getElementById('endPerc').value + "%");
@@ -236,7 +236,7 @@
                     Object.assign(globalTraps, e.data.traps);
                     totalJumps += e.data.Jumps;
                     tameWorkersFinished++;
-                    log("Worker " + e.data.workerId + ": Gestart op unieke positie, vallen succesvol geplaatst.");
+                    log("Worker " + e.data.workerId + ": Vallen succesvol geplaatst.");
 
                     if (tameWorkersFinished === numWorkers) {
                         startWildPhase(numWorkers, subStartStr, subEndStr);
