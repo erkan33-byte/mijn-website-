@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Bitcoin Puzzle - Kangaroo Solver (Dynamic Fix)</title>
+    <title>Bitcoin Puzzle #135 - Global Scattered Kangaroo Net</title>
     <style>
         body { font-family: monospace; background: #0b0f19; color: #00ff66; padding: 20px; }
         .container { max-width: 650px; margin: 0 auto; background: #111827; padding: 20px; border-radius: 8px; border: 1px solid #00ff66; }
@@ -11,6 +11,7 @@
         .controls div { display: flex; justify-content: space-between; align-items: center; }
         input { background: #1f2937; color: #00ff66; border: 1px solid #00ff66; width: 420px; padding: 6px; font-family: monospace; }
         input[type="number"] { width: 100px; }
+        .pct-input { width: 100px !important; }
         button { padding: 10px; font-weight: bold; cursor: pointer; border-radius: 4px; }
         #startBtn { background: #047857; color: #fff; border: none; }
         #stopBtn { background: #b91c1c; color: #fff; border: none; }
@@ -22,8 +23,8 @@
 <body>
 
 <div class="container">
-    <h3>🦘 Bitcoin Puzzle - Kangaroo Solver</h3>
-    <p style="color: #9ca3af; font-size: 13px;">Gecorrigeerde versie met dynamisch schalende spronggroottes en parallelle Tame-offsets.</p>
+    <h3>🦘 Global Scattered Kangaroo Solver</h3>
+    <p style="color: #9ca3af; font-size: 13px;">Methode: Spant continu een willekeurig netwerk van tamme paden over de gehele cryptografische ruimte.</p>
     
     <div class="controls">
         <div>Workers (CPU Cores): <input id="numW" value="4" type="number"></div>
@@ -32,19 +33,21 @@
         
         <hr style="border: 0; border-top: 1px dashed #374151; width: 100%;">
         
-        <div>Start % (0-100): <input id="startPerc" value="0" type="number" step="0.001"></div>
-        <div>End % (0-100): <input id="endPerc" value="100" type="number" step="0.001"></div>
+        <div>Absoluut Start (HEX): <input id="rangeStart" value="4000000000000000000000000000000000" type="text"></div>
+        <div>Absoluut Eind (HEX): <input id="rangeEnd" value="7fffffffffffffffffffffffffffffffff" type="text"></div>
         
         <hr style="border: 0; border-top: 1px dashed #374151; width: 100%;">
         
-        <div>Absoluut Start (HEX): <input id="rangeStart" value="4000000000000000000000000000000000" type="text"></div>
-        <div>Absoluut Eind (HEX): <input id="rangeEnd" value="7fffffffffffffffffffffffffffffffff" type="text"></div>
-        <div><button id="startBtn">Start Jacht</button> <button id="stopBtn" disabled>Stop</button></div>
+        <div>Zoekbereik Start (%): <input id="pctStart" value="49.0" type="number" step="0.1" min="0" max="100" class="pct-input"></div>
+        <div>Zoekbereik Eind (%): <input id="pctEnd" value="50.0" type="number" step="0.1" min="0" max="100" class="pct-input"></div>
+
+        <div><button id="startBtn">Start Global Scattered Net</button> <button id="stopBtn" disabled>Stop</button></div>
     </div>
 
     <div class="stats-box">
         <div>Status: <span id="statusTxt" style="color: #ef4444; font-weight: bold;">Gestopt</span></div>
-        <div>Actieve Sub-Eind (HEX): <span id="subEndHex" style="color: #fff;">-</span></div>
+        <div>Huidige Loterij-Ronde: <span id="epochCount" style="color: #eab308; font-weight: bold;">0</span></div>
+        <div>Actieve Vallen in Netwerk: <span id="trapCount" style="color: #fff;">0</span></div>
         <div>Totaal aantal sprongen: <span id="totalJumps">0</span></div>
         <div>Snelheid: <span id="speed">0</span> sprongen/s</div>
     </div>
@@ -95,16 +98,14 @@
     }
 
     self.onmessage = function(e) {
-        const { type, subStartStr, subEndStr, targetPubHex, traps, workerId, padLen, workerOffsetStr } = e.data;
+        const { type, rangeStartStr, rangeEndStr, targetPubHex, traps, workerId, padLen, maxWildJumps } = e.data;
         
         let targetPubKey = ec.keyFromPublic(targetPubHex, 'hex').getPublic();
-        let subStart = BigInt("0x" + subStartStr);
-        let subEnd = BigInt("0x" + subEndStr);
+        let rangeStart = BigInt("0x" + rangeStartStr);
+        let rangeEnd = BigInt("0x" + rangeEndStr);
         
         if (JUMP_SIZES.length === 0) {
-            let W = subEnd - subStart;
-            if (W < 1000n) W = 1000n; 
-            
+            let W = rangeEnd - rangeStart;
             let sqrtW = 0n;
             let x0 = W / 2n;
             if (x0 > 0n) {
@@ -113,6 +114,7 @@
                 sqrtW = x0;
             } else { sqrtW = W; }
 
+            // Wereldwijde spronggrootte afgesteld op de gigantische wortel van de absolute range
             for (let i = 0; i < NUM_STEPS; i++) {
                 let size = (sqrtW * BigInt(i + 1)) / 32n;
                 if (size === 0n) size = 1n;
@@ -121,52 +123,59 @@
             }
         }
 
-        let localTraps = new Map();
-        if (traps) {
-            for (let [k, v] of Object.entries(traps)) {
-                localTraps.set(k, BigInt(v));
-            }
-        }
-
         if (type === "TAME") {
-            let workerOffset = BigInt("0x" + workerOffsetStr);
-            let currDist = workerOffset; 
-            let currPoint = G.mul((subEnd + workerOffset).toString(16));
+            let localTraps = {};
+            let range = rangeEnd - rangeStart;
+            let pathsPerWorker = 40;   // Aantal unieke willekeurige startlocaties per core
+            let stepsPerPath = 1500;   // Lengte van elk weggeslingerd tam pad
             let jumpsCount = 0;
-            let tameSteps = 100000; 
 
-            for (let i = 0; i < tameSteps; i++) {
-                let pubHex = currPoint.encode('hex', true);
+            for (let p = 0; p < pathsPerWorker; p++) {
+                // Genereer een volstrekt unieke cryptografische startlocatie
+                let bits = range.toString(2).length;
+                let array = new Uint8Array(Math.ceil(bits / 8));
+                self.crypto.getRandomValues(array);
+                let randHex = Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
                 
-                // FIX: Eerst controleren en opslaan vóórdat de sprong en afstand wijzigen!
-                if ((parseInt(pubHex.substr(10, 4), 16) & 0x3F) === 0) {
-                    localTraps.set(pubHex, currDist);
-                }
+                let k_tame = rangeStart + (BigInt("0x" + randHex) % range);
 
-                let r = parseInt(pubHex.substr(2, 8), 16) % NUM_STEPS;
-                currPoint = currPoint.add(JUMP_POINTS[r]);
-                currDist += JUMP_SIZES[r];
-                jumpsCount++;
+                let currDist = 0n; 
+                let currPoint = G.mul(k_tame.toString(16));
+
+                for (let i = 0; i < stepsPerPath; i++) {
+                    let pubHex = currPoint.encode('hex', true);
+                    
+                    // Distinguished point filter op basis van de laatste 5 bits
+                    if ((parseInt(pubHex.substr(pubHex.length - 4), 16) & 0x1F) === 0) {
+                        localTraps[pubHex] = { startKey: k_tame.toString(16), dist: currDist.toString() };
+                    }
+
+                    let r = parseInt(pubHex.substr(2, 8), 16) % NUM_STEPS;
+                    currPoint = currPoint.add(JUMP_POINTS[r]);
+                    currDist += JUMP_SIZES[r];
+                    jumpsCount++;
+                }
             }
-            
-            let trapsObj = {};
-            for (let [k, v] of localTraps) { trapsObj[k] = v.toString(); }
-            self.postMessage({ type: "TAME_READY", traps: trapsObj, Jumps: jumpsCount, workerId });
+            self.postMessage({ type: "TAME_READY", traps: localTraps, Jumps: jumpsCount, workerId });
         } 
         
         else if (type === "WILD") {
             let currPoint = targetPubKey;
             let currDist = 0n; 
-            let batchSize = 20000;
+            let batchSize = 10000;
+            let totalWildJumps = 0;
 
-            while (true) {
+            while (totalWildJumps < maxWildJumps) {
                 for (let i = 0; i < batchSize; i++) {
                     let pubHex = currPoint.encode('hex', true);
                     
-                    if (localTraps.has(pubHex)) {
-                        let tameDist = localTraps.get(pubHex);
+                    if (traps[pubHex]) {
+                        let matchData = traps[pubHex];
+                        let k_tame = BigInt("0x" + matchData.startKey);
+                        let tameDist = BigInt(matchData.dist);
                         
-                        let secretKey = (subEnd + tameDist - currDist) % BigInt(N.toString());
+                        // DE FORMULE: Bereken de exacte private key op basis van de botsing!
+                        let secretKey = (k_tame + tameDist - currDist) % BigInt(N.toString());
                         if (secretKey < 0n) secretKey += BigInt(N.toString());
                         
                         if (secretKey > 0n) {
@@ -187,9 +196,10 @@
                     currPoint = currPoint.add(JUMP_POINTS[r]);
                     currDist += JUMP_SIZES[r];
                 }
-                
+                totalWildJumps += batchSize;
                 self.postMessage({ type: "PROGRESS", jumps: batchSize });
             }
+            self.postMessage({ type: "WILD_DONE" });
         }
     };
 </script>
@@ -200,6 +210,15 @@
     let totalJumps = 0;
     let startTime = 0;
     let tameWorkersFinished = 0;
+    let wildWorkersFinished = 0;
+    let epoch = 0;
+    let isRunning = false;
+
+    // Globale variabelen voor het daadwerkelijk berekende zoekbereik
+    let calcRangeStartStr = "";
+    let calcRangeEndStr = "";
+
+    const MAX_WILD_JUMPS_PER_EPOCH = 400000; // Aantal stappen dat de Wilde kangoeroe jaagt per ronde per core
 
     const logBox = document.getElementById('logBox');
     const startBtn = document.getElementById('startBtn');
@@ -210,68 +229,85 @@
         logBox.scrollTop = logBox.scrollHeight;
     }
 
+    // Bereken het daadwerkelijke zoekgebied op basis van de absolute grenzen en percentages
+    function calculateSubRange() {
+        const absStartStr = document.getElementById('rangeStart').value.trim();
+        const absEndStr = document.getElementById('rangeEnd').value.trim();
+        const pStart = parseFloat(document.getElementById('pctStart').value);
+        const pEnd = parseFloat(document.getElementById('pctEnd').value);
+
+        const A = BigInt("0x" + absStartStr);
+        const B = BigInt("0x" + absEndStr);
+        const W = B - A;
+
+        // Vermenigvuldigen voor precisie
+        const MULTIPLIER = 1000000n;
+        const startFract = BigInt(Math.floor((pStart / 100) * 1000000));
+        const endFract = BigInt(Math.floor((pEnd / 100) * 1000000));
+
+        const actualStart = A + (W * startFract) / MULTIPLIER;
+        const actualEnd = A + (W * endFract) / MULTIPLIER;
+
+        return {
+            start: actualStart.toString(16),
+            end: actualEnd.toString(16)
+        };
+    }
+
     startBtn.onclick = function() {
+        isRunning = true;
         totalJumps = 0;
-        tameWorkersFinished = 0;
-        globalTraps = {};
+        epoch = 0;
+        
+        // Bereken subbereik
+        const subRange = calculateSubRange();
+        calcRangeStartStr = subRange.start;
+        calcRangeEndStr = subRange.end;
+
         document.getElementById('totalJumps').innerText = "0";
-        document.getElementById('statusTxt').innerText = "Berekenen sub-range...";
-        document.getElementById('statusTxt').style.color = "#eab308";
-        document.getElementById('matchTable').innerHTML = `<tr><td colspan="3" style="border: 1px solid #374151; padding: 8px; text-align: center; color: #6b7280;">Scannen is bezig...</td></tr>`;
+        document.getElementById('matchTable').innerHTML = `<tr><td colspan="3" style="border: 1px solid #374151; padding: 8px; text-align: center; color: #6b7280;">Wereldwijd netwerk wordt opgebouwd...</td></tr>`;
         startBtn.disabled = true;
         stopBtn.disabled = false;
         startTime = Date.now();
-
-        const rawStart = document.getElementById('rangeStart').value.trim();
-        const rawEnd = document.getElementById('rangeEnd').value.trim();
-        const targetLen = Math.max(rawStart.length, rawEnd.length);
-
-        const absStart = BigInt("0x" + rawStart);
-        const absEnd = BigInt("0x" + rawEnd);
-        const fullRange = absEnd - absStart;
-
-        const startPercVal = parseFloat(document.getElementById('startPerc').value);
-        const endPercVal = parseFloat(document.getElementById('endPerc').value);
         
-        const startFactor = BigInt(Math.floor(startPercVal * 10000));
-        const endFactor = BigInt(Math.floor(endPercVal * 10000));
+        log(`<b>[Init]</b> Percentage Range ingesteld: ${document.getElementById('pctStart').value}% - ${document.getElementById('pctEnd').value}%`);
+        log(`<b>[Init]</b> Effectief Start: ${calcRangeStartStr}`);
+        log(`<b>[Init]</b> Effectief Eind: ${calcRangeEndStr}`);
+        
+        runNextEpoch();
+    };
 
-        const subStart = absStart + (fullRange * startFactor) / 1000000n;
-        const subEnd = absStart + (fullRange * endFactor) / 1000000n;
+    function runNextEpoch() {
+        if (!isRunning) return;
+        
+        epoch++;
+        tameWorkersFinished = 0;
+        wildWorkersFinished = 0;
+        globalTraps = {};
+        
+        document.getElementById('epochCount').innerText = epoch;
+        document.getElementById('statusTxt').innerText = `Ronde ${epoch}: Netwerk weven...`;
+        document.getElementById('statusTxt').style.color = "#eab308";
 
-        const subStartStr = subStart.toString(16).padStart(targetLen, '0');
-        const subEndStr = subEnd.toString(16).padStart(targetLen, '0');
+        // Bepaal padLen aan de hand van het absolute bereik om padding correct te houden
+        const targetLen = Math.max(document.getElementById('rangeStart').value.trim().length, document.getElementById('rangeEnd').value.trim().length);
 
-        document.getElementById('subEndHex').innerText = "0x" + subEndStr;
-
-        let W = subEnd - subStart;
-        let sqrtW = 1000n;
-        let x0 = W / 2n;
-        if (x0 > 0n) {
-            let x1 = (x0 + W / x0) / 2n;
-            while (x1 < x0) { x0 = x1; x1 = (x0 + W / x0) / 2n; }
-            sqrtW = x0;
-        } else { sqrtW = W; }
-        if (sqrtW < 10n) sqrtW = 10n;
+        log(`<b>[Ronde ${epoch}]</b> Tamme kangoeroes droppen op willekeurige locaties over subbereik...`);
 
         const numWorkers = parseInt(document.getElementById('numW').value);
-        log("Doelgebied ingesteld op: " + startPercVal + "% tot " + endPercVal + "%");
-        log("Uitzetten van de Tamme Kangoeroes met unieke parallelle offsets...");
 
+        clearOldWorkers();
         for (let i = 0; i < numWorkers; i++) {
             let w = new Worker(URL.createObjectURL(new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'})));
             workers.push(w);
 
-            let workerOffset = (sqrtW / BigInt(numWorkers)) * BigInt(i);
-
             w.postMessage({
                 type: "TAME",
-                subStartStr: subStartStr,
-                subEndStr: subEndStr,
+                rangeStartStr: calcRangeStartStr,
+                rangeEndStr: calcRangeEndStr,
                 targetPubHex: document.getElementById('pubKey').value.trim(),
                 workerId: i,
-                padLen: targetLen,
-                workerOffsetStr: workerOffset.toString(16)
+                padLen: targetLen
             });
 
             w.onmessage = function(e) {
@@ -279,34 +315,34 @@
                     Object.assign(globalTraps, e.data.traps);
                     totalJumps += e.data.Jumps;
                     tameWorkersFinished++;
-                    log("Worker " + e.data.workerId + ": Vallenveld uitgelegd.");
 
                     if (tameWorkersFinished === numWorkers) {
-                        startWildPhase(numWorkers, subStartStr, subEndStr, targetLen);
+                        document.getElementById('trapCount').innerText = Object.keys(globalTraps).length.toLocaleString();
+                        startWildPhase(numWorkers, targetLen);
                     }
                 }
             };
         }
-    };
+    }
 
-    function startWildPhase(numWorkers, subStartStr, subEndStr, targetLen) {
-        log("Totaal aantal unieke sub-vallen geladen: " + Object.keys(globalTraps).length);
-        log("🚀 Starten van de Wilde jacht binnen de zone...");
-        document.getElementById('statusTxt').innerText = "Wilde jacht bezig...";
+    function startWildPhase(numWorkers, targetLen) {
+        if (!isRunning) return;
+        document.getElementById('statusTxt').innerText = `Ronde ${epoch}: Wilde jacht in het netwerk...`;
         document.getElementById('statusTxt').style.color = "#00ff66";
 
+        clearOldWorkers();
         for (let i = 0; i < numWorkers; i++) {
-            workers[i].terminate();
             let w = new Worker(URL.createObjectURL(new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'})));
-            workers[i] = w;
+            workers.push(w);
 
             w.postMessage({
                 type: "WILD",
-                subStartStr: subStartStr,
-                subEndStr: subEndStr,
+                rangeStartStr: calcRangeStartStr,
+                rangeEndStr: calcRangeEndStr,
                 targetPubHex: document.getElementById('pubKey').value.trim(),
                 traps: globalTraps,
-                padLen: targetLen
+                padLen: targetLen,
+                maxWildJumps: MAX_WILD_JUMPS_PER_EPOCH
             });
 
             w.onmessage = function(e) {
@@ -315,8 +351,16 @@
                     document.getElementById('totalJumps').innerText = totalJumps.toLocaleString();
                     let elapsed = (Date.now() - startTime) / 1000;
                     document.getElementById('speed').innerText = Math.floor(totalJumps / elapsed).toLocaleString();
-                } else if (e.data.type === "FOUND") {
-                    log("<span style='color:#fff; background:#047857; padding:4px; font-weight:bold;'>🎉 DOEL BINNEN PROCENTUELE RANGE GERAAKT!</span>");
+                } 
+                else if (e.data.type === "WILD_DONE") {
+                    wildWorkersFinished++;
+                    if (wildWorkersFinished === numWorkers) {
+                        log(`Geen match in ronde ${epoch}. Netwerk wordt verplaatst...`);
+                        runNextEpoch();
+                    }
+                } 
+                else if (e.data.type === "FOUND") {
+                    log("<span style='color:#fff; background:#047857; padding:4px; font-weight:bold;'>🎉 WERELDWIJDE COLLISIE CORREKT BEREKEND!</span>");
                     
                     document.getElementById('matchTable').innerHTML = `
                         <tr style="background: #047857; color: #fff; font-weight: bold;">
@@ -332,9 +376,14 @@
         }
     }
 
-    function terminateAll() {
+    function clearOldWorkers() {
         workers.forEach(w => w.terminate());
         workers = [];
+    }
+
+    function terminateAll() {
+        isRunning = false;
+        clearOldWorkers();
         startBtn.disabled = false;
         stopBtn.disabled = true;
         document.getElementById('statusTxt').innerText = "Gestopt";
