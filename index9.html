@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>Satoshi 2009 — Legacy Entropy Scanner</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07090f; --surface:#0d1117; --panel:#0f1420; --border:#1f2937;
+  --accent:#f59e0b; --accent2:#00c3ff; --accent3:#00ff99; --accent4:#a78bfa;
+  --dim:#374151; --muted:#6b7280; --text:#e2e8f0;
+  --danger:#ef4444; --success:#10b981;
+}
+body{font-family:'Courier New',Courier,monospace;background:var(--bg);color:var(--text);min-height:100vh;padding:24px 16px 60px}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(to bottom,transparent 0,transparent 3px,rgba(245,158,11,.012) 3px,rgba(245,158,11,.012) 4px);pointer-events:none;z-index:999}
+.container{max-width:820px;margin:0 auto}
+
+.header{text-align:center;margin-bottom:28px}
+.header h1{font-size:1.5rem;letter-spacing:.18em;color:var(--accent);text-shadow:0 0 20px var(--accent),0 0 50px rgba(245,158,11,.3);text-transform:uppercase}
+.header .sub{font-size:.72rem;color:var(--muted);letter-spacing:.12em;margin-top:6px}
+.badge{display:inline-block;background:linear-gradient(90deg,#1a1200,#201500);border:1px solid var(--accent);color:var(--accent);font-size:.6rem;letter-spacing:.15em;padding:3px 12px;border-radius:2px;margin-top:10px}
+
+.card{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:20px;margin-bottom:16px}
+.card-title{font-size:.63rem;letter-spacing:.18em;color:var(--accent);text-transform:uppercase;border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:18px}
+
+.field{display:grid;grid-template-columns:200px 1fr 1fr;align-items:center;gap:8px;margin-bottom:10px}
+.field.wide{grid-template-columns:200px 1fr}
+.field label{font-size:.7rem;color:var(--muted);letter-spacing:.05em}
+.field input{background:var(--surface);color:var(--accent);border:1px solid var(--dim);border-radius:3px;padding:6px 8px;font-family:inherit;font-size:.74rem;width:100%;outline:none;transition:border-color .2s}
+.field input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(245,158,11,.15)}
+.field .col-label{font-size:.58rem;color:var(--muted);text-align:center;margin-bottom:2px}
+.field-group{display:flex;flex-direction:column;gap:2px}
+.divider{border:none;border-top:1px dashed var(--dim);margin:14px 0}
+.sec-label{font-size:.6rem;letter-spacing:.15em;color:var(--accent2);text-transform:uppercase;margin-bottom:10px;margin-top:4px}
+
+.btn-row{display:flex;gap:10px;margin-top:6px}
+.btn{flex:1;padding:11px 16px;font-family:inherit;font-size:.8rem;font-weight:bold;letter-spacing:.1em;cursor:pointer;border:none;border-radius:4px;transition:opacity .15s,transform .1s}
+.btn:active:not(:disabled){transform:scale(.97)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn-start{background:var(--success);color:#000}
+.btn-stop{background:var(--danger);color:#fff}
+
+/* ENTROPY VISUALIZER */
+.entropy-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+.ent-cell{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:8px 10px}
+.ent-cell .ec-label{font-size:.56rem;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin-bottom:4px}
+.ent-cell .ec-val{font-size:.72rem;color:var(--accent);font-weight:bold;word-break:break-all;line-height:1.4}
+.ent-cell .ec-bar{height:3px;background:var(--border);border-radius:2px;margin-top:5px;overflow:hidden}
+.ent-cell .ec-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;width:0%;transition:width .3s}
+
+/* STATS */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.stat-cell{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:10px 14px}
+.stat-cell .s-label{font-size:.56rem;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin-bottom:4px}
+.stat-cell .s-val{font-size:1rem;font-weight:bold;color:var(--accent3)}
+#statusVal{color:var(--danger)}
+#statusVal.running{color:var(--success)}
+
+.progress-wrap{height:4px;background:var(--border);border-radius:2px;margin-top:14px;overflow:hidden}
+.progress-bar{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent3));border-radius:2px;transition:width .3s}
+
+/* LIVE ENTROPY DISPLAY */
+.entropy-live{background:#000;border:1px solid var(--border);border-radius:4px;overflow:hidden;margin-bottom:12px}
+.el-header{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:rgba(245,158,11,.06);border-bottom:1px solid var(--border)}
+.el-title{font-size:.6rem;letter-spacing:.14em;color:var(--accent);text-transform:uppercase}
+.el-hash{font-size:.7rem;color:var(--accent2);font-weight:bold;word-break:break-all}
+.el-body{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.el-col{padding:12px 14px}
+.el-col:first-child{border-right:1px solid var(--border)}
+.el-row{margin-bottom:6px}
+.el-row .er-label{font-size:.58rem;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+.el-row .er-val{font-size:.7rem;color:var(--accent3);word-break:break-all;line-height:1.5}
+
+/* LOG */
+.log{background:#000;height:150px;overflow-y:scroll;padding:10px 12px;font-size:.68rem;line-height:1.7;border-radius:4px;border:1px solid var(--border)}
+.log .ts{color:var(--dim)}
+.log .ev-match{color:var(--accent);font-weight:bold}
+.log .ev-scan{color:var(--accent2)}
+.log .ev-stop{color:var(--danger)}
+.log .ev-info{color:var(--accent4)}
+
+/* TABLE */
+.result-table{width:100%;border-collapse:collapse;font-size:.7rem}
+.result-table th{background:var(--surface);color:var(--accent2);letter-spacing:.1em;font-size:.6rem;text-transform:uppercase;padding:10px 12px;border:1px solid var(--border);text-align:left}
+.result-table td{border:1px solid var(--border);padding:8px 12px;color:var(--text);word-break:break-all;font-size:.67rem}
+.result-table .empty-row td{text-align:center;color:var(--muted);font-style:italic}
+.result-table .match-row td{color:var(--accent);background:rgba(245,158,11,.06);font-weight:bold}
+
+/* UITLEG KAART */
+.uitleg-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.uit-item{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:10px 12px}
+.uit-item .ui-title{font-size:.62rem;color:var(--accent);font-weight:bold;margin-bottom:4px}
+.uit-item .ui-desc{font-size:.63rem;color:var(--muted);line-height:1.7}
+
+.nav-link{display:inline-block;margin-bottom:20px;font-size:.68rem;color:var(--accent4);letter-spacing:.1em;text-decoration:none;border:1px solid var(--accent4);padding:4px 12px;border-radius:3px}
+.footer{text-align:center;font-size:.6rem;color:var(--muted);letter-spacing:.1em;margin-top:28px}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:var(--surface)}
+::-webkit-scrollbar-thumb{background:var(--dim);border-radius:3px}
+</style>
+</head>
+<body>
+<div class="container">
+
+<a class="nav-link" href="kangaroo-solver.html">← Terug naar Kangaroo Solver</a>
+
+<div class="header">
+  <h1>🕰 Satoshi 2009 Legacy Scanner</h1>
+  <div class="sub">Windows XP / Vista Entropy Reconstructie · Bitcoin Genesis Era</div>
+  <span class="badge">SATOSHI NAKAMOTO · 2009 · WINDOWS RNG SIMULATIE · SCHOOLPROJECT</span>
+</div>
+
+<!-- UITLEG -->
+<div class="card">
+  <div class="card-title">📚 Wat is dit? — Educatieve uitleg</div>
+  <div class="uitleg-grid">
+    <div class="uit-item">
+      <div class="ui-title">🕰 Bitcoin in 2009</div>
+      <div class="ui-desc">In 2009 genereerde Satoshi's Bitcoin client privésleutels op Windows XP/Vista. De willekeurigheid (entropie) kwam van meerdere systeem-bronnen: systeemtijd, muispositie, processorteller, schijfgegevens en meer.</div>
+    </div>
+    <div class="uit-item">
+      <div class="ui-title">🎲 Entropie-bronnen</div>
+      <div class="ui-desc">Windows' CryptGenRandom verzamelde entropie van: QueryPerformanceCounter (CPU), GetTickCount (systeem), PID/TID (processen), muisbeweging, schijfactiviteit, BIOS-datum en omgevingsvariabelen.</div>
+    </div>
+    <div class="uit-item">
+      <div class="ui-title">🔐 SHA-256 Mengpot</div>
+      <div class="ui-desc">Al deze bronnen werden gemengd via SHA-256. Het resultaat werd de basis voor de privésleutel. De kwaliteit van de entropie bepaalde de veiligheid van de sleutel — slechte entropie = zwakke sleutel.</div>
+    </div>
+    <div class="uit-item">
+      <div class="ui-title">⚠️ Historische kwetsbaarheid</div>
+      <div class="ui-desc">Vroege Bitcoin wallets hadden soms zwakke entropie door voorspelbare systeemstatus. Dit is de reden dat oude wallets theoretisch kwetsbaarder zijn. Moderne wallets gebruiken cryptografisch veilige RNG.</div>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIG -->
+<div class="card">
+  <div class="card-title">⚙ Configuratie — Target & Keyspace</div>
+
+  <div class="field wide">
+    <label>Target BTC Adres</label>
+    <input id="targetAddr" value="1A1zP1eP5QGefi2DMPTfTL5SLmv7Divfna" type="text">
+  </div>
+
+  <hr class="divider">
+  <div class="sec-label">🔑 Keyspace Bereik</div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    <div>
+      <div style="font-size:.6rem;color:var(--muted);margin-bottom:4px">Keyspace Start (%)</div>
+      <input id="kS" value="21.1" style="background:var(--surface);color:var(--accent);border:1px solid var(--dim);border-radius:3px;padding:6px 8px;font-family:inherit;font-size:.74rem;width:100%;outline:none">
+    </div>
+    <div>
+      <div style="font-size:.6rem;color:var(--muted);margin-bottom:4px">Keyspace End (%)</div>
+      <input id="kE" value="21.2" style="background:var(--surface);color:var(--accent);border:1px solid var(--dim);border-radius:3px;padding:6px 8px;font-family:inherit;font-size:.74rem;width:100%;outline:none">
+    </div>
+  </div>
+
+  <hr class="divider">
+  <div class="sec-label">🖥 Windows XP/Vista Entropie Parameters</div>
+
+  <div style="display:grid;grid-template-columns:auto 1fr 1fr;align-items:center;gap:6px;margin-bottom:6px">
+    <div style="font-size:.6rem;color:var(--muted);width:160px"></div>
+    <div style="font-size:.6rem;color:var(--muted);text-align:center">START</div>
+    <div style="font-size:.6rem;color:var(--muted);text-align:center">EIND</div>
+  </div>
+
+  <div class="field"><label title="Unix timestamp 03-01-2009 t/m 31-12-2009">⏰ Systeemtijd (Unix)</label><input id="tS" value="1231006505"><input id="tE" value="1262303999"></div>
+  <div class="field"><label title="QueryPerformanceCounter — CPU cycles teller">⚡ QPC (CPU cycles)</label><input id="qS" value="1000000"><input id="qE" value="1000000000"></div>
+  <div class="field"><label title="GetTickCount — ms sinds opstarten">🕐 Tick Count (ms)</label><input id="tkS" value="0"><input id="tkE" value="65535"></div>
+  <div class="field"><label title="Process ID van bitcoin.exe">🔢 PID (Process ID)</label><input id="pS" value="4"><input id="pE" value="16384"></div>
+  <div class="field"><label title="Thread ID van de hoofd-thread">🧵 TID (Thread ID)</label><input id="tiS" value="4"><input id="tiE" value="16384"></div>
+  <div class="field"><label title="Hoeveelheid RAM in MB">💾 RAM (MB)</label><input id="rS" value="512"><input id="rE" value="2048"></div>
+  <div class="field"><label title="Systeemuptime in milliseconden">⏱ Systeemuptime (ms)</label><input id="sS" value="1"><input id="sE" value="3600000"></div>
+  <div class="field"><label title="Schijf vrije ruimte of sector-offset">💿 Disk (Hex)</label><input id="dS" value="00000000"><input id="dE" value="FFFFFFFF"></div>
+  <div class="field"><label title="Muiscursor X-positie in pixels">🖱 Muis X</label><input id="mXS" value="0"><input id="mXE" value="1024"></div>
+  <div class="field"><label title="Muiscursor Y-positie in pixels">🖱 Muis Y</label><input id="mYS" value="0"><input id="mYE" value="768"></div>
+  <div class="field"><label title="Hash van omgevingsvariabelen (PATH, etc)">🌍 Env Hash</label><input id="eHS" value="00000000"><input id="eHE" value="FFFFFFFF"></div>
+  <div class="field"><label title="Windows volume serienummer van C:\">💽 Volume Serial</label><input id="vSS" value="00000000"><input id="vSE" value="FFFFFFFF"></div>
+  <div class="field"><label title="BIOS fabricagedatum als Unix timestamp">📅 BIOS Datum</label><input id="bS" value="1136073600"><input id="bE" value="1230768000"></div>
+  <div class="field"><label title="Hash van BIOS identificatiestring">🔏 BIOS Hash</label><input id="bHS" value="00000000"><input id="bHE" value="FFFFFFFF"></div>
+
+  <hr class="divider">
+  <div class="sec-label">🖥 Hardware Specificaties (2009 era)</div>
+
+  <div class="field wide">
+    <label title="Processor type: 586=Pentium, 686=P3/P4, 1586=Core2">🔧 Processor Types</label>
+    <div style="display:flex;gap:6px">
+      <input id="pT1" value="586" style="background:var(--surface);color:var(--accent);border:1px solid var(--dim);border-radius:3px;padding:6px 8px;font-family:inherit;font-size:.74rem;flex:1;outline:none">
+      <input id="pT2" value="686" style="background:var(--surface);color:var(--accent);border:1px solid var(--dim);border-radius:3px;padding:6px 8px;font-family:inherit;font-size:.74rem;flex:1;outline:none">
+      <input id="pT3" value="1586" style="background:var(--surface);color:var(--accent);border:1px solid var(--dim);border-radius:3px;padding:6px 8px;font-family:inherit;font-size:.74rem;flex:1;outline:none">
+    </div>
+  </div>
+  <div class="field wide">
+    <label title="Schermresolutie als hex (b.v. 04000300 = 1024x768)">📺 Display Resolutie</label>
+    <input id="dR" value="04000300">
+  </div>
+
+  <hr class="divider">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div>
+      <div style="font-size:.6rem;color:var(--muted);margin-bottom:4px">Workers (CPU cores)</div>
+      <input id="numW" value="4" type="number" min="1" max="32" style="background:var(--surface);color:var(--accent);border:1px solid var(--dim);border-radius:3px;padding:6px 8px;font-family:inherit;font-size:.74rem;width:100%;outline:none">
+    </div>
+    <div>
+      <div style="font-size:.6rem;color:var(--muted);margin-bottom:4px">Log elke N adressen</div>
+      <input id="batchSize" value="500" type="number" style="background:var(--surface);color:var(--accent);border:1px solid var(--dim);border-radius:3px;padding:6px 8px;font-family:inherit;font-size:.74rem;width:100%;outline:none">
+    </div>
+  </div>
+
+  <div class="btn-row" style="margin-top:16px">
+    <button class="btn btn-start" id="startBtn">▶ Start Entropy Scan</button>
+    <button class="btn btn-stop"  id="stopBtn" disabled>■ Stop</button>
+  </div>
+</div>
+
+<!-- STATS -->
+<div class="card">
+  <div class="card-title">📊 Live Statistieken</div>
+  <div class="stats-grid">
+    <div class="stat-cell">
+      <div class="s-label">Status</div>
+      <div class="s-val" id="statusVal">Gestopt</div>
+    </div>
+    <div class="stat-cell">
+      <div class="s-label">Totaal gescand</div>
+      <div class="s-val" style="color:var(--accent2)" id="totaal">0</div>
+    </div>
+    <div class="stat-cell">
+      <div class="s-label">Snelheid</div>
+      <div class="s-val" style="color:var(--accent)" id="scanSpeed">0/s</div>
+    </div>
+    <div class="stat-cell">
+      <div class="s-label">Unieke adressen</div>
+      <div class="s-val" style="color:var(--accent4)" id="uniqueCount">0</div>
+    </div>
+  </div>
+  <div class="progress-wrap">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+</div>
+
+<!-- LIVE ENTROPY VISUALISATIE -->
+<div class="card">
+  <div class="card-title">🎲 Live Entropie Visualisatie — Huidige Berekening</div>
+
+  <div class="entropy-live">
+    <div class="el-header">
+      <div class="el-title">Entropie-mengpot → SHA-256 hash</div>
+      <div class="el-hash" id="liveHash">— wachten op start —</div>
+    </div>
+    <div class="el-body">
+      <div class="el-col">
+        <div class="el-row"><div class="er-label">⏰ Systeemtijd</div><div class="er-val" id="liveTime">—</div></div>
+        <div class="el-row"><div class="er-label">⚡ QPC Counter</div><div class="er-val" id="liveQpc">—</div></div>
+        <div class="el-row"><div class="er-label">🔢 PID / TID</div><div class="er-val" id="livePid">—</div></div>
+        <div class="el-row"><div class="er-label">🖱 Muis X/Y</div><div class="er-val" id="liveMouse">—</div></div>
+      </div>
+      <div class="el-col">
+        <div class="el-row"><div class="er-label">💾 RAM gebruik</div><div class="er-val" id="liveRam">—</div></div>
+        <div class="el-row"><div class="er-label">💿 Disk offset</div><div class="er-val" id="liveDisk">—</div></div>
+        <div class="el-row"><div class="er-label">📅 BIOS datum</div><div class="er-val" id="liveBios">—</div></div>
+        <div class="el-row"><div class="er-label">🔑 Gegenereerd adres</div><div class="er-val" id="liveAddr">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Entropy bronnen als mini-bars -->
+  <div class="entropy-grid" id="entropyBars">
+    <div class="ent-cell"><div class="ec-label">⏰ Tijd</div><div class="ec-val" id="eTime">—</div><div class="ec-bar"><div class="ec-fill" id="eTimeBar"></div></div></div>
+    <div class="ent-cell"><div class="ec-label">⚡ QPC</div><div class="ec-val" id="eQpc">—</div><div class="ec-bar"><div class="ec-fill" id="eQpcBar"></div></div></div>
+    <div class="ent-cell"><div class="ec-label">🔢 PID</div><div class="ec-val" id="ePid">—</div><div class="ec-bar"><div class="ec-fill" id="ePidBar"></div></div></div>
+    <div class="ent-cell"><div class="ec-label">🖱 Muis</div><div class="ec-val" id="eMouse">—</div><div class="ec-bar"><div class="ec-fill" id="eMouseBar"></div></div></div>
+    <div class="ent-cell"><div class="ec-label">💾 RAM</div><div class="ec-val" id="eRam">—</div><div class="ec-bar"><div class="ec-fill" id="eRamBar"></div></div></div>
+    <div class="ent-cell"><div class="ec-label">💿 Disk</div><div class="ec-val" id="eDisk">—</div><div class="ec-bar"><div class="ec-fill" id="eDiskBar"></div></div></div>
+    <div class="ent-cell"><div class="ec-label">📅 BIOS</div><div class="ec-val" id="eBios">—</div><div class="ec-bar"><div class="ec-fill" id="eBiosBar"></div></div></div>
+    <div class="ent-cell"><div class="ec-label">🌍 Env</div><div class="ec-val" id="eEnv">—</div><div class="ec-bar"><div class="ec-fill" id="eEnvBar"></div></div></div>
+  </div>
+</div>
+
+<!-- LOG -->
+<div class="card">
+  <div class="card-title">📋 Activiteitenlog</div>
+  <div class="log" id="logBox"></div>
+</div>
+
+<!-- RESULTATEN -->
+<div class="card">
+  <div class="card-title">🎯 Gegenereerde Adressen — Laatste 20</div>
+  <table class="result-table">
+    <thead>
+      <tr><th>Bitcoin Adres</th><th>WIF Sleutel</th><th>Status</th></tr>
+    </thead>
+    <tbody id="resultTable"></tbody>
+  </table>
+  <tr class="empty-row" id="emptyRow"><td colspan="3" style="text-align:center;color:var(--muted);padding:12px;font-style:italic">Nog geen adressen gegenereerd...</td></tr>
+</div>
+
+<div class="footer">Satoshi 2009 Entropy Scanner · Windows RNG Simulatie · Schoolproject — puur educatief</div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════
+   WORKER CODE
+   ══════════════════════════════════════════ */
+const workerCode = `
+importScripts(
+  'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js'
+);
+const ec = new elliptic.ec("secp256k1");
+const N  = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
+
+function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function ripemd160(hex) { return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString(); }
+
+function base58Check(payloadHex) {
+  const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  const cs  = sha256(sha256(payloadHex)).substring(0,8);
+  let hex   = payloadHex + cs;
+  let n     = BigInt("0x" + hex);
+  let s     = "";
+  while (n > 0n) { s = ALPHA[Number(n % 58n)] + s; n /= 58n; }
+  for (let i=0; i<payloadHex.length && payloadHex.substr(i,2)==="00"; i+=2) s = ALPHA[0]+s;
+  return s;
+}
+
+/* Simuleer Windows 2009 CryptGenRandom entropie-mengpot */
+function buildEntropyPool(r) {
+  const buf  = new Uint8Array(96);
+  const rnd  = new Uint8Array(32);
+  self.crypto.getRandomValues(rnd);
+
+  /* Simuleer beperkte hardware-entropie van 2009 era */
+  for (let i=0; i<rnd.length; i++) {
+    rnd[i] = rnd[i] & 0xFC;           /* Laagste 2 bits maskeren */
+    if (i % 4 === 0) rnd[i] |= 0x02;  /* Bit-patroon typisch voor oude PRNG */
+  }
+
+  /* Bouw deterministische parameter-buffer */
+  const params = [
+    r.tS,  r.qS,  r.tkS, r.pS,  r.tiS,
+    r.rS,  r.sS,  r.dS,  r.mXS, r.mYS,
+    r.eHS, r.vSS, r.bS,  r.bHS, r.pT1, r.dR
+  ];
+  const view = new DataView(buf.buffer);
+  params.forEach((p, i) => {
+    if (i < 16) view.setUint32(i*4, parseInt(p,16)||parseInt(p)||0, true);
+  });
+
+  /* Combineer: param-buffer + ruis */
+  buf.set(rnd, 64);
+
+  /* SHA-256 mengpot */
+  const poolHash = CryptoJS.SHA256(CryptoJS.lib.WordArray.create(buf)).toString();
+
+  return { poolHash, entropyVals: {
+    time: parseInt(r.tS)||0, qpc: parseInt(r.qS)||0,
+    pid:  parseInt(r.pS)||0, tid: parseInt(r.tiS)||0,
+    mouse: [parseInt(r.mXS)||0, parseInt(r.mYS)||0],
+    ram:  parseInt(r.rS)||0, disk: r.dS||'0',
+    bios: parseInt(r.bS)||0, env: r.eHS||'0'
+  }};
+}
+
+self.onmessage = function(e) {
+  const { r, target, batch } = e.data;
+
+  const minK  = (N * BigInt(Math.floor(parseFloat(r.kS) * 1000))) / 100000n;
+  const maxK  = (N * BigInt(Math.floor(parseFloat(r.kE) * 1000))) / 100000n;
+  const range = maxK > minK ? maxK - minK : 1n;
+
+  let count = 0;
+
+  while (true) {
+    const { poolHash, entropyVals } = buildEntropyPool(r);
+
+    const privBig = minK + (BigInt("0x" + poolHash) % range);
+    const privHex = privBig.toString(16).padStart(64,'0');
+
+    /* Uncompressed pubkey (2009-stijl, vroege Bitcoin gebruikte uncompressed) */
+    const pubHex   = ec.keyFromPrivate(privHex,'hex').getPublic(false,'hex');
+    const hash160  = ripemd160(sha256(pubHex));
+    const addr     = base58Check("00" + hash160);
+    const wif      = base58Check("80" + privHex + "01");
+
+    count++;
+    const isMatch = (addr === target);
+
+    /* Stuur altijd update zodat UI de entropy-waarden kan tonen */
+    if (isMatch || count % batch === 0) {
+      self.postMessage({
+        match: isMatch, addr, wif,
+        privHex: privHex.slice(0,16)+'...',
+        poolHash: poolHash.slice(0,16)+'...',
+        entropy: entropyVals,
+        count
+      });
+    }
+
+    if (isMatch) break;
+  }
+};
+`;
+
+/* ══════════════════════════════════════════
+   MAIN STATE
+   ══════════════════════════════════════════ */
+let workers   = [];
+let totaal    = 0;
+let startTime = 0;
+let unique    = new Set();
+let isRunning = false;
+
+const logBox  = document.getElementById('logBox');
+
+function log(msg, cls='') {
+  const ts  = new Date().toLocaleTimeString('nl-NL');
+  const div = document.createElement('div');
+  div.innerHTML = `<span class="ts">[${ts}]</span> <span class="${cls}">${msg}</span>`;
+  logBox.appendChild(div);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+function setStatus(txt, cls='') {
+  const el = document.getElementById('statusVal');
+  el.textContent = txt;
+  el.className = cls;
+}
+
+/* ══════════════════════════════════════════
+   ENTROPY BARS UPDATEN
+   ══════════════════════════════════════════ */
+function updateEntropyDisplay(data) {
+  const e = data.entropy;
+  const pct = v => Math.min(100, Math.max(2, (v % 1000) / 10));
+
+  document.getElementById('liveHash').textContent  = data.poolHash;
+  document.getElementById('liveTime').textContent  = new Date(e.time*1000).toLocaleString('nl-NL');
+  document.getElementById('liveQpc').textContent   = e.qpc.toLocaleString();
+  document.getElementById('livePid').textContent   = `PID:${e.pid} TID:${e.tid}`;
+  document.getElementById('liveMouse').textContent = `X:${e.mouse[0]} Y:${e.mouse[1]}`;
+  document.getElementById('liveRam').textContent   = `${e.ram} MB`;
+  document.getElementById('liveDisk').textContent  = `0x${e.disk}`;
+  document.getElementById('liveBios').textContent  = new Date(e.bios*1000).toLocaleDateString('nl-NL');
+  document.getElementById('liveAddr').textContent  = data.addr;
+
+  /* Mini entropy bars */
+  const bars = [
+    ['eTime', 'eTimeBar', e.time],
+    ['eQpc',  'eQpcBar',  e.qpc],
+    ['ePid',  'ePidBar',  e.pid],
+    ['eMouse','eMouseBar',e.mouse[0]+e.mouse[1]],
+    ['eRam',  'eRamBar',  e.ram],
+    ['eDisk', 'eDiskBar', parseInt(e.disk,16)||0],
+    ['eBios', 'eBiosBar', e.bios],
+    ['eEnv',  'eEnvBar',  parseInt(e.env,16)||0],
+  ];
+  bars.forEach(([valId, barId, val]) => {
+    document.getElementById(valId).textContent = typeof val==='number' ? val.toLocaleString() : val;
+    document.getElementById(barId).style.width = pct(typeof val==='number'?val:0) + '%';
+  });
+}
+
+/* ══════════════════════════════════════════
+   START
+   ══════════════════════════════════════════ */
+document.getElementById('startBtn').onclick = function() {
+  const target = document.getElementById('targetAddr').value.trim();
+  if (!target.startsWith('1') || target.length < 25) {
+    alert('Voer een geldig Bitcoin Legacy adres in (begint met 1).');
+    return;
+  }
+
+  totaal    = 0;
+  startTime = Date.now();
+  unique    = new Set();
+  isRunning = true;
+
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('stopBtn').disabled  = false;
+  document.getElementById('emptyRow').style.display = 'none';
+  document.getElementById('resultTable').innerHTML = '';
+  setStatus('Scanning...', 'running');
+
+  /* Verzamel alle parameters */
+  const r = {};
+  ['kS','kE','tS','tE','qS','qE','tkS','tkE','pS','pE','tiS','tiE',
+   'rS','rE','sS','sE','dS','dE','mXS','mXE','mYS','mYE',
+   'eHS','eHE','vSS','vSE','bS','bE','bHS','bHE','pT1','pT2','pT3','dR'
+  ].forEach(id => { const el=document.getElementById(id); if(el) r[id]=el.value; });
+
+  const numW  = Math.max(1, parseInt(document.getElementById('numW').value)||4);
+  const batch = Math.max(10, parseInt(document.getElementById('batchSize').value)||500);
+
+  log(`🚀 Scanner gestart — ${numW} workers`, 'ev-scan');
+  log(`🎯 Target: ${target}`, 'ev-scan');
+  log(`🔑 Keyspace: ${r.kS}% → ${r.kE}%`, 'ev-scan');
+  log(`⏰ Tijdrange: ${new Date(parseInt(r.tS)*1000).toLocaleDateString('nl-NL')} → ${new Date(parseInt(r.tE||r.tS)*1000).toLocaleDateString('nl-NL')}`, 'ev-scan');
+
+  /* Voortgangsbalk animatie */
+  let progDir = 1, progVal = 0;
+  const progInterval = setInterval(() => {
+    if (!isRunning) { clearInterval(progInterval); return; }
+    progVal += progDir * 2;
+    if (progVal >= 95 || progVal <= 5) progDir *= -1;
+    document.getElementById('progressBar').style.width = progVal + '%';
+  }, 80);
+
+  /* Start workers */
+  for (let i = 0; i < numW; i++) {
+    const w = new Worker(URL.createObjectURL(new Blob([workerCode])));
+    w.postMessage({ r, target, batch });
+
+    w.onmessage = function(ev) {
+      const d = ev.data;
+      totaal += d.count || 1;
+
+      /* Speed */
+      const elapsed = (Date.now() - startTime) / 1000 || 1;
+      document.getElementById('totaal').textContent     = totaal.toLocaleString('nl-NL');
+      document.getElementById('scanSpeed').textContent  = Math.floor(totaal/elapsed).toLocaleString('nl-NL')+'/s';
+
+      /* Entropy display bijwerken */
+      if (d.entropy) updateEntropyDisplay(d);
+
+      /* Unieke teller */
+      unique.add(d.addr);
+      document.getElementById('uniqueCount').textContent = unique.size.toLocaleString('nl-NL');
+
+      /* Tabel */
+      const tbody = document.getElementById('resultTable');
+      const row   = tbody.insertRow(0);
+      row.innerHTML = `
+        <td>${d.addr}</td>
+        <td style="font-size:.62rem">${d.wif}</td>
+        <td style="color:${d.match?'#f59e0b':'#6b7280'}">${d.match?'✅ MATCH':'✗'}</td>`;
+      if (d.match) {
+        row.className = 'match-row';
+        log(`🎉 MATCH GEVONDEN! ${d.addr}`, 'ev-match');
+      }
+      if (tbody.rows.length > 20) tbody.deleteRow(tbody.rows.length-1);
+
+      /* Log elke batch */
+      log(`⚙ Adres: ${d.addr.slice(0,18)}... | Pool: ${d.poolHash}`, 'ev-scan');
+
+      if (d.match) stop();
+    };
+
+    workers.push(w);
+  }
+};
+
+/* ══════════════════════════════════════════
+   STOP
+   ══════════════════════════════════════════ */
+function stop() {
+  isRunning = false;
+  workers.forEach(w => w.terminate());
+  workers = [];
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('stopBtn').disabled  = true;
+  document.getElementById('progressBar').style.width = '0%';
+  setStatus('Gestopt');
+  log('🛑 Scanner gestopt', 'ev-stop');
+}
+document.getElementById('stopBtn').onclick = stop;
+</script>
+</body>
+</html>
