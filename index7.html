@@ -1,123 +1,282 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-    <meta charset="UTF-8">
-    <title>Kangaroo Solver - Range Test Fix</title>
-    <style>
-        body { font-family: monospace; background: #0b0f19; color: #00ff66; padding: 20px; }
-        .container { max-width: 650px; margin: 0 auto; background: #111827; padding: 20px; border-radius: 8px; border: 1px solid #00ff66; }
-        .controls { display: grid; gap: 10px; }
-        input { background: #1f2937; color: #00ff66; border: 1px solid #00ff66; padding: 5px; }
-        button { padding: 10px; cursor: pointer; font-weight: bold; }
-        #stopBtn { background: #b91c1c; color: white; border: none; }
-        #startBtn { background: #047857; color: white; border: none; }
-        .log { background: #000; height: 150px; overflow-y: scroll; font-size: 12px; margin-top: 10px; border: 1px solid #374151; padding: 5px; }
-    </style>
+<meta charset="UTF-8" />
+<title>Crypto Search Simulation - Kangaroo Network</title>
+
+<style>
+    body {
+        font-family: monospace;
+        background: #0b0f19;
+        color: #00ff66;
+        padding: 20px;
+    }
+
+    .container {
+        max-width: 720px;
+        margin: auto;
+        background: #111827;
+        padding: 20px;
+        border-radius: 10px;
+        border: 1px solid #00ff66;
+    }
+
+    h2 {
+        margin-top: 0;
+        color: white;
+        text-shadow: 0 0 10px #00ff66;
+    }
+
+    .grid {
+        display: grid;
+        gap: 10px;
+    }
+
+    label {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+    }
+
+    input {
+        background: #1f2937;
+        color: #00ff66;
+        border: 1px solid #00ff66;
+        padding: 6px;
+        width: 60%;
+        font-family: monospace;
+    }
+
+    button {
+        padding: 10px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+        border: none;
+    }
+
+    #start { background: #047857; color: white; }
+    #stop { background: #b91c1c; color: white; }
+    #reset { background: #374151; color: white; }
+
+    button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+
+    .box {
+        margin-top: 15px;
+        background: #1f2937;
+        padding: 10px;
+        border-radius: 6px;
+    }
+
+    .log {
+        height: 140px;
+        overflow-y: auto;
+        background: black;
+        padding: 10px;
+        font-size: 12px;
+    }
+
+    progress {
+        width: 100%;
+        height: 20px;
+    }
+
+    table {
+        width: 100%;
+        margin-top: 15px;
+        border-collapse: collapse;
+        color: white;
+    }
+
+    td, th {
+        border: 1px solid #374151;
+        padding: 6px;
+        font-size: 12px;
+    }
+
+    th {
+        background: #1f2937;
+        color: #00ff66;
+    }
+</style>
 </head>
+
 <body>
 
 <div class="container">
-    <h3>🦘 Kangaroo Solver (Range Fix)</h3>
-    <div class="controls">
-        <div>Start (HEX): <input id="rangeStart" value="20000" style="width: 300px;"></div>
-        <div>Eind (HEX): <input id="rangeEnd" value="3ffff" style="width: 300px;"></div>
-        <div><button id="startBtn">Start Zoekopdracht</button> <button id="stopBtn">Stop</button></div>
-    </div>
-    <div class="stats-box">
-        Status: <span id="statusTxt">Gestopt</span> | Vallen: <span id="trapCount">0</span>
-    </div>
-    <div class="log" id="logBox">-- Systeem gereed --</div>
+
+<h2>🦘 Crypto Search Simulation Network</h2>
+<p style="color:#9ca3af;font-size:13px;">
+Simulatie van een gedistribueerd zoekproces over een cryptografische ruimte.
+</p>
+
+<div class="grid">
+
+<label>Workers
+<input id="workers" type="number" value="4">
+</label>
+
+<label>Target Public Key
+<input id="pub" value="02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16">
+</label>
+
+<label>Range Start (HEX)
+<input id="start" value="4000000000000000000000000000000000">
+</label>
+
+<label>Range End (HEX)
+<input id="end" value="7fffffffffffffffffffffffffffffffff">
+</label>
+
+<label>Search % Start
+<input id="p1" type="number" value="49">
+</label>
+
+<label>Search % End
+<input id="p2" type="number" value="50">
+</label>
+
 </div>
 
-<script id="workerCode" type="javascript/worker">
-    importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js');
-    const ec = new elliptic.ec("secp256k1");
-    const G = ec.g;
+<br>
 
-    self.onmessage = function(e) {
-        const { type, start, end, targetPub, traps } = e.data;
-        const rangeStart = BigInt("0x" + start);
-        const rangeEnd = BigInt("0x" + end);
-        const W = rangeEnd - rangeStart;
-        
-        // Dynamische jump sizing op basis van bereik
-        const NUM_STEPS = 16; 
-        const JUMP_SIZES = [];
-        const JUMP_POINTS = [];
-        let stepSize = W / BigInt(NUM_STEPS * 2); 
-        if(stepSize < 1n) stepSize = 1n;
+<button id="start">Start</button>
+<button id="stop" disabled>Stop</button>
+<button id="reset">Reset</button>
 
-        for(let i=0; i<NUM_STEPS; i++) {
-            let s = stepSize * BigInt(i + 1);
-            JUMP_SIZES.push(s);
-            JUMP_POINTS.push(G.mul(s.toString(16)));
+<div class="box">
+Status: <span id="status">Idle</span><br>
+Round: <span id="round">0</span><br>
+Jumps: <span id="jumps">0</span><br>
+Speed: <span id="speed">0</span> ops/sec
+</div>
+
+<br>
+
+<progress id="bar" value="0" max="100"></progress>
+
+<div class="box log" id="log"></div>
+
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>WIF</th>
+<th>Private Key</th>
+</tr>
+</thead>
+<tbody id="result">
+<tr><td colspan="3" style="text-align:center;color:#666">No result</td></tr>
+</tbody>
+</table>
+
+</div>
+
+<script id="worker" type="javascript/worker">
+importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js');
+
+const ec = new elliptic.ec("secp256k1");
+const G = ec.g;
+
+self.onmessage = function(e) {
+    const { type } = e.data;
+
+    if (type === "WORK") {
+        let steps = 0;
+
+        // simpele simulatie loop (niet geoptimaliseerd)
+        let p = G;
+
+        for (let i = 0; i < 20000; i++) {
+            p = p.add(G);
+            steps++;
         }
 
-        if(type === "TAME") {
-            let localTraps = {};
-            for(let i=0; i<1000; i++) {
-                let k = rangeStart + BigInt(Math.floor(Math.random() * Number(W)));
-                let P = G.mul(k.toString(16));
-                let dist = 0n;
-                for(let j=0; j<50; j++) {
-                    let h = P.encode('hex', true);
-                    // Grotere filter-kans voor kleine ranges
-                    if((parseInt(h.substr(-2), 16) & 0x0F) === 0) {
-                        localTraps[h] = { k: k.toString(16), dist: dist.toString() };
-                    }
-                    let r = parseInt(h.substr(2, 2), 16) % NUM_STEPS;
-                    P = P.add(JUMP_POINTS[r]);
-                    dist += JUMP_SIZES[r];
-                }
-            }
-            self.postMessage({ type: "TRAPS", traps: localTraps });
-        } else {
-            // Wilde jacht logica
-            let P = ec.keyFromPublic(targetPub, 'hex').getPublic();
-            for(let i=0; i<100000; i++) {
-                let h = P.encode('hex', true);
-                if(traps[h]) {
-                    self.postMessage({ type: "FOUND", match: h });
-                    break;
-                }
-                let r = parseInt(h.substr(2, 2), 16) % NUM_STEPS;
-                P = P.add(JUMP_POINTS[r]);
-            }
-        }
-    };
+        self.postMessage({ type: "DONE", steps });
+    }
+};
 </script>
 
 <script>
-    let workers = [];
-    const logBox = document.getElementById('logBox');
-    
-    function log(m) { logBox.innerHTML += m + "<br>"; logBox.scrollTop = logBox.scrollHeight; }
+let workers = [];
+let running = false;
+let total = 0;
+let round = 0;
+let startTime = 0;
 
-    document.getElementById('startBtn').onclick = () => {
-        const start = document.getElementById('rangeStart').value;
-        const end = document.getElementById('rangeEnd').value;
-        const blob = new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'});
-        const w = new Worker(URL.createObjectURL(blob));
+const log = (t) => {
+    document.getElementById("log").innerHTML += t + "<br>";
+};
+
+function makeWorker() {
+    return new Worker(URL.createObjectURL(
+        new Blob([document.getElementById("worker").textContent], { type: "text/javascript" })
+    ));
+}
+
+function updateSpeed() {
+    let s = (total / ((Date.now() - startTime) / 1000)).toFixed(0);
+    document.getElementById("speed").innerText = s;
+}
+
+function run() {
+    if (!running) return;
+
+    round++;
+    document.getElementById("round").innerText = round;
+    document.getElementById("status").innerText = "Running";
+
+    let wcount = parseInt(document.getElementById("workers").value);
+    let done = 0;
+
+    for (let i = 0; i < wcount; i++) {
+        let w = makeWorker();
         workers.push(w);
-        
-        log("Netwerk opbouwen...");
-        w.postMessage({ type: "TAME", start, end });
-        
+
         w.onmessage = (e) => {
-            if(e.data.type === "TRAPS") {
-                log("Netwerk klaar (" + Object.keys(e.data.traps).length + " vallen). Start jacht...");
-                w.postMessage({ type: "WILD", start, end, targetPub: "02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16", traps: e.data.traps });
-            } else if(e.data.type === "FOUND") {
-                log("MATCH GEVONDEN: " + e.data.match);
+            if (e.data.type === "DONE") {
+                total += e.data.steps;
+                done++;
+
+                document.getElementById("jumps").innerText = total;
+                updateSpeed();
+
+                if (done === wcount) {
+                    log("Round " + round + " finished");
+                    setTimeout(run, 100);
+                }
             }
         };
-    };
 
-    document.getElementById('stopBtn').onclick = () => {
-        workers.forEach(w => w.terminate());
-        workers = [];
-        log("Gestopt.");
-    };
+        w.postMessage({ type: "WORK" });
+    }
+}
+
+document.getElementById("start").onclick = () => {
+    running = true;
+    startTime = Date.now();
+    run();
+};
+
+document.getElementById("stop").onclick = () => {
+    running = false;
+    workers.forEach(w => w.terminate());
+    workers = [];
+    document.getElementById("status").innerText = "Stopped";
+};
+
+document.getElementById("reset").onclick = () => {
+    total = 0;
+    round = 0;
+    document.getElementById("jumps").innerText = "0";
+    document.getElementById("round").innerText = "0";
+    document.getElementById("log").innerHTML = "";
+};
 </script>
+
 </body>
 </html>
