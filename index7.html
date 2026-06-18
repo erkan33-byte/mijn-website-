@@ -97,6 +97,22 @@
         return s;
     }
 
+    // Helper functie voor veilige random generatie (Zelfs via file://)
+    function getRandomHex(bits) {
+        let bytesReq = Math.ceil(bits / 8);
+        if (self.crypto && self.crypto.getRandomValues) {
+            let array = new Uint8Array(bytesReq);
+            self.crypto.getRandomValues(array);
+            return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+        } else {
+            let res = '';
+            for(let i=0; i<bytesReq; i++) {
+                res += Math.floor(Math.random() * 256).toString(16).padStart(2, '0');
+            }
+            return res;
+        }
+    }
+
     self.onmessage = function(e) {
         const { type, rangeStartStr, rangeEndStr, targetPubHex, traps, workerId, padLen, wildOffsetStr } = e.data;
         
@@ -125,54 +141,70 @@
         if (type === "TAME") {
             let localTraps = {};
             let range = rangeEnd - rangeStart;
-            let pathsPerWorker = 1000;   // Verhoogd voor een groter eenmalig netwerk
-            let stepsPerPath = 2000;     
+            
+            // Gereduceerd naar behapbare porties voor JavaScript
+            let pathsPerWorker = 100;   
+            let stepsPerPath = 500;     
+            
             let jumpsCount = 0;
+            let currentPath = 0;
 
-            for (let p = 0; p < pathsPerWorker; p++) {
-                let bits = range.toString(2).length;
-                let array = new Uint8Array(Math.ceil(bits / 8));
-                self.crypto.getRandomValues(array);
-                let randHex = Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+            function tameBatch() {
+                let pathsToProcess = 5; // Verwerk 5 paden tegelijk om UI responsief te houden
                 
-                let k_tame = rangeStart + (BigInt("0x" + randHex) % range);
-
-                let currDist = 0n; 
-                let currPoint = G.mul(k_tame.toString(16));
-
-                for (let i = 0; i < stepsPerPath; i++) {
-                    let pubHex = currPoint.encode('hex', true);
-                    
-                    if ((parseInt(pubHex.substr(pubHex.length - 4), 16) & 0x1F) === 0) {
-                        localTraps[pubHex] = { startKey: k_tame.toString(16), dist: currDist.toString() };
+                for(let p = 0; p < pathsToProcess; p++) {
+                    if (currentPath >= pathsPerWorker) {
+                        self.postMessage({ type: "TAME_READY", traps: localTraps, Jumps: jumpsCount, workerId });
+                        return;
                     }
 
-                    let r = parseInt(pubHex.substr(2, 8), 16) % NUM_STEPS;
-                    currPoint = currPoint.add(JUMP_POINTS[r]);
-                    currDist += JUMP_SIZES[r];
-                    jumpsCount++;
+                    let bits = range.toString(2).length;
+                    let randHex = getRandomHex(bits);
+                    let k_tame = rangeStart + (BigInt("0x" + randHex) % range);
+
+                    let currDist = 0n; 
+                    let currPoint = G.mul(k_tame.toString(16));
+
+                    for (let i = 0; i < stepsPerPath; i++) {
+                        let pubHex = currPoint.encode('hex', true);
+                        
+                        if ((parseInt(pubHex.substr(pubHex.length - 4), 16) & 0x1F) === 0) {
+                            localTraps[pubHex] = { startKey: k_tame.toString(16), dist: currDist.toString() };
+                        }
+
+                        let r = parseInt(pubHex.substr(2, 8), 16) % NUM_STEPS;
+                        currPoint = currPoint.add(JUMP_POINTS[r]);
+                        currDist += JUMP_SIZES[r];
+                        jumpsCount++;
+                    }
+                    currentPath++;
                 }
+                
+                // Voortgang doorgeven
+                self.postMessage({ type: "TAME_PROGRESS", currentPath, totalPaths: pathsPerWorker, workerId });
+                
+                // Laat Worker ademhalen, activeer volgende batch
+                setTimeout(tameBatch, 0);
             }
-            self.postMessage({ type: "TAME_READY", traps: localTraps, Jumps: jumpsCount, workerId });
+            
+            // Start opbouwen
+            tameBatch();
         } 
         
         else if (type === "WILD") {
             let wildOffset = BigInt(wildOffsetStr || "0");
             let currPoint = targetPubKey;
             
-            // Pas de unieke core-offset toe op de startpositie van deze wilde kangoeroe
+            // Pas de unieke core-offset toe
             if (wildOffset > 0n) {
                 currPoint = currPoint.add(G.mul(wildOffset.toString(16)));
             }
             
             let currDist = 0n; 
-            let batchSize = 25000;
+            let batchSize = 5000; // Iets verlaagd voor snellere UI updates in browser
 
-            // FIX 1: Explicite conversie van N naar hex en dan BigInt om crashes te voorkomen
             let nBig = BigInt("0x" + N.toString(16));
 
-            // FIX 2: while(true) vervangen door recursieve functie via setTimeout 
-            // Hierdoor krijgt de worker 'ademruimte' en blokkeert de thread niet.
             function huntBatch() {
                 for (let i = 0; i < batchSize; i++) {
                     let pubHex = currPoint.encode('hex', true);
@@ -182,7 +214,6 @@
                         let k_tame = BigInt("0x" + matchData.startKey);
                         let tameDist = BigInt(matchData.dist);
                         
-                        // DE GECORRIGEERDE FORMULE
                         let secretKey = (k_tame + tameDist - currDist - wildOffset) % nBig;
                         if (secretKey < 0n) secretKey += nBig;
                         
@@ -196,7 +227,7 @@
                             let wif = toBase58(wifPayload + checksum);
                             
                             self.postMessage({ type: "FOUND", privHex, wif });
-                            return; // Stop de worker zodra er een match is
+                            return; 
                         }
                     }
 
@@ -205,14 +236,11 @@
                     currDist += JUMP_SIZES[r];
                 }
                 
-                // Stuur voortgang
                 self.postMessage({ type: "PROGRESS", jumps: batchSize });
-                
-                // Roep de volgende batch asynchroon aan om de thread niet te laten bevriezen
                 setTimeout(huntBatch, 0);
             }
 
-            // Start de ononderbroken (maar niet-blokkerende) jacht
+            // Start de jacht
             huntBatch();
         }
     };
@@ -224,6 +252,7 @@
     let totalJumps = 0;
     let startTime = 0;
     let tameWorkersFinished = 0;
+    let tameProgressData = {};
     let isRunning = false;
 
     let calcRangeStartStr = "";
@@ -262,6 +291,7 @@
         isRunning = true;
         totalJumps = 0;
         globalTraps = {};
+        tameProgressData = {};
         
         const subRange = calculateSubRange();
         calcRangeStartStr = subRange.start;
@@ -285,16 +315,17 @@
         
         tameWorkersFinished = 0;
         document.getElementById('epochCount').innerText = "Fase 1: Netwerk Opbouw";
-        document.getElementById('statusTxt').innerText = "Netwerk weven...";
+        document.getElementById('statusTxt').innerText = "Netwerk weven... (0%)";
         document.getElementById('statusTxt').style.color = "#eab308";
 
         const targetLen = Math.max(document.getElementById('rangeStart').value.trim().length, document.getElementById('rangeEnd').value.trim().length);
-        log(`<b>[Setup]</b> Cores starten met het eenmalig spannen van het vallen-netwerk...`);
+        log(`<b>[Setup]</b> Cores starten met asynchroon spannen van het vallen-netwerk...`);
 
         const numWorkers = parseInt(document.getElementById('numW').value);
 
         clearOldWorkers();
         for (let i = 0; i < numWorkers; i++) {
+            tameProgressData[i] = 0;
             let w = new Worker(URL.createObjectURL(new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'})));
             workers.push(w);
 
@@ -308,7 +339,13 @@
             });
 
             w.onmessage = function(e) {
-                if (e.data.type === "TAME_READY") {
+                if (e.data.type === "TAME_PROGRESS") {
+                    tameProgressData[e.data.workerId] = (e.data.currentPath / e.data.totalPaths) * 100;
+                    
+                    let totalPct = Object.values(tameProgressData).reduce((a, b) => a + b, 0) / numWorkers;
+                    document.getElementById('statusTxt').innerText = `Netwerk weven... (${Math.floor(totalPct)}%)`;
+                }
+                else if (e.data.type === "TAME_READY") {
                     Object.assign(globalTraps, e.data.traps);
                     totalJumps += e.data.Jumps;
                     tameWorkersFinished++;
@@ -336,7 +373,7 @@
             let w = new Worker(URL.createObjectURL(new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'})));
             workers.push(w);
 
-            // Geef elke core een unieke start-offset (bijv. i * 50.000.000 stappen) zodat ze elkaar niet dupliceren
+            // Geef elke core een unieke start-offset
             let wildOffset = BigInt(i + 1) * 50000000n;
 
             w.postMessage({
