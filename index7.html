@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Bitcoin Puzzle #135 - Global Scattered Kangaroo Net</title>
+    <title>Bitcoin Puzzle #135 - Global Scattered Kangaroo Net (Endless Edition)</title>
     <style>
         body { font-family: monospace; background: #0b0f19; color: #00ff66; padding: 20px; }
         .container { max-width: 650px; margin: 0 auto; background: #111827; padding: 20px; border-radius: 8px; border: 1px solid #00ff66; }
@@ -11,6 +11,7 @@
         .controls div { display: flex; justify-content: space-between; align-items: center; }
         input { background: #1f2937; color: #00ff66; border: 1px solid #00ff66; width: 420px; padding: 6px; font-family: monospace; }
         input[type="number"] { width: 100px; }
+        .pct-input { width: 100px !important; }
         button { padding: 10px; font-weight: bold; cursor: pointer; border-radius: 4px; }
         #startBtn { background: #047857; color: #fff; border: none; }
         #stopBtn { background: #b91c1c; color: #fff; border: none; }
@@ -22,8 +23,8 @@
 <body>
 
 <div class="container">
-    <h3>🦘 Global Scattered Kangaroo Solver</h3>
-    <p style="color: #9ca3af; font-size: 13px;">Methode: Spant continu een willekeurig netwerk van tamme paden over de gehele cryptografische ruimte.</p>
+    <h3>🦘 Global Scattered Kangaroo Solver (Endless Hunt)</h3>
+    <p style="color: #9ca3af; font-size: 13px;">Methode: Spant eenmalig een statisch netwerk en jaagt daarna oneindig met unieke core-offsets.</p>
     
     <div class="controls">
         <div>Workers (CPU Cores): <input id="numW" value="4" type="number"></div>
@@ -34,12 +35,18 @@
         
         <div>Absoluut Start (HEX): <input id="rangeStart" value="4000000000000000000000000000000000" type="text"></div>
         <div>Absoluut Eind (HEX): <input id="rangeEnd" value="7fffffffffffffffffffffffffffffffff" type="text"></div>
+        
+        <hr style="border: 0; border-top: 1px dashed #374151; width: 100%;">
+        
+        <div>Zoekbereik Start (%): <input id="pctStart" value="49.0" type="number" step="0.1" min="0" max="100" class="pct-input"></div>
+        <div>Zoekbereik Eind (%): <input id="pctEnd" value="50.0" type="number" step="0.1" min="0" max="100" class="pct-input"></div>
+
         <div><button id="startBtn">Start Global Scattered Net</button> <button id="stopBtn" disabled>Stop</button></div>
     </div>
 
     <div class="stats-box">
         <div>Status: <span id="statusTxt" style="color: #ef4444; font-weight: bold;">Gestopt</span></div>
-        <div>Huidige Loterij-Ronde: <span id="epochCount" style="color: #eab308; font-weight: bold;">0</span></div>
+        <div>Huidige Status-Fase: <span id="epochCount" style="color: #eab308; font-weight: bold;">Stand-by</span></div>
         <div>Actieve Vallen in Netwerk: <span id="trapCount" style="color: #fff;">0</span></div>
         <div>Totaal aantal sprongen: <span id="totalJumps">0</span></div>
         <div>Snelheid: <span id="speed">0</span> sprongen/s</div>
@@ -91,7 +98,7 @@
     }
 
     self.onmessage = function(e) {
-        const { type, rangeStartStr, rangeEndStr, targetPubHex, traps, workerId, padLen, maxWildJumps } = e.data;
+        const { type, rangeStartStr, rangeEndStr, targetPubHex, traps, workerId, padLen, wildOffsetStr } = e.data;
         
         let targetPubKey = ec.keyFromPublic(targetPubHex, 'hex').getPublic();
         let rangeStart = BigInt("0x" + rangeStartStr);
@@ -107,7 +114,6 @@
                 sqrtW = x0;
             } else { sqrtW = W; }
 
-            // Wereldwijde spronggrootte afgesteld op de gigantische wortel van de absolute range
             for (let i = 0; i < NUM_STEPS; i++) {
                 let size = (sqrtW * BigInt(i + 1)) / 32n;
                 if (size === 0n) size = 1n;
@@ -119,17 +125,16 @@
         if (type === "TAME") {
             let localTraps = {};
             let range = rangeEnd - rangeStart;
-            let pathsPerWorker = 40;   // Aantal unieke willekeurige startlocaties per core
-            let stepsPerPath = 1500;   // Lengte van elk weggeslingerd tam pad
+            let pathsPerWorker = 1000;   // Verhoogd voor een groter eenmalig netwerk
+            let stepsPerPath = 2000;     
             let jumpsCount = 0;
 
             for (let p = 0; p < pathsPerWorker; p++) {
-                // Genereer een volstrekt unieke willekeurige private key binnen de absolute grenzen
-                let randHex = "";
                 let bits = range.toString(2).length;
-                while (randHex.length * 4 < bits) {
-                    randHex += Math.floor(Math.random() * 16).toString(16);
-                }
+                let array = new Uint8Array(Math.ceil(bits / 8));
+                self.crypto.getRandomValues(array);
+                let randHex = Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+                
                 let k_tame = rangeStart + (BigInt("0x" + randHex) % range);
 
                 let currDist = 0n; 
@@ -138,7 +143,6 @@
                 for (let i = 0; i < stepsPerPath; i++) {
                     let pubHex = currPoint.encode('hex', true);
                     
-                    // Distinguished point filter op basis van de laatste 5 bits
                     if ((parseInt(pubHex.substr(pubHex.length - 4), 16) & 0x1F) === 0) {
                         localTraps[pubHex] = { startKey: k_tame.toString(16), dist: currDist.toString() };
                     }
@@ -153,12 +157,23 @@
         } 
         
         else if (type === "WILD") {
+            let wildOffset = BigInt(wildOffsetStr || "0");
             let currPoint = targetPubKey;
+            
+            // Pas de unieke core-offset toe op de startpositie van deze wilde kangoeroe
+            if (wildOffset > 0n) {
+                currPoint = currPoint.add(G.mul(wildOffset.toString(16)));
+            }
+            
             let currDist = 0n; 
-            let batchSize = 10000;
-            let totalWildJumps = 0;
+            let batchSize = 25000;
 
-            while (totalWildJumps < maxWildJumps) {
+            // FIX 1: Explicite conversie van N naar hex en dan BigInt om crashes te voorkomen
+            let nBig = BigInt("0x" + N.toString(16));
+
+            // FIX 2: while(true) vervangen door recursieve functie via setTimeout 
+            // Hierdoor krijgt de worker 'ademruimte' en blokkeert de thread niet.
+            function huntBatch() {
                 for (let i = 0; i < batchSize; i++) {
                     let pubHex = currPoint.encode('hex', true);
                     
@@ -167,9 +182,9 @@
                         let k_tame = BigInt("0x" + matchData.startKey);
                         let tameDist = BigInt(matchData.dist);
                         
-                        // DE FORMULE: Bereken de exacte private key op basis van de botsing!
-                        let secretKey = (k_tame + tameDist - currDist) % BigInt(N.toString());
-                        if (secretKey < 0n) secretKey += BigInt(N.toString());
+                        // DE GECORRIGEERDE FORMULE
+                        let secretKey = (k_tame + tameDist - currDist - wildOffset) % nBig;
+                        if (secretKey < 0n) secretKey += nBig;
                         
                         if (secretKey > 0n) {
                             let privHex = secretKey.toString(16).padStart(padLen, '0');
@@ -181,7 +196,7 @@
                             let wif = toBase58(wifPayload + checksum);
                             
                             self.postMessage({ type: "FOUND", privHex, wif });
-                            return;
+                            return; // Stop de worker zodra er een match is
                         }
                     }
 
@@ -189,10 +204,16 @@
                     currPoint = currPoint.add(JUMP_POINTS[r]);
                     currDist += JUMP_SIZES[r];
                 }
-                totalWildJumps += batchSize;
+                
+                // Stuur voortgang
                 self.postMessage({ type: "PROGRESS", jumps: batchSize });
+                
+                // Roep de volgende batch asynchroon aan om de thread niet te laten bevriezen
+                setTimeout(huntBatch, 0);
             }
-            self.postMessage({ type: "WILD_DONE" });
+
+            // Start de ononderbroken (maar niet-blokkerende) jacht
+            huntBatch();
         }
     };
 </script>
@@ -203,11 +224,10 @@
     let totalJumps = 0;
     let startTime = 0;
     let tameWorkersFinished = 0;
-    let wildWorkersFinished = 0;
-    let epoch = 0;
     let isRunning = false;
 
-    const MAX_WILD_JUMPS_PER_EPOCH = 400000; // Aantal stappen dat de Wilde kangoeroe jaagt per ronde per core
+    let calcRangeStartStr = "";
+    let calcRangeEndStr = "";
 
     const logBox = document.getElementById('logBox');
     const startBtn = document.getElementById('startBtn');
@@ -218,36 +238,58 @@
         logBox.scrollTop = logBox.scrollHeight;
     }
 
+    function calculateSubRange() {
+        const absStartStr = document.getElementById('rangeStart').value.trim();
+        const absEndStr = document.getElementById('rangeEnd').value.trim();
+        const pStart = parseFloat(document.getElementById('pctStart').value);
+        const pEnd = parseFloat(document.getElementById('pctEnd').value);
+
+        const A = BigInt("0x" + absStartStr);
+        const B = BigInt("0x" + absEndStr);
+        const W = B - A;
+
+        const MULTIPLIER = 1000000n;
+        const startFract = BigInt(Math.floor((pStart / 100) * 1000000));
+        const endFract = BigInt(Math.floor((pEnd / 100) * 1000000));
+
+        const actualStart = A + (W * startFract) / MULTIPLIER;
+        const actualEnd = A + (W * endFract) / MULTIPLIER;
+
+        return { start: actualStart.toString(16), end: actualEnd.toString(16) };
+    }
+
     startBtn.onclick = function() {
         isRunning = true;
         totalJumps = 0;
-        epoch = 0;
+        globalTraps = {};
+        
+        const subRange = calculateSubRange();
+        calcRangeStartStr = subRange.start;
+        calcRangeEndStr = subRange.end;
+
         document.getElementById('totalJumps').innerText = "0";
         document.getElementById('matchTable').innerHTML = `<tr><td colspan="3" style="border: 1px solid #374151; padding: 8px; text-align: center; color: #6b7280;">Wereldwijd netwerk wordt opgebouwd...</td></tr>`;
         startBtn.disabled = true;
         stopBtn.disabled = false;
         startTime = Date.now();
         
-        runNextEpoch();
+        log(`<b>[Init]</b> Percentage Range ingesteld: ${document.getElementById('pctStart').value}% - ${document.getElementById('pctEnd').value}%`);
+        log(`<b>[Init]</b> Effectief Start: ${calcRangeStartStr}`);
+        log(`<b>[Init]</b> Effectief Eind: ${calcRangeEndStr}`);
+        
+        runTamePhase();
     };
 
-    function runNextEpoch() {
+    function runTamePhase() {
         if (!isRunning) return;
         
-        epoch++;
         tameWorkersFinished = 0;
-        wildWorkersFinished = 0;
-        globalTraps = {};
-        
-        document.getElementById('epochCount').innerText = epoch;
-        document.getElementById('statusTxt').innerText = `Ronde ${epoch}: Netwerk weven...`;
+        document.getElementById('epochCount').innerText = "Fase 1: Netwerk Opbouw";
+        document.getElementById('statusTxt').innerText = "Netwerk weven...";
         document.getElementById('statusTxt').style.color = "#eab308";
 
-        const rangeStartStr = document.getElementById('rangeStart').value.trim();
-        const rangeEndStr = document.getElementById('rangeEnd').value.trim();
-        const targetLen = Math.max(rangeStartStr.length, rangeEndStr.length);
-
-        log(`<b>[Ronde ${epoch}]</b> Tamme kangoeroes droppen op willekeurige locaties over de gehele range...`);
+        const targetLen = Math.max(document.getElementById('rangeStart').value.trim().length, document.getElementById('rangeEnd').value.trim().length);
+        log(`<b>[Setup]</b> Cores starten met het eenmalig spannen van het vallen-netwerk...`);
 
         const numWorkers = parseInt(document.getElementById('numW').value);
 
@@ -258,8 +300,8 @@
 
             w.postMessage({
                 type: "TAME",
-                rangeStartStr: rangeStartStr,
-                rangeEndStr: rangeEndStr,
+                rangeStartStr: calcRangeStartStr,
+                rangeEndStr: calcRangeEndStr,
                 targetPubHex: document.getElementById('pubKey').value.trim(),
                 workerId: i,
                 padLen: targetLen
@@ -273,31 +315,38 @@
 
                     if (tameWorkersFinished === numWorkers) {
                         document.getElementById('trapCount').innerText = Object.keys(globalTraps).length.toLocaleString();
-                        startWildPhase(numWorkers, rangeStartStr, rangeEndStr, targetLen);
+                        log(`<b>[Setup]</b> Netwerk permanent verankerd met ${Object.keys(globalTraps).length.toLocaleString()} actieve vallen.`);
+                        startInfiniteWildPhase(numWorkers, targetLen);
                     }
                 }
             };
         }
     }
 
-    function startWildPhase(numWorkers, rangeStartStr, rangeEndStr, targetLen) {
+    function startInfiniteWildPhase(numWorkers, targetLen) {
         if (!isRunning) return;
-        document.getElementById('statusTxt').innerText = `Ronde ${epoch}: Wilde jacht in het netwerk...`;
+        document.getElementById('epochCount').innerText = "Fase 2: Oneindige Jacht";
+        document.getElementById('statusTxt').innerText = "Wilde jacht actief...";
         document.getElementById('statusTxt').style.color = "#00ff66";
 
         clearOldWorkers();
+        log(`<b>[Jacht]</b> Wilde kangoeroes losgelaten met unieke core-offsets. Jacht loopt continu door...`);
+
         for (let i = 0; i < numWorkers; i++) {
             let w = new Worker(URL.createObjectURL(new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'})));
             workers.push(w);
 
+            // Geef elke core een unieke start-offset (bijv. i * 50.000.000 stappen) zodat ze elkaar niet dupliceren
+            let wildOffset = BigInt(i + 1) * 50000000n;
+
             w.postMessage({
                 type: "WILD",
-                rangeStartStr: rangeStartStr,
-                rangeEndStr: rangeEndStr,
+                rangeStartStr: calcRangeStartStr,
+                rangeEndStr: calcRangeEndStr,
                 targetPubHex: document.getElementById('pubKey').value.trim(),
                 traps: globalTraps,
                 padLen: targetLen,
-                maxWildJumps: MAX_WILD_JUMPS_PER_EPOCH
+                wildOffsetStr: wildOffset.toString()
             });
 
             w.onmessage = function(e) {
@@ -306,13 +355,6 @@
                     document.getElementById('totalJumps').innerText = totalJumps.toLocaleString();
                     let elapsed = (Date.now() - startTime) / 1000;
                     document.getElementById('speed').innerText = Math.floor(totalJumps / elapsed).toLocaleString();
-                } 
-                else if (e.data.type === "WILD_DONE") {
-                    wildWorkersFinished++;
-                    if (wildWorkersFinished === numWorkers) {
-                        log(`Geen match in ronde ${epoch}. Netwerk wordt verplaatst...`);
-                        runNextEpoch();
-                    }
                 } 
                 else if (e.data.type === "FOUND") {
                     log("<span style='color:#fff; background:#047857; padding:4px; font-weight:bold;'>🎉 WERELDWIJDE COLLISIE CORREKT BEREKEND!</span>");
