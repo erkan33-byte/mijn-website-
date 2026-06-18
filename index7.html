@@ -2,431 +2,122 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Bitcoin Puzzle #135 - Global Scattered Kangaroo Net (Endless Edition)</title>
+    <title>Kangaroo Solver - Range Test Fix</title>
     <style>
         body { font-family: monospace; background: #0b0f19; color: #00ff66; padding: 20px; }
         .container { max-width: 650px; margin: 0 auto; background: #111827; padding: 20px; border-radius: 8px; border: 1px solid #00ff66; }
-        h3 { margin-top: 0; color: #fff; text-shadow: 0 0 10px #00ff66; }
-        .controls { display: grid; gap: 12px; margin-bottom: 20px; }
-        .controls div { display: flex; justify-content: space-between; align-items: center; }
-        input { background: #1f2937; color: #00ff66; border: 1px solid #00ff66; width: 420px; padding: 6px; font-family: monospace; }
-        input[type="number"] { width: 100px; }
-        .pct-input { width: 100px !important; }
-        button { padding: 10px; font-weight: bold; cursor: pointer; border-radius: 4px; }
-        #startBtn { background: #047857; color: #fff; border: none; }
-        #stopBtn { background: #b91c1c; color: #fff; border: none; }
-        #startBtn:disabled, #stopBtn:disabled { background: #4b5563; color: #9ca3af; cursor: not-allowed; }
-        .stats-box { background: #1f2937; padding: 15px; border-radius: 4px; border: 1px solid #374151; margin-top: 15px; }
-        .log { background: #000; color: #00ff66; height: 160px; overflow-y: scroll; padding: 10px; font-size: 12px; margin-top: 15px; border-radius: 4px; }
+        .controls { display: grid; gap: 10px; }
+        input { background: #1f2937; color: #00ff66; border: 1px solid #00ff66; padding: 5px; }
+        button { padding: 10px; cursor: pointer; font-weight: bold; }
+        #stopBtn { background: #b91c1c; color: white; border: none; }
+        #startBtn { background: #047857; color: white; border: none; }
+        .log { background: #000; height: 150px; overflow-y: scroll; font-size: 12px; margin-top: 10px; border: 1px solid #374151; padding: 5px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h3>🦘 Global Scattered Kangaroo Solver (Endless Hunt)</h3>
-    <p style="color: #9ca3af; font-size: 13px;">Methode: Spant eenmalig een statisch netwerk en jaagt daarna oneindig met unieke core-offsets.</p>
-    
+    <h3>🦘 Kangaroo Solver (Range Fix)</h3>
     <div class="controls">
-        <div>Workers (CPU Cores): <input id="numW" value="4" type="number"></div>
-        <div>Target Public Key: <input id="pubKey" value="02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16" type="text"></div>
-        <div>Target BTC Adres: <input id="btcAddr" value="16RGFo6hjq9ym6Pj7N5H7L1NR1rVPJyw2v" type="text"></div>
-        
-        <hr style="border: 0; border-top: 1px dashed #374151; width: 100%;">
-        
-        <div>Absoluut Start (HEX): <input id="rangeStart" value="4000000000000000000000000000000000" type="text"></div>
-        <div>Absoluut Eind (HEX): <input id="rangeEnd" value="7fffffffffffffffffffffffffffffffff" type="text"></div>
-        
-        <hr style="border: 0; border-top: 1px dashed #374151; width: 100%;">
-        
-        <div>Zoekbereik Start (%): <input id="pctStart" value="49.0" type="number" step="0.1" min="0" max="100" class="pct-input"></div>
-        <div>Zoekbereik Eind (%): <input id="pctEnd" value="50.0" type="number" step="0.1" min="0" max="100" class="pct-input"></div>
-
-        <div><button id="startBtn">Start Global Scattered Net</button> <button id="stopBtn" disabled>Stop</button></div>
+        <div>Start (HEX): <input id="rangeStart" value="20000" style="width: 300px;"></div>
+        <div>Eind (HEX): <input id="rangeEnd" value="3ffff" style="width: 300px;"></div>
+        <div><button id="startBtn">Start Zoekopdracht</button> <button id="stopBtn">Stop</button></div>
     </div>
-
     <div class="stats-box">
-        <div>Status: <span id="statusTxt" style="color: #ef4444; font-weight: bold;">Gestopt</span></div>
-        <div>Huidige Status-Fase: <span id="epochCount" style="color: #eab308; font-weight: bold;">Stand-by</span></div>
-        <div>Actieve Vallen in Netwerk: <span id="trapCount" style="color: #fff;">0</span></div>
-        <div>Totaal aantal sprongen: <span id="totalJumps">0</span></div>
-        <div>Snelheid: <span id="speed">0</span> sprongen/s</div>
+        Status: <span id="statusTxt">Gestopt</span> | Vallen: <span id="trapCount">0</span>
     </div>
-
-    <div class="log" id="logBox">-- Systeem stand-by --<br></div>
-
-    <table style="width: 100%; border-collapse: collapse; margin-top: 20px; color: #fff; border: 1px solid #374151;">
-        <thead>
-            <tr style="background: #1f2937; color: #00ff66;">
-                <th style="border: 1px solid #374151; padding: 8px; text-align: left;">Type</th>
-                <th style="border: 1px solid #374151; padding: 8px; text-align: left;">WIF (Compressed Private Key)</th>
-                <th style="border: 1px solid #374151; padding: 8px; text-align: left;">Privésleutel (HEX)</th>
-            </tr>
-        </thead>
-        <tbody id="matchTable">
-            <tr>
-                <td colspan="3" style="border: 1px solid #374151; padding: 8px; text-align: center; color: #6b7280;">Nog geen match gevonden...</td>
-            </tr>
-        </tbody>
-    </table>
+    <div class="log" id="logBox">-- Systeem gereed --</div>
 </div>
 
 <script id="workerCode" type="javascript/worker">
-    importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
-    
+    importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js');
     const ec = new elliptic.ec("secp256k1");
     const G = ec.g;
-    const N = ec.n;
-
-    const NUM_STEPS = 32;
-    const JUMP_SIZES = [];
-    const JUMP_POINTS = [];
-
-    function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
-    function toBase58(hex) {
-        const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-        let bytes = hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16));
-        let digits = [0];
-        for (let i = 0; i < bytes.length; i++) {
-            let carry = bytes[i];
-            for (let j = 0; j < digits.length; j++) { carry += digits[j] << 8; digits[j] = carry % 58; carry = (carry / 58) | 0; }
-            while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0; }
-        }
-        let s = "";
-        for (let i = 0; i < bytes.length && bytes[i] === 0; i++) s += ALPHABET[0];
-        for (let i = digits.length - 1; i >= 0; i--) s += ALPHABET[digits[i]];
-        return s;
-    }
-
-    // Helper functie voor veilige random generatie (Zelfs via file://)
-    function getRandomHex(bits) {
-        let bytesReq = Math.ceil(bits / 8);
-        if (self.crypto && self.crypto.getRandomValues) {
-            let array = new Uint8Array(bytesReq);
-            self.crypto.getRandomValues(array);
-            return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
-        } else {
-            let res = '';
-            for(let i=0; i<bytesReq; i++) {
-                res += Math.floor(Math.random() * 256).toString(16).padStart(2, '0');
-            }
-            return res;
-        }
-    }
 
     self.onmessage = function(e) {
-        const { type, rangeStartStr, rangeEndStr, targetPubHex, traps, workerId, padLen, wildOffsetStr } = e.data;
+        const { type, start, end, targetPub, traps } = e.data;
+        const rangeStart = BigInt("0x" + start);
+        const rangeEnd = BigInt("0x" + end);
+        const W = rangeEnd - rangeStart;
         
-        let targetPubKey = ec.keyFromPublic(targetPubHex, 'hex').getPublic();
-        let rangeStart = BigInt("0x" + rangeStartStr);
-        let rangeEnd = BigInt("0x" + rangeEndStr);
-        
-        if (JUMP_SIZES.length === 0) {
-            let W = rangeEnd - rangeStart;
-            let sqrtW = 0n;
-            let x0 = W / 2n;
-            if (x0 > 0n) {
-                let x1 = (x0 + W / x0) / 2n;
-                while (x1 < x0) { x0 = x1; x1 = (x0 + W / x0) / 2n; }
-                sqrtW = x0;
-            } else { sqrtW = W; }
+        // Dynamische jump sizing op basis van bereik
+        const NUM_STEPS = 16; 
+        const JUMP_SIZES = [];
+        const JUMP_POINTS = [];
+        let stepSize = W / BigInt(NUM_STEPS * 2); 
+        if(stepSize < 1n) stepSize = 1n;
 
-            for (let i = 0; i < NUM_STEPS; i++) {
-                let size = (sqrtW * BigInt(i + 1)) / 32n;
-                if (size === 0n) size = 1n;
-                JUMP_SIZES.push(size);
-                JUMP_POINTS.push(G.mul(size.toString(16)));
-            }
+        for(let i=0; i<NUM_STEPS; i++) {
+            let s = stepSize * BigInt(i + 1);
+            JUMP_SIZES.push(s);
+            JUMP_POINTS.push(G.mul(s.toString(16)));
         }
 
-        if (type === "TAME") {
+        if(type === "TAME") {
             let localTraps = {};
-            let range = rangeEnd - rangeStart;
-            
-            // Gereduceerd naar behapbare porties voor JavaScript
-            let pathsPerWorker = 100;   
-            let stepsPerPath = 500;     
-            
-            let jumpsCount = 0;
-            let currentPath = 0;
-
-            function tameBatch() {
-                let pathsToProcess = 5; // Verwerk 5 paden tegelijk om UI responsief te houden
-                
-                for(let p = 0; p < pathsToProcess; p++) {
-                    if (currentPath >= pathsPerWorker) {
-                        self.postMessage({ type: "TAME_READY", traps: localTraps, Jumps: jumpsCount, workerId });
-                        return;
+            for(let i=0; i<1000; i++) {
+                let k = rangeStart + BigInt(Math.floor(Math.random() * Number(W)));
+                let P = G.mul(k.toString(16));
+                let dist = 0n;
+                for(let j=0; j<50; j++) {
+                    let h = P.encode('hex', true);
+                    // Grotere filter-kans voor kleine ranges
+                    if((parseInt(h.substr(-2), 16) & 0x0F) === 0) {
+                        localTraps[h] = { k: k.toString(16), dist: dist.toString() };
                     }
-
-                    let bits = range.toString(2).length;
-                    let randHex = getRandomHex(bits);
-                    let k_tame = rangeStart + (BigInt("0x" + randHex) % range);
-
-                    let currDist = 0n; 
-                    let currPoint = G.mul(k_tame.toString(16));
-
-                    for (let i = 0; i < stepsPerPath; i++) {
-                        let pubHex = currPoint.encode('hex', true);
-                        
-                        if ((parseInt(pubHex.substr(pubHex.length - 4), 16) & 0x1F) === 0) {
-                            localTraps[pubHex] = { startKey: k_tame.toString(16), dist: currDist.toString() };
-                        }
-
-                        let r = parseInt(pubHex.substr(2, 8), 16) % NUM_STEPS;
-                        currPoint = currPoint.add(JUMP_POINTS[r]);
-                        currDist += JUMP_SIZES[r];
-                        jumpsCount++;
-                    }
-                    currentPath++;
+                    let r = parseInt(h.substr(2, 2), 16) % NUM_STEPS;
+                    P = P.add(JUMP_POINTS[r]);
+                    dist += JUMP_SIZES[r];
                 }
-                
-                // Voortgang doorgeven
-                self.postMessage({ type: "TAME_PROGRESS", currentPath, totalPaths: pathsPerWorker, workerId });
-                
-                // Laat Worker ademhalen, activeer volgende batch
-                setTimeout(tameBatch, 0);
             }
-            
-            // Start opbouwen
-            tameBatch();
-        } 
-        
-        else if (type === "WILD") {
-            let wildOffset = BigInt(wildOffsetStr || "0");
-            let currPoint = targetPubKey;
-            
-            // Pas de unieke core-offset toe
-            if (wildOffset > 0n) {
-                currPoint = currPoint.add(G.mul(wildOffset.toString(16)));
-            }
-            
-            let currDist = 0n; 
-            let batchSize = 5000; // Iets verlaagd voor snellere UI updates in browser
-
-            let nBig = BigInt("0x" + N.toString(16));
-
-            function huntBatch() {
-                for (let i = 0; i < batchSize; i++) {
-                    let pubHex = currPoint.encode('hex', true);
-                    
-                    if (traps[pubHex]) {
-                        let matchData = traps[pubHex];
-                        let k_tame = BigInt("0x" + matchData.startKey);
-                        let tameDist = BigInt(matchData.dist);
-                        
-                        let secretKey = (k_tame + tameDist - currDist - wildOffset) % nBig;
-                        if (secretKey < 0n) secretKey += nBig;
-                        
-                        if (secretKey > 0n) {
-                            let privHex = secretKey.toString(16).padStart(padLen, '0');
-                            let full32ByteHex = secretKey.toString(16).padStart(64, '0');
-                            
-                            const wifPayload = "80" + full32ByteHex + "01";
-                            const doubleSha = sha256(sha256(wifPayload));
-                            const checksum = doubleSha.substr(0, 8);
-                            let wif = toBase58(wifPayload + checksum);
-                            
-                            self.postMessage({ type: "FOUND", privHex, wif });
-                            return; 
-                        }
-                    }
-
-                    let r = parseInt(pubHex.substr(2, 8), 16) % NUM_STEPS;
-                    currPoint = currPoint.add(JUMP_POINTS[r]);
-                    currDist += JUMP_SIZES[r];
+            self.postMessage({ type: "TRAPS", traps: localTraps });
+        } else {
+            // Wilde jacht logica
+            let P = ec.keyFromPublic(targetPub, 'hex').getPublic();
+            for(let i=0; i<100000; i++) {
+                let h = P.encode('hex', true);
+                if(traps[h]) {
+                    self.postMessage({ type: "FOUND", match: h });
+                    break;
                 }
-                
-                self.postMessage({ type: "PROGRESS", jumps: batchSize });
-                setTimeout(huntBatch, 0);
+                let r = parseInt(h.substr(2, 2), 16) % NUM_STEPS;
+                P = P.add(JUMP_POINTS[r]);
             }
-
-            // Start de jacht
-            huntBatch();
         }
     };
 </script>
 
 <script>
     let workers = [];
-    let globalTraps = {};
-    let totalJumps = 0;
-    let startTime = 0;
-    let tameWorkersFinished = 0;
-    let tameProgressData = {};
-    let isRunning = false;
-
-    let calcRangeStartStr = "";
-    let calcRangeEndStr = "";
-
     const logBox = document.getElementById('logBox');
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
+    
+    function log(m) { logBox.innerHTML += m + "<br>"; logBox.scrollTop = logBox.scrollHeight; }
 
-    function log(msg) {
-        logBox.innerHTML += msg + "<br>";
-        logBox.scrollTop = logBox.scrollHeight;
-    }
-
-    function calculateSubRange() {
-        const absStartStr = document.getElementById('rangeStart').value.trim();
-        const absEndStr = document.getElementById('rangeEnd').value.trim();
-        const pStart = parseFloat(document.getElementById('pctStart').value);
-        const pEnd = parseFloat(document.getElementById('pctEnd').value);
-
-        const A = BigInt("0x" + absStartStr);
-        const B = BigInt("0x" + absEndStr);
-        const W = B - A;
-
-        const MULTIPLIER = 1000000n;
-        const startFract = BigInt(Math.floor((pStart / 100) * 1000000));
-        const endFract = BigInt(Math.floor((pEnd / 100) * 1000000));
-
-        const actualStart = A + (W * startFract) / MULTIPLIER;
-        const actualEnd = A + (W * endFract) / MULTIPLIER;
-
-        return { start: actualStart.toString(16), end: actualEnd.toString(16) };
-    }
-
-    startBtn.onclick = function() {
-        isRunning = true;
-        totalJumps = 0;
-        globalTraps = {};
-        tameProgressData = {};
+    document.getElementById('startBtn').onclick = () => {
+        const start = document.getElementById('rangeStart').value;
+        const end = document.getElementById('rangeEnd').value;
+        const blob = new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'});
+        const w = new Worker(URL.createObjectURL(blob));
+        workers.push(w);
         
-        const subRange = calculateSubRange();
-        calcRangeStartStr = subRange.start;
-        calcRangeEndStr = subRange.end;
-
-        document.getElementById('totalJumps').innerText = "0";
-        document.getElementById('matchTable').innerHTML = `<tr><td colspan="3" style="border: 1px solid #374151; padding: 8px; text-align: center; color: #6b7280;">Wereldwijd netwerk wordt opgebouwd...</td></tr>`;
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
-        startTime = Date.now();
+        log("Netwerk opbouwen...");
+        w.postMessage({ type: "TAME", start, end });
         
-        log(`<b>[Init]</b> Percentage Range ingesteld: ${document.getElementById('pctStart').value}% - ${document.getElementById('pctEnd').value}%`);
-        log(`<b>[Init]</b> Effectief Start: ${calcRangeStartStr}`);
-        log(`<b>[Init]</b> Effectief Eind: ${calcRangeEndStr}`);
-        
-        runTamePhase();
+        w.onmessage = (e) => {
+            if(e.data.type === "TRAPS") {
+                log("Netwerk klaar (" + Object.keys(e.data.traps).length + " vallen). Start jacht...");
+                w.postMessage({ type: "WILD", start, end, targetPub: "02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16", traps: e.data.traps });
+            } else if(e.data.type === "FOUND") {
+                log("MATCH GEVONDEN: " + e.data.match);
+            }
+        };
     };
 
-    function runTamePhase() {
-        if (!isRunning) return;
-        
-        tameWorkersFinished = 0;
-        document.getElementById('epochCount').innerText = "Fase 1: Netwerk Opbouw";
-        document.getElementById('statusTxt').innerText = "Netwerk weven... (0%)";
-        document.getElementById('statusTxt').style.color = "#eab308";
-
-        const targetLen = Math.max(document.getElementById('rangeStart').value.trim().length, document.getElementById('rangeEnd').value.trim().length);
-        log(`<b>[Setup]</b> Cores starten met asynchroon spannen van het vallen-netwerk...`);
-
-        const numWorkers = parseInt(document.getElementById('numW').value);
-
-        clearOldWorkers();
-        for (let i = 0; i < numWorkers; i++) {
-            tameProgressData[i] = 0;
-            let w = new Worker(URL.createObjectURL(new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'})));
-            workers.push(w);
-
-            w.postMessage({
-                type: "TAME",
-                rangeStartStr: calcRangeStartStr,
-                rangeEndStr: calcRangeEndStr,
-                targetPubHex: document.getElementById('pubKey').value.trim(),
-                workerId: i,
-                padLen: targetLen
-            });
-
-            w.onmessage = function(e) {
-                if (e.data.type === "TAME_PROGRESS") {
-                    tameProgressData[e.data.workerId] = (e.data.currentPath / e.data.totalPaths) * 100;
-                    
-                    let totalPct = Object.values(tameProgressData).reduce((a, b) => a + b, 0) / numWorkers;
-                    document.getElementById('statusTxt').innerText = `Netwerk weven... (${Math.floor(totalPct)}%)`;
-                }
-                else if (e.data.type === "TAME_READY") {
-                    Object.assign(globalTraps, e.data.traps);
-                    totalJumps += e.data.Jumps;
-                    tameWorkersFinished++;
-
-                    if (tameWorkersFinished === numWorkers) {
-                        document.getElementById('trapCount').innerText = Object.keys(globalTraps).length.toLocaleString();
-                        log(`<b>[Setup]</b> Netwerk permanent verankerd met ${Object.keys(globalTraps).length.toLocaleString()} actieve vallen.`);
-                        startInfiniteWildPhase(numWorkers, targetLen);
-                    }
-                }
-            };
-        }
-    }
-
-    function startInfiniteWildPhase(numWorkers, targetLen) {
-        if (!isRunning) return;
-        document.getElementById('epochCount').innerText = "Fase 2: Oneindige Jacht";
-        document.getElementById('statusTxt').innerText = "Wilde jacht actief...";
-        document.getElementById('statusTxt').style.color = "#00ff66";
-
-        clearOldWorkers();
-        log(`<b>[Jacht]</b> Wilde kangoeroes losgelaten met unieke core-offsets. Jacht loopt continu door...`);
-
-        for (let i = 0; i < numWorkers; i++) {
-            let w = new Worker(URL.createObjectURL(new Blob([document.getElementById('workerCode').textContent], {type: 'text/javascript'})));
-            workers.push(w);
-
-            // Geef elke core een unieke start-offset
-            let wildOffset = BigInt(i + 1) * 50000000n;
-
-            w.postMessage({
-                type: "WILD",
-                rangeStartStr: calcRangeStartStr,
-                rangeEndStr: calcRangeEndStr,
-                targetPubHex: document.getElementById('pubKey').value.trim(),
-                traps: globalTraps,
-                padLen: targetLen,
-                wildOffsetStr: wildOffset.toString()
-            });
-
-            w.onmessage = function(e) {
-                if (e.data.type === "PROGRESS") {
-                    totalJumps += e.data.jumps;
-                    document.getElementById('totalJumps').innerText = totalJumps.toLocaleString();
-                    let elapsed = (Date.now() - startTime) / 1000;
-                    document.getElementById('speed').innerText = Math.floor(totalJumps / elapsed).toLocaleString();
-                } 
-                else if (e.data.type === "FOUND") {
-                    log("<span style='color:#fff; background:#047857; padding:4px; font-weight:bold;'>🎉 WERELDWIJDE COLLISIE CORREKT BEREKEND!</span>");
-                    
-                    document.getElementById('matchTable').innerHTML = `
-                        <tr style="background: #047857; color: #fff; font-weight: bold;">
-                            <td style="border: 1px solid #374151; padding: 8px;">COMPRESSED</td>
-                            <td style="border: 1px solid #374151; padding: 8px; word-break: break-all;">${e.data.wif}</td>
-                            <td style="border: 1px solid #374151; padding: 8px; word-break: break-all;">${e.data.privHex}</td>
-                        </tr>`;
-
-                    alert("!!! PUZZEL OPGELOST !!!\n\nBekijk de tabel onderaan voor je WIF!");
-                    terminateAll();
-                }
-            };
-        }
-    }
-
-    function clearOldWorkers() {
+    document.getElementById('stopBtn').onclick = () => {
         workers.forEach(w => w.terminate());
         workers = [];
-    }
-
-    function terminateAll() {
-        isRunning = false;
-        clearOldWorkers();
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
-        document.getElementById('statusTxt').innerText = "Gestopt";
-        document.getElementById('statusTxt').style.color = "#ef4444";
-        log("Scanner uitgeschakeld.");
-    }
-
-    stopBtn.onclick = terminateAll;
+        log("Gestopt.");
+    };
 </script>
-
 </body>
 </html>
