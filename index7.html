@@ -1,1 +1,408 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>Bitcoin Puzzle #135 - Global Scattered Kangaroo Net</title>
+    <style>
+        body { font-family: monospace; background: #0b0f19; color: #00ff66; padding: 20px; }
+        .container { max-width: 650px; margin: 0 auto; background: #111827; padding: 20px; border-radius: 8px; border: 1px solid #00ff66; }
+        h3 { margin-top: 0; color: #fff; text-shadow: 0 0 10px #00ff66; }
+        .controls { display: grid; gap: 12px; margin-bottom: 20px; }
+        .controls div { display: flex; justify-content: space-between; align-items: center; }
+        input { background: #1f2937; color: #00ff66; border: 1px solid #00ff66; width: 420px; padding: 6px; font-family: monospace; }
+        input[type="number"] { width: 100px; }
+        .pct-input { width: 100px !important; }
+        button { padding: 10px; font-weight: bold; cursor: pointer; border-radius: 4px; }
+        #startBtn { background: #047857; color: #fff; border: none; }
+        #stopBtn { background: #b91c1c; color: #fff; border: none; }
+        #startBtn:disabled, #stopBtn:disabled { background: #4b5563; color: #9ca3af; cursor: not-allowed; }
+        .stats-box { background: #1f2937; padding: 15px; border-radius: 4px; border: 1px solid #374151; margin-top: 15px; }
+        .log { background: #000; color: #00ff66; height: 160px; overflow-y: scroll; padding: 10px; font-size: 12px; margin-top: 15px; border-radius: 4px; }
+    </style>
+</head>
+<body>
 
+<div class="container">
+    <h3>🦘 Global Scattered Kangaroo Solver</h3>
+    <p style="color: #9ca3af; font-size: 13px;">Methode: Spant continu een willekeurig netwerk van tamme paden over de gehele cryptografische ruimte.</p>
+    
+    <div class="controls">
+        <div>Workers (CPU Cores): <input id="numW" value="4" type="number"></div>
+        <div>Target Public Key: <input id="pubKey" value="02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16" type="text"></div>
+        <div>Target BTC Adres: <input id="btcAddr" value="16RGFo6hjq9ym6Pj7N5H7L1NR1rVPJyw2v" type="text"></div>
+        
+        <hr style="border: 0; border-top: 1px dashed #374151; width: 100%;">
+        
+        <div>Absoluut Start (HEX): <input id="rangeStart" value="4000000000000000000000000000000000" type="text"></div>
+        <div>Absoluut Eind (HEX): <input id="rangeEnd" value="7fffffffffffffffffffffffffffffffff" type="text"></div>
+        
+        <hr style="border: 0; border-top: 1px dashed #374151; width: 100%;">
+        
+        <div>Zoekbereik Start (%): <input id="pctStart" value="49.0" type="number" step="0.1" min="0" max="100" class="pct-input"></div>
+        <div>Zoekbereik Eind (%): <input id="pctEnd" value="50.0" type="number" step="0.1" min="0" max="100" class="pct-input"></div>
+
+        <div><button id="startBtn">Start Global Scattered Net</button> <button id="stopBtn" disabled>Stop</button></div>
+    </div>
+
+    <div class="stats-box">
+        <div>Status: <span id="statusTxt" style="color: #ef4444; font-weight: bold;">Gestopt</span></div>
+        <div>Huidige Loterij-Ronde: <span id="epochCount" style="color: #eab308; font-weight: bold;">0</span></div>
+        <div>Actieve Vallen in Netwerk: <span id="trapCount" style="color: #fff;">0</span></div>
+        <div>Totaal aantal sprongen: <span id="totalJumps">0</span></div>
+        <div>Snelheid: <span id="speed">0</span> sprongen/s</div>
+    </div>
+
+    <div class="log" id="logBox">-- Systeem stand-by --<br></div>
+
+    <table style="width: 100%; border-collapse: collapse; margin-top: 20px; color: #fff; border: 1px solid #374151;">
+        <thead>
+            <tr style="background: #1f2937; color: #00ff66;">
+                <th style="border: 1px solid #374151; padding: 8px; text-align: left;">Type</th>
+                <th style="border: 1px solid #374151; padding: 8px; text-align: left;">WIF (Compressed Private Key)</th>
+                <th style="border: 1px solid #374151; padding: 8px; text-align: left;">Privésleutel (HEX)</th>
+            </tr>
+        </thead>
+        <tbody id="matchTable">
+            <tr>
+                <td colspan="3" style="border: 1px solid #374151; padding: 8px; text-align: center; color: #6b7280;">Nog geen match gevonden...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<script id="workerCode" type="javascript/worker">
+    importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+    
+    const ec = new elliptic.ec("secp256k1");
+    const G = ec.g;
+    const N = ec.n;
+
+    const NUM_STEPS = 32;
+    const JUMP_SIZES = [];
+    const JUMP_POINTS = [];
+
+    function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+    function toBase58(hex) {
+        const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+        let bytes = hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16));
+        let digits = [0];
+        for (let i = 0; i < bytes.length; i++) {
+            let carry = bytes[i];
+            for (let j = 0; j < digits.length; j++) { carry += digits[j] << 8; digits[j] = carry % 58; carry = (carry / 58) | 0; }
+            while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0; }
+        }
+        let s = "";
+        for (let i = 0; i < bytes.length && bytes[i] === 0; i++) s += ALPHABET[0];
+        for (let i = digits.length - 1; i >= 0; i--) s += ALPHABET[digits[i]];
+        return s;
+    }
+
+    self.onmessage = function(e) {
+        const { type, rangeStartStr, rangeEndStr, targetPubHex, traps, workerId, padLen, maxWildJumps } = e.data;
+        
+        let targetPubKey = ec.keyFromPublic(targetPubHex, 'hex').getPublic();
+        let rangeStart = BigInt("0x" + rangeStartStr);
+        let rangeEnd = BigInt("0x" + rangeEndStr);
+        
+        if (JUMP_SIZES.length === 0) {
+            let W = rangeEnd - rangeStart;
+            let sqrtW = 0n;
+            let x0 = W / 2n;
+            if (x0 > 0n) {
+                let x1 = (x0 + W / x0) / 2n;
+                while (x1 < x0) { x0 = x1; x1 = (x0 + W / x0) / 2n; }
+                sqrtW = x0;
+            } else { sqrtW = W; }
+
+            // Wereldwijde spronggrootte afgesteld op de gigantische wortel van de absolute range
+            for (let i = 0; i < NUM_STEPS; i++) {
+                let size = (sqrtW * BigInt(i + 1)) / 32n;
+                if (size === 0n) size = 1n;
+                JUMP_SIZES.push(size);
+                JUMP_POINTS.push(G.mul(size.toString(16)));
+            }
+        }
+
+        if (type === "TAME") {
+            let localTraps = {};
+            let range = rangeEnd - rangeStart;
+            let pathsPerWorker = 200;   // Aantal unieke willekeurige startlocaties per core
+            let stepsPerPath = 1500;   // Lengte van elk weggeslingerd tam pad
+            let jumpsCount = 0;
+
+            for (let p = 0; p < pathsPerWorker; p++) {
+                // Genereer een volstrekt unieke cryptografische startlocatie
+                let bits = range.toString(2).length;
+                let array = new Uint8Array(Math.ceil(bits / 8));
+                self.crypto.getRandomValues(array);
+                let randHex = Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+                
+                let k_tame = rangeStart + (BigInt("0x" + randHex) % range);
+
+                let currDist = 0n; 
+                let currPoint = G.mul(k_tame.toString(16));
+
+                for (let i = 0; i < stepsPerPath; i++) {
+                    let pubHex = currPoint.encode('hex', true);
+                    
+                    // Distinguished point filter op basis van de laatste 5 bits
+                    if ((parseInt(pubHex.substr(pubHex.length - 4), 16) & 0x1F) === 0) {
+                        localTraps[pubHex] = { startKey: k_tame.toString(16), dist: currDist.toString() };
+                    }
+
+                    let r = parseInt(pubHex.substr(2, 8), 16) % NUM_STEPS;
+                    currPoint = currPoint.add(JUMP_POINTS[r]);
+                    currDist += JUMP_SIZES[r];
+                    jumpsCount++;
+                }
+            }
+            self.postMessage({ type: "TAME_READY", traps: localTraps, Jumps: jumpsCount, workerId });
+        } 
+        
+        else if (type === "WILD") {
+            let currPoint = targetPubKey;
+            let currDist = 0n; 
+            let batchSize = 10000;
+            let totalWildJumps = 0;
+
+            while (totalWildJumps < maxWildJumps) {
+                for (let i = 0; i < batchSize; i++) {
+                    let pubHex = currPoint.encode('hex', true);
+                    
+                    if (traps[pubHex]) {
+                        let matchData = traps[pubHex];
+                        let k_tame = BigInt("0x" + matchData.startKey);
+                        let tameDist = BigInt(matchData.dist);
+                        
+                        // DE FORMULE: Bereken de exacte private key op basis van de botsing!
+                        let secretKey = (k_tame + tameDist - currDist) % BigInt(N.toString());
+                        if (secretKey < 0n) secretKey += BigInt(N.toString());
+                        
+                        if (secretKey > 0n) {
+                            let privHex = secretKey.toString(16).padStart(padLen, '0');
+                            let full32ByteHex = secretKey.toString(16).padStart(64, '0');
+                            
+                            const wifPayload = "80" + full32ByteHex + "01";
+                            const doubleSha = sha256(sha256(wifPayload));
+                            const checksum = doubleSha.substr(0, 8);
+                            let wif = toBase58(wifPayload + checksum);
+                            
+                            self.postMessage({ type: "FOUND", privHex, wif });
+                            return;
+                        }
+                    }
+
+                    let r = parseInt(pubHex.substr(2, 8), 16) % NUM_STEPS;
+                    currPoint = currPoint.add(JUMP_POINTS[r]);
+                    currDist += JUMP_SIZES[r];
+                }
+                totalWildJumps += batchSize;
+                self.postMessage({ type: "PROGRESS", jumps: batchSize });
+            }
+            self.postMessage({ type: "WILD_DONE" });
+        }
+    };
+</script>
+
+<script>
+let workers = [];
+let globalTraps = new Map(); // FIX: sneller + veiliger
+let totalJumps = 0;
+let startTime = 0;
+let epoch = 0;
+let isRunning = false;
+
+let tameDone = 0;
+let wildDone = 0;
+
+const logBox = document.getElementById('logBox');
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+
+function log(msg){
+    logBox.innerHTML += msg + "<br>";
+    logBox.scrollTop = logBox.scrollHeight;
+}
+
+// FIX: altijd harde cleanup
+function killWorkers(){
+    for (const w of workers) {
+        try { w.terminate(); } catch(e){}
+    }
+    workers = [];
+}
+
+// FIX: Map → object voor worker transfer
+function trapsToObject(map){
+    return Object.fromEntries(map);
+}
+
+function calculateSubRange(){
+    const A = BigInt("0x"+document.getElementById('rangeStart').value.trim());
+    const B = BigInt("0x"+document.getElementById('rangeEnd').value.trim());
+
+    const p1 = parseFloat(document.getElementById('pctStart').value);
+    const p2 = parseFloat(document.getElementById('pctEnd').value);
+
+    const W = B - A;
+    const SCALE = 1000000n;
+
+    const s = BigInt(Math.floor(p1 * 10000));
+    const e = BigInt(Math.floor(p2 * 10000));
+
+    const start = A + (W * s) / SCALE;
+    const end = A + (W * e) / SCALE;
+
+    return {
+        start: start.toString(16),
+        end: end.toString(16)
+    };
+}
+
+startBtn.onclick = () => {
+    if (isRunning) return;
+
+    isRunning = true;
+    totalJumps = 0;
+    epoch = 0;
+
+    startTime = Date.now();
+
+    log("START ENGINE");
+    nextEpoch();
+};
+
+stopBtn.onclick = () => {
+    isRunning = false;
+    killWorkers();
+    document.getElementById('statusTxt').innerText = "Gestopt";
+};
+
+function nextEpoch(){
+    if (!isRunning) return;
+
+    epoch++;
+    tameDone = 0;
+    wildDone = 0;
+
+    globalTraps.clear(); // FIX: echte reset
+
+    document.getElementById('epochCount').innerText = epoch;
+
+    const numW = parseInt(document.getElementById('numW').value);
+
+    killWorkers();
+
+    const range = calculateSubRange();
+
+    document.getElementById('statusTxt').innerText = "TAME phase";
+
+    // ================= TAME =================
+    for (let i=0;i<numW;i++){
+        const w = new Worker(URL.createObjectURL(
+            new Blob([document.getElementById('workerCode').textContent],
+            {type:'text/javascript'})
+        ));
+
+        workers.push(w);
+
+        w.onmessage = (e) => {
+            if (e.data.type === "TAME_READY") {
+
+                // FIX: Map merge (geen overwrite bugs)
+                for (const k in e.data.traps){
+                    globalTraps.set(k, e.data.traps[k]);
+                }
+
+                totalJumps += e.data.Jumps;
+                tameDone++;
+
+                if (tameDone === numW){
+                    document.getElementById('trapCount').innerText = globalTraps.size;
+                    startWild(numW);
+                }
+            }
+        };
+
+        w.postMessage({
+            type:"TAME",
+            rangeStartStr: range.start,
+            rangeEndStr: range.end
+        });
+    }
+}
+
+// ================= WILD =================
+function startWild(numW){
+    if (!isRunning) return;
+
+    killWorkers();
+
+    document.getElementById('statusTxt').innerText = "WILD phase";
+
+    const trapObj = Object.fromEntries(globalTraps); // FIX transfer
+
+    for (let i=0;i<numW;i++){
+        const w = new Worker(URL.createObjectURL(
+            new Blob([document.getElementById('workerCode').textContent],
+            {type:'text/javascript'})
+        ));
+
+        workers.push(w);
+
+        w.onmessage = (e) => {
+
+            if (e.data.type === "PROGRESS"){
+                totalJumps += e.data.jumps;
+
+                let speed = totalJumps / ((Date.now()-startTime)/1000 || 1);
+                document.getElementById('totalJumps').innerText = totalJumps.toLocaleString();
+                document.getElementById('speed').innerText = Math.floor(speed);
+            }
+
+            if (e.data.type === "WILD_DONE"){
+                wildDone++;
+
+                if (wildDone === numW){
+                    log("Next epoch");
+                    setTimeout(nextEpoch, 20);
+                }
+            }
+
+            if (e.data.type === "FOUND"){
+                log("🎉 FOUND");
+                document.getElementById('matchTable').innerHTML =
+                    `<tr><td>FOUND</td><td>${e.data.wif}</td><td>${e.data.privHex}</td></tr>`;
+
+                isRunning = false;
+                killWorkers();
+            }
+        };
+
+        w.postMessage({
+            type:"WILD",
+            traps: trapObj
+        });
+    }
+}
+
+    function clearOldWorkers() {
+        workers.forEach(w => w.terminate());
+        workers = [];
+    }
+
+    function terminateAll() {
+        isRunning = false;
+        clearOldWorkers();
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        document.getElementById('statusTxt').innerText = "Gestopt";
+        document.getElementById('statusTxt').style.color = "#ef4444";
+        log("Scanner uitgeschakeld.");
+    }
+
+    stopBtn.onclick = terminateAll;
+</script>
+
+</body>
+</html>
