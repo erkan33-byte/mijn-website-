@@ -472,7 +472,6 @@ function generateBiasedKey(startKey, endKey, strategy, biasRegions, goldilocksLe
         let regionStart, regionEnd;
         const regionSize = range / BigInt(numRegions);
         
-        // Kies een regio met een bias (eerste regio's hebben hogere kans)
         let regionIndex = 0;
         let cumProb = 0;
         for (let i = 0; i < numRegions; i++) {
@@ -565,8 +564,8 @@ self.onmessage = function(e) {
         const mask   = dpMask || 0x3FF;
         let jumpsCount = 0;
 
+        // PLAATS VALLEN VOLGENS STRATEGIE
         for (let p=0;p<paths;p++) {
-            // Gebruik de gekozen strategie om de startkey te bepalen
             const k_start = generateBiasedKey(rangeStart, rangeEnd, strategy, 
                 parseInt(biasRegions || 4), goldilocksLevel || 'standard', patternLevel || 'standard');
             let currDist  = 0n;
@@ -582,6 +581,7 @@ self.onmessage = function(e) {
                 jumpsCount++;
             }
         }
+        // STUUR BERICHT TERUG NAAR MAIN-THREAD
         self.postMessage({ type:"TAME_READY", traps:localTraps, jumps:jumpsCount, workerId });
         return;
     }
@@ -621,6 +621,9 @@ self.onmessage = function(e) {
         self.postMessage({ type:"WILD_DONE" });
     }
 };
+
+// ===== HULPFUNCTIE VOOR JUMP INDEX =====
+function jumpIndex(pubHex) { return parseInt(pubHex.substr(2,8),16)%NUM_STEPS; }
 </script>
 
 <!-- MAIN -->
@@ -667,7 +670,6 @@ function updateStrategy() {
     const boost = getStrategyBoost(mode);
     document.getElementById('stratBoostVal').textContent = '+' + boost + '%';
     
-    // Enable/disable strategy options
     document.getElementById('biasRegions').disabled = (mode !== 'biased' && mode !== 'dynamic');
     document.getElementById('goldilocksLevel').disabled = (mode !== 'goldilocks' && mode !== 'dynamic');
     document.getElementById('patternLevel').disabled = (mode !== 'pattern' && mode !== 'dynamic');
