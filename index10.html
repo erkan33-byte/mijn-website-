@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Checksum Scanner — Oneindige Loop</title>
+    <title>Checksum Scanner — Oneindig (Gefixt)</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -62,7 +62,7 @@
 <div class="container">
 
     <div class="header">
-        <h1>🔍 Checksum Scanner (Oneindig)</h1>
+        <h1>🔍 Checksum Scanner (Oneindig - Gefixt)</h1>
         <div class="sub">Oneindige loop · Stopt alleen bij match of stop</div>
         <span class="badge">CHECKSUM-FILTER · ONEINDIG</span>
     </div>
@@ -273,17 +273,17 @@ const progressBar = document.getElementById('progressBar');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
 
-// ===== CALCULATE SUB RANGE =====
+// ===== CALCULATE SUB RANGE (GEFIXT) =====
 function calculateSubRange() {
     const A = hexToBigInt(document.getElementById('rangeStart').value.trim());
     const B = hexToBigInt(document.getElementById('rangeEnd').value.trim());
     const W = B - A;
-    const SCALE = 1_000_000n;
-    const s = BigInt(Math.floor(parseFloat(document.getElementById('pctStart').value) * 10000));
-    const e = BigInt(Math.floor(parseFloat(document.getElementById('pctEnd').value) * 10000));
+    const s = parseFloat(document.getElementById('pctStart').value) / 100;
+    const e = parseFloat(document.getElementById('pctEnd').value) / 100;
+    
     return {
-        start: A + (W * s) / SCALE,
-        end: A + (W * e) / SCALE
+        start: A + BigInt(Math.floor(Number(W) * s)),
+        end: A + BigInt(Math.floor(Number(W) * e))
     };
 }
 
