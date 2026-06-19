@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Quantum Brute Force — Oneindige Scan</title>
+    <title>Quantum Fase-gewijze Scanner — 1M per keer</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -11,7 +11,7 @@
             --text: #c8d0e8; --muted: #4a5a7a; --danger: #ef4444;
         }
         body { font-family:'Courier New',monospace; background:var(--bg); color:var(--text); min-height:100vh; padding:20px; }
-        .container { max-width:1000px; margin:0 auto; }
+        .container { max-width:1100px; margin:0 auto; }
         .header { text-align:center; margin-bottom:28px; }
         .header h1 { font-size:1.8rem; letter-spacing:.3em; color:var(--quantum); text-shadow:0 0 30px rgba(0,240,255,0.15); text-transform:uppercase; }
         .header .sub { font-size:.7rem; color:var(--muted); letter-spacing:.15em; margin-top:6px; }
@@ -25,7 +25,7 @@
         .field label { font-size:.7rem; color:var(--muted); letter-spacing:.06em; }
         .field input { background:var(--surface); color:var(--quantum); border:1px solid var(--border); border-radius:6px; padding:8px 12px; font-family:inherit; font-size:.75rem; width:100%; outline:none; }
         .field input:focus { border-color:var(--quantum); box-shadow:0 0 15px rgba(0,240,255,0.1); }
-        .field input[type="number"] { max-width:150px; }
+        .field input[type="number"] { max-width:180px; }
 
         .btn-row { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
         .btn { flex:1; padding:10px 20px; font-family:inherit; font-size:.7rem; font-weight:bold; letter-spacing:.15em; cursor:pointer; border:none; border-radius:6px; transition:all .2s; min-width:120px; text-transform:uppercase; }
@@ -33,15 +33,16 @@
         .btn:disabled { opacity:.3; cursor:not-allowed; }
         .btn-start { background:linear-gradient(135deg,#002244,#004488); color:var(--quantum); border:1px solid var(--quantum); }
         .btn-stop { background:var(--danger); color:#fff; }
+        .btn-skip { background:linear-gradient(135deg,#440022,#880044); color:#ff88cc; border:1px solid #ff88cc; }
 
-        .stats-grid { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:10px; margin:12px 0; }
+        .stats-grid { display:grid; grid-template-columns:1fr 1fr 1fr 1fr 1fr; gap:10px; margin:12px 0; }
         .stat-cell { background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:6px; padding:10px 14px; }
         .stat-cell .label { font-size:.5rem; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; margin-bottom:4px; }
         .stat-cell .value { font-size:.85rem; color:var(--quantum); font-weight:bold; }
         .stat-cell .value.green { color:var(--green); }
         .stat-cell .value.danger { color:var(--danger); }
 
-        .worker-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:8px; margin:12px 0; }
+        .worker-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px; margin:12px 0; }
         .worker-cell { background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:4px; padding:8px 10px; }
         .worker-cell .wlabel { font-size:.45rem; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
         .worker-cell .wvalue { font-size:.7rem; color:var(--quantum); }
@@ -61,15 +62,15 @@
         .result-table .found-row td { color:var(--green); background:rgba(0,255,136,0.05); }
 
         .footer { text-align:center; font-size:.55rem; color:var(--muted); letter-spacing:.15em; margin-top:30px; }
-        @media (max-width:600px) { .field{grid-template-columns:1fr;} .stats-grid{grid-template-columns:1fr 1fr;} }
+        @media (max-width:600px) { .field{grid-template-columns:1fr;} .stats-grid{grid-template-columns:1fr 1fr;} .worker-grid{grid-template-columns:1fr 1fr;} }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header">
-        <h1>⚛ Quantum Brute Force — Oneindige Scan</h1>
-        <div class="sub">Parallelle workers · Echte cryptografie · secp256k1</div>
-        <span class="badge">🔮 ONEINDIG · ALLE KEYS · STOP BIJ MATCH</span>
+        <h1>⚛ Fase-gewijze Scanner — 1M per keer</h1>
+        <div class="sub">Genereer 1M keys → parallel check → volgende 1M → stop bij match</div>
+        <span class="badge">🔮 GROTE RANGE · FASES · PARALLEL · STOP BIJ MATCH</span>
     </div>
 
     <!-- Config -->
@@ -90,19 +91,24 @@
         </div>
         <div class="field">
             <label>Eind Key (HEX)</label>
-            <input id="rangeEnd" value="4000000000000000000000000000000100" type="text">
+            <input id="rangeEnd" value="4000000000000000000000000000001000" type="text">
         </div>
         <div class="field">
-            <label>Aantal Workers</label>
-            <input id="numWorkers" value="4" type="number" min="1" max="32">
+            <label>Keys per fase</label>
+            <input id="phaseSize" value="1000000" type="number" min="1000" max="10000000">
         </div>
         <div class="field">
             <label>Keys per batch (per worker)</label>
-            <input id="batchSize" value="100" type="number" min="1" max="1000">
+            <input id="batchSize" value="200" type="number" min="1" max="10000">
+        </div>
+        <div class="field">
+            <label>Aantal workers</label>
+            <input id="numWorkers" value="4" type="number" min="1" max="32">
         </div>
         <div class="btn-row">
-            <button class="btn btn-start" id="startBtn">🌀 Start Oneindige Scan</button>
+            <button class="btn btn-start" id="startBtn">🌀 Start Fase-scan</button>
             <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
+            <button class="btn btn-skip" id="skipBtn" disabled>⏩ Skip fase</button>
         </div>
     </div>
 
@@ -113,6 +119,10 @@
             <div class="stat-cell">
                 <div class="label">Status</div>
                 <div class="value" id="statusVal">Gestopt</div>
+            </div>
+            <div class="stat-cell">
+                <div class="label">Huidige fase</div>
+                <div class="value" id="phaseVal">0</div>
             </div>
             <div class="stat-cell">
                 <div class="label">Gecontroleerde keys</div>
@@ -162,7 +172,7 @@
         </table>
     </div>
 
-    <div class="footer">Quantum Brute Force · Oneindige Scan · secp256k1 · Schoolproject</div>
+    <div class="footer">Fase-gewijze Scanner · 1M per keer · secp256k1 · Schoolproject</div>
 </div>
 
 <!-- WORKER SCRIPT -->
@@ -206,74 +216,60 @@ function calculateWIF(privHex) {
     return wif;
 }
 
-// Oneindige scan: blijf door de range heen en weer lopen
 self.onmessage = function(e) {
-    const { workerId, startKey, endKey, targetPubKey, batchSize } = e.data;
+    const { workerId, keys, targetPubKey, batchSize } = e.data;
     
-    let current = startKey;
-    let totalChecked = 0n;
-    let direction = 1; // 1 = vooruit, -1 = achteruit
+    let totalChecked = 0;
+    let batch = [];
     
-    while (true) {
-        const batchEnd = current + BigInt(batchSize) * BigInt(direction);
-        let actualStart = current;
-        let actualEnd = batchEnd;
+    for (let i = 0; i < keys.length; i++) {
+        batch.push(keys[i]);
         
-        // Zorg dat we binnen de range blijven
-        if (direction === 1) {
-            if (batchEnd > endKey) {
-                actualEnd = endKey;
-                direction = -1;
-            }
-        } else {
-            if (batchEnd < startKey) {
-                actualEnd = startKey;
-                direction = 1;
-            }
-        }
-        
-        // Scan de batch
-        let key = actualStart;
-        while ((direction === 1 && key <= actualEnd) || 
-               (direction === -1 && key >= actualEnd)) {
-            
-            const privHex = bigIntToHex(key, 64);
-            try {
-                const keyPair = ec.keyFromPrivate(privHex);
-                const pubKey = keyPair.getPublic();
-                const pubKeyHex = pubKey.encode('hex', true);
-                
-                if (pubKeyHex.toLowerCase() === targetPubKey.toLowerCase()) {
-                    // MATCH GEVONDEN!
-                    const wif = calculateWIF(privHex);
-                    self.postMessage({
-                        type: 'FOUND',
-                        workerId: workerId,
-                        privHex: privHex,
-                        wif: wif,
-                        pubKey: pubKeyHex
-                    });
-                    return; // Stop worker
+        if (batch.length >= batchSize || i === keys.length - 1) {
+            // Verwerk deze batch
+            for (let j = 0; j < batch.length; j++) {
+                const key = batch[j];
+                const privHex = bigIntToHex(key, 64);
+                try {
+                    const keyPair = ec.keyFromPrivate(privHex);
+                    const pubKey = keyPair.getPublic();
+                    const pubKeyHex = pubKey.encode('hex', true);
+                    
+                    if (pubKeyHex.toLowerCase() === targetPubKey.toLowerCase()) {
+                        // MATCH GEVONDEN!
+                        const wif = calculateWIF(privHex);
+                        self.postMessage({
+                            type: 'FOUND',
+                            workerId: workerId,
+                            privHex: privHex,
+                            wif: wif,
+                            pubKey: pubKeyHex
+                        });
+                        return;
+                    }
+                } catch (e) {
+                    // Skip invalid keys
                 }
-            } catch (e) {
-                // Skip invalid keys
+                totalChecked++;
             }
             
-            totalChecked++;
-            key += BigInt(direction);
+            // Stuur progress
+            self.postMessage({
+                type: 'PROGRESS',
+                workerId: workerId,
+                checked: totalChecked
+            });
             
-            // Stuur progress om de 1000 keys
-            if (totalChecked % 1000n === 0n) {
-                self.postMessage({
-                    type: 'PROGRESS',
-                    workerId: workerId,
-                    checked: Number(totalChecked)
-                });
-            }
+            batch = [];
         }
-        
-        current = actualEnd + BigInt(direction);
     }
+    
+    // Worker is klaar
+    self.postMessage({
+        type: 'DONE',
+        workerId: workerId,
+        checked: totalChecked
+    });
 };
 </script>
 
@@ -283,14 +279,27 @@ self.onmessage = function(e) {
 let workers = [];
 let isRunning = false;
 let matchFound = false;
-let totalChecked = 0n;
-let totalKeys = 0n;
+let currentPhase = 0;
+let currentKey = 0n;
+let rangeStart = 0n;
+let rangeEnd = 0n;
+let totalKeysCount = 0n;
+let totalChecked = 0;
+let phaseSize = 1000000;
+let batchSize = 200;
+let numWorkers = 4;
 let startTime = 0;
 let workerStatus = {};
-let numWorkers = 0;
+let workerCompleted = 0;
+let isProcessingPhase = false;
+let phaseKeys = [];
+let phaseStartKey = 0n;
+let phaseEndKey = 0n;
+let skipRequested = false;
 
 // ===== DOM ELEMENTEN =====
 const statusVal = document.getElementById('statusVal');
+const phaseVal = document.getElementById('phaseVal');
 const checkedVal = document.getElementById('checkedVal');
 const totalVal = document.getElementById('totalVal');
 const speedVal = document.getElementById('speedVal');
@@ -301,6 +310,7 @@ const logBox = document.getElementById('logBox');
 const matchTable = document.getElementById('matchTable');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
+const skipBtn = document.getElementById('skipBtn');
 
 // ===== UTILITY =====
 function hexToBigInt(hex) { return BigInt('0x' + hex.replace(/^0x/, '').trim()); }
@@ -316,8 +326,21 @@ function log(msg, cls='') {
     logBox.scrollTop = logBox.scrollHeight;
 }
 
+// ===== KEY GENERATIE VOOR FASE =====
+function generatePhaseKeys(start, end) {
+    const keys = [];
+    let current = start;
+    let count = 0;
+    while (current <= end && count < Number(phaseSize)) {
+        keys.push(current);
+        current++;
+        count++;
+    }
+    return keys;
+}
+
 // ===== WORKER MANAGEMENT =====
-function createWorker(workerId, startKey, endKey, targetPubKey, batchSize) {
+function createWorker(workerId, keys, targetPubKey, batchSize) {
     const code = document.getElementById('workerCode').textContent;
     const blob = new Blob([code], { type: 'text/javascript' });
     const url = URL.createObjectURL(blob);
@@ -338,6 +361,7 @@ function createWorker(workerId, startKey, endKey, targetPubKey, batchSize) {
             // MATCH GEVONDEN!
             matchFound = true;
             isRunning = false;
+            isProcessingPhase = false;
             
             log(`🎉 WORKER ${data.workerId} vond MATCH!`, 'found');
             log(`🔑 Privésleutel: ${data.privHex}`, 'found');
@@ -356,14 +380,35 @@ function createWorker(workerId, startKey, endKey, targetPubKey, batchSize) {
             stopAllWorkers();
             startBtn.disabled = false;
             stopBtn.disabled = true;
+            skipBtn.disabled = true;
+        } else if (data.type === 'DONE') {
+            workerCompleted++;
+            log(`✅ Worker ${data.workerId} voltooid (${data.checked} keys)`, 'worker');
+            workerStatus[data.workerId].status = 'voltooid';
+            workerStatus[data.workerId].checked = data.checked;
+            updateWorkerGrid();
+            
+            if (workerCompleted === numWorkers) {
+                // Deze fase is klaar
+                log(`✅ Fase ${currentPhase} voltooid — ${totalChecked.toLocaleString()} keys gecontroleerd`, 'phase');
+                isProcessingPhase = false;
+                stopAllWorkers();
+                activeWorkers.textContent = '0';
+                
+                // Ga naar volgende fase
+                if (skipRequested) {
+                    skipRequested = false;
+                    log('⏩ Skip aangevraagd, volgende fase...', 'phase');
+                }
+                setTimeout(processNextPhase, 500);
+            }
         }
     };
     
     // Start worker
     worker.postMessage({
         workerId: workerId,
-        startKey: startKey,
-        endKey: endKey,
+        keys: keys,
         targetPubKey: targetPubKey,
         batchSize: batchSize
     });
@@ -371,9 +416,7 @@ function createWorker(workerId, startKey, endKey, targetPubKey, batchSize) {
     // Update status
     workerStatus[workerId] = {
         status: 'actief',
-        checked: 0,
-        startKey: bigIntToHex(startKey, 40),
-        endKey: bigIntToHex(endKey, 40)
+        checked: 0
     };
     updateWorkerGrid();
     activeWorkers.textContent = Object.keys(workerStatus).length;
@@ -395,23 +438,23 @@ function stopAllWorkers() {
 
 // ===== UI UPDATES =====
 function updateStats() {
-    let total = 0n;
+    let total = 0;
     Object.values(workerStatus).forEach(s => {
-        total += BigInt(s.checked || 0);
+        total += (s.checked || 0);
     });
     totalChecked = total;
     checkedVal.textContent = totalChecked.toLocaleString();
     
-    // Progress (als percentage van de range)
-    if (totalKeys > 0n) {
-        const progress = Number((totalChecked * 10000n) / totalKeys) / 100;
+    // Progress (percentage van totale range)
+    if (totalKeysCount > 0n) {
+        const progress = Number((BigInt(totalChecked) * 10000n) / totalKeysCount) / 100;
         progressBar.style.width = Math.min(progress, 99.99) + '%';
     }
     
     // Speed
     const elapsed = (Date.now() - startTime) / 1000;
     if (elapsed > 0) {
-        const speed = Number(totalChecked) / elapsed;
+        const speed = totalChecked / elapsed;
         speedVal.textContent = Math.floor(speed).toLocaleString() + ' /s';
     }
 }
@@ -451,6 +494,72 @@ function setStatus(text) {
     }
 }
 
+// ===== FASE PROCESSING =====
+function processNextPhase() {
+    if (!isRunning || matchFound) return;
+    
+    // Check of we aan het einde zijn
+    if (currentKey > rangeEnd) {
+        log('✅ Alle keys in de range zijn gecontroleerd. Geen match gevonden.', 'phase');
+        setStatus('Voltooid');
+        isRunning = false;
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        skipBtn.disabled = true;
+        return;
+    }
+    
+    // Bepaal fase
+    currentPhase++;
+    phaseVal.textContent = currentPhase;
+    
+    // Bepaal fase range
+    phaseStartKey = currentKey;
+    const phaseSizeBig = BigInt(phaseSize);
+    phaseEndKey = currentKey + phaseSizeBig - 1n;
+    if (phaseEndKey > rangeEnd) {
+        phaseEndKey = rangeEnd;
+    }
+    
+    log(`🔬 Fase ${currentPhase}: ${bigIntToHex(phaseStartKey, 40)} → ${bigIntToHex(phaseEndKey, 40)}`, 'phase');
+    
+    // Genereer keys voor deze fase
+    setStatus(`Genereer fase ${currentPhase}...`);
+    phaseKeys = generatePhaseKeys(phaseStartKey, phaseEndKey);
+    log(`📦 ${phaseKeys.length.toLocaleString()} keys gegenereerd voor fase ${currentPhase}`, 'phase');
+    
+    // Update currentKey voor volgende fase
+    currentKey = phaseEndKey + 1n;
+    
+    // Verdeel de keys over workers
+    isProcessingPhase = true;
+    workerCompleted = 0;
+    workerStatus = {};
+    skipBtn.disabled = false;
+    
+    const targetPubKey = document.getElementById('pubKey').value.trim();
+    numWorkers = parseInt(document.getElementById('numWorkers').value) || 4;
+    batchSize = parseInt(document.getElementById('batchSize').value) || 200;
+    
+    const keysPerWorker = Math.floor(phaseKeys.length / numWorkers);
+    let startIdx = 0;
+    
+    workers = [];
+    for (let i = 0; i < numWorkers; i++) {
+        const endIdx = (i === numWorkers - 1) ? phaseKeys.length : (startIdx + keysPerWorker);
+        const workerKeys = phaseKeys.slice(startIdx, endIdx);
+        if (workerKeys.length > 0) {
+            const worker = createWorker(i, workerKeys, targetPubKey, batchSize);
+            workers.push(worker);
+        }
+        startIdx = endIdx;
+    }
+    
+    log(`🧠 ${workers.length} workers gestart voor fase ${currentPhase}`, 'phase');
+    setStatus(`Scannen fase ${currentPhase}...`);
+    skipBtn.disabled = false;
+}
+
 // ===== START =====
 startBtn.onclick = async () => {
     if (isRunning) return;
@@ -458,18 +567,23 @@ startBtn.onclick = async () => {
     // Reset state
     isRunning = true;
     matchFound = false;
-    totalChecked = 0n;
+    totalChecked = 0;
+    currentPhase = 0;
     workerStatus = {};
+    workerCompleted = 0;
+    isProcessingPhase = false;
+    skipRequested = false;
     startTime = Date.now();
     
     // Lees configuratie
     const startHex = document.getElementById('rangeStart').value.trim();
     const endHex = document.getElementById('rangeEnd').value.trim();
-    const rangeStart = hexToBigInt(startHex);
-    const rangeEnd = hexToBigInt(endHex);
-    const targetPubKey = document.getElementById('pubKey').value.trim();
-    const numWorkersInput = parseInt(document.getElementById('numWorkers').value) || 4;
-    const batchSize = parseInt(document.getElementById('batchSize').value) || 100;
+    rangeStart = hexToBigInt(startHex);
+    rangeEnd = hexToBigInt(endHex);
+    currentKey = rangeStart;
+    phaseSize = parseInt(document.getElementById('phaseSize').value) || 1000000;
+    numWorkers = parseInt(document.getElementById('numWorkers').value) || 4;
+    batchSize = parseInt(document.getElementById('batchSize').value) || 200;
     
     if (rangeStart > rangeEnd) {
         log('❌ Start moet kleiner zijn dan eind!');
@@ -477,54 +591,54 @@ startBtn.onclick = async () => {
         return;
     }
     
-    totalKeys = rangeEnd - rangeStart + 1n;
-    totalVal.textContent = totalKeys.toLocaleString();
+    totalKeysCount = rangeEnd - rangeStart + 1n;
+    totalVal.textContent = totalKeysCount.toLocaleString();
     checkedVal.textContent = '0';
+    phaseVal.textContent = '0';
     speedVal.textContent = '0 /s';
     progressBar.style.width = '0%';
-    matchTable.innerHTML = `<tr><td colspan="3" style="text-align:center;color:var(--muted);font-style:italic;">Scannen met ${numWorkersInput} workers...</td></tr>`;
+    matchTable.innerHTML = `<tr><td colspan="3" style="text-align:center;color:var(--muted);font-style:italic;">Scannen in fases van ${phaseSize.toLocaleString()} keys...</td></tr>`;
     logBox.innerHTML = '';
     workerGrid.innerHTML = '';
     
-    log('🚀 Oneindige scan gestart!', 'phase');
-    log(`📐 Range: ${startHex} → ${endHex} (${totalKeys.toLocaleString()} keys)`, 'phase');
-    log(`⚡ Workers: ${numWorkersInput}, Batch size: ${batchSize}`, 'phase');
-    log('♾️ Scan blijft draaien tot een match wordt gevonden!', 'phase');
+    log('🚀 Fase-gewijze scan gestart!', 'phase');
+    log(`📐 Range: ${startHex} → ${endHex} (${totalKeysCount.toLocaleString()} keys)`, 'phase');
+    log(`⚡ Fasegrootte: ${phaseSize.toLocaleString()} keys, Workers: ${numWorkers}, Batch: ${batchSize}`, 'phase');
     
-    setStatus('Scannen...');
+    setStatus('Starten...');
     startBtn.disabled = true;
     stopBtn.disabled = false;
+    skipBtn.disabled = true;
     
-    // Verdeel de range over workers
-    numWorkers = numWorkersInput;
-    const keysPerWorker = totalKeys / BigInt(numWorkers);
-    let currentStart = rangeStart;
-    
-    workers = [];
-    for (let i = 0; i < numWorkers; i++) {
-        const workerStart = currentStart;
-        const workerEnd = (i === numWorkers - 1) ? rangeEnd : (workerStart + keysPerWorker - 1n);
-        const worker = createWorker(i, workerStart, workerEnd, targetPubKey, batchSize);
-        workers.push(worker);
-        currentStart = workerEnd + 1n;
-    }
-    
-    log(`🧠 ${numWorkers} workers gestart. Ze scannen oneindig tot een match.`, 'phase');
+    // Start eerste fase
+    setTimeout(processNextPhase, 100);
+};
+
+// ===== SKIP =====
+skipBtn.onclick = () => {
+    if (!isProcessingPhase) return;
+    log('⏩ Skip fase aangevraagd...', 'phase');
+    skipRequested = true;
+    stopAllWorkers();
+    isProcessingPhase = false;
+    setTimeout(processNextPhase, 200);
 };
 
 // ===== STOP =====
 stopBtn.onclick = () => {
     isRunning = false;
+    isProcessingPhase = false;
     stopAllWorkers();
     setStatus('Gestopt');
     startBtn.disabled = false;
     stopBtn.disabled = true;
+    skipBtn.disabled = true;
     log('⏹ Scan gestopt door gebruiker', 'phase');
 };
 
 // ===== INIT =====
-log('⚡ Systeem gereed — stel workers en batch-grootte in en druk op Start');
-log('⚠️ Waarschuwing: Bij grote ranges kan de scan miljarden jaren duren!');
+log('⚡ Systeem gereed — stel range, fasegrootte, workers en batch in en druk op Start');
+log('💡 Tip: Gebruik "Skip fase" om een fase over te slaan als deze te lang duurt.');
 </script>
 </body>
 </html>
