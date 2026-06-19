@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Checksum Scanner — WIF & Automatische Stop</title>
+    <title>Checksum Scanner — Oneindige Loop</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -62,9 +62,9 @@
 <div class="container">
 
     <div class="header">
-        <h1>🔍 Checksum Scanner (WIF & Stop)</h1>
-        <div class="sub">Alleen Adres & Range — WIF bij match</div>
-        <span class="badge">CHECKSUM-FILTER · 2^80 → 2^48</span>
+        <h1>🔍 Checksum Scanner (Oneindig)</h1>
+        <div class="sub">Oneindige loop · Stopt alleen bij match of stop</div>
+        <span class="badge">CHECKSUM-FILTER · ONEINDIG</span>
     </div>
 
     <!-- Config -->
@@ -93,7 +93,7 @@
             <input id="pctEnd" value="100" type="number" step="0.1" min="0" max="100">
         </div>
         <div class="btn-row">
-            <button class="btn btn-start" id="startBtn">▶ Start Checksum Scan</button>
+            <button class="btn btn-start" id="startBtn">▶ Start Oneindige Scan</button>
             <button class="btn btn-stop"  id="stopBtn" disabled>■ Stop</button>
         </div>
     </div>
@@ -143,7 +143,7 @@
         </table>
     </div>
 
-    <div class="footer">Checksum Scanner · WIF & Stop · Schoolproject</div>
+    <div class="footer">Checksum Scanner · Oneindig · Schoolproject</div>
 </div>
 
 <script>
@@ -258,7 +258,8 @@ let totalChecked = 0n;
 let totalKeys = 0n;
 let startTime = 0;
 let currentKey = 0n;
-let endKey = 0n;
+let rangeStart = 0n;
+let rangeEnd = 0n;
 let targetChecksum = "";
 let batchSize = 10000;
 let matchFound = false;
@@ -286,11 +287,17 @@ function calculateSubRange() {
     };
 }
 
-// ===== SCAN LOOP =====
+// ===== SCAN LOOP (ONEINDIG) =====
 async function scanLoop() {
-    while (isRunning && !stopRequested && !matchFound && currentKey <= endKey) {
+    while (isRunning && !stopRequested && !matchFound) {
+        // Als einde bereikt, spring terug naar begin
+        if (currentKey > rangeEnd) {
+            currentKey = rangeStart;
+            log(`🔄 Terug naar begin van de range (${bigIntToHex(currentKey, 20)})`, 'info');
+        }
+        
         const batchEnd = currentKey + BigInt(batchSize) - 1n;
-        const actualEnd = batchEnd > endKey ? endKey : batchEnd;
+        const actualEnd = batchEnd > rangeEnd ? rangeEnd : batchEnd;
         
         let key = currentKey;
         while (key <= actualEnd && !stopRequested && !matchFound) {
@@ -336,8 +343,8 @@ async function scanLoop() {
     }
     
     if (!matchFound && !stopRequested) {
-        log("✅ Scan voltooid. Geen match gevonden.", "info");
-        setStatus('Voltooid');
+        log("✅ Scan gestopt (onverwacht).", "info");
+        setStatus('Gestopt');
         isRunning = false;
         startBtn.disabled = false;
         stopBtn.disabled = true;
@@ -365,10 +372,11 @@ startBtn.onclick = async () => {
     
     // Lees configuratie
     const addr = document.getElementById('btcAddr').value.trim();
-    const range = calculateSubRange();
-    currentKey = range.start;
-    endKey = range.end;
-    totalKeys = range.end - range.start + 1n;
+    const subRange = calculateSubRange();
+    rangeStart = subRange.start;
+    rangeEnd = subRange.end;
+    currentKey = rangeStart;
+    totalKeys = rangeEnd - rangeStart + 1n;
     
     // Analyseer adres
     const addrData = analyzeAddress(addr);
@@ -378,10 +386,11 @@ startBtn.onclick = async () => {
     }
     targetChecksum = addrData.checksum;
     
-    log(`🔍 Start checksum scan op adres: ${addr}`, 'info');
-    log(`📐 Range: ${bigIntToHex(currentKey, 20)} → ${bigIntToHex(endKey, 20)}`, 'info');
+    log(`🔍 Start oneindige checksum scan op adres: ${addr}`, 'info');
+    log(`📐 Range: ${bigIntToHex(rangeStart, 20)} → ${bigIntToHex(rangeEnd, 20)}`, 'info');
     log(`✅ Checksum: ${targetChecksum}`, 'info');
     log(`📊 Totaal te controleren keys: ${totalKeys.toLocaleString()}`, 'info');
+    log(`♾️ Scan blijft oneindig doorgaan tot een match wordt gevonden!`, 'info');
     
     // Update UI
     totalVal.textContent = totalKeys.toLocaleString();
