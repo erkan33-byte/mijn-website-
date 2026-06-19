@@ -62,7 +62,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .ui-title{font-size:.62rem;color:var(--accent);font-weight:bold;margin-bottom:4px}
 .ui-desc{font-size:.63rem;color:var(--muted);line-height:1.7}
 .log{background:#000;height:150px;overflow-y:scroll;padding:10px 12px;font-size:.68rem;line-height:1.7;border-radius:4px;border:1px solid var(--border)}
-.log .ts{color:var(--dim)}
+.log .ts">color:var(--dim)}
 .log .ev-match{color:var(--accent);font-weight:bold}
 .log .ev-scan{color:var(--accent2)}
 .log .ev-stop{color:var(--danger)}
@@ -88,7 +88,6 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <span class="badge">SATOSHI NAKAMOTO · 2009 · WINDOWS RNG SIMULATIE · SCHOOLPROJECT</span>
 </div>
 
-<!-- UITLEG -->
 <div class="card">
   <div class="card-title">📚 Wat is dit? — Educatieve uitleg</div>
   <div class="uitleg-grid">
@@ -111,12 +110,13 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   </div>
 </div>
 
-<!-- CONFIG -->
 <div class="card">
   <div class="card-title">⚙ Configuratie — Target & Keyspace</div>
   <div class="field wide">
-    <label>Target BTC Adres</label>
-    <input class="inp" id="targetAddr" value="1A1zP1eP5QGefi2DMPTfTL5SLmv7Divfna" type="text">
+    <label>Target BTC Adressen</label>
+    <div class="inp" style="color:var(--accent3); background:var(--surface); line-height:1.4;">
+      [ Ingeladen via Script Set — Aantal targets: <span id="targetCountDisplay" style="font-weight:bold; color:var(--accent2)">0</span> ]
+    </div>
   </div>
   <hr class="divider">
   <div class="sec-label">🔑 Keyspace Bereik</div>
@@ -162,7 +162,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <hr class="divider">
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
     <div><div style="font-size:.6rem;color:var(--muted);margin-bottom:4px">Workers (CPU cores)</div><input class="inp" id="numW" value="4" type="number" min="1" max="16"></div>
-    <div><div style="font-size:.6rem;color:var(--muted);margin-bottom:4px">Log elke N adressen</div><input class="inp" id="batchSize" value="100" type="number"></div>
+    <div><div style="font-size:.6rem;color:var(--muted);margin-bottom:4px">Batch Grootte (Hogere waarde = sneller)</div><input class="inp" id="batchSize" value="250" type="number"></div>
   </div>
   <div class="btn-row" style="margin-top:16px">
     <button class="btn btn-start" id="startBtn">▶ Start Entropy Scan</button>
@@ -170,7 +170,6 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   </div>
 </div>
 
-<!-- STATS -->
 <div class="card">
   <div class="card-title">📊 Live Statistieken</div>
   <div class="stats-grid">
@@ -182,9 +181,8 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
 </div>
 
-<!-- LIVE ENTROPY -->
 <div class="card">
-  <div class="card-title">🎲 Live Entropie Visualisatie — Elke iteratie anders</div>
+  <div class="card-title">🎲 Live Entropie Visualisatie — Per batch ververst</div>
   <div class="entropy-live">
     <div class="el-header">
       <div class="el-title">SHA-256 Mengpot Hash →</div>
@@ -217,15 +215,13 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
   </div>
 </div>
 
-<!-- LOG -->
 <div class="card">
   <div class="card-title">📋 Activiteitenlog</div>
   <div class="log" id="logBox"></div>
 </div>
 
-<!-- RESULTATEN -->
 <div class="card">
-  <div class="card-title">🎯 Gegenereerde Adressen — Laatste 20</div>
+  <div class="card-title">🎯 Gegenereerde Adressen — Recente Scans</div>
   <table class="result-table">
     <thead><tr><th>Bitcoin Adres</th><th>WIF Sleutel</th><th>Status</th></tr></thead>
     <tbody id="resultBody">
@@ -237,29 +233,34 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 <div class="footer">Satoshi 2009 Entropy Scanner · Windows RNG Simulatie · Schoolproject — puur educatief</div>
 </div>
 
-<!-- ALLE CRYPTO IN DE HOOFDPAGINA — geen importScripts nodig in worker -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 
 <script>
 /* ══════════════════════════════════════════════════════
-   ALLE BEREKENINGEN IN DE HOOFDTHREAD
-   Worker-benadering werkt niet betrouwbaar met Blob +
-   importScripts. We gebruiken requestAnimationFrame-vrije
-   setInterval batches zodat de UI live blijft updaten.
+   TARGET ADRESSEN CONST SET
+   Plak hieronder al je 40.000 adressen (komma-gescheiden)
    ══════════════════════════════════════════════════════ */
+const TARGET_ADDRESSES = new Set([
+  "1A1zP1eP5QGefi2DMPTfTL5SLmv7Divfna",
+  // "1...volgende_adres",
+  // "1...volgende_adres"
+]);
+
+/* Toon het aantal geladen targets direct in de UI */
+document.addEventListener("DOMContentLoaded", function() {
+  document.getElementById('targetCountDisplay').textContent = TARGET_ADDRESSES.size.toLocaleString('nl-NL');
+});
 
 const N_HEX = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141";
 const N_BIG = BigInt("0x" + N_HEX);
 
-/* ── secp256k1 helpers via elliptic.js ── */
 let EC_LIB = null;
 function getEC() {
   if (!EC_LIB) EC_LIB = new elliptic.ec('secp256k1');
   return EC_LIB;
 }
 
-/* ── SHA256 via CryptoJS ── */
 function sha256hex(hex) {
   return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString();
 }
@@ -271,7 +272,6 @@ function ripemd160hex(hex) {
   return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString();
 }
 
-/* ── Base58Check ── */
 function base58Check(payloadHex) {
   var ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
   var cs  = sha256hex(sha256hex(payloadHex)).substring(0, 8);
@@ -283,7 +283,6 @@ function base58Check(payloadHex) {
   return s;
 }
 
-/* ── Willekeurig getal in [lo, hi] ── */
 function rInt(lo, hi) {
   lo = parseInt(lo) || 0;
   hi = parseInt(hi) || lo;
@@ -298,9 +297,7 @@ function rHex(loHex, hiHex) {
   return (v >>> 0).toString(16).padStart(8,'0');
 }
 
-/* ── Windows 2009 Entropie Pool bouwen ── */
 function buildEntropyPool(r) {
-  /* Stap 1: varieer alle bronnen willekeurig binnen bereik */
   var time  = rInt(r.tS,  r.tE);
   var qpc   = rInt(r.qS,  r.qE);
   var tick  = rInt(r.tkS, r.tkE);
@@ -318,7 +315,6 @@ function buildEntropyPool(r) {
   var proc  = parseInt(r.pT1) || 586;
   var disp  = parseInt(r.dR, 16) || 0x04000300;
 
-  /* Stap 2: schrijf in 64-byte buffer (little-endian zoals Windows) */
   var buf  = new Uint8Array(96);
   var view = new DataView(buf.buffer);
   view.setUint32(0,  time   >>> 0, true);
@@ -338,7 +334,6 @@ function buildEntropyPool(r) {
   view.setUint32(56, proc   >>> 0, true);
   view.setUint32(60, disp   >>> 0, true);
 
-  /* Stap 3: hardware-ruis (2009 simulatie: laagste 2 bits beperkt) */
   var rnd = new Uint8Array(32);
   crypto.getRandomValues(rnd);
   for (var i = 0; i < 32; i++) {
@@ -347,7 +342,6 @@ function buildEntropyPool(r) {
   }
   buf.set(rnd, 64);
 
-  /* Stap 4: SHA-256 mengpot */
   var poolHash = sha256bytes(buf);
 
   return {
@@ -358,11 +352,10 @@ function buildEntropyPool(r) {
   };
 }
 
-/* ── Privésleutel → Adres & WIF ── */
 function privToAddr(privHex) {
   var ec      = getEC();
   var key     = ec.keyFromPrivate(privHex, 'hex');
-  var pubHex  = key.getPublic(false, 'hex');   /* uncompressed — 2009 stijl */
+  var pubHex  = key.getPublic(false, 'hex');
   var h160    = ripemd160hex(sha256hex(pubHex));
   var addr    = base58Check("00" + h160);
   var wif     = base58Check("80" + privHex);
@@ -378,7 +371,6 @@ var startTime    = 0;
 var unique       = new Set();
 var scanInterval = null;
 var progInterval = null;
-var target       = '';
 var scanParams   = {};
 var minK, maxK, range;
 
@@ -399,7 +391,6 @@ function setStatus(txt, cls) {
   el.className   = cls || '';
 }
 
-/* ── Parameters verzamelen ── */
 function collectParams() {
   var ids = ['kS','kE','tS','tE','qS','qE','tkS','tkE','pS','pE','tiS','tiE',
              'rS','rE','sS','sE','dS','dE','mXS','mXE','mYS','mYE',
@@ -409,7 +400,6 @@ function collectParams() {
   return r;
 }
 
-/* ── Entropy display bijwerken ── */
 function updateDisplay(ev, addr, poolHash) {
   function norm(val, lo, hi) {
     lo=parseInt(lo)||0; hi=parseInt(hi)||1;
@@ -442,8 +432,10 @@ function updateDisplay(ev, addr, poolHash) {
   });
 }
 
-/* ── Één scan batch uitvoeren ── */
 function runBatch(batchSize) {
+  var lastPool = null;
+  var lastResult = null;
+
   for (var i = 0; i < batchSize; i++) {
     var pool    = buildEntropyPool(scanParams);
     var privBig = minK + (BigInt("0x" + pool.poolHash) % range);
@@ -452,34 +444,49 @@ function runBatch(batchSize) {
 
     totaal++;
     unique.add(result.addr);
+    
+    lastPool = pool;
+    lastResult = result;
 
-    /* Tabel bijwerken */
-    var tbody = document.getElementById('resultBody');
-    var emptyRow = document.getElementById('emptyRow');
-    if (emptyRow) emptyRow.remove();
+    /* Razendsnelle lookup in de hardcoded Set */
+    if (TARGET_ADDRESSES.has(result.addr)) {
+      var tbody = document.getElementById('resultBody');
+      var emptyRow = document.getElementById('emptyRow');
+      if (emptyRow) emptyRow.remove();
 
-    var row = document.createElement('tr');
-    var isMatch = (result.addr === target);
-    if (isMatch) row.className = 'match-row';
-    row.innerHTML =
-      '<td>'+result.addr+'</td>'+
-      '<td style="font-size:.62rem">'+result.wif+'</td>'+
-      '<td style="color:'+(isMatch?'#f59e0b':'#6b7280')+'">'+(isMatch?'✅ MATCH':'✗')+'</td>';
-    tbody.insertBefore(row, tbody.firstChild);
-    while (tbody.rows.length > 20) tbody.deleteRow(tbody.rows.length-1);
-
-    /* Entropy display & log */
-    updateDisplay(pool.ev, result.addr, pool.poolHash);
-    log('⚙ '+result.addr+' | Pool: '+pool.poolHash.slice(0,12)+'...', 'ev-scan');
-
-    if (isMatch) {
+      var row = document.createElement('tr');
+      row.className = 'match-row';
+      row.innerHTML =
+        '<td>'+result.addr+'</td>'+
+        '<td style="font-size:.62rem">'+result.wif+'</td>'+
+        '<td style="color:var(--accent)">✅ MATCH</td>';
+      tbody.insertBefore(row, tbody.firstChild);
+      
       log('🎉 MATCH GEVONDEN! Adres: '+result.addr, 'ev-match');
       stop();
       return;
     }
   }
 
-  /* Stats updaten */
+  /* UI Throttling verversing */
+  if (lastResult && lastPool) {
+    updateDisplay(lastPool.ev, lastResult.addr, lastPool.poolHash);
+    
+    var tbody = document.getElementById('resultBody');
+    var emptyRow = document.getElementById('emptyRow');
+    if (emptyRow) emptyRow.remove();
+
+    var row = document.createElement('tr');
+    row.innerHTML =
+      '<td>'+lastResult.addr+'</td>'+
+      '<td style="font-size:.62rem">'+lastResult.wif+'</td>'+
+      '<td style="color:#6b7280">✗</td>';
+    tbody.insertBefore(row, tbody.firstChild);
+    while (tbody.rows.length > 15) tbody.deleteRow(tbody.rows.length-1);
+    
+    log('⚙ Batch voltooid. Totaal gecontroleerd: ' + totaal, 'ev-scan');
+  }
+
   var elapsed = (Date.now() - startTime) / 1000 || 1;
   document.getElementById('totaal').textContent     = totaal.toLocaleString('nl-NL');
   document.getElementById('scanSpeed').textContent  = Math.floor(totaal/elapsed).toLocaleString('nl-NL')+'/s';
@@ -490,9 +497,8 @@ function runBatch(batchSize) {
    START
    ══════════════════════════════════════════════════════ */
 document.getElementById('startBtn').onclick = function() {
-  target = document.getElementById('targetAddr').value.trim();
-  if (!target || target.length < 25) {
-    alert('Voer een geldig Bitcoin Legacy adres in (begint met 1).');
+  if (TARGET_ADDRESSES.size === 0) {
+    alert('De target lijst (TARGET_ADDRESSES) in de code is leeg! Voeg eerst adressen toe.');
     return;
   }
 
@@ -502,7 +508,6 @@ document.getElementById('startBtn').onclick = function() {
   unique     = new Set();
   isRunning  = true;
 
-  /* Keyspace berekenen */
   var kS = parseFloat(scanParams.kS) || 0;
   var kE = parseFloat(scanParams.kE) || 100;
   minK   = (N_BIG * BigInt(Math.round(kS * 10000))) / 1000000n;
@@ -516,25 +521,21 @@ document.getElementById('startBtn').onclick = function() {
   document.getElementById('uniqueCount').textContent= '0';
   setStatus('Scanning...', 'running');
 
-  log('🚀 Scanner gestart', 'ev-scan');
-  log('🎯 Target: '+target, 'ev-scan');
+  log('🚀 Scanner gestart met ' + TARGET_ADDRESSES.size.toLocaleString('nl-NL') + ' hardcoded targets.', 'ev-scan');
   log('🔑 Keyspace: '+kS+'% → '+kE+'%', 'ev-scan');
-  log('⏰ Tijdrange: '+new Date(parseInt(scanParams.tS)*1000).toLocaleDateString('nl-NL')+
-      ' → '+new Date(parseInt(scanParams.tE)*1000).toLocaleDateString('nl-NL'), 'ev-scan');
 
-  /* Progress bar pingpong */
   var pv=0, pd=1;
   progInterval = setInterval(function(){
     pv+=pd*2; if(pv>=95||pv<=5) pd*=-1;
     document.getElementById('progressBar').style.width=pv+'%';
   }, 80);
 
-  /* Scan loop: 5 adressen per 16ms tick → ~300/sec */
-  var batchSize = 5;
+  var dynamicBatch = parseInt(document.getElementById('batchSize').value) || 250;
+  
   scanInterval = setInterval(function(){
     if (!isRunning) return;
-    runBatch(batchSize);
-  }, 16);
+    runBatch(dynamicBatch);
+  }, 10);
 };
 
 /* ══════════════════════════════════════════════════════
