@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Quantum Fase-gewijze Scanner — 1M per keer</title>
+    <title>Quantum Fase-gewijze Scanner — Volledig Automatisch</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -33,7 +33,6 @@
         .btn:disabled { opacity:.3; cursor:not-allowed; }
         .btn-start { background:linear-gradient(135deg,#002244,#004488); color:var(--quantum); border:1px solid var(--quantum); }
         .btn-stop { background:var(--danger); color:#fff; }
-        .btn-skip { background:linear-gradient(135deg,#440022,#880044); color:#ff88cc; border:1px solid #ff88cc; }
 
         .stats-grid { display:grid; grid-template-columns:1fr 1fr 1fr 1fr 1fr; gap:10px; margin:12px 0; }
         .stat-cell { background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:6px; padding:10px 14px; }
@@ -68,9 +67,9 @@
 <body>
 <div class="container">
     <div class="header">
-        <h1>⚛ Fase-gewijze Scanner — 1M per keer</h1>
-        <div class="sub">Genereer 1M keys → parallel check → volgende 1M → stop bij match</div>
-        <span class="badge">🔮 GROTE RANGE · FASES · PARALLEL · STOP BIJ MATCH</span>
+        <h1>⚛ Fase-gewijze Scanner — Volledig Automatisch</h1>
+        <div class="sub">Genereer → check → volgende fase → automatisch tot match of stop</div>
+        <span class="badge">🔮 AUTOMATISCH · FASES · PARALLEL · STOP BIJ MATCH</span>
     </div>
 
     <!-- Config -->
@@ -106,9 +105,8 @@
             <input id="numWorkers" value="4" type="number" min="1" max="32">
         </div>
         <div class="btn-row">
-            <button class="btn btn-start" id="startBtn">🌀 Start Fase-scan</button>
+            <button class="btn btn-start" id="startBtn">🌀 Start Automatische Scan</button>
             <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
-            <button class="btn btn-skip" id="skipBtn" disabled>⏩ Skip fase</button>
         </div>
     </div>
 
@@ -172,7 +170,7 @@
         </table>
     </div>
 
-    <div class="footer">Fase-gewijze Scanner · 1M per keer · secp256k1 · Schoolproject</div>
+    <div class="footer">Fase-gewijze Scanner · Volledig Automatisch · secp256k1 · Schoolproject</div>
 </div>
 
 <!-- WORKER SCRIPT -->
@@ -295,7 +293,7 @@ let isProcessingPhase = false;
 let phaseKeys = [];
 let phaseStartKey = 0n;
 let phaseEndKey = 0n;
-let skipRequested = false;
+let nextPhaseTimeout = null;
 
 // ===== DOM ELEMENTEN =====
 const statusVal = document.getElementById('statusVal');
@@ -310,7 +308,6 @@ const logBox = document.getElementById('logBox');
 const matchTable = document.getElementById('matchTable');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
-const skipBtn = document.getElementById('skipBtn');
 
 // ===== UTILITY =====
 function hexToBigInt(hex) { return BigInt('0x' + hex.replace(/^0x/, '').trim()); }
@@ -380,7 +377,6 @@ function createWorker(workerId, keys, targetPubKey, batchSize) {
             stopAllWorkers();
             startBtn.disabled = false;
             stopBtn.disabled = true;
-            skipBtn.disabled = true;
         } else if (data.type === 'DONE') {
             workerCompleted++;
             log(`✅ Worker ${data.workerId} voltooid (${data.checked} keys)`, 'worker');
@@ -388,19 +384,17 @@ function createWorker(workerId, keys, targetPubKey, batchSize) {
             workerStatus[data.workerId].checked = data.checked;
             updateWorkerGrid();
             
-            if (workerCompleted === numWorkers) {
+            if (workerCompleted === workers.length) {
                 // Deze fase is klaar
                 log(`✅ Fase ${currentPhase} voltooid — ${totalChecked.toLocaleString()} keys gecontroleerd`, 'phase');
                 isProcessingPhase = false;
                 stopAllWorkers();
                 activeWorkers.textContent = '0';
                 
-                // Ga naar volgende fase
-                if (skipRequested) {
-                    skipRequested = false;
-                    log('⏩ Skip aangevraagd, volgende fase...', 'phase');
+                // Ga naar volgende fase (automatisch!)
+                if (isRunning && !matchFound) {
+                    nextPhaseTimeout = setTimeout(processNextPhase, 100);
                 }
-                setTimeout(processNextPhase, 500);
             }
         }
     };
@@ -505,7 +499,6 @@ function processNextPhase() {
         isRunning = false;
         startBtn.disabled = false;
         stopBtn.disabled = true;
-        skipBtn.disabled = true;
         return;
     }
     
@@ -535,7 +528,6 @@ function processNextPhase() {
     isProcessingPhase = true;
     workerCompleted = 0;
     workerStatus = {};
-    skipBtn.disabled = false;
     
     const targetPubKey = document.getElementById('pubKey').value.trim();
     numWorkers = parseInt(document.getElementById('numWorkers').value) || 4;
@@ -557,7 +549,6 @@ function processNextPhase() {
     
     log(`🧠 ${workers.length} workers gestart voor fase ${currentPhase}`, 'phase');
     setStatus(`Scannen fase ${currentPhase}...`);
-    skipBtn.disabled = false;
 }
 
 // ===== START =====
@@ -572,7 +563,6 @@ startBtn.onclick = async () => {
     workerStatus = {};
     workerCompleted = 0;
     isProcessingPhase = false;
-    skipRequested = false;
     startTime = Date.now();
     
     // Lees configuratie
@@ -601,44 +591,36 @@ startBtn.onclick = async () => {
     logBox.innerHTML = '';
     workerGrid.innerHTML = '';
     
-    log('🚀 Fase-gewijze scan gestart!', 'phase');
+    log('🚀 Automatische fase-scan gestart!', 'phase');
     log(`📐 Range: ${startHex} → ${endHex} (${totalKeysCount.toLocaleString()} keys)`, 'phase');
     log(`⚡ Fasegrootte: ${phaseSize.toLocaleString()} keys, Workers: ${numWorkers}, Batch: ${batchSize}`, 'phase');
     
     setStatus('Starten...');
     startBtn.disabled = true;
     stopBtn.disabled = false;
-    skipBtn.disabled = true;
     
     // Start eerste fase
     setTimeout(processNextPhase, 100);
-};
-
-// ===== SKIP =====
-skipBtn.onclick = () => {
-    if (!isProcessingPhase) return;
-    log('⏩ Skip fase aangevraagd...', 'phase');
-    skipRequested = true;
-    stopAllWorkers();
-    isProcessingPhase = false;
-    setTimeout(processNextPhase, 200);
 };
 
 // ===== STOP =====
 stopBtn.onclick = () => {
     isRunning = false;
     isProcessingPhase = false;
+    if (nextPhaseTimeout) {
+        clearTimeout(nextPhaseTimeout);
+        nextPhaseTimeout = null;
+    }
     stopAllWorkers();
     setStatus('Gestopt');
     startBtn.disabled = false;
     stopBtn.disabled = true;
-    skipBtn.disabled = true;
     log('⏹ Scan gestopt door gebruiker', 'phase');
 };
 
 // ===== INIT =====
 log('⚡ Systeem gereed — stel range, fasegrootte, workers en batch in en druk op Start');
-log('💡 Tip: Gebruik "Skip fase" om een fase over te slaan als deze te lang duurt.');
+log('🤖 De scan gaat volledig automatisch door tot een match of tot jij stopt.');
 </script>
 </body>
 </html>
