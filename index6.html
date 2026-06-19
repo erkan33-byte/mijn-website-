@@ -2,96 +2,79 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Quantum Kangaroo — Superpositie Visualizer</title>
+    <title>Quantum Brute Force — Oneindige Scan</title>
     <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
-            --bg:#07090f; --surface:#0d1117; --panel:#111827; --border:#1f2937;
-            --accent:#00ff99; --accent2:#00c3ff; --dim:#374151; --muted:#6b7280;
-            --text:#e2e8f0; --warn:#f59e0b; --danger:#ef4444; --success:#10b981; --found:#f59e0b;
-            --quantum:#00f0ff; --quantum2:#7b2fff; --glow:rgba(0,240,255,0.15);
+            --bg: #05080f; --surface: #0a0e1a; --panel: #0f1525; --border: #1a2a4a;
+            --quantum: #00f0ff; --quantum2: #7b2fff; --green: #00ff88;
+            --text: #c8d0e8; --muted: #4a5a7a; --danger: #ef4444;
         }
-        body { font-family:'Courier New',Courier,monospace; background:var(--bg); color:var(--text); min-height:100vh; padding:24px 16px 48px; }
-        body::before { content:''; position:fixed; inset:0; background:repeating-linear-gradient(to bottom,transparent 0px,transparent 3px,rgba(0,255,153,.015) 3px,rgba(0,255,153,.015) 4px); pointer-events:none; z-index:999; }
-        .container { max-width:760px; margin:0 auto; }
+        body { font-family:'Courier New',monospace; background:var(--bg); color:var(--text); min-height:100vh; padding:20px; }
+        .container { max-width:1000px; margin:0 auto; }
         .header { text-align:center; margin-bottom:28px; }
-        .header h1 { font-size:1.6rem; letter-spacing:.2em; color:var(--quantum); text-shadow:0 0 18px var(--glow),0 0 40px rgba(0,240,255,.2); text-transform:uppercase; }
-        .header .sub { font-size:.72rem; color:var(--muted); letter-spacing:.12em; margin-top:6px; }
-        .badge { display:inline-block; background:linear-gradient(90deg,#0a1a2a,#0a0a2a); border:1px solid var(--quantum); color:var(--quantum); font-size:.62rem; letter-spacing:.15em; padding:3px 10px; border-radius:2px; margin-top:10px; animation:pulse-border 3s ease-in-out infinite; }
+        .header h1 { font-size:1.8rem; letter-spacing:.3em; color:var(--quantum); text-shadow:0 0 30px rgba(0,240,255,0.15); text-transform:uppercase; }
+        .header .sub { font-size:.7rem; color:var(--muted); letter-spacing:.15em; margin-top:6px; }
+        .badge { display:inline-block; border:1px solid var(--quantum); color:var(--quantum); font-size:.55rem; padding:4px 14px; border-radius:20px; margin-top:10px; animation:pulse-border 2s ease-in-out infinite; }
         @keyframes pulse-border { 0%,100%{border-color:var(--quantum);box-shadow:0 0 10px rgba(0,240,255,0.1);} 50%{border-color:var(--quantum2);box-shadow:0 0 25px rgba(123,47,255,0.2);} }
 
-        .card { background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:20px; margin-bottom:16px; }
-        .card-title { font-size:.65rem; letter-spacing:.18em; color:var(--quantum); text-transform:uppercase; border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:16px; }
+        .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:16px; }
+        .card-title { font-size:.6rem; letter-spacing:.2em; color:var(--quantum); text-transform:uppercase; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:16px; }
 
-        .field { display:grid; grid-template-columns:210px 1fr; align-items:center; gap:10px; margin-bottom:12px; }
-        .field label { font-size:.72rem; color:var(--muted); letter-spacing:.06em; }
-        .field input { background:var(--surface); color:var(--quantum); border:1px solid var(--dim); border-radius:3px; padding:7px 10px; font-family:inherit; font-size:.78rem; width:100%; outline:none; transition:border-color .2s,box-shadow .2s; }
-        .field input:focus { border-color:var(--quantum); box-shadow:0 0 0 2px rgba(0,240,255,.12); }
+        .field { display:grid; grid-template-columns:210px 1fr; gap:10px; margin-bottom:10px; }
+        .field label { font-size:.7rem; color:var(--muted); letter-spacing:.06em; }
+        .field input { background:var(--surface); color:var(--quantum); border:1px solid var(--border); border-radius:6px; padding:8px 12px; font-family:inherit; font-size:.75rem; width:100%; outline:none; }
+        .field input:focus { border-color:var(--quantum); box-shadow:0 0 15px rgba(0,240,255,0.1); }
+        .field input[type="number"] { max-width:150px; }
 
-        .btn-row { display:flex; gap:10px; margin-top:4px; flex-wrap:wrap; }
-        .btn { flex:1; padding:11px 16px; font-family:inherit; font-size:.8rem; font-weight:bold; letter-spacing:.1em; cursor:pointer; border:none; border-radius:4px; transition:opacity .15s,transform .1s; min-width:120px; }
-        .btn:active:not(:disabled) { transform:scale(.97); }
-        .btn:disabled { opacity:.35; cursor:not-allowed; }
-        .btn-start { background:linear-gradient(135deg,#004488,#002244); color:var(--quantum); border:1px solid var(--quantum); }
-        .btn-stop  { background:var(--danger); color:#fff; }
-        .btn-measure { background:linear-gradient(135deg,#004422,#008844); color:#00ff88; border:1px solid #00ff88; }
+        .btn-row { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+        .btn { flex:1; padding:10px 20px; font-family:inherit; font-size:.7rem; font-weight:bold; letter-spacing:.15em; cursor:pointer; border:none; border-radius:6px; transition:all .2s; min-width:120px; text-transform:uppercase; }
+        .btn:active:not(:disabled) { transform:scale(.96); }
+        .btn:disabled { opacity:.3; cursor:not-allowed; }
+        .btn-start { background:linear-gradient(135deg,#002244,#004488); color:var(--quantum); border:1px solid var(--quantum); }
+        .btn-stop { background:var(--danger); color:#fff; }
 
-        /* QUANTUM CLOUD */
-        .quantum-cloud { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:16px; margin:16px 0; min-height:260px; position:relative; overflow:hidden; }
-        .cloud-label { font-size:.55rem; color:var(--muted); letter-spacing:.15em; text-transform:uppercase; margin-bottom:8px; display:flex; justify-content:space-between; }
-        .cloud-label .count { color:var(--quantum); }
+        .stats-grid { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:10px; margin:12px 0; }
+        .stat-cell { background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:6px; padding:10px 14px; }
+        .stat-cell .label { font-size:.5rem; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; margin-bottom:4px; }
+        .stat-cell .value { font-size:.85rem; color:var(--quantum); font-weight:bold; }
+        .stat-cell .value.green { color:var(--green); }
+        .stat-cell .value.danger { color:var(--danger); }
 
-        .key-particle { position:absolute; font-size:.5rem; color:var(--quantum); opacity:0.6; transition:all 2s cubic-bezier(0.23,1,0.32,1); pointer-events:none; text-shadow:0 0 8px rgba(0,240,255,0.3); user-select:none; animation:float-particle 4s ease-in-out infinite alternate; }
-        .key-particle.collapsed { color:var(--quantum2); opacity:0.9; text-shadow:0 0 15px rgba(123,47,255,0.5); animation:none; }
-        .key-particle.measured { color:#00ff88; opacity:1; text-shadow:0 0 20px rgba(0,255,136,0.6); animation:none; font-weight:bold; transform:scale(1.8); }
-        .key-particle.hidden { opacity:0; transform:scale(0.5); }
-        @keyframes float-particle { 0%{transform:translateY(0px) scale(1);} 100%{transform:translateY(-6px) scale(1.05);} }
+        .worker-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:8px; margin:12px 0; }
+        .worker-cell { background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:4px; padding:8px 10px; }
+        .worker-cell .wlabel { font-size:.45rem; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; }
+        .worker-cell .wvalue { font-size:.7rem; color:var(--quantum); }
 
-        .state-indicator { display:flex; align-items:center; gap:14px; margin:12px 0 8px 0; padding:10px 14px; background:rgba(0,0,0,0.4); border-radius:6px; border:1px solid var(--border); }
-        .state-dot { width:12px; height:12px; border-radius:50%; background:var(--muted); transition:background .5s,box-shadow .5s; }
-        .state-dot.superposition { background:var(--quantum); box-shadow:0 0 20px rgba(0,240,255,0.4); animation:pulse-dot 1.5s ease-in-out infinite; }
-        .state-dot.collapsed { background:var(--quantum2); box-shadow:0 0 20px rgba(123,47,255,0.4); }
-        .state-dot.measured { background:#00ff88; box-shadow:0 0 20px rgba(0,255,136,0.4); }
-        @keyframes pulse-dot { 0%,100%{transform:scale(1);} 50%{transform:scale(1.2);} }
+        .progress-wrap { height:4px; background:var(--border); border-radius:2px; margin-top:14px; overflow:hidden; }
+        .progress-bar { height:100%; width:0%; background:linear-gradient(90deg,var(--quantum2),var(--quantum)); border-radius:2px; transition:width .4s; }
 
-        .result-display { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px; }
-        .result-cell { background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:6px; padding:10px 14px; }
-        .result-cell .rlabel { font-size:.5rem; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; margin-bottom:4px; }
-        .result-cell .rvalue { font-size:.8rem; color:var(--quantum); font-weight:bold; word-break:break-all; font-family:'Courier New',monospace; }
-        .result-cell .rvalue.green { color:#00ff88; }
-        .result-cell .rvalue.purple { color:var(--quantum2); }
+        .log { background:#000; color:var(--quantum); height:150px; overflow-y:scroll; padding:10px 12px; font-size:.72rem; line-height:1.6; border-radius:4px; border:1px solid var(--border); }
+        .log .ts { color:var(--muted); }
+        .log .found { color:var(--green); font-weight:bold; }
+        .log .phase { color:var(--quantum2); }
+        .log .worker { color:var(--quantum2); }
 
-        .phase-timeline { display:flex; justify-content:space-between; margin:12px 0 8px 0; padding:0 10px; }
-        .phase-step { font-size:.5rem; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; padding:4px 10px; border-radius:12px; border:1px solid transparent; transition:all .4s; }
-        .phase-step.active { color:var(--quantum); border-color:var(--quantum); background:rgba(0,240,255,0.05); }
-        .phase-step.done { color:var(--quantum2); border-color:var(--quantum2); }
+        .result-table { width:100%; border-collapse:collapse; font-size:.72rem; }
+        .result-table th { background:var(--surface); color:var(--quantum); letter-spacing:.1em; font-size:.62rem; text-transform:uppercase; padding:10px 12px; border:1px solid var(--border); text-align:left; }
+        .result-table td { border:1px solid var(--border); padding:9px 12px; color:var(--text); word-break:break-all; }
+        .result-table .found-row td { color:var(--green); background:rgba(0,255,136,0.05); }
 
-        .sci-note { background:rgba(0,240,255,0.03); border:1px solid rgba(0,240,255,0.1); border-radius:6px; padding:12px 16px; margin-top:14px; font-size:.6rem; color:var(--muted); line-height:1.7; }
-        .sci-note strong { color:var(--quantum); }
-
-        .footer { text-align:center; font-size:.6rem; color:var(--muted); letter-spacing:.1em; margin-top:24px; }
-        ::-webkit-scrollbar { width:6px; }
-        ::-webkit-scrollbar-track { background:var(--surface); }
-        ::-webkit-scrollbar-thumb { background:var(--dim); border-radius:3px; }
-        @media (max-width:600px) { .field{grid-template-columns:1fr;} .result-display{grid-template-columns:1fr;} }
+        .footer { text-align:center; font-size:.55rem; color:var(--muted); letter-spacing:.15em; margin-top:30px; }
+        @media (max-width:600px) { .field{grid-template-columns:1fr;} .stats-grid{grid-template-columns:1fr 1fr;} }
     </style>
 </head>
 <body>
 <div class="container">
-
     <div class="header">
-        <h1>⚛ Quantum Kangaroo</h1>
-        <div class="sub">Superpositie · Interferentie · Decoherentie — Visualisatie van Pollard's Kangaroo</div>
-        <span class="badge">🔮 QUANTUM-ENHANCED SEARCH</span>
+        <h1>⚛ Quantum Brute Force — Oneindige Scan</h1>
+        <div class="sub">Parallelle workers · Echte cryptografie · secp256k1</div>
+        <span class="badge">🔮 ONEINDIG · ALLE KEYS · STOP BIJ MATCH</span>
     </div>
 
-    <!-- CONFIG (exact zelfde velden als je eerste pagina) -->
+    <!-- Config -->
     <div class="card">
         <div class="card-title">⚙ Configuratie</div>
-        <div class="field">
-            <label>Workers (CPU Cores)</label>
-            <input id="numW" value="4" type="number" min="1" max="32">
-        </div>
         <div class="field">
             <label>Target Public Key</label>
             <input id="pubKey" value="02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16" type="text">
@@ -100,131 +83,101 @@
             <label>Target BTC Adres</label>
             <input id="btcAddr" value="16RGFo6hjq9ym6Pj7N5H7L1NR1rVPJyw2v" type="text">
         </div>
-        <hr class="divider" style="border-color:var(--dim);margin:14px 0;">
+        <hr style="border-color:var(--border);margin:14px 0;">
         <div class="field">
-            <label>Absoluut Start (HEX)</label>
+            <label>Start Key (HEX)</label>
             <input id="rangeStart" value="4000000000000000000000000000000000" type="text">
         </div>
         <div class="field">
-            <label>Absoluut Eind (HEX)</label>
-            <input id="rangeEnd" value="7fffffffffffffffffffffffffffffffff" type="text">
-        </div>
-        <hr class="divider" style="border-color:var(--dim);margin:14px 0;">
-        <div class="field">
-            <label>Zoekbereik Start (%)</label>
-            <input id="pctStart" value="0" type="number" step="0.1" min="0" max="100">
+            <label>Eind Key (HEX)</label>
+            <input id="rangeEnd" value="4000000000000000000000000000000100" type="text">
         </div>
         <div class="field">
-            <label>Zoekbereik Eind (%)</label>
-            <input id="pctEnd" value="100" type="number" step="0.1" min="0" max="100">
+            <label>Aantal Workers</label>
+            <input id="numWorkers" value="4" type="number" min="1" max="32">
+        </div>
+        <div class="field">
+            <label>Keys per batch (per worker)</label>
+            <input id="batchSize" value="100" type="number" min="1" max="1000">
         </div>
         <div class="btn-row">
-            <button class="btn btn-start" id="startBtn">🌀 Start Superpositie</button>
+            <button class="btn btn-start" id="startBtn">🌀 Start Oneindige Scan</button>
             <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
-            <button class="btn btn-measure" id="measureBtn" disabled>🎯 Forceer Meting</button>
         </div>
     </div>
 
-    <!-- OPTIMIZER CARD (zelfde als eerste pagina, maar met quantum-twist) -->
-    <div class="card" style="border-color:#1a4a6a;">
-        <div class="card-title" style="color:var(--quantum2);">⚡ Quantum Optimizer</div>
-        <div class="field">
-            <label>Quantum Paden per worker</label>
-            <input id="pathsSlider" value="200" type="range" min="100" max="800" step="100" style="width:100%;" oninput="updateOptimizer()">
-            <span style="font-size:.7rem;color:var(--muted);margin-top:4px;" id="pathsVal">200 paden</span>
-        </div>
-        <div class="field">
-            <label>Interferentie-filter (bits)</label>
-            <select id="dpFilter" onchange="updateOptimizer()" style="background:var(--surface);color:var(--quantum);border:1px solid var(--dim);border-radius:3px;padding:5px 8px;font-family:inherit;font-size:.75rem;">
-                <option value="1023">10-bit (standaard)</option>
-                <option value="4095">12-bit (meer quantum-wolken)</option>
-                <option value="255">8-bit (snellere collapse)</option>
-            </select>
-        </div>
-        <div class="field">
-            <label>Quantum-sprongen per epoch</label>
-            <select id="wildJumps" onchange="updateOptimizer()" style="background:var(--surface);color:var(--quantum);border:1px solid var(--dim);border-radius:3px;padding:5px 8px;font-family:inherit;font-size:.75rem;">
-                <option value="1000000">1M (snel)</option>
-                <option value="3000000" selected>3M (standaard)</option>
-                <option value="6000000">6M (meer dekking)</option>
-                <option value="10000000">10M (maximaal)</option>
-            </select>
-        </div>
-        <div class="sci-note" style="border-color:rgba(123,47,255,0.2);">
-            <strong>💡 Quantum-effect:</strong> De visualisatie toont de zoekruimte als een <strong>superpositie-wolk</strong>.
-            Hoe meer paden & sprongen, hoe dichter de wolk bij de echte sleutel komt. <strong>Stop bij match</strong> — de wolk collapst dan direct naar de gevonden key!
-        </div>
-    </div>
-
-    <!-- QUANTUM CLOUD VISUALIZATION -->
+    <!-- Stats -->
     <div class="card">
-        <div class="card-title">🌀 Quantum-wolk — Live Superpositie</div>
-        <div class="quantum-cloud" id="quantumCloud">
-            <div class="cloud-label">
-                <span>Deeltjes in superpositie</span>
-                <span class="count" id="particleCount">0</span>
+        <div class="card-title">📊 Live Statistieken</div>
+        <div class="stats-grid">
+            <div class="stat-cell">
+                <div class="label">Status</div>
+                <div class="value" id="statusVal">Gestopt</div>
             </div>
-            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.7rem;letter-spacing:.1em;opacity:0.4;pointer-events:none;" id="emptyHint">
-                ⚡ Druk op "Start Superpositie" om de quantum-wolk te laden
+            <div class="stat-cell">
+                <div class="label">Gecontroleerde keys</div>
+                <div class="value" id="checkedVal">0</div>
             </div>
-        </div>
-
-        <!-- State & Timeline -->
-        <div class="state-indicator">
-            <div class="state-dot" id="stateDot"></div>
-            <div class="state-text" id="stateText">Huidige toestand: <strong>Initieel</strong></div>
-        </div>
-        <div class="phase-timeline">
-            <span class="phase-step" id="step1">1. Superpositie</span>
-            <span class="phase-step" id="step2">2. Interferentie</span>
-            <span class="phase-step" id="step3">3. Decoherentie</span>
-        </div>
-
-        <!-- Results -->
-        <div class="result-display">
-            <div class="result-cell">
-                <div class="rlabel">Gemeten Key (HEX)</div>
-                <div class="rvalue green" id="measuredKey">—</div>
+            <div class="stat-cell">
+                <div class="label">Totale keys in range</div>
+                <div class="value" id="totalVal">0</div>
             </div>
-            <div class="result-cell">
-                <div class="rlabel">Aantal keys in superpositie</div>
-                <div class="rvalue purple" id="totalKeys">0</div>
-            </div>
-            <div class="result-cell">
-                <div class="rlabel">Entropie (Shannon)</div>
-                <div class="rvalue" id="entropyDisplay">—</div>
-            </div>
-            <div class="result-cell">
-                <div class="rlabel">Kans op huidige key</div>
-                <div class="rvalue" id="probabilityKey">—</div>
+            <div class="stat-cell">
+                <div class="label">Snelheid (totaal)</div>
+                <div class="value" id="speedVal">0 /s</div>
             </div>
         </div>
-
-        <div class="sci-note">
-            <strong>🧠 Hoe werkt quantum-visualisatie?</strong><br>
-            De Kangaroo-engine draait op de achtergrond. De <strong>quantum-wolk</strong> toont willekeurige keys uit de zoekruimte alsof ze in superpositie bestaan.
-            Naarmate de engine vordert, <strong>interfereert</strong> de wolk richting de meest waarschijnlijke regio.
-            Bij een match <strong>collapst</strong> de wolk direct naar de gevonden privésleutel — alsof een quantumcomputer de golffunctie meet.
+        <div class="progress-wrap">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <div style="margin-top:10px;font-size:.65rem;color:var(--muted);">
+            Actieve workers: <span id="activeWorkers" style="color:var(--quantum);">0</span>
         </div>
     </div>
 
-    <div class="footer">Quantum Kangaroo · Schoolproject · Geïnspireerd door Qubits & Superpositie</div>
+    <!-- Worker Status -->
+    <div class="card">
+        <div class="card-title">🧠 Worker Status</div>
+        <div class="worker-grid" id="workerGrid">
+            <div style="text-align:center;color:var(--muted);font-size:.7rem;grid-column:1/-1;">Nog geen workers gestart...</div>
+        </div>
+    </div>
+
+    <!-- Log -->
+    <div class="card">
+        <div class="card-title">📋 Activiteitenlog</div>
+        <div class="log" id="logBox"></div>
+    </div>
+
+    <!-- Results -->
+    <div class="card">
+        <div class="card-title">🎯 Resultaten</div>
+        <table class="result-table">
+            <thead>
+                <tr><th>Status</th><th>WIF (Compressed)</th><th>Privésleutel (HEX)</th></tr>
+            </thead>
+            <tbody id="matchTable">
+                <tr><td colspan="3" style="text-align:center;color:var(--muted);font-style:italic;">Nog geen match gevonden...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="footer">Quantum Brute Force · Oneindige Scan · secp256k1 · Schoolproject</div>
 </div>
 
-<!-- WORKER (identiek aan je eerste pagina) -->
+<!-- WORKER SCRIPT -->
 <script id="workerCode" type="javascript/worker">
+// Worker heeft eigen elliptic & crypto-js
 importScripts(
     'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js',
     'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js'
 );
-const ec = new elliptic.ec("secp256k1");
-const G  = ec.g;
-const N  = ec.n;
-const NUM_STEPS = 32;
-const JUMP_SIZES  = [];
-const JUMP_POINTS = [];
 
-function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+const ec = new elliptic.ec("secp256k1");
+
+function bigIntToHex(n, pad=64) {
+    return n.toString(16).padStart(pad, '0');
+}
 
 function toBase58(hex) {
     const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -241,432 +194,337 @@ function toBase58(hex) {
     return s;
 }
 
-function initJumps(rangeStart, rangeEnd) {
-    if (JUMP_SIZES.length>0) return;
-    const W = rangeEnd - rangeStart;
-    let x0 = W/2n, sqrtW = 1n;
-    if (x0>0n) { let x1=(x0+W/x0)/2n; while(x1<x0){x0=x1;x1=(x0+W/x0)/2n;} sqrtW=x0; }
-    for (let i=0;i<NUM_STEPS;i++) {
-        let size=(sqrtW*BigInt(i+1))/BigInt(NUM_STEPS);
-        if(size===0n) size=1n;
-        JUMP_SIZES.push(size);
-        JUMP_POINTS.push(G.mul(size.toString(16)));
-    }
+function sha256(hex) {
+    return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString();
 }
 
-function randBigInt(lo, hi) {
-    const range=hi-lo, bits=range.toString(2).length, bytes=Math.ceil(bits/8);
-    const arr=new Uint8Array(bytes); self.crypto.getRandomValues(arr);
-    const hex=Array.from(arr,b=>b.toString(16).padStart(2,'0')).join('');
-    return lo+(BigInt("0x"+hex)%range);
+function calculateWIF(privHex) {
+    const full32 = privHex.padStart(64, '0');
+    const wifPayload = "80" + full32 + "01";
+    const doubleSha = sha256(sha256(wifPayload));
+    const wif = toBase58(wifPayload + doubleSha.slice(0, 8));
+    return wif;
 }
 
-function jumpIndex(pubHex) { return parseInt(pubHex.substr(2,8),16)%NUM_STEPS; }
-
+// Oneindige scan: blijf door de range heen en weer lopen
 self.onmessage = function(e) {
-    const { type, rangeStartStr, rangeEndStr, targetPubHex, traps,
-            workerId, padLen, maxWildJumps, pathsPerWorker, stepsPerPath, dpMask } = e.data;
-
-    const rangeStart = BigInt("0x"+rangeStartStr);
-    const rangeEnd   = BigInt("0x"+rangeEndStr);
-    initJumps(rangeStart, rangeEnd);
-
-    if (type === "TAME") {
-        const localTraps = {};
-        const paths  = pathsPerWorker || 200;
-        const steps  = stepsPerPath   || 1500;
-        const mask   = dpMask || 0x3FF;
-        let jumpsCount = 0;
-
-        for (let p=0;p<paths;p++) {
-            const k_start = randBigInt(rangeStart, rangeEnd);
-            let currDist  = 0n;
-            let currPoint = G.mul(k_start.toString(16));
-            for (let i=0;i<steps;i++) {
-                const pubHex = currPoint.encode('hex',true);
-                if ((parseInt(pubHex.slice(-4),16) & mask) === 0) {
-                    localTraps[pubHex] = { absKey: k_start.toString(16), dist: currDist.toString() };
-                }
-                const r=jumpIndex(pubHex);
-                currPoint=currPoint.add(JUMP_POINTS[r]);
-                currDist+=JUMP_SIZES[r];
-                jumpsCount++;
+    const { workerId, startKey, endKey, targetPubKey, batchSize } = e.data;
+    
+    let current = startKey;
+    let totalChecked = 0n;
+    let direction = 1; // 1 = vooruit, -1 = achteruit
+    
+    while (true) {
+        const batchEnd = current + BigInt(batchSize) * BigInt(direction);
+        let actualStart = current;
+        let actualEnd = batchEnd;
+        
+        // Zorg dat we binnen de range blijven
+        if (direction === 1) {
+            if (batchEnd > endKey) {
+                actualEnd = endKey;
+                direction = -1;
+            }
+        } else {
+            if (batchEnd < startKey) {
+                actualEnd = startKey;
+                direction = 1;
             }
         }
-        self.postMessage({ type:"TAME_READY", traps:localTraps, jumps:jumpsCount, workerId });
-        return;
-    }
-
-    if (type === "WILD") {
-        const targetPubKey = ec.keyFromPublic(targetPubHex,'hex').getPublic();
-        const Nbig = BigInt(N.toString());
-        let currPoint = targetPubKey, currDist = 0n, totalWildJumps = 0;
-        const batchSize = 10000;
-        const maxJumps  = maxWildJumps || 3000000;
-
-        while (totalWildJumps < maxJumps) {
-            for (let i=0;i<batchSize;i++) {
-                const pubHex = currPoint.encode('hex',true);
-                if (traps[pubHex]) {
-                    const { absKey, dist:distStr } = traps[pubHex];
-                    const k_tame   = BigInt("0x"+absKey);
-                    const tameDist = BigInt(distStr);
-                    let secretKey  = ((k_tame+tameDist-currDist)%Nbig+Nbig)%Nbig;
-                    if (secretKey > 0n) {
-                        const privHex    = secretKey.toString(16).padStart(padLen||64,'0');
-                        const full32     = secretKey.toString(16).padStart(64,'0');
-                        const wifPayload = "80"+full32+"01";
-                        const doubleSha  = sha256(sha256(wifPayload));
-                        const wif        = toBase58(wifPayload+doubleSha.slice(0,8));
-                        self.postMessage({ type:"FOUND", privHex, wif });
-                        return;
-                    }
+        
+        // Scan de batch
+        let key = actualStart;
+        while ((direction === 1 && key <= actualEnd) || 
+               (direction === -1 && key >= actualEnd)) {
+            
+            const privHex = bigIntToHex(key, 64);
+            try {
+                const keyPair = ec.keyFromPrivate(privHex);
+                const pubKey = keyPair.getPublic();
+                const pubKeyHex = pubKey.encode('hex', true);
+                
+                if (pubKeyHex.toLowerCase() === targetPubKey.toLowerCase()) {
+                    // MATCH GEVONDEN!
+                    const wif = calculateWIF(privHex);
+                    self.postMessage({
+                        type: 'FOUND',
+                        workerId: workerId,
+                        privHex: privHex,
+                        wif: wif,
+                        pubKey: pubKeyHex
+                    });
+                    return; // Stop worker
                 }
-                const r=jumpIndex(pubHex);
-                currPoint=currPoint.add(JUMP_POINTS[r]);
-                currDist+=JUMP_SIZES[r];
+            } catch (e) {
+                // Skip invalid keys
             }
-            totalWildJumps += batchSize;
-            self.postMessage({ type:"PROGRESS", jumps:batchSize });
+            
+            totalChecked++;
+            key += BigInt(direction);
+            
+            // Stuur progress om de 1000 keys
+            if (totalChecked % 1000n === 0n) {
+                self.postMessage({
+                    type: 'PROGRESS',
+                    workerId: workerId,
+                    checked: Number(totalChecked)
+                });
+            }
         }
-        self.postMessage({ type:"WILD_DONE" });
+        
+        current = actualEnd + BigInt(direction);
     }
 };
 </script>
 
 <!-- MAIN SCRIPT -->
 <script>
-let workers=[], globalTraps=new Map(), totalJumps=0, startTime=0;
-let epoch=0, isRunning=false, tameDone=0, wildDone=0, cumulativeJumps=0;
-let foundKey = null; // wordt gevuld bij match
+// ===== STATE =====
+let workers = [];
+let isRunning = false;
+let matchFound = false;
+let totalChecked = 0n;
+let totalKeys = 0n;
+let startTime = 0;
+let workerStatus = {};
+let numWorkers = 0;
 
+// ===== DOM ELEMENTEN =====
+const statusVal = document.getElementById('statusVal');
+const checkedVal = document.getElementById('checkedVal');
+const totalVal = document.getElementById('totalVal');
+const speedVal = document.getElementById('speedVal');
+const progressBar = document.getElementById('progressBar');
+const activeWorkers = document.getElementById('activeWorkers');
+const workerGrid = document.getElementById('workerGrid');
 const logBox = document.getElementById('logBox');
+const matchTable = document.getElementById('matchTable');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
-const measureBtn = document.getElementById('measureBtn');
-const stateDot = document.getElementById('stateDot');
-const stateText = document.getElementById('stateText');
-const phaseLabel = document.getElementById('phaseLabel');
-
-// Quantum cloud elements
-const cloud = document.getElementById('quantumCloud');
-const emptyHint = document.getElementById('emptyHint');
-const particleCount = document.getElementById('particleCount');
-const measuredKey = document.getElementById('measuredKey');
-const totalKeys = document.getElementById('totalKeys');
-const entropyDisplay = document.getElementById('entropyDisplay');
-const probabilityKey = document.getElementById('probabilityKey');
-const step1 = document.getElementById('step1');
-const step2 = document.getElementById('step2');
-const step3 = document.getElementById('step3');
-
-let particles = [];
-let currentPhase = 'idle';
-let keyRange = { start: 0n, end: 0n };
-let measuredKeyValue = null;
 
 // ===== UTILITY =====
 function hexToBigInt(hex) { return BigInt('0x' + hex.replace(/^0x/, '').trim()); }
-function bigIntToHex(n, pad=40) { return n.toString(16).padStart(pad, '0'); }
-function getRange() {
-    const s = document.getElementById('rangeStart').value.trim();
-    const e = document.getElementById('rangeEnd').value.trim();
-    return { start: hexToBigInt(s), end: hexToBigInt(e) };
-}
-function getRangeSize(range) { return range.end - range.start + 1n; }
+function bigIntToHex(n, pad=64) { return n.toString(16).padStart(pad, '0'); }
 
-// ===== QUANTUM CLOUD FUNCTIES =====
-function generateSuperpositionParticles(range, count=120) {
-    const size = getRangeSize(range);
-    if (size === 0n) return [];
-    const maxParticles = Math.min(Number(count), 150);
-    const particles = [];
-    for (let i = 0; i < maxParticles; i++) {
-        const randomKey = range.start + (size === 1n ? 0n : (BigInt(Math.floor(Math.random() * Number(size)))));
-        const hex = bigIntToHex(randomKey, 40);
-        const x = 5 + Math.random() * 90;
-        const y = 5 + Math.random() * 85;
-        particles.push({
-            key: randomKey,
-            hex: hex,
-            x: x,
-            y: y,
-            opacity: 0.3 + Math.random() * 0.5,
-            size: 0.4 + Math.random() * 0.4
+// ===== LOGGING =====
+function log(msg, cls='') {
+    const ts = new Date().toLocaleTimeString('nl-NL');
+    const div = document.createElement('div');
+    div.innerHTML = `<span class="ts">[${ts}]</span> ${msg}`;
+    if (cls) div.className = cls;
+    logBox.appendChild(div);
+    logBox.scrollTop = logBox.scrollHeight;
+}
+
+// ===== WORKER MANAGEMENT =====
+function createWorker(workerId, startKey, endKey, targetPubKey, batchSize) {
+    const code = document.getElementById('workerCode').textContent;
+    const blob = new Blob([code], { type: 'text/javascript' });
+    const url = URL.createObjectURL(blob);
+    const worker = new Worker(url);
+    
+    worker.onmessage = function(e) {
+        const data = e.data;
+        
+        if (data.type === 'PROGRESS') {
+            // Update worker status
+            workerStatus[data.workerId] = {
+                ...workerStatus[data.workerId],
+                checked: data.checked
+            };
+            updateWorkerGrid();
+            updateStats();
+        } else if (data.type === 'FOUND') {
+            // MATCH GEVONDEN!
+            matchFound = true;
+            isRunning = false;
+            
+            log(`🎉 WORKER ${data.workerId} vond MATCH!`, 'found');
+            log(`🔑 Privésleutel: ${data.privHex}`, 'found');
+            log(`💳 WIF: ${data.wif}`, 'found');
+            
+            matchTable.innerHTML = `
+                <tr class="found-row">
+                    <td>✅ MATCH</td>
+                    <td style="font-size:.65rem">${data.wif}</td>
+                    <td style="font-size:.65rem">${data.privHex}</td>
+                </tr>
+            `;
+            
+            setStatus('🎉 GEVONDEN!');
+            progressBar.style.width = '100%';
+            stopAllWorkers();
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+    };
+    
+    // Start worker
+    worker.postMessage({
+        workerId: workerId,
+        startKey: startKey,
+        endKey: endKey,
+        targetPubKey: targetPubKey,
+        batchSize: batchSize
+    });
+    
+    // Update status
+    workerStatus[workerId] = {
+        status: 'actief',
+        checked: 0,
+        startKey: bigIntToHex(startKey, 40),
+        endKey: bigIntToHex(endKey, 40)
+    };
+    updateWorkerGrid();
+    activeWorkers.textContent = Object.keys(workerStatus).length;
+    
+    return worker;
+}
+
+function stopAllWorkers() {
+    workers.forEach(w => w.terminate());
+    workers = [];
+    activeWorkers.textContent = '0';
+    Object.keys(workerStatus).forEach(id => {
+        if (workerStatus[id].status === 'actief') {
+            workerStatus[id].status = 'gestopt';
+        }
+    });
+    updateWorkerGrid();
+}
+
+// ===== UI UPDATES =====
+function updateStats() {
+    let total = 0n;
+    Object.values(workerStatus).forEach(s => {
+        total += BigInt(s.checked || 0);
+    });
+    totalChecked = total;
+    checkedVal.textContent = totalChecked.toLocaleString();
+    
+    // Progress (als percentage van de range)
+    if (totalKeys > 0n) {
+        const progress = Number((totalChecked * 10000n) / totalKeys) / 100;
+        progressBar.style.width = Math.min(progress, 99.99) + '%';
+    }
+    
+    // Speed
+    const elapsed = (Date.now() - startTime) / 1000;
+    if (elapsed > 0) {
+        const speed = Number(totalChecked) / elapsed;
+        speedVal.textContent = Math.floor(speed).toLocaleString() + ' /s';
+    }
+}
+
+function updateWorkerGrid() {
+    let html = '';
+    const ids = Object.keys(workerStatus);
+    if (ids.length === 0) {
+        html = '<div style="text-align:center;color:var(--muted);font-size:.7rem;grid-column:1/-1;">Nog geen workers gestart...</div>';
+    } else {
+        ids.forEach(id => {
+            const s = workerStatus[id];
+            const statusClass = s.status === 'actief' ? 'green' : (s.status === 'voltooid' ? '' : 'danger');
+            html += `
+                <div class="worker-cell">
+                    <div class="wlabel">Worker ${id}</div>
+                    <div class="wvalue" style="color:var(--${statusClass || 'quantum'});">
+                        ${s.status}
+                    </div>
+                    <div class="wlabel">Gecontroleerd</div>
+                    <div class="wvalue">${(s.checked || 0).toLocaleString()}</div>
+                </div>
+            `;
         });
     }
-    return particles;
+    workerGrid.innerHTML = html;
 }
 
-function renderParticles(particlesList, className='') {
-    cloud.querySelectorAll('.key-particle').forEach(el => el.remove());
-    emptyHint.style.display = particlesList.length === 0 ? 'flex' : 'none';
-    const containerRect = cloud.getBoundingClientRect();
-    const w = containerRect.width || 800;
-    const h = containerRect.height || 260;
-    particlesList.forEach((p, idx) => {
-        const el = document.createElement('div');
-        el.className = 'key-particle' + (className ? ' ' + className : '');
-        el.textContent = p.hex.slice(-6);
-        el.style.left = (p.x / 100 * w) + 'px';
-        el.style.top = (p.y / 100 * h) + 'px';
-        el.style.fontSize = (0.4 + p.size * 0.4) + 'rem';
-        el.style.opacity = p.opacity;
-        el.style.animationDelay = (Math.random() * 2) + 's';
-        el.style.animationDuration = (3 + Math.random() * 3) + 's';
-        el.style.transform = `rotate(${Math.random() * 360}deg)`;
-        cloud.appendChild(el);
-    });
-    particleCount.textContent = particlesList.length;
-}
-
-function updateQuantumCloud() {
-    // Update cloud based on current state
-    const range = getRange();
-    keyRange = range;
-    const size = getRangeSize(range);
-    totalKeys.textContent = size.toLocaleString();
-
-    if (currentPhase === 'idle') {
-        particles = [];
-        renderParticles([]);
-        measuredKey.textContent = '—';
-        entropyDisplay.textContent = '—';
-        probabilityKey.textContent = '—';
-    } else if (currentPhase === 'superposition') {
-        const count = Math.min(120, Number(size) || 120);
-        particles = generateSuperpositionParticles(range, count);
-        renderParticles(particles, '');
-        const entropy = Math.log2(particles.length || 1);
-        entropyDisplay.textContent = entropy.toFixed(2) + ' bit';
-        probabilityKey.textContent = '1 / ' + particles.length;
-    } else if (currentPhase === 'collapsed') {
-        // Simulate interference: reduce to most probable region
-        const subsetSize = Math.min(20, particles.length);
-        const sorted = [...particles].sort(() => Math.random() - 0.5);
-        const collapsed = sorted.slice(0, subsetSize);
-        renderParticles(collapsed, 'collapsed');
-        particles = collapsed;
-        const entropy = Math.log2(particles.length || 1);
-        entropyDisplay.textContent = entropy.toFixed(2) + ' bit';
-        probabilityKey.textContent = '1 / ' + particles.length;
-    } else if (currentPhase === 'measured') {
-        // Show only the measured key
-        if (measuredKeyValue !== null) {
-            const hex = bigIntToHex(measuredKeyValue, 40);
-            renderParticles([], 'hidden');
-            const el = document.createElement('div');
-            el.className = 'key-particle measured';
-            el.textContent = hex.slice(-6);
-            const containerRect = cloud.getBoundingClientRect();
-            const w = containerRect.width || 800;
-            const h = containerRect.height || 260;
-            el.style.left = (50 / 100 * w) + 'px';
-            el.style.top = (50 / 100 * h) + 'px';
-            el.style.fontSize = '1.2rem';
-            el.style.animation = 'none';
-            el.style.transform = 'scale(1.5)';
-            cloud.appendChild(el);
-            particleCount.textContent = '1 gemeten';
-            measuredKey.textContent = hex;
-            probabilityKey.textContent = '100% (decoherent)';
-        }
-    }
-}
-
-// ===== PHASE MANAGEMENT =====
-function setPhase(phase, found=false) {
-    currentPhase = phase;
-    phaseLabel.textContent = `Fase: ${phase.charAt(0).toUpperCase() + phase.slice(1)}`;
-    [step1, step2, step3].forEach(el => el.classList.remove('active', 'done'));
-    if (phase === 'superposition') {
-        step1.classList.add('active');
-    } else if (phase === 'collapsed') {
-        step1.classList.add('done');
-        step2.classList.add('active');
-    } else if (phase === 'measured') {
-        step1.classList.add('done');
-        step2.classList.add('done');
-        step3.classList.add('active');
-    }
-    stateDot.className = 'state-dot';
-    if (phase === 'superposition') {
-        stateDot.classList.add('superposition');
-        stateText.innerHTML = 'Huidige toestand: <strong>Superpositie</strong> — alle keys bestaan tegelijk';
-    } else if (phase === 'collapsed') {
-        stateDot.classList.add('collapsed');
-        stateText.innerHTML = 'Huidige toestand: <strong>Interferentie</strong> — subset van meest waarschijnlijke keys';
-    } else if (phase === 'measured') {
-        stateDot.classList.add('measured');
-        stateText.innerHTML = found ? '🎉 <strong>Gevonden!</strong> — key is gedecohoreerd' : 'Huidige toestand: <strong>Gedecohoreerd</strong> — één key is gemeten';
+function setStatus(text) {
+    statusVal.textContent = text;
+    if (text.includes('GEVONDEN')) {
+        statusVal.style.color = 'var(--green)';
+    } else if (text.includes('Gestopt')) {
+        statusVal.style.color = 'var(--danger)';
     } else {
-        stateText.innerHTML = 'Huidige toestand: <strong>Initieel</strong> — wacht op superpositie';
-    }
-
-    startBtn.disabled = (phase !== 'idle' && phase !== 'measured');
-    stopBtn.disabled = (phase === 'idle' || phase === 'measured');
-    measureBtn.disabled = (phase !== 'collapsed');
-
-    if (phase === 'measured' && found) {
-        // Extra visual feedback for found
-        document.querySelector('.header h1').style.textShadow = '0 0 40px #00ff88, 0 0 80px rgba(0,255,136,0.3)';
-    } else {
-        document.querySelector('.header h1').style.textShadow = '';
-    }
-
-    updateQuantumCloud();
-}
-
-// ===== ENGINE FUNCTIES (identiek aan je eerste pagina) =====
-function calculateSubRange() {
-    const A=BigInt("0x"+document.getElementById('rangeStart').value.trim());
-    const B=BigInt("0x"+document.getElementById('rangeEnd').value.trim());
-    const W=B-A, SCALE=1_000_000n;
-    const s=BigInt(Math.floor(parseFloat(document.getElementById('pctStart').value)*10000));
-    const e=BigInt(Math.floor(parseFloat(document.getElementById('pctEnd').value)*10000));
-    return { start:(A+(W*s)/SCALE).toString(16), end:(A+(W*e)/SCALE).toString(16) };
-}
-
-function makeWorker() {
-    const code=document.getElementById('workerCode').textContent;
-    return new Worker(URL.createObjectURL(new Blob([code],{type:'text/javascript'})));
-}
-
-function killWorkers() { workers.forEach(w=>{try{w.terminate();}catch(_){}}); workers=[]; }
-
-function nextEpoch() {
-    if (!isRunning) return;
-    epoch++; tameDone=0; wildDone=0; globalTraps.clear();
-
-    const numW  = Math.max(1, parseInt(document.getElementById('numW').value)||4);
-    const range = calculateSubRange();
-    const paths = parseInt(document.getElementById('pathsSlider').value) || 200;
-    const steps = 1500; // vaste waarde voor consistentie
-    const dpMask= parseInt(document.getElementById('dpFilter').value) || 1023;
-
-    killWorkers();
-    setPhase('superposition');
-
-    for (let i=0;i<numW;i++) {
-        const w=makeWorker(); workers.push(w);
-        w.onmessage = (ev) => {
-            if (ev.data.type==="TAME_READY") {
-                for (const k in ev.data.traps) globalTraps.set(k, ev.data.traps[k]);
-                totalJumps+=ev.data.jumps; cumulativeJumps+=ev.data.jumps; tameDone++;
-                if (tameDone===numW) {
-                    setPhase('collapsed');
-                    startWild(numW,range);
-                }
-            }
-            else if (ev.data.type==="PROGRESS") {
-                totalJumps+=ev.data.jumps; cumulativeJumps+=ev.data.jumps;
-                // Update cloud periodically with new particles
-                if (totalJumps % 100000 === 0) {
-                    updateQuantumCloud();
-                }
-            }
-            else if (ev.data.type==="WILD_DONE") {
-                wildDone++;
-                if (wildDone===numW) {
-                    // Epoch done, but no match -> continue with new epoch
-                    setTimeout(() => {
-                        if (isRunning) nextEpoch();
-                    }, 50);
-                }
-            }
-            else if (ev.data.type==="FOUND") {
-                foundKey = BigInt("0x"+ev.data.privHex);
-                measuredKeyValue = foundKey;
-                setRunning(false);
-                setPhase('measured', true);
-                updateQuantumCloud();
-                // Show WIF
-                document.getElementById('measuredKey').textContent = ev.data.privHex;
-                document.getElementById('probabilityKey').textContent = '100% (gevonden!)';
-                // Show success message
-                stateText.innerHTML = '🎉 <strong>Gevonden!</strong> — privésleutel is gedecohoreerd!';
-            }
-        };
-        w.postMessage({ type:"TAME", rangeStartStr:range.start, rangeEndStr:range.end,
-                        workerId:i, pathsPerWorker:paths, stepsPerPath:steps, dpMask });
+        statusVal.style.color = 'var(--quantum)';
     }
 }
 
-function startWild(numW, range) {
-    if (!isRunning) return;
-    killWorkers();
-    const trapObj = Object.fromEntries(globalTraps);
-    const targetPubHex = document.getElementById('pubKey').value.trim();
-    const maxWildJumps = parseInt(document.getElementById('wildJumps').value) || 3000000;
-    const padLen = 68;
-
-    for (let i=0;i<numW;i++) {
-        const w=makeWorker(); workers.push(w);
-        w.onmessage = (ev) => {
-            if (ev.data.type==="PROGRESS") {
-                totalJumps+=ev.data.jumps; cumulativeJumps+=ev.data.jumps;
-                if (totalJumps % 100000 === 0) {
-                    updateQuantumCloud();
-                }
-            }
-            else if (ev.data.type==="WILD_DONE") {
-                wildDone++;
-                if (wildDone===numW) {
-                    setTimeout(() => {
-                        if (isRunning) nextEpoch();
-                    }, 50);
-                }
-            }
-            else if (ev.data.type==="FOUND") {
-                foundKey = BigInt("0x"+ev.data.privHex);
-                measuredKeyValue = foundKey;
-                setRunning(false);
-                setPhase('measured', true);
-                updateQuantumCloud();
-                document.getElementById('measuredKey').textContent = ev.data.privHex;
-                document.getElementById('probabilityKey').textContent = '100% (gevonden!)';
-                stateText.innerHTML = '🎉 <strong>Gevonden!</strong> — privésleutel is gedecohoreerd!';
-            }
-        };
-        w.postMessage({ type:"WILD", rangeStartStr:range.start, rangeEndStr:range.end,
-                        targetPubHex, traps:trapObj, workerId:i, padLen, maxWildJumps });
-    }
-}
-
-function setRunning(v) { isRunning=v; startBtn.disabled=v; stopBtn.disabled=!v; }
-
-// ===== BUTTON HANDLERS =====
-startBtn.onclick = () => {
+// ===== START =====
+startBtn.onclick = async () => {
     if (isRunning) return;
-    totalJumps=0; epoch=0; cumulativeJumps=0; foundKey=null; measuredKeyValue=null;
-    setRunning(true);
-    setPhase('superposition');
-    nextEpoch();
+    
+    // Reset state
+    isRunning = true;
+    matchFound = false;
+    totalChecked = 0n;
+    workerStatus = {};
+    startTime = Date.now();
+    
+    // Lees configuratie
+    const startHex = document.getElementById('rangeStart').value.trim();
+    const endHex = document.getElementById('rangeEnd').value.trim();
+    const rangeStart = hexToBigInt(startHex);
+    const rangeEnd = hexToBigInt(endHex);
+    const targetPubKey = document.getElementById('pubKey').value.trim();
+    const numWorkersInput = parseInt(document.getElementById('numWorkers').value) || 4;
+    const batchSize = parseInt(document.getElementById('batchSize').value) || 100;
+    
+    if (rangeStart > rangeEnd) {
+        log('❌ Start moet kleiner zijn dan eind!');
+        isRunning = false;
+        return;
+    }
+    
+    totalKeys = rangeEnd - rangeStart + 1n;
+    totalVal.textContent = totalKeys.toLocaleString();
+    checkedVal.textContent = '0';
+    speedVal.textContent = '0 /s';
+    progressBar.style.width = '0%';
+    matchTable.innerHTML = `<tr><td colspan="3" style="text-align:center;color:var(--muted);font-style:italic;">Scannen met ${numWorkersInput} workers...</td></tr>`;
+    logBox.innerHTML = '';
+    workerGrid.innerHTML = '';
+    
+    log('🚀 Oneindige scan gestart!', 'phase');
+    log(`📐 Range: ${startHex} → ${endHex} (${totalKeys.toLocaleString()} keys)`, 'phase');
+    log(`⚡ Workers: ${numWorkersInput}, Batch size: ${batchSize}`, 'phase');
+    log('♾️ Scan blijft draaien tot een match wordt gevonden!', 'phase');
+    
+    setStatus('Scannen...');
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    
+    // Verdeel de range over workers
+    numWorkers = numWorkersInput;
+    const keysPerWorker = totalKeys / BigInt(numWorkers);
+    let currentStart = rangeStart;
+    
+    workers = [];
+    for (let i = 0; i < numWorkers; i++) {
+        const workerStart = currentStart;
+        const workerEnd = (i === numWorkers - 1) ? rangeEnd : (workerStart + keysPerWorker - 1n);
+        const worker = createWorker(i, workerStart, workerEnd, targetPubKey, batchSize);
+        workers.push(worker);
+        currentStart = workerEnd + 1n;
+    }
+    
+    log(`🧠 ${numWorkers} workers gestart. Ze scannen oneindig tot een match.`, 'phase');
 };
 
+// ===== STOP =====
 stopBtn.onclick = () => {
-    setRunning(false); killWorkers(); setPhase('idle');
-};
-
-measureBtn.onclick = () => {
-    // Force measurement: collapse to one random key from current particles
-    if (particles.length === 0) return;
-    const chosen = particles[Math.floor(Math.random() * particles.length)];
-    measuredKeyValue = chosen.key;
-    setPhase('measured');
-    updateQuantumCloud();
-    document.getElementById('measuredKey').textContent = chosen.hex;
-    document.getElementById('probabilityKey').textContent = '100% (handmatig gemeten)';
+    isRunning = false;
+    stopAllWorkers();
+    setStatus('Gestopt');
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    log('⏹ Scan gestopt door gebruiker', 'phase');
 };
 
 // ===== INIT =====
-function updateOptimizer() {
-    // Simple visual update for the slider
-    const val = document.getElementById('pathsSlider').value;
-    document.getElementById('pathsVal').textContent = val + ' paden';
-}
-updateOptimizer();
-setPhase('idle');
+log('⚡ Systeem gereed — stel workers en batch-grootte in en druk op Start');
+log('⚠️ Waarschuwing: Bij grote ranges kan de scan miljarden jaren duren!');
 </script>
 </body>
 </html>
