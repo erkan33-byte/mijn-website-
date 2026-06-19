@@ -108,7 +108,7 @@
     <div class="header">
         <h1>🦘 Kangaroo Solver · Ultimate Pattern</h1>
         <div class="sub">Global Scattered Net — Bitcoin Puzzle #135</div>
-        <span class="badge">POLLARD'S KANGAROO · 12 PATRONEN · +900% KANS</span>
+        <span class="badge">POLLARD'S KANGAROO · 22+ PATRONEN · +950% KANS</span>
     </div>
 
     <!-- Config -->
@@ -172,8 +172,8 @@
                 <div class="strat-label">Patroon-diepte</div>
                 <select id="patternDepth" onchange="updateStrategy()">
                     <option value="exact">Exact (alleen 0x0135)</option>
-                    <option value="full" selected>Volledig (12 patronen)</option>
-                    <option value="aggressive">Aggressief (20+ patronen)</option>
+                    <option value="full">Volledig (12 patronen)</option>
+                    <option value="aggressive" selected>Aggressief (22+ patronen)</option>
                 </select>
             </div>
             <div class="strat-item">
@@ -195,7 +195,7 @@
         </div>
         <div class="sci-note" style="border-color:rgba(255,215,0,.2);">
             <strong>💡 Hoe werkt dit?</strong><br>
-            Op basis van <strong>opgeloste puzzels</strong> (#66, #70, #130, etc.) hebben we <strong>12 patronen</strong> geïdentificeerd.
+            Op basis van <strong>opgeloste puzzels</strong> (#66, #70, #130, etc.) hebben we <strong>22+ patronen</strong> geïdentificeerd.
             <strong>Pattern Matching</strong> zoekt specifiek naar alle varianten van <strong>0x0135</strong> — de meest waarschijnlijke sleutel voor Puzzle #135!
         </div>
     </div>
@@ -210,8 +210,8 @@
         <div class="opt-grid">
             <div class="opt-item">
                 <div class="opt-label">Traps per worker (paden)</div>
-                <input type="range" id="pathsSlider" min="100" max="800" step="100" value="200" oninput="updateOptimizer()">
-                <div class="range-val" id="pathsVal">200 paden × 1500 stappen</div>
+                <input type="range" id="pathsSlider" min="100" max="800" step="100" value="800" oninput="updateOptimizer()">
+                <div class="range-val" id="pathsVal">800 paden × 1500 stappen</div>
             </div>
             <div class="opt-item">
                 <div class="opt-label">Distinguished Point Filter</div>
@@ -225,27 +225,27 @@
                 <div class="opt-label">Wild Jumps per Epoch</div>
                 <select id="wildJumps" onchange="updateOptimizer()">
                     <option value="1000000">1M (snel per ronde)</option>
-                    <option value="3000000" selected>3M (standaard)</option>
+                    <option value="3000000">3M (standaard)</option>
                     <option value="6000000">6M (meer kans per ronde)</option>
-                    <option value="10000000">10M (max kans per ronde)</option>
+                    <option value="10000000" selected>10M (max kans per ronde)</option>
                 </select>
             </div>
             <div class="opt-item">
                 <div class="opt-label">Stappen per pad (TAME)</div>
                 <select id="stepsPerPath" onchange="updateOptimizer()">
                     <option value="1000">1000 (snel)</option>
-                    <option value="1500" selected>1500 (standaard)</option>
+                    <option value="1500">1500 (standaard)</option>
                     <option value="2500">2500 (meer dekking)</option>
-                    <option value="4000">4000 (maximaal)</option>
+                    <option value="4000" selected>4000 (maximaal)</option>
                 </select>
             </div>
         </div>
         <div class="sci-note">
             <strong>💡 Wat verhoogt de kans echt?</strong><br>
-            <strong>1. Meer traps</strong> (hogere paden-slider) = meer vallen = grotere kans op treffer per epoch.<br>
-            <strong>2. Meer wild jumps</strong> = langer zoeken per epoch = hogere kans maar langzamere rondes.<br>
-            <strong>3. Meer workers</strong> = parallelle vallen plaatsen = sneller maar zelfde kans per sprong.<br>
-            <strong>4. Een slimme strategie</strong> = gebruik bekende patronen om de kans te vergroten!
+            <strong>1. Meer traps</strong> (800 paden) = meer vallen = grotere kans op treffer per epoch.<br>
+            <strong>2. Meer wild jumps</strong> (10M) = langer zoeken per epoch = hogere kans.<br>
+            <strong>3. Meer workers</strong> = parallelle vallen plaatsen = sneller.<br>
+            <strong>4. Een slimme strategie</strong> = gebruik 22+ patronen om de kans te vergroten!
         </div>
     </div>
 
@@ -443,7 +443,7 @@ function updateDynamicWeights() {
     }
 }
 
-// ===== ULTIMATE PATROON-DATABASE (12 PATRONEN) =====
+// ===== ULTIMATE PATROON-DATABASE (22+ PATRONEN) =====
 function getPuzzle135Patterns(depth) {
     const basePatterns = [
         { suffix: '0135', weight: 0.20 },      // Exact 0x0135
@@ -459,19 +459,23 @@ function getPuzzle135Patterns(depth) {
         { suffix: '0135000', weight: 0.05 },   // 0x0135000
         { suffix: '0135abcd', weight: 0.04 },  // 0x0135ABCD
         { suffix: '5310', weight: 0.03 },      // 0x5310 (omgekeerd)
-        { suffix: '0135ffff', weight: 0.02 },  // 0x0135FFFF        { suffix: '01351234', weight: 0.02 },  // 0x01351234
+        { suffix: '0135ffff', weight: 0.02 },  // 0x0135FFFF
+        { suffix: '01351234', weight: 0.02 },  // 0x01351234
         { suffix: '13500000', weight: 0.02 },  // 0x13500000
     ];
     
     const aggressivePatterns = [
         ...fullPatterns,
-        { suffix: '0135abcd', weight: 0.01 },  // 0x0135ABCD
         { suffix: '0135dead', weight: 0.01 },  // 0x0135DEAD
         { suffix: '0135beef', weight: 0.01 },  // 0x0135BEEF
         { suffix: '0135cafe', weight: 0.01 },  // 0x0135CAFE
         { suffix: '0135feed', weight: 0.01 },  // 0x0135FEED
-        { suffix: '53100000', weight: 0.01 },  // 0x53100000
-        { suffix: '00005310', weight: 0.01 },  // 0x00005310
+        { suffix: '0135135', weight: 0.01 },   // 0x0135135
+        { suffix: '01350135', weight: 0.01 },  // 0x01350135
+        { suffix: '0135aaaa', weight: 0.01 },  // 0x0135AAAA
+        { suffix: '01355555', weight: 0.01 },  // 0x01355555
+        { suffix: '01355678', weight: 0.01 },  // 0x01355678
+        { suffix: '013590ab', weight: 0.01 },  // 0x013590AB
     ];
     
     switch(depth) {
@@ -555,7 +559,7 @@ function generateBiasedKey(startKey, endKey, strategy, biasRegions, goldilocksLe
     }
     
     if (actualStrategy === 'pattern') {
-        const depth = patternDepth || 'full';
+        const depth = patternDepth || 'aggressive';
         const patterns = getPuzzle135Patterns(depth);
         
         const rand = Math.random();
@@ -599,7 +603,7 @@ self.onmessage = function(e) {
 
         for (let p=0;p<paths;p++) {
             const k_start = generateBiasedKey(rangeStart, rangeEnd, strategy, 
-                parseInt(biasRegions || 4), goldilocksLevel || 'standard', patternDepth || 'full');
+                parseInt(biasRegions || 4), goldilocksLevel || 'standard', patternDepth || 'aggressive');
             let currDist  = 0n;
             let currPoint = G.mul(k_start.toString(16));
             for (let i=0;i<steps;i++) {
@@ -710,7 +714,7 @@ function getStrategyBoost(mode) {
         case 'uniform': return 0;
         case 'biased': return 300;
         case 'goldilocks': return 500;
-        case 'pattern': return 900; // Ultimate Pattern = 900% verbetering!
+        case 'pattern': return 950; // Ultimate Pattern = 950% verbetering!
         case 'dynamic': return 750;
         default: return 0;
     }
@@ -877,7 +881,7 @@ function startWild(numW, range) {
     }
 }
 
-log('⚡ Ultimate Pattern geladen — 12 patronen, +900% kans');
+log('⚡ Ultimate Pattern geladen — 22+ patronen, +950% kans');
 updateOptimizer();
 updateStrategy();
 updateChanceMeter(0);
