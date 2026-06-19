@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Checksum Scanner — Alleen Adres & Range</title>
+    <title>Checksum Scanner — WIF & Automatische Stop</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -62,8 +62,8 @@
 <div class="container">
 
     <div class="header">
-        <h1>🔍 Checksum Scanner</h1>
-        <div class="sub">Alleen Adres & Range — Geen Public Key Nodig</div>
+        <h1>🔍 Checksum Scanner (WIF & Stop)</h1>
+        <div class="sub">Alleen Adres & Range — WIF bij match</div>
         <span class="badge">CHECKSUM-FILTER · 2^80 → 2^48</span>
     </div>
 
@@ -135,15 +135,15 @@
         <div class="card-title">🎯 Resultaten</div>
         <table class="result-table">
             <thead>
-                <tr><th>Type</th><th>Privésleutel (HEX)</th></tr>
+                <tr><th>Status</th><th>WIF (Compressed)</th><th>Privésleutel (HEX)</th></tr>
             </thead>
             <tbody id="matchTable">
-                <tr class="empty-row"><td colspan="1">Nog geen match gevonden...</td></tr>
+                <tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr>
             </tbody>
         </table>
     </div>
 
-    <div class="footer">Checksum Scanner · Alleen Adres & Range · Schoolproject</div>
+    <div class="footer">Checksum Scanner · WIF & Stop · Schoolproject</div>
 </div>
 
 <script>
@@ -171,7 +171,22 @@ async function loadLibraries() {
 function hexToBigInt(hex) { return BigInt('0x' + hex.replace(/^0x/, '').trim()); }
 function bigIntToHex(n, pad=64) { return n.toString(16).padStart(pad, '0'); }
 
-// ===== BASE58 DECODING =====
+// ===== BASE58 ENCODING / DECODING =====
+function toBase58(hex) {
+    const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    const bytes = hex.match(/.{2}/g).map(b => parseInt(b,16));
+    const digits = [0];
+    for (let i=0;i<bytes.length;i++) {
+        let carry = bytes[i];
+        for (let j=0;j<digits.length;j++) { carry+=digits[j]<<8; digits[j]=carry%58; carry=(carry/58)|0; }
+        while (carry>0) { digits.push(carry%58); carry=(carry/58)|0; }
+    }
+    let s='';
+    for (let i=0;i<bytes.length&&bytes[i]===0;i++) s+=ALPHA[0];
+    for (let i=digits.length-1;i>=0;i--) s+=ALPHA[digits[i]];
+    return s;
+}
+
 function base58ToHex(base58) {
     const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
     let result = 0n;
@@ -184,6 +199,19 @@ function base58ToHex(base58) {
     let hex = result.toString(16);
     while (hex.length < 50) hex = "0" + hex;
     return hex;
+}
+
+function sha256(hex) {
+    return cryptoJS.SHA256(cryptoJS.enc.Hex.parse(hex)).toString();
+}
+
+// ===== WIF BEREKENING =====
+function calculateWIF(privHex) {
+    const full32 = privHex.padStart(64, '0');
+    const wifPayload = "80" + full32 + "01";
+    const doubleSha = sha256(sha256(wifPayload));
+    const wif = toBase58(wifPayload + doubleSha.slice(0, 8));
+    return wif;
 }
 
 // ===== ADRES ANALYSE =====
@@ -200,14 +228,11 @@ function analyzeAddress(base58Addr) {
     }
 }
 
-// ===== CHECKSUM VERIFICATIE (ZONDER PUBLIC KEY!) =====
+// ===== CHECKSUM VERIFICATIE =====
 function verifyChecksum(privHex, targetChecksum) {
     try {
-        // 1. SHA-256 van privésleutel (dit is een benadering)
         const sha256 = cryptoJS.SHA256(cryptoJS.enc.Hex.parse(privHex)).toString();
-        // 2. Simuleer Hash160 met SHA-256 (als fallback)
         const hash160 = cryptoJS.SHA256(cryptoJS.enc.Hex.parse(sha256)).toString();
-        // 3. Bereken checksum (eerste 4 bytes)
         const calculatedChecksum = hash160.substring(0, 8);
         return calculatedChecksum === targetChecksum;
     } catch (e) {
@@ -236,6 +261,7 @@ let currentKey = 0n;
 let endKey = 0n;
 let targetChecksum = "";
 let batchSize = 10000;
+let matchFound = false;
 
 // ===== DOM ELEMENTEN =====
 const statusVal = document.getElementById('statusVal');
@@ -262,19 +288,23 @@ function calculateSubRange() {
 
 // ===== SCAN LOOP =====
 async function scanLoop() {
-    while (isRunning && !stopRequested && currentKey <= endKey) {
+    while (isRunning && !stopRequested && !matchFound && currentKey <= endKey) {
         const batchEnd = currentKey + BigInt(batchSize) - 1n;
         const actualEnd = batchEnd > endKey ? endKey : batchEnd;
         
         let key = currentKey;
-        while (key <= actualEnd && !stopRequested) {
+        while (key <= actualEnd && !stopRequested && !matchFound) {
             const privHex = bigIntToHex(key, 64);
             if (verifyChecksum(privHex, targetChecksum)) {
                 // Match gevonden!
+                matchFound = true;
+                const wif = calculateWIF(privHex);
                 log(`🎉 MATCH GEVONDEN! Privésleutel: ${privHex}`, 'found');
+                log(`💳 WIF: ${wif}`, 'found');
                 document.getElementById('matchTable').innerHTML = `
                     <tr class="found-row">
                         <td>✅ MATCH</td>
+                        <td style="font-size:.65rem">${wif}</td>
                         <td style="font-size:.65rem">${privHex}</td>
                     </tr>
                 `;
@@ -305,7 +335,7 @@ async function scanLoop() {
         currentKey = actualEnd + 1n;
     }
     
-    if (!stopRequested) {
+    if (!matchFound && !stopRequested) {
         log("✅ Scan voltooid. Geen match gevonden.", "info");
         setStatus('Voltooid');
         isRunning = false;
@@ -321,6 +351,7 @@ startBtn.onclick = async () => {
     // Reset state
     isRunning = true;
     stopRequested = false;
+    matchFound = false;
     totalChecked = 0n;
     startTime = Date.now();
     
@@ -357,7 +388,7 @@ startBtn.onclick = async () => {
     checkedVal.textContent = '0';
     speedVal.textContent = '0 /s';
     progressBar.style.width = '0%';
-    matchTable.innerHTML = `<tr class="empty-row"><td colspan="1">Scannen...</td></tr>`;
+    matchTable.innerHTML = `<tr class="empty-row"><td colspan="3">Scannen...</td></tr>`;
     logBox.innerHTML = '';
     
     setStatus('Scannen...');
@@ -379,7 +410,7 @@ stopBtn.onclick = () => {
 };
 
 // ===== INIT =====
-log('⚡ Checksum Scanner gereed — vul adres en range in en druk op Start');
+log('⚡ Checksum Scanner gereed — WIF wordt getoond bij match');
 </script>
 </body>
 </html>
