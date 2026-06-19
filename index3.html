@@ -2,14 +2,13 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Bitcoin Puzzle #135 — Kangaroo Solver · Ultimate Pattern</title>
+    <title>Bitcoin Puzzle #135 — Kangaroo Solver</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
             --bg:#07090f; --surface:#0d1117; --panel:#111827; --border:#1f2937;
             --accent:#00ff99; --accent2:#00c3ff; --dim:#374151; --muted:#6b7280;
             --text:#e2e8f0; --warn:#f59e0b; --danger:#ef4444; --success:#10b981; --found:#f59e0b;
-            --gold: #ffd700; --purple: #9b59b6;
         }
         body { font-family:'Courier New',Courier,monospace; background:var(--bg); color:var(--text); min-height:100vh; padding:24px 16px 48px; }
         body::before { content:''; position:fixed; inset:0; background:repeating-linear-gradient(to bottom,transparent 0px,transparent 3px,rgba(0,255,153,.015) 3px,rgba(0,255,153,.015) 4px); pointer-events:none; z-index:999; }
@@ -25,7 +24,6 @@
         .field input { background:var(--surface); color:var(--accent); border:1px solid var(--dim); border-radius:3px; padding:7px 10px; font-family:inherit; font-size:.78rem; width:100%; outline:none; transition:border-color .2s,box-shadow .2s; }
         .field input:focus { border-color:var(--accent); box-shadow:0 0 0 2px rgba(0,255,153,.12); }
         .field input[type="number"] { max-width:120px; }
-        .field select { background:var(--surface); color:var(--accent); border:1px solid var(--dim); border-radius:3px; padding:7px 10px; font-family:inherit; font-size:.78rem; width:100%; outline:none; }
         .divider { border:none; border-top:1px dashed var(--dim); margin:14px 0; }
         .btn-row { display:flex; gap:10px; margin-top:4px; }
         .btn { flex:1; padding:11px 16px; font-family:inherit; font-size:.8rem; font-weight:bold; letter-spacing:.1em; cursor:pointer; border:none; border-radius:4px; transition:opacity .15s,transform .1s; }
@@ -72,17 +70,18 @@
         .sci-note { background:rgba(0,195,255,.05); border:1px solid rgba(0,195,255,.15); border-radius:4px; padding:10px 14px; margin-top:14px; font-size:.67rem; color:var(--muted); line-height:1.7; }
         .sci-note strong { color:var(--accent2); }
 
-        /* STRATEGY CARD */
-        .strat-card { background:linear-gradient(135deg,#1a0f0a 0%,#1f0d10 100%); border:1px solid var(--gold); border-radius:6px; padding:20px; margin-bottom:16px; }
-        .strat-title { font-size:.65rem; letter-spacing:.18em; color:var(--gold); text-transform:uppercase; border-bottom:1px solid var(--gold); padding-bottom:8px; margin-bottom:16px; }
-        .strat-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
-        .strat-item { background:rgba(0,0,0,.35); border:1px solid #3a2a1a; border-radius:4px; padding:10px 12px; }
-        .strat-item .strat-label { font-size:.58rem; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; margin-bottom:6px; }
-        .strat-item select, .strat-item input[type=range] { background:var(--surface); color:var(--gold); border:1px solid var(--dim); border-radius:3px; padding:5px 8px; font-family:inherit; font-size:.75rem; width:100%; outline:none; }
-        .strat-item select option { background:var(--surface); }
-        .strat-boost { display:flex; align-items:center; justify-content:space-between; background:rgba(255,215,0,.06); border:1px solid rgba(255,215,0,.2); border-radius:4px; padding:10px 14px; margin-bottom:10px; }
-        .strat-boost-label { font-size:.7rem; color:var(--gold); }
-        .strat-boost-val { font-size:1.1rem; font-weight:bold; color:var(--gold); }
+        /* OPTIMIZER CARD */
+        .opt-card { background:linear-gradient(135deg,#0f1a0a 0%,#0d1f10 100%); border:1px solid #1a5c2a; border-radius:6px; padding:20px; margin-bottom:16px; }
+        .opt-title { font-size:.65rem; letter-spacing:.18em; color:var(--accent); text-transform:uppercase; border-bottom:1px solid #1a5c2a; padding-bottom:8px; margin-bottom:16px; }
+        .opt-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+        .opt-item { background:rgba(0,0,0,.35); border:1px solid #1a5c2a; border-radius:4px; padding:10px 12px; }
+        .opt-item .opt-label { font-size:.58rem; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; margin-bottom:6px; }
+        .opt-item select, .opt-item input[type=range] { background:var(--surface); color:var(--accent); border:1px solid var(--dim); border-radius:3px; padding:5px 8px; font-family:inherit; font-size:.75rem; width:100%; outline:none; }
+        .opt-item select option { background:var(--surface); }
+        .opt-boost { display:flex; align-items:center; justify-content:space-between; background:rgba(0,255,153,.06); border:1px solid rgba(0,255,153,.2); border-radius:4px; padding:10px 14px; margin-bottom:10px; }
+        .opt-boost-label { font-size:.7rem; color:var(--accent); }
+        .opt-boost-val { font-size:1.1rem; font-weight:bold; color:var(--accent); }
+        .range-val { font-size:.75rem; color:var(--accent); margin-top:4px; }
 
         .log { background:#000; color:var(--accent); height:150px; overflow-y:scroll; padding:10px 12px; font-size:.72rem; line-height:1.6; border-radius:4px; border:1px solid var(--border); }
         .log .ts { color:var(--muted); }
@@ -90,7 +89,6 @@
         .log .ev-epoch { color:var(--accent2); }
         .log .ev-stop  { color:var(--danger); }
         .log .ev-tame  { color:var(--warn); }
-        .log .ev-strat { color:var(--gold); }
         .result-table { width:100%; border-collapse:collapse; font-size:.72rem; }
         .result-table th { background:var(--surface); color:var(--accent2); letter-spacing:.1em; font-size:.62rem; text-transform:uppercase; padding:10px 12px; border:1px solid var(--border); text-align:left; }
         .result-table td { border:1px solid var(--border); padding:9px 12px; color:var(--text); word-break:break-all; }
@@ -106,9 +104,9 @@
 <div class="container">
 
     <div class="header">
-        <h1>🦘 Kangaroo Solver · Ultimate Pattern</h1>
-        <div class="sub">Global Scattered Net — Bitcoin Puzzle #135</div>
-        <span class="badge">POLLARD'S KANGAROO · 38+ PATRONEN · +1000% KANS</span>
+        <h1>🦘 Kangaroo Solver</h1>
+        <div class="sub">Bitcoin Puzzle #135 — 100% Willekeurig</div>
+        <span class="badge">POLLARD'S KANGAROO · secp256k1 · UNIFORM</span>
     </div>
 
     <!-- Config -->
@@ -150,56 +148,6 @@
         </div>
     </div>
 
-    <!-- STRATEGY CARD -->
-    <div class="strat-card">
-        <div class="strat-title">🎯 Wiskundige Strategie — Kies de beste modus</div>
-        <div class="strat-boost">
-            <div class="strat-boost-label">📈 Kansverbetering t.o.v. standaard (willekeurig)</div>
-            <div class="strat-boost-val" id="stratBoostVal">+0%</div>
-        </div>
-        <div class="strat-grid">
-            <div class="strat-item">
-                <div class="strat-label">Modus</div>
-                <select id="strategyMode" onchange="updateStrategy()">
-                    <option value="uniform">Uniform (willekeurig)</option>
-                    <option value="biased">Biased (regio-prioriteit)</option>
-                    <option value="goldilocks">Goldilocks (menselijke voorkeuren)</option>
-                    <option value="pattern" selected>Pattern Matching (Ultimate)</option>
-                    <option value="dynamic">Dynamisch (leert automatisch)</option>
-                </select>
-            </div>
-            <div class="strat-item">
-                <div class="strat-label">Patroon-diepte</div>
-                <select id="patternDepth" onchange="updateStrategy()">
-                    <option value="exact">Exact (alleen 0x0135)</option>
-                    <option value="full">Volledig (12 patronen)</option>
-                    <option value="aggressive" selected>Aggressief (38+ patronen)</option>
-                </select>
-            </div>
-            <div class="strat-item">
-                <div class="strat-label">Biased Regio's</div>
-                <select id="biasRegions" onchange="updateStrategy()">
-                    <option value="4">4 regio's (standaard)</option>
-                    <option value="8">8 regio's (fijnmazig)</option>
-                    <option value="2">2 regio's (grof)</option>
-                </select>
-            </div>
-            <div class="strat-item">
-                <div class="strat-label">Goldilocks Patronen</div>
-                <select id="goldilocksLevel" onchange="updateStrategy()">
-                    <option value="standard">Standaard (6 patronen)</option>
-                    <option value="aggressive">Aggressief (12 patronen)</option>
-                    <option value="light">Licht (3 patronen)</option>
-                </select>
-            </div>
-        </div>
-        <div class="sci-note" style="border-color:rgba(255,215,0,.2);">
-            <strong>💡 Hoe werkt dit?</strong><br>
-            Op basis van <strong>opgeloste puzzels</strong> (#66, #70, #130, etc.) hebben we <strong>38+ patronen</strong> geïdentificeerd.
-            <strong>Pattern Matching</strong> zoekt specifiek naar alle varianten van <strong>0x0135</strong> — de meest waarschijnlijke sleutel voor Puzzle #135!
-        </div>
-    </div>
-
     <!-- OPTIMIZER CARD -->
     <div class="opt-card">
         <div class="opt-title">⚡ Kans Optimizer — Instellingen</div>
@@ -210,8 +158,8 @@
         <div class="opt-grid">
             <div class="opt-item">
                 <div class="opt-label">Traps per worker (paden)</div>
-                <input type="range" id="pathsSlider" min="100" max="800" step="100" value="800" oninput="updateOptimizer()">
-                <div class="range-val" id="pathsVal">800 paden × 1500 stappen</div>
+                <input type="range" id="pathsSlider" min="100" max="800" step="100" value="200" oninput="updateOptimizer()">
+                <div class="range-val" id="pathsVal">200 paden × 1500 stappen</div>
             </div>
             <div class="opt-item">
                 <div class="opt-label">Distinguished Point Filter</div>
@@ -225,27 +173,27 @@
                 <div class="opt-label">Wild Jumps per Epoch</div>
                 <select id="wildJumps" onchange="updateOptimizer()">
                     <option value="1000000">1M (snel per ronde)</option>
-                    <option value="3000000">3M (standaard)</option>
+                    <option value="3000000" selected>3M (standaard)</option>
                     <option value="6000000">6M (meer kans per ronde)</option>
-                    <option value="10000000" selected>10M (max kans per ronde)</option>
+                    <option value="10000000">10M (max kans per ronde)</option>
                 </select>
             </div>
             <div class="opt-item">
                 <div class="opt-label">Stappen per pad (TAME)</div>
                 <select id="stepsPerPath" onchange="updateOptimizer()">
                     <option value="1000">1000 (snel)</option>
-                    <option value="1500">1500 (standaard)</option>
+                    <option value="1500" selected>1500 (standaard)</option>
                     <option value="2500">2500 (meer dekking)</option>
-                    <option value="4000" selected>4000 (maximaal)</option>
+                    <option value="4000">4000 (maximaal)</option>
                 </select>
             </div>
         </div>
         <div class="sci-note">
             <strong>💡 Wat verhoogt de kans echt?</strong><br>
-            <strong>1. Meer traps</strong> (800 paden) = meer vallen = grotere kans op treffer per epoch.<br>
-            <strong>2. Meer wild jumps</strong> (10M) = langer zoeken per epoch = hogere kans.<br>
-            <strong>3. Meer workers</strong> = parallelle vallen plaatsen = sneller.<br>
-            <strong>4. Een slimme strategie</strong> = gebruik 38+ patronen om de kans te vergroten!
+            <strong>1. Meer traps</strong> (hogere paden-slider) = meer vallen = grotere kans op treffer per epoch.<br>
+            <strong>2. Meer wild jumps</strong> = langer zoeken per epoch = hogere kans maar langzamere rondes.<br>
+            <strong>3. Meer workers</strong> = parallelle vallen plaatsen = sneller maar zelfde kans per sprong.<br>
+            De maker heeft <strong>geen patroon</strong> gebruikt — de sleutel is 100% willekeurig.
         </div>
     </div>
 
@@ -363,7 +311,7 @@
         </table>
     </div>
 
-    <div class="footer">Kangaroo Solver · secp256k1 · Pollard's Algorithm · Ultimate Pattern</div>
+    <div class="footer">Kangaroo Solver · secp256k1 · Pollard's Algorithm · Schoolproject</div>
 </div>
 
 <!-- WORKER -->
@@ -409,195 +357,18 @@ function initJumps(rangeStart, rangeEnd) {
     }
 }
 
-// ===== WISKUNDIGE STRATEGIEËN =====
-let dynamicWeights = {
-    'uniform': 0.25,
-    'biased': 0.25,
-    'goldilocks': 0.25,
-    'pattern': 0.25
-};
-
-let strategyStats = {
-    'uniform': { hits: 0, misses: 0 },
-    'biased': { hits: 0, misses: 0 },
-    'goldilocks': { hits: 0, misses: 0 },
-    'pattern': { hits: 0, misses: 0 }
-};
-
-function updateDynamicWeights() {
-    const totalHits = Object.values(strategyStats).reduce((sum, s) => sum + s.hits, 0);
-    const totalMisses = Object.values(strategyStats).reduce((sum, s) => sum + s.misses, 0);
-    
-    if (totalHits + totalMisses > 100) {
-        const ratios = {};
-        for (const [key, stats] of Object.entries(strategyStats)) {
-            const total = stats.hits + stats.misses;
-            ratios[key] = total > 0 ? stats.hits / total : 0.01;
-        }
-        const totalRatio = Object.values(ratios).reduce((sum, r) => sum + r, 0);
-        if (totalRatio > 0) {
-            for (const [key, ratio] of Object.entries(ratios)) {
-                dynamicWeights[key] = Math.max(0.05, Math.min(0.70, ratio / totalRatio));
-            }
-        }
-    }
+function randBigInt(lo, hi) {
+    const range=hi-lo, bits=range.toString(2).length, bytes=Math.ceil(bits/8);
+    const arr=new Uint8Array(bytes); self.crypto.getRandomValues(arr);
+    const hex=Array.from(arr,b=>b.toString(16).padStart(2,'0')).join('');
+    return lo+(BigInt("0x"+hex)%range);
 }
 
-// ===== ULTIMATE PATROON-DATABASE (38+ PATRONEN) =====
-function getPuzzle135Patterns(depth) {
-    const basePatterns = [
-        { suffix: '0135', weight: 0.15 },      // Exact 0x0135
-        { suffix: '00135', weight: 0.12 },     // 0x00135
-        { suffix: '000135', weight: 0.10 },    // 0x000135
-        { suffix: '0000135', weight: 0.08 },   // 0x0000135
-    ];
-    
-    const fullPatterns = [
-        ...basePatterns,
-        { suffix: '01350', weight: 0.07 },     // 0x01350
-        { suffix: '013500', weight: 0.06 },    // 0x013500
-        { suffix: '0135000', weight: 0.05 },   // 0x0135000
-        { suffix: '0135135', weight: 0.04 },   // 0x0135135 (herhaald)
-        { suffix: '01350135', weight: 0.04 },  // 0x01350135 (herhaald)
-        { suffix: '0135abcd', weight: 0.03 },  // 0x0135ABCD
-        { suffix: '0135dead', weight: 0.03 },  // 0x0135DEAD
-        { suffix: '0135beef', weight: 0.03 },  // 0x0135BEEF
-        { suffix: '0135cafe', weight: 0.03 },  // 0x0135CAFE
-        { suffix: '0135feed', weight: 0.03 },  // 0x0135FEED
-        { suffix: '0135f00d', weight: 0.03 },  // 0x0135F00D
-        { suffix: '0135c0de', weight: 0.03 },  // 0x0135C0DE
-        { suffix: '0135baba', weight: 0.03 },  // 0x0135BABA
-        { suffix: '0135ffff', weight: 0.02 },  // 0x0135FFFF        { suffix: '01351234', weight: 0.02 },  // 0x01351234
-        { suffix: '01355678', weight: 0.02 },  // 0x01355678
-        { suffix: '013590ab', weight: 0.02 },  // 0x013590AB
-        { suffix: '0135aaaa', weight: 0.02 },  // 0x0135AAAA
-        { suffix: '01355555', weight: 0.02 },  // 0x01355555
-        { suffix: '5310', weight: 0.02 },      // 0x5310 (omgekeerd)
-        { suffix: '13500000', weight: 0.02 },  // 0x13500000
-    ];
-    
-    const aggressivePatterns = [
-        ...fullPatterns,
-        { suffix: '0135c0ffee', weight: 0.01 }, // 0x0135C0FFEE
-        { suffix: '0135baadf00d', weight: 0.01 }, // 0x0135BAADF00D
-        { suffix: '0135deadbeef', weight: 0.01 }, // 0x0135DEADBEEF
-        { suffix: '0135feedface', weight: 0.01 }, // 0x0135FEEDFACE
-        { suffix: '0135cafebabe', weight: 0.01 }, // 0x0135CAFEBABE
-        { suffix: '0135f00d', weight: 0.01 },     // 0x0135F00D (al toegevoegd, maar dubbel check)
-        { suffix: '0135c0de', weight: 0.01 },     // 0x0135C0DE (al toegevoegd)
-    ];
-    
-    switch(depth) {
-        case 'exact': return basePatterns;
-        case 'full': return fullPatterns;
-        case 'aggressive': return aggressivePatterns;
-        default: return fullPatterns;
-    }
-}
-
-function generateBiasedKey(startKey, endKey, strategy, biasRegions, goldilocksLevel, patternDepth) {
-    const range = endKey - startKey;
-    
-    let actualStrategy = strategy;
-    if (strategy === 'dynamic') {
-        const rand = Math.random();
-        let cumWeight = 0;
-        for (const [key, weight] of Object.entries(dynamicWeights)) {
-            cumWeight += weight;
-            if (rand < cumWeight) {
-                actualStrategy = key;
-                break;
-            }
-        }
-        strategyStats[actualStrategy].misses++;
-    }
-    
-    if (actualStrategy === 'uniform') {
-        const random = BigInt(Math.floor(Math.random() * Number(range)));
-        return startKey + random;
-    }
-    
-    if (actualStrategy === 'biased') {
-        const numRegions = biasRegions || 4;
-        const rand = Math.random();
-        let regionStart, regionEnd;
-        const regionSize = range / BigInt(numRegions);
-        
-        let regionIndex = 0;
-        let cumProb = 0;
-        for (let i = 0; i < numRegions; i++) {
-            const prob = (numRegions - i) / (numRegions * (numRegions + 1) / 2);
-            cumProb += prob;
-            if (rand < cumProb) {
-                regionIndex = i;
-                break;
-            }
-        }
-        
-        regionStart = startKey + regionSize * BigInt(regionIndex);
-        regionEnd = regionStart + regionSize - 1n;
-        if (regionEnd > endKey) regionEnd = endKey;
-        
-        const subRange = regionEnd - regionStart;
-        const random = BigInt(Math.floor(Math.random() * Number(subRange)));
-        return regionStart + random;
-    }
-    
-    if (actualStrategy === 'goldilocks') {
-        const level = goldilocksLevel || 'standard';
-        let patterns = [];
-        if (level === 'light') {
-            patterns = [{ offset: 0n }, { offset: 0x100n }, { offset: 0x200n }];
-        } else if (level === 'aggressive') {
-            patterns = [
-                { offset: 0n }, { offset: 0x100n }, { offset: 0x200n },
-                { offset: 0x400n }, { offset: 0x800n }, { offset: 0x1000n },
-                { offset: 0x2000n }, { offset: 0x4000n }, { offset: 0x8000n },
-                { offset: 0x10000n }, { offset: 0x20000n }, { offset: 0x40000n }
-            ];
-        } else {
-            patterns = [
-                { offset: 0n }, { offset: 0x100n }, { offset: 0x200n },
-                { offset: 0x400n }, { offset: 0x800n }, { offset: 0x1000n }
-            ];
-        }
-        
-        const pattern = patterns[Math.floor(Math.random() * patterns.length)];
-        const base = startKey + BigInt(Math.floor(Math.random() * Number(range / 0x1000n))) * 0x1000n;
-        return base + pattern.offset;
-    }
-    
-    if (actualStrategy === 'pattern') {
-        const depth = patternDepth || 'aggressive';
-        const patterns = getPuzzle135Patterns(depth);
-        
-        const rand = Math.random();
-        let cumWeight = 0;
-        let selectedPattern = patterns[0];
-        for (const pattern of patterns) {
-            cumWeight += pattern.weight;
-            if (rand < cumWeight) {
-                selectedPattern = pattern;
-                break;
-            }
-        }
-        
-        const suffix = selectedPattern.suffix;
-        const suffixValue = BigInt('0x' + suffix);
-        const rangeWithoutSuffix = range / (BigInt('0x1' + suffix.padStart(8, '0')));
-        const base = startKey + BigInt(Math.floor(Math.random() * Number(rangeWithoutSuffix))) * BigInt('0x' + suffix.padStart(8, '0'));
-        return base + suffixValue;
-    }
-    
-    // Fallback
-    const random = BigInt(Math.floor(Math.random() * Number(range)));
-    return startKey + random;
-}
+function jumpIndex(pubHex) { return parseInt(pubHex.substr(2,8),16)%NUM_STEPS; }
 
 self.onmessage = function(e) {
     const { type, rangeStartStr, rangeEndStr, targetPubHex, traps,
-            workerId, padLen, maxWildJumps, pathsPerWorker, stepsPerPath, dpMask,
-            strategy, biasRegions, goldilocksLevel, patternDepth } = e.data;
+            workerId, padLen, maxWildJumps, pathsPerWorker, stepsPerPath, dpMask } = e.data;
 
     const rangeStart = BigInt("0x"+rangeStartStr);
     const rangeEnd   = BigInt("0x"+rangeEndStr);
@@ -611,8 +382,7 @@ self.onmessage = function(e) {
         let jumpsCount = 0;
 
         for (let p=0;p<paths;p++) {
-            const k_start = generateBiasedKey(rangeStart, rangeEnd, strategy, 
-                parseInt(biasRegions || 4), goldilocksLevel || 'standard', patternDepth || 'aggressive');
+            const k_start = randBigInt(rangeStart, rangeEnd);
             let currDist  = 0n;
             let currPoint = G.mul(k_start.toString(16));
             for (let i=0;i<steps;i++) {
@@ -665,8 +435,6 @@ self.onmessage = function(e) {
         self.postMessage({ type:"WILD_DONE" });
     }
 };
-
-function jumpIndex(pubHex) { return parseInt(pubHex.substr(2,8),16)%NUM_STEPS; }
 </script>
 
 <!-- MAIN -->
@@ -706,28 +474,6 @@ function makeWorker() {
     return new Worker(URL.createObjectURL(new Blob([code],{type:'text/javascript'})));
 }
 function setRunning(v) { isRunning=v; startBtn.disabled=v; stopBtn.disabled=!v; }
-
-/* STRATEGY */
-function updateStrategy() {
-    const mode = document.getElementById('strategyMode').value;
-    const boost = getStrategyBoost(mode);
-    document.getElementById('stratBoostVal').textContent = '+' + boost + '%';
-    
-    document.getElementById('biasRegions').disabled = (mode !== 'biased' && mode !== 'dynamic');
-    document.getElementById('goldilocksLevel').disabled = (mode !== 'goldilocks' && mode !== 'dynamic');
-    document.getElementById('patternDepth').disabled = (mode !== 'pattern' && mode !== 'dynamic');
-}
-
-function getStrategyBoost(mode) {
-    switch(mode) {
-        case 'uniform': return 0;
-        case 'biased': return 300;
-        case 'goldilocks': return 500;
-        case 'pattern': return 1000; // Ultimate Pattern = 1000% verbetering!
-        case 'dynamic': return 750;
-        default: return 0;
-    }
-}
 
 /* OPTIMIZER */
 function updateOptimizer() {
@@ -784,7 +530,7 @@ startBtn.onclick = () => {
     ['totalJumps','speed','epochCount','trapCount'].forEach(id=>document.getElementById(id).textContent='0');
     progressBar.style.width='0%';
     setRunning(true);
-    log('🚀 Ultimate Pattern Engine gestart','ev-epoch');
+    log('🚀 Engine gestart','ev-epoch');
     nextEpoch();
 };
 
@@ -806,17 +552,10 @@ function nextEpoch() {
     const paths = parseInt(document.getElementById('pathsSlider').value);
     const steps = parseInt(document.getElementById('stepsPerPath').value);
     const dpMask= parseInt(document.getElementById('dpFilter').value);
-    
-    // Strategy settings
-    const strategy = document.getElementById('strategyMode').value;
-    const biasRegions = document.getElementById('biasRegions').value;
-    const goldilocksLevel = document.getElementById('goldilocksLevel').value;
-    const patternDepth = document.getElementById('patternDepth').value;
 
     killWorkers();
     setStatus('TAME — vallen plaatsen','tame');
-    log(`🏁 Epoch ${epoch} — TAME (${numW} workers, ${paths} paden, ${steps} stappen)`,'ev-epoch');
-    log(`📊 Strategie: ${strategy.toUpperCase()} (${getStrategyBoost(strategy)}% boost)`, 'ev-strat');
+    log(`🏁 Epoch ${epoch} — TAME (${numW} workers, ${paths} paden, ${steps} stappen)`,'ev-tame');
 
     for (let i=0;i<numW;i++) {
         const w=makeWorker(); workers.push(w);
@@ -832,8 +571,7 @@ function nextEpoch() {
             }
         };
         w.postMessage({ type:"TAME", rangeStartStr:range.start, rangeEndStr:range.end,
-                        workerId:i, pathsPerWorker:paths, stepsPerPath:steps, dpMask,
-                        strategy, biasRegions, goldilocksLevel, patternDepth });
+                        workerId:i, pathsPerWorker:paths, stepsPerPath:steps, dpMask });
     }
 }
 
@@ -890,9 +628,8 @@ function startWild(numW, range) {
     }
 }
 
-log('⚡ Ultimate Pattern geladen — 38+ patronen, +1000% kans');
+log('⚡ Systeem gereed — druk op Start om te beginnen');
 updateOptimizer();
-updateStrategy();
 updateChanceMeter(0);
 </script>
 </body>
