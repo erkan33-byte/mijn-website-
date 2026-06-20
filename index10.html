@@ -155,6 +155,18 @@
             <label>Schakel na X rondes naar MITM</label>
             <input id="switchMITM" value="50" type="number" min="1" max="1000">
         </div>
+        <div class="field">
+            <label>Max sprongen per worker (WILD)</label>
+            <input id="wildJumps" value="3000000" type="number" min="100000" max="100000000" step="100000">
+        </div>
+        <div class="field">
+            <label>Padlengte per worker (TAME)</label>
+            <input id="pathsSlider" value="200" type="number" min="50" max="500" step="10">
+        </div>
+        <div class="field">
+            <label>Stappen per pad (TAME)</label>
+            <input id="stepsPerPath" value="1500" type="number" min="500" max="10000" step="100">
+        </div>
         <div class="btn-row">
             <button class="btn btn-start" id="startBtn">▶ Start Hybride Scan</button>
             <button class="btn btn-stop"  id="stopBtn" disabled>■ Stop</button>
@@ -174,6 +186,11 @@
                 <div class="opt-label">MITM Halve stappen per ronde</div>
                 <input type="range" id="mitmSteps" min="1000" max="100000" step="1000" value="50000">
                 <div class="range-val" id="mitmVal">50.000 stappen</div>
+            </div>
+            <div class="opt-item">
+                <div class="opt-label">DP Mask (deterministische punten)</div>
+                <input type="range" id="dpFilter" min="0" max="1023" step="1" value="255">
+                <div class="range-val" id="dpVal">255 (0x0FF)</div>
             </div>
         </div>
         <div class="sci-note">
@@ -314,8 +331,17 @@ const NUM_STEPS = 32;
 const JUMP_SIZES  = [];
 const JUMP_POINTS = [];
 
-function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
-function ripemd160(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function sha256(hex) { 
+    const wordArray = CryptoJS.enc.Hex.parse(hex);
+    const hash = CryptoJS.SHA256(wordArray);
+    return hash.toString();
+}
+
+function ripemd160(hex) {
+    const wordArray = CryptoJS.enc.Hex.parse(hex);
+    const hash = CryptoJS.RIPEMD160(wordArray);
+    return hash.toString();
+}
 
 function toBase58(hex) {
     const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -663,6 +689,10 @@ document.getElementById('bsgsSteps').oninput = function() {
 document.getElementById('mitmSteps').oninput = function() {
     document.getElementById('mitmVal').textContent = this.value + ' stappen';
 };
+document.getElementById('dpFilter').oninput = function() {
+    const v = parseInt(this.value).toString(16).toUpperCase();
+    document.getElementById('dpVal').textContent = this.value + ' (0x' + v + ')';
+};
 
 /* KANS METER */
 function updateChanceMeter(currentSpeed) {
@@ -700,6 +730,7 @@ startBtn.onclick = () => {
     totalJumps=0; epoch=0; startTime=Date.now(); cumulativeJumps=0;
     ['totalJumps','speed','epochCount','trapCount'].forEach(id=>document.getElementById(id).textContent='0');
     progressBar.style.width='0%';
+    document.getElementById('matchTable').innerHTML = '<tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr>';
     setRunning(true);
     log('🚀 Ultra Hybride Scanner gestart','ev-epoch');
     nextEpoch();
@@ -720,9 +751,9 @@ function nextEpoch() {
 
     const numW  = Math.max(1, parseInt(document.getElementById('numW').value)||4);
     const range = calculateSubRange();
-    const paths = parseInt(document.getElementById('pathsSlider').value);
-    const steps = parseInt(document.getElementById('stepsPerPath').value);
-    const dpMask= parseInt(document.getElementById('dpFilter').value);
+    const paths = parseInt(document.getElementById('pathsSlider').value) || 200;
+    const steps = parseInt(document.getElementById('stepsPerPath').value) || 1500;
+    const dpMask= parseInt(document.getElementById('dpFilter').value) || 255;
     const switchBSGS = parseInt(document.getElementById('switchBSGS').value) || 10;
     const switchMITM = parseInt(document.getElementById('switchMITM').value) || 50;
     const bsgsSteps = parseInt(document.getElementById('bsgsSteps').value) || 50000;
@@ -769,7 +800,7 @@ function startWild(numW, range) {
     progressBar.style.width='55%';
     const trapObj      = Object.fromEntries(globalTraps);
     const targetPubHex = document.getElementById('pubKey').value.trim();
-    const maxWildJumps = parseInt(document.getElementById('wildJumps').value);
+    const maxWildJumps = parseInt(document.getElementById('wildJumps').value) || 3000000;
     const padLen       = 68;
     for (let i=0;i<numW;i++) {
         const w=makeWorker(); workers.push(w);
@@ -897,6 +928,7 @@ function handleFound(privHex, wif) {
 log('🚀 Ultra Hybride Scanner geladen — Kangaroo + BSGS + MITM');
 document.getElementById('bsgsVal').textContent = '50.000 stappen';
 document.getElementById('mitmVal').textContent = '50.000 stappen';
+document.getElementById('dpVal').textContent = '255 (0x0FF)';
 updateChanceMeter(0);
 </script>
 </body>
