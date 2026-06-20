@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Checksum Scanner — Oneindig (Gefixt)</title>
+    <title>Checksum Scanner — Oneindige Scan</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -62,7 +62,7 @@
 <div class="container">
 
     <div class="header">
-        <h1>🔍 Checksum Scanner (Oneindig - Gefixt)</h1>
+        <h1>🔍 Checksum Scanner (Oneindig)</h1>
         <div class="sub">Oneindige loop · Stopt alleen bij match of stop</div>
         <span class="badge">CHECKSUM-FILTER · ONEINDIG</span>
     </div>
@@ -116,7 +116,7 @@
             </div>
             <div class="stat-cell">
                 <div class="label">Snelheid</div>
-                <div class="value" style="color:var(--accent2)" id="speed">0 /s</div>
+                <div class="value" style="color:var(--accent2)" id="speedVal">0 /s</div>
             </div>
         </div>
         <div class="progress-wrap">
@@ -161,9 +161,10 @@ async function loadLibraries() {
         });
         cryptoJS = CryptoJS;
         log("✅ Bibliotheken geladen", "info");
+        return true;
     } catch (e) {
         log("❌ Fout bij laden bibliotheken: " + e.message, "error");
-        throw e;
+        return false;
     }
 }
 
@@ -272,8 +273,17 @@ const speedVal = document.getElementById('speedVal');
 const progressBar = document.getElementById('progressBar');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
+const matchTable = document.getElementById('matchTable');
 
-// ===== CALCULATE SUB RANGE (GEFIXT) =====
+// ===== STATUS UPDATE =====
+function setStatus(text) {
+    statusVal.textContent = text;
+    statusVal.className = '';
+    if (text === 'Scannen...') statusVal.classList.add('running');
+    else if (text === '🎉 GEVONDEN!') statusVal.classList.add('tame');
+}
+
+// ===== CALCULATE SUB RANGE =====
 function calculateSubRange() {
     const A = hexToBigInt(document.getElementById('rangeStart').value.trim());
     const B = hexToBigInt(document.getElementById('rangeEnd').value.trim());
@@ -287,13 +297,15 @@ function calculateSubRange() {
     };
 }
 
-// ===== SCAN LOOP (ONEINDIG) =====
+// ===== SCAN LOOP =====
 async function scanLoop() {
     while (isRunning && !stopRequested && !matchFound) {
-        // Als einde bereikt, spring terug naar begin
+        // Als einde bereikt, spring terug naar begin (oneindig)
         if (currentKey > rangeEnd) {
             currentKey = rangeStart;
             log(`🔄 Terug naar begin van de range (${bigIntToHex(currentKey, 20)})`, 'info');
+            // Reset progress voor de volgende ronde
+            totalChecked = 0n;
         }
         
         const batchEnd = currentKey + BigInt(batchSize) - 1n;
@@ -306,9 +318,9 @@ async function scanLoop() {
                 // Match gevonden!
                 matchFound = true;
                 const wif = calculateWIF(privHex);
-                log(`🎉 MATCH GEVONDEN! Privésleutel: ${privHex}`, 'found');
-                log(`💳 WIF: ${wif}`, 'found');
-                document.getElementById('matchTable').innerHTML = `
+                log(`🎉 MATCH GEVONDEN! Privésleutel: ${privHex}`, 'ev-found');
+                log(`💳 WIF: ${wif}`, 'ev-found');
+                matchTable.innerHTML = `
                     <tr class="found-row">
                         <td>✅ MATCH</td>
                         <td style="font-size:.65rem">${wif}</td>
@@ -328,13 +340,14 @@ async function scanLoop() {
             // Update UI elke batch
             if (totalChecked % BigInt(batchSize) === 0n) {
                 const elapsed = (Date.now() - startTime) / 1000;
-                const speed = Number(totalChecked) / elapsed;
+                const speed = elapsed > 0 ? Number(totalChecked) / elapsed : 0;
                 checkedVal.textContent = totalChecked.toLocaleString();
                 speedVal.textContent = Math.floor(speed).toLocaleString() + ' /s';
                 
                 const progress = Number((totalChecked * 10000n) / totalKeys) / 100;
                 progressBar.style.width = Math.min(progress, 99.99) + '%';
                 
+                // Geef de browser de kans om te renderen
                 await new Promise(r => setTimeout(r, 0));
             }
         }
@@ -356,17 +369,14 @@ startBtn.onclick = async () => {
     if (isRunning) return;
     
     // Reset state
-    isRunning = true;
-    stopRequested = false;
-    matchFound = false;
     totalChecked = 0n;
     startTime = Date.now();
+    matchFound = false;
+    stopRequested = false;
     
-    // Laad bibliotheken
-    try {
-        await loadLibraries();
-    } catch (e) {
-        isRunning = false;
+    // Laad bibliotheken (synchronized)
+    const loaded = await loadLibraries();
+    if (!loaded) {
         return;
     }
     
@@ -381,7 +391,6 @@ startBtn.onclick = async () => {
     // Analyseer adres
     const addrData = analyzeAddress(addr);
     if (!addrData) {
-        isRunning = false;
         return;
     }
     targetChecksum = addrData.checksum;
@@ -400,11 +409,12 @@ startBtn.onclick = async () => {
     matchTable.innerHTML = `<tr class="empty-row"><td colspan="3">Scannen...</td></tr>`;
     logBox.innerHTML = '';
     
+    // Set running state and start scan
+    isRunning = true;
     setStatus('Scannen...');
     startBtn.disabled = true;
     stopBtn.disabled = false;
     
-    // Start scan
     await scanLoop();
 };
 
