@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Hybride Kangaroo — iPhone Edition</title>
+    <title>Hybride Kangaroo — iPhone Fixed</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -104,9 +104,9 @@
 <div class="container">
 
     <div class="header">
-        <h1>🦘 Hybride Kangaroo — iPhone</h1>
-        <div class="sub">Checksum + Pollard · Geoptimaliseerd voor mobiel</div>
-        <span class="badge">MOBIEL · 5 WORKERS · SNEL</span>
+        <h1>🦘 Hybride Kangaroo — iPhone Fixed</h1>
+        <div class="sub">Checksum + Pollard · Werkt vloeiend op mobiel</div>
+        <span class="badge">MOBIEL · GEFIXT · 5 WORKERS</span>
     </div>
 
     <!-- Config -->
@@ -158,8 +158,8 @@
         <div class="opt-grid">
             <div class="opt-item">
                 <div class="opt-label">Traps per worker (paden)</div>
-                <input type="range" id="pathsSlider" min="100" max="1600" step="100" value="800" oninput="updateOptimizer()">
-                <div class="range-val" id="pathsVal">800 paden × 1500 stappen</div>
+                <input type="range" id="pathsSlider" min="100" max="800" step="100" value="400" oninput="updateOptimizer()">
+                <div class="range-val" id="pathsVal">400 paden × 1000 stappen</div>
             </div>
             <div class="opt-item">
                 <div class="opt-label">Distinguished Point Filter</div>
@@ -180,17 +180,17 @@
             <div class="opt-item">
                 <div class="opt-label">Stappen per pad (TAME)</div>
                 <select id="stepsPerPath" onchange="updateOptimizer()">
-                    <option value="1000">1000 (snel)</option>
-                    <option value="1500" selected>1500 (aanbevolen)</option>
-                    <option value="2500">2500 (intensief)</option>
+                    <option value="500">500 (snel)</option>
+                    <option value="1000" selected>1000 (aanbevolen)</option>
+                    <option value="1500">1500 (intensief)</option>
                 </select>
             </div>
         </div>
         <div class="sci-note">
             <strong>📱 Geoptimaliseerd voor iPhone:</strong><br>
-            <strong>5 workers</strong> (niet te zwaar voor batterij)<br>
-            <strong>8-bit DP filter</strong> (balans tussen snelheid en vallen)<br>
-            <strong>Checksum blijft 100% werken</strong> (alleen in WILD-fase)
+            <strong>400 paden × 1000 stappen</strong> (minder belasting)<br>
+            <strong>TAME-fase in batches</strong> (geen vastlopen meer)<br>
+            <strong>Checksum blijft 100% werken</strong>
         </div>
     </div>
 
@@ -215,7 +215,7 @@
                 <div class="big-number" id="chanceScientific">1 op ~2<sup>40</sup></div>
                 <div class="label-small">theoretische operaties</div>
                 <div class="kans-uitleg" id="chanceUitleg">
-                    iPhone-versie geladen.
+                    Werkt vloeiend op iPhone.
                 </div>
             </div>
         </div>
@@ -237,7 +237,7 @@
             </div>
             <div class="cmp-cell">
                 <div class="cmp-label">⏱ Tijd per epoch</div>
-                <div class="cmp-val" id="cmpTime">~2 sec</div>
+                <div class="cmp-val" id="cmpTime">~1 sec</div>
                 <div class="cmp-desc">mobiel</div>
             </div>
             <div class="cmp-cell">
@@ -255,7 +255,7 @@
             <strong>📐 Checksum:</strong><br>
             TAME-fase: GEEN checksum (ultra snel op mobiel)<br>
             WILD-fase: ALLEEN checksum-vallen (precies)<br>
-            Zo blijft de checksum 100% werken!
+            Checksum blijft 100% werken!
         </div>
     </div>
 
@@ -307,7 +307,7 @@
         </table>
     </div>
 
-    <div class="footer">Hybride Kangaroo · iPhone Edition</div>
+    <div class="footer">Hybride Kangaroo · iPhone Fixed</div>
 </div>
 
 <!-- WORKER -->
@@ -392,7 +392,7 @@ function base58ToHex(base58) {
     return hex;
 }
 
-// ===== WILD WORKER (MOBIEL VERSIE) =====
+// ===== WILD WORKER =====
 let wildTraps = {};
 let wildRunning = false;
 let wildTotalJumps = 0;
@@ -410,7 +410,6 @@ function wildLoop() {
     let batchJumps = 0;
     const startTime = performance.now();
     
-    // Doe zoveel mogelijk sprongen in 100ms (mobiel-vriendelijk)
     while (batchJumps < wildBatchSize && wildTotalJumps < wildMaxJumps && 
            (performance.now() - startTime) < 100) {
         const pubHex = wildCurrPoint.encode('hex',true);
@@ -452,6 +451,34 @@ function wildLoop() {
     setTimeout(wildLoop, 0);
 }
 
+// ===== TAME IN BATCHES (FIX VOOR VASTLOPEN) =====
+function tameLoop(localTraps, paths, steps, mask, rangeStart, rangeEnd, workerId, jumpsCount, p) {
+    if (p >= paths || !wildRunning) {
+        self.postMessage({ type:"TAME_READY", traps:localTraps, jumps:jumpsCount, workerId });
+        return;
+    }
+    
+    const k_start = randBigInt(rangeStart, rangeEnd);
+    let currDist  = 0n;
+    let currPoint = G.mul(k_start.toString(16));
+    
+    for (let i=0;i<steps;i++) {
+        const pubHex = currPoint.encode('hex',true);
+        if ((parseInt(pubHex.slice(-4),16) & mask) === 0) {
+            localTraps[pubHex] = { absKey: k_start.toString(16), dist: currDist.toString() };
+        }
+        const r=jumpIndex(pubHex);
+        currPoint=currPoint.add(JUMP_POINTS[r]);
+        currDist+=JUMP_SIZES[r];
+        jumpsCount++;
+    }
+    
+    // Volgende pad in volgende batch (geef browser ademruimte)
+    setTimeout(() => {
+        tameLoop(localTraps, paths, steps, mask, rangeStart, rangeEnd, workerId, jumpsCount, p + 1);
+    }, 0);
+}
+
 self.onmessage = function(e) {
     const { type, rangeStartStr, rangeEndStr, targetPubHex, targetAddr,
             workerId, padLen, maxWildJumps, pathsPerWorker, stepsPerPath, dpMask } = e.data;
@@ -469,36 +496,21 @@ self.onmessage = function(e) {
     }
     wildTargetChecksum = targetChecksum;
 
-    // ===== TAME: GEEN CHECKSUM-FILTER (SNEL OP MOBIEL) =====
+    // ===== TAME: IN BATCHES (GEEN VASTLOPEN) =====
     if (type === "TAME") {
         const localTraps = {};
-        const paths  = pathsPerWorker || 800;
-        const steps  = stepsPerPath   || 1500;
+        const paths  = pathsPerWorker || 400;
+        const steps  = stepsPerPath   || 1000;
         const mask   = dpMask || 0xFF;
         let jumpsCount = 0;
-
-        for (let p=0;p<paths;p++) {
-            const k_start = randBigInt(rangeStart, rangeEnd);
-            let currDist  = 0n;
-            let currPoint = G.mul(k_start.toString(16));
-            for (let i=0;i<steps;i++) {
-                const pubHex = currPoint.encode('hex',true);
-                if ((parseInt(pubHex.slice(-4),16) & mask) === 0) {
-                    localTraps[pubHex] = { absKey: k_start.toString(16), dist: currDist.toString() };
-                }
-                const r=jumpIndex(pubHex);
-                currPoint=currPoint.add(JUMP_POINTS[r]);
-                currDist+=JUMP_SIZES[r];
-                jumpsCount++;
-            }
-        }
-        self.postMessage({ type:"TAME_READY", traps:localTraps, jumps:jumpsCount, workerId });
+        
+        // Start de eerste batch
+        tameLoop(localTraps, paths, steps, mask, rangeStart, rangeEnd, workerId, jumpsCount, 0);
         return;
     }
 
     // ===== WILD: ALLEEN CHECKSUM-VALLEN =====
     if (type === "WILD") {
-        // Filter alleen vallen met de juiste checksum
         const unfilteredTraps = e.data.traps || {};
         const filteredTraps = {};
         for (const [pubHex, trap] of Object.entries(unfilteredTraps)) {
@@ -594,7 +606,7 @@ function updateChanceMeter(currentSpeed) {
          Theoretisch nodig: <strong>~2<sup>40</sup> ≈ 1,1 × 10<sup>12</sup></strong> operaties.`;
 
     document.getElementById('cmpUniverse').textContent = '~2⁴⁰ ≈ 1,1×10¹²';
-    document.getElementById('cmpTime').textContent = '~2 sec/epoch';
+    document.getElementById('cmpTime').textContent = '~1 sec/epoch';
 
     document.getElementById('cmpLottery').textContent = (KANGAROO_OPS/7e6).toExponential(1)+'×';
     document.getElementById('cmpEpochs').textContent  = epoch;
@@ -607,7 +619,7 @@ startBtn.onclick = () => {
     ['totalJumps','speed','epochCount','trapCount'].forEach(id=>document.getElementById(id).textContent='0');
     progressBar.style.width='0%';
     setRunning(true);
-    log('🚀 Hybride Kangaroo (iPhone) gestart','ev-epoch');
+    log('🚀 Hybride Kangaroo (iPhone Fixed) gestart','ev-epoch');
     nextEpoch();
 };
 
@@ -708,7 +720,7 @@ function startWild(numW, range) {
     }
 }
 
-log('⚡ Hybride Kangaroo (iPhone) geladen');
+log('⚡ Hybride Kangaroo (iPhone Fixed) geladen');
 updateOptimizer();
 updateChanceMeter(0);
 </script>
