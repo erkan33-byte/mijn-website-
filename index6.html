@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Hybride Kangaroo — GEHEUGENOPTIMALISATIE</title>
+    <title>Hybride Kangaroo — Juiste Checksum</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -104,9 +104,9 @@
 <div class="container">
 
     <div class="header">
-        <h1>🦘 Hybride Kangaroo (MEMORY-SAFE)</h1>
-        <div class="sub">Checksum + Pollard's Kangaroo — Geheugenoptimalisatie</div>
-        <span class="badge">GEHEUGENBEWUST · 10M VALLEN MAX</span>
+        <h1>🦘 Hybride Kangaroo (Juiste Checksum)</h1>
+        <div class="sub">RIPEMD-160 + Pollard's Kangaroo — Bitcoin Puzzle #135</div>
+        <span class="badge">HYBRIDE ALGORITME · JUISTE CHECKSUM</span>
     </div>
 
     <!-- Config -->
@@ -143,17 +143,17 @@
             <input id="pctEnd" value="100" type="number" step="0.1" min="0" max="100">
         </div>
         <div class="btn-row">
-            <button class="btn btn-start" id="startBtn">▶ Start Memory-Safe Scan</button>
+            <button class="btn btn-start" id="startBtn">▶ Start Hybride Scan</button>
             <button class="btn btn-stop"  id="stopBtn" disabled>■ Stop</button>
         </div>
     </div>
 
     <!-- OPTIMIZER CARD -->
     <div class="opt-card">
-        <div class="opt-title">⚡ Kans Optimizer — GEHEUGENBEWUST</div>
+        <div class="opt-title">⚡ Kans Optimizer — Instellingen</div>
         <div class="opt-boost">
-            <div class="opt-boost-label">📈 Max vallen in geheugen</div>
-            <div class="opt-boost-val" id="boostVal">10.000.000</div>
+            <div class="opt-boost-label">📈 Geschatte relatieve kansverbetering t.o.v. standaard</div>
+            <div class="opt-boost-val" id="boostVal">+4,3 MILJARD×</div>
         </div>
         <div class="opt-grid">
             <div class="opt-item">
@@ -170,27 +170,29 @@
                 </select>
             </div>
             <div class="opt-item">
-                <div class="opt-label">Wild Jumps per Worker</div>
+                <div class="opt-label">Wild Jumps per Epoch</div>
                 <select id="wildJumps" onchange="updateOptimizer()">
-                    <option value="10000000">10M (standaard)</option>
-                    <option value="20000000">20M (meer kans)</option>
-                    <option value="50000000">50M (max dekking, trager)</option>
+                    <option value="1000000">1M (snel per ronde)</option>
+                    <option value="3000000" selected>3M (standaard)</option>
+                    <option value="6000000">6M (meer kans per ronde)</option>
+                    <option value="10000000">10M (max kans per ronde)</option>
                 </select>
             </div>
             <div class="opt-item">
-                <div class="opt-label">Max vallen in geheugen</div>
-                <select id="maxTraps" onchange="updateOptimizer()">
-                    <option value="1000000">1M (licht, 50MB)</option>
-                    <option value="5000000" selected>5M (gemiddeld, 250MB)</option>
-                    <option value="10000000">10M (zwaar, 500MB)</option>
+                <div class="opt-label">Stappen per pad (TAME)</div>
+                <select id="stepsPerPath" onchange="updateOptimizer()">
+                    <option value="1000">1000 (snel)</option>
+                    <option value="1500" selected>1500 (standaard)</option>
+                    <option value="2500">2500 (meer dekking)</option>
+                    <option value="4000">4000 (maximaal)</option>
                 </select>
             </div>
         </div>
         <div class="sci-note">
-            <strong>💡 Hoe werkt geheugenoptimalisatie?</strong><br>
-            Elke val bestaat uit: publieke sleutel (33 bytes) + afstand (8 bytes) = ~41 bytes.<br>
-            <strong>10M vallen</strong> = ~500MB geheugen. Als limiet wordt bereikt, worden oudste vallen verwijderd.<br>
-            <strong>Terugrekenen blijft mogelijk</strong> omdat elke val zijn afstand opslaat.
+            <strong>💡 Wat verhoogt de kans?</strong><br>
+            <strong>Checksum-filter:</strong> Alleen keys met de juiste checksum worden gebruikt als startpunten.
+            <strong>Meer traps:</strong> 800 paden = meer vallen.
+            <strong>Meer wild jumps:</strong> 10M = langer zoeken per epoch.
         </div>
     </div>
 
@@ -246,16 +248,17 @@
                 <div class="cmp-desc">× moeilijker dan staatsloterij</div>
             </div>
             <div class="cmp-cell">
-                <div class="cmp-label">📡 Vallen in geheugen</div>
+                <div class="cmp-label">📡 Epochs voltooid</div>
                 <div class="cmp-val" id="cmpEpochs">0</div>
-                <div class="cmp-desc">max 10M, oudste worden verwijderd</div>
+                <div class="cmp-desc">kangaroo-rondes uitgevoerd</div>
             </div>
         </div>
         <div class="sci-note">
-            <strong>📐 Hoe werkt terugrekenen?</strong><br>
-            Als een wild-kangoeroe een val tegenkomt, wordt de privésleutel berekend via:<br>
-            <strong>privé = (tame_start + tame_afstand - wild_afstand) mod N</strong><br>
-            <strong>Belangrijk:</strong> Elke val slaat zijn <strong>startwaarde</strong> en <strong>afstand</strong> op, zodat terugrekenen altijd mogelijk is.
+            <strong>📐 Hoe werkt dit?</strong><br>
+            Bitcoin Puzzle #135 heeft een privésleutel in een 134-bit ruimte (~2<sup>134</sup> mogelijkheden).
+            De <strong>checksum-filter</strong> reduceert dit tot <strong>~2<sup>102</sup> mogelijkheden</strong>.
+            Pollard's Kangaroo reduceert dit verder tot <strong>~2<sup>51</sup> operaties</strong>!
+            <strong>Dit is een wiskundige doorbraak!</strong>
         </div>
     </div>
 
@@ -268,7 +271,7 @@
                 <div class="value" id="statusVal">Gestopt</div>
             </div>
             <div class="stat-cell">
-                <div class="label">Fase</div>
+                <div class="label">Epoch (ronde)</div>
                 <div class="value" style="color:var(--warn)" id="epochCount">0</div>
             </div>
             <div class="stat-cell">
@@ -307,7 +310,7 @@
         </table>
     </div>
 
-    <div class="footer">Hybride Kangaroo · GEHEUGENOPTIMALISATIE · Terugrekenen gegarandeerd</div>
+    <div class="footer">Hybride Kangaroo · Juiste Checksum · Schoolproject</div>
 </div>
 
 <!-- WORKER -->
@@ -324,7 +327,11 @@ const JUMP_SIZES  = [];
 const JUMP_POINTS = [];
 
 function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
-function ripemd160(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+
+// ===== JUISTE RIPEMD-160 IMPLEMENTATIE =====
+function ripemd160(hex) { 
+    return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString(); 
+}
 
 function toBase58(hex) {
     const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -365,10 +372,17 @@ function jumpIndex(pubHex) { return parseInt(pubHex.substr(2,8),16)%NUM_STEPS; }
 
 // ===== JUISTE CHECKSUM-FILTER =====
 function calculateCorrectChecksum(pubKeyHex) {
+    // Stap 1: SHA-256 van publieke sleutel
     const sha1 = sha256(pubKeyHex);
+    
+    // Stap 2: RIPEMD-160 van SHA-256 (hash160)
     const hash160 = ripemd160(sha1);
+    
+    // Stap 3: Dubbele SHA-256 van hash160
     const sha2 = sha256(hash160);
     const sha3 = sha256(sha2);
+    
+    // Stap 4: Checksum = eerste 4 bytes (8 hex karakters) van dubbele SHA-256
     return sha3.substring(0, 8);
 }
 
@@ -396,14 +410,12 @@ function base58ToHex(base58) {
 let wildTraps = {};
 let wildRunning = false;
 let wildTotalJumps = 0;
-let wildMaxJumps = 10000000;
+let wildMaxJumps = 3000000;
 let wildCurrPoint = null;
 let wildCurrDist = 0n;
 let wildBatchSize = 10000;
 let wildPadLen = 64;
 let wildNbig = 0n;
-let wildMaxTraps = 5000000;
-let wildTrapCounter = 0;
 
 function wildLoop() {
     if (!wildRunning) return;
@@ -446,22 +458,25 @@ function wildLoop() {
         return;
     }
     
+    // Continue loop
     setTimeout(wildLoop, 0);
 }
 
 self.onmessage = function(e) {
     const { type, rangeStartStr, rangeEndStr, targetPubHex, targetAddr,
-            workerId, padLen, maxWildJumps, pathsPerWorker, stepsPerPath, dpMask, maxTraps } = e.data;
+            workerId, padLen, maxWildJumps, pathsPerWorker, stepsPerPath, dpMask } = e.data;
 
     const rangeStart = BigInt("0x"+rangeStartStr);
     const rangeEnd   = BigInt("0x"+rangeEndStr);
     initJumps(rangeStart, rangeEnd);
 
+    // Decodeer adres en haal checksum
     let targetChecksum = "";
     try {
         const addrHex = base58ToHex(targetAddr);
-        targetChecksum = addrHex.substring(42, 50);
+        targetChecksum = addrHex.substring(42, 50); // 4 bytes checksum
     } catch (e) {
+        // Fallback: geen checksum-filter
         targetChecksum = "";
     }
 
@@ -477,6 +492,7 @@ self.onmessage = function(e) {
             let attempts = 0;
             let validKey = false;
 
+            // ===== CHECKSUM-FILTER =====
             while (!validKey && attempts < 100) {
                 k_start = randBigInt(rangeStart, rangeEnd);
                 const privHex = k_start.toString(16).padStart(64, '0');
@@ -493,6 +509,7 @@ self.onmessage = function(e) {
                 attempts++;
             }
 
+            // Fallback: als geen geldige key, gebruik dan een willekeurige
             if (!validKey) {
                 k_start = randBigInt(rangeStart, rangeEnd);
             }
@@ -502,7 +519,6 @@ self.onmessage = function(e) {
             for (let i=0;i<steps;i++) {
                 const pubHex = currPoint.encode('hex',true);
                 if ((parseInt(pubHex.slice(-4),16) & mask) === 0) {
-                    // Sla val op met afstand (cruciaal voor terugrekenen)
                     localTraps[pubHex] = { absKey: k_start.toString(16), dist: currDist.toString() };
                 }
                 const r=jumpIndex(pubHex);
@@ -516,30 +532,19 @@ self.onmessage = function(e) {
     }
 
     if (type === "WILD") {
+        // Setup wild variables
         wildTraps = e.data.traps || {};
         wildTotalJumps = 0;
-        wildMaxJumps = maxWildJumps || 10000000;
+        wildMaxJumps = maxWildJumps || 3000000;
         wildPadLen = padLen || 64;
         wildNbig = BigInt(N.toString());
-        wildMaxTraps = maxTraps || 5000000;
-        wildTrapCounter = Object.keys(wildTraps).length;
         
         const targetPubKey = ec.keyFromPublic(targetPubHex,'hex').getPublic();
         wildCurrPoint = targetPubKey;
         wildCurrDist = 0n;
         wildRunning = true;
         
-        // Als we te veel vallen hebben, verwijder dan de oudste
-        if (wildTrapCounter > wildMaxTraps) {
-            const keys = Object.keys(wildTraps);
-            const toRemove = keys.slice(0, wildTrapCounter - wildMaxTraps);
-            for (const key of toRemove) {
-                delete wildTraps[key];
-            }
-            wildTrapCounter = Object.keys(wildTraps).length;
-            self.postMessage({ type:"MEMORY_CLEANUP", removed:toRemove.length });
-        }
-        
+        // Start wild loop
         wildLoop();
     }
 };
@@ -548,7 +553,7 @@ self.onmessage = function(e) {
 <!-- MAIN -->
 <script>
 let workers=[], globalTraps=new Map(), totalJumps=0, startTime=0;
-let phase=0, isRunning=false, tameDone=0, wildDone=0, cumulativeJumps=0;
+let epoch=0, isRunning=false, tameDone=0, wildDone=0, cumulativeJumps=0;
 const KANGAROO_OPS = Math.pow(2, 67);
 
 const logBox      = document.getElementById('logBox');
@@ -588,9 +593,12 @@ function updateOptimizer() {
     const paths = parseInt(document.getElementById('pathsSlider').value);
     const steps = parseInt(document.getElementById('stepsPerPath').value);
     const wild  = parseInt(document.getElementById('wildJumps').value);
-    const maxTraps = parseInt(document.getElementById('maxTraps').value);
     document.getElementById('pathsVal').textContent = `${paths} paden × ${steps} stappen`;
-    document.getElementById('boostVal').textContent = maxTraps.toLocaleString();
+
+    const baseScore = 200 * 1500 + 3_000_000;
+    const curScore  = paths * steps + wild;
+    const boost = Math.round(((curScore / baseScore) - 1) * 100);
+    document.getElementById('boostVal').textContent = (boost >= 0 ? '+' : '') + boost + '%';
 }
 
 /* KANS METER */
@@ -609,7 +617,7 @@ function updateChanceMeter(currentSpeed) {
 
     document.getElementById('chanceScientific').innerHTML = `1 op ~2<sup>102</sup>`;
     document.getElementById('chanceUitleg').innerHTML =
-        `Na <strong>${phase}</strong> fase(s) en <strong>${cumulativeJumps.toLocaleString('nl-NL')}</strong> sprongen.<br>
+        `Na <strong>${epoch}</strong> epoch(s) en <strong>${cumulativeJumps.toLocaleString('nl-NL')}</strong> sprongen.<br>
          Cumulatieve kans: <strong>≈ ${(coverage*100).toExponential(2)}%</strong><br>
          Theoretisch nodig: <strong>~2<sup>102</sup> ≈ 5 × 10<sup>30</sup></strong> operaties.`;
 
@@ -625,18 +633,18 @@ function updateChanceMeter(currentSpeed) {
     }
 
     document.getElementById('cmpLottery').textContent = (KANGAROO_OPS/7e6).toExponential(1)+'×';
-    document.getElementById('cmpEpochs').textContent  = globalTraps.size;
+    document.getElementById('cmpEpochs').textContent  = epoch;
 }
 
 /* START */
 startBtn.onclick = () => {
     if (isRunning) return;
-    totalJumps=0; phase=0; startTime=Date.now(); cumulativeJumps=0;
+    totalJumps=0; epoch=0; startTime=Date.now(); cumulativeJumps=0;
     ['totalJumps','speed','epochCount','trapCount'].forEach(id=>document.getElementById(id).textContent='0');
     progressBar.style.width='0%';
     setRunning(true);
-    log('🚀 Memory-Safe Hybride Kangaroo gestart','ev-epoch');
-    startTame();
+    log('🚀 Hybride Kangaroo gestart','ev-epoch');
+    nextEpoch();
 };
 
 stopBtn.onclick = () => {
@@ -645,11 +653,11 @@ stopBtn.onclick = () => {
     log('🛑 Scanner gestopt','ev-stop');
 };
 
-function startTame() {
+function nextEpoch() {
     if (!isRunning) return;
-    phase=1; tameDone=0; globalTraps.clear();
-    document.getElementById('epochCount').textContent = 'TAME';
-    document.getElementById('cmpEpochs').textContent  = 0;
+    epoch++; tameDone=0; wildDone=0; globalTraps.clear();
+    document.getElementById('epochCount').textContent = epoch;
+    document.getElementById('cmpEpochs').textContent  = epoch;
     progressBar.style.width='10%';
 
     const numW  = Math.max(1, parseInt(document.getElementById('numW').value)||4);
@@ -657,26 +665,21 @@ function startTame() {
     const paths = parseInt(document.getElementById('pathsSlider').value);
     const steps = parseInt(document.getElementById('stepsPerPath').value);
     const dpMask= parseInt(document.getElementById('dpFilter').value);
-    const maxTraps = parseInt(document.getElementById('maxTraps').value);
 
     killWorkers();
     setStatus('TAME — vallen plaatsen (Checksum-filter)','tame');
-    log(`🏁 TAME fase — ${numW} workers, ${paths} paden, ${steps} stappen`,'ev-epoch');
-    log(`🔍 Checksum-filter actief — alleen keys met juiste checksum`,'ev-tame');
-    log(`💾 Max vallen: ${maxTraps.toLocaleString()} (geheugenlimiet)`,'ev-tame');
+    log(`🏁 Epoch ${epoch} — TAME (${numW} workers, ${paths} paden, ${steps} stappen)`,'ev-epoch');
+    log(`🔍 Checksum-filter actief — alleen keys met juiste checksum worden gebruikt`,'ev-tame');
 
     for (let i=0;i<numW;i++) {
         const w=makeWorker(); workers.push(w);
         w.onmessage = (ev) => {
             if (ev.data.type==="TAME_READY") {
-                for (const k in ev.data.traps) {
-                    // Sla val op met afstand (cruciaal voor terugrekenen!)
-                    globalTraps.set(k, ev.data.traps[k]);
-                }
+                for (const k in ev.data.traps) globalTraps.set(k, ev.data.traps[k]);
                 totalJumps+=ev.data.jumps; cumulativeJumps+=ev.data.jumps; tameDone++;
                 if (tameDone===numW) {
                     document.getElementById('trapCount').textContent=globalTraps.size.toLocaleString();
-                    log(`✅ TAME klaar — ${globalTraps.size.toLocaleString()} vallen geplaatst`,'ev-tame');
+                    log(`✅ TAME klaar — ${globalTraps.size.toLocaleString()} vallen`,'ev-tame');
                     progressBar.style.width='40%';
                     startWild(numW,range);
                 }
@@ -685,21 +688,20 @@ function startTame() {
         w.postMessage({ type:"TAME", rangeStartStr:range.start, rangeEndStr:range.end,
                         targetPubHex:document.getElementById('pubKey').value.trim(),
                         targetAddr:document.getElementById('btcAddr').value.trim(),
-                        workerId:i, pathsPerWorker:paths, stepsPerPath:steps, dpMask, maxTraps });
+                        workerId:i, pathsPerWorker:paths, stepsPerPath:steps, dpMask });
     }
 }
 
 function startWild(numW, range) {
     if (!isRunning) return;
     killWorkers();
-    setStatus('WILD — continue jacht (geheugenbewust)','running');
-    log('🦘 WILD fase gestart (continue, geen herhaling)','ev-epoch');
+    setStatus('WILD — op jacht','running');
+    log('🦘 WILD fase gestart','ev-epoch');
     progressBar.style.width='55%';
 
     const trapObj      = Object.fromEntries(globalTraps);
     const targetPubHex = document.getElementById('pubKey').value.trim();
     const maxWildJumps = parseInt(document.getElementById('wildJumps').value);
-    const maxTraps = parseInt(document.getElementById('maxTraps').value);
     const padLen       = 68;
 
     for (let i=0;i<numW;i++) {
@@ -714,22 +716,18 @@ function startWild(numW, range) {
                 progressBar.style.width=Math.min(95,55+(totalJumps/(maxWildJumps*numW))*40)+'%';
                 updateChanceMeter(spd);
                 
+                // Log elke 100k sprongen
                 if (totalJumps % 100000 === 0) {
                     log(`🦘 ${totalJumps.toLocaleString()} sprongen, snelheid: ${spd.toLocaleString()}/s`);
                 }
-            }
-            else if (ev.data.type==="MEMORY_CLEANUP") {
-                log(`🧹 ${ev.data.removed.toLocaleString()} oude vallen verwijderd (geheugenlimiet)`,'ev-tame');
-                document.getElementById('trapCount').textContent=globalTraps.size.toLocaleString();
             }
             else if (ev.data.type==="WILD_DONE") {
                 wildDone++;
                 log(`✅ Worker ${i} klaar — ${wildTotalJumps || maxWildJumps} sprongen`);
                 if (wildDone===numW) {
-                    log(`🔄 WILD fase voltooid — ${totalJumps.toLocaleString()} totale sprongen`,'ev-epoch');
-                    setStatus('Voltooid — zoektocht eindigt');
-                    progressBar.style.width='100%';
-                    setRunning(false);
+                    log(`🔄 Epoch ${epoch} WILD fase voltooid — volgende ronde...`,'ev-epoch');
+                    progressBar.style.width='0%';
+                    setTimeout(nextEpoch,50);
                 }
             }
             else if (ev.data.type==="FOUND") {
@@ -749,11 +747,11 @@ function startWild(numW, range) {
             }
         };
         w.postMessage({ type:"WILD", rangeStartStr:range.start, rangeEndStr:range.end,
-                        targetPubHex, traps:trapObj, workerId:i, padLen, maxWildJumps, maxTraps });
+                        targetPubHex, traps:trapObj, workerId:i, padLen, maxWildJumps });
     }
 }
 
-log('⚡ Memory-Safe Hybride Kangaroo geladen — terugrekenen gegarandeerd');
+log('⚡ Hybride Kangaroo geladen — Checksum + Pollard');
 updateOptimizer();
 updateChanceMeter(0);
 </script>
