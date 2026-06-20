@@ -469,33 +469,45 @@ self.onmessage = function(e) {
         let currPoint = targetPubKey, currDist = 0n, totalWildJumps = 0;
         const batchSize = 10000;
         const maxJumps  = maxWildJumps || 3000000;
+        let traps = {}; // Wordt gevuld door de main thread
 
-        while (totalWildJumps < maxJumps) {
-            for (let i=0;i<batchSize;i++) {
-                const pubHex = currPoint.encode('hex',true);
-                if (traps[pubHex]) {
-                    const { absKey, dist:distStr } = traps[pubHex];
-                    const k_tame   = BigInt("0x"+absKey);
-                    const tameDist = BigInt(distStr);
-                    let secretKey  = ((k_tame+tameDist-currDist)%Nbig+Nbig)%Nbig;
-                    if (secretKey > 0n) {
-                        const privHex    = secretKey.toString(16).padStart(padLen||64,'0');
-                        const full32     = secretKey.toString(16).padStart(64,'0');
-                        const wifPayload = "80"+full32+"01";
-                        const doubleSha  = sha256(sha256(wifPayload));
-                        const wif        = toBase58(wifPayload+doubleSha.slice(0,8));
-                        self.postMessage({ type:"FOUND", privHex, wif });
-                        return;
+        // Wacht tot de traps zijn ontvangen
+        self.onmessage = function(e) {
+            if (e.data.type === "WILD") {
+                traps = e.data.traps || {};
+                while (totalWildJumps < maxJumps) {
+                    for (let i=0;i<batchSize;i++) {
+                        const pubHex = currPoint.encode('hex',true);
+                        if (traps[pubHex]) {
+                            const { absKey, dist:distStr } = traps[pubHex];
+                            const k_tame   = BigInt("0x"+absKey);
+                            const tameDist = BigInt(distStr);
+                            let secretKey  = ((k_tame+tameDist-currDist)%Nbig+Nbig)%Nbig;
+                            if (secretKey > 0n) {
+                                const privHex    = secretKey.toString(16).padStart(padLen||64,'0');
+                                const full32     = secretKey.toString(16).padStart(64,'0');
+                                const wifPayload = "80"+full32+"01";
+                                const doubleSha  = sha256(sha256(wifPayload));
+                                const wif        = toBase58(wifPayload+doubleSha.slice(0,8));
+                                self.postMessage({ type:"FOUND", privHex, wif });
+                                return;
+                            }
+                        }
+                        const r=jumpIndex(pubHex);
+                        currPoint=currPoint.add(JUMP_POINTS[r]);
+                        currDist+=JUMP_SIZES[r];
+                        totalWildJumps++;
+                        
+                        // Stuur progress elke batch
+                        if (totalWildJumps % batchSize === 0) {
+                            self.postMessage({ type:"PROGRESS", jumps:batchSize });
+                        }
                     }
+                    totalWildJumps += batchSize;
                 }
-                const r=jumpIndex(pubHex);
-                currPoint=currPoint.add(JUMP_POINTS[r]);
-                currDist+=JUMP_SIZES[r];
+                self.postMessage({ type:"WILD_DONE" });
             }
-            totalWildJumps += batchSize;
-            self.postMessage({ type:"PROGRESS", jumps:batchSize });
-        }
-        self.postMessage({ type:"WILD_DONE" });
+        };
     }
 };
 </script>
@@ -624,14 +636,15 @@ function nextEpoch() {
     for (let i=0;i<numW;i++) {
         const w=makeWorker(); workers.push(w);
         w.onmessage = (ev) => {
-            if (ev.data.type!=="TAME_READY") return;
-            for (const k in ev.data.traps) globalTraps.set(k, ev.data.traps[k]);
-            totalJumps+=ev.data.jumps; cumulativeJumps+=ev.data.jumps; tameDone++;
-            if (tameDone===numW) {
-                document.getElementById('trapCount').textContent=globalTraps.size.toLocaleString();
-                log(`✅ TAME klaar — ${globalTraps.size.toLocaleString()} vallen`,'ev-tame');
-                progressBar.style.width='40%';
-                startWild(numW,range);
+            if (ev.data.type==="TAME_READY") {
+                for (const k in ev.data.traps) globalTraps.set(k, ev.data.traps[k]);
+                totalJumps+=ev.data.jumps; cumulativeJumps+=ev.data.jumps; tameDone++;
+                if (tameDone===numW) {
+                    document.getElementById('trapCount').textContent=globalTraps.size.toLocaleString();
+                    log(`✅ TAME klaar — ${globalTraps.size.toLocaleString()} vallen`,'ev-tame');
+                    progressBar.style.width='40%';
+                    startWild(numW,range);
+                }
             }
         };
         w.postMessage({ type:"TAME", rangeStartStr:range.start, rangeEndStr:range.end,
