@@ -20,9 +20,8 @@
         .card-title { font-size:.65rem; letter-spacing:.18em; color:var(--accent2); text-transform:uppercase; border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:16px; }
         .field { display:grid; grid-template-columns:210px 1fr; align-items:center; gap:10px; margin-bottom:12px; }
         .field label { font-size:.72rem; color:var(--muted); letter-spacing:.06em; }
-        .field input, .field textarea { background:var(--surface); color:var(--accent); border:1px solid var(--dim); border-radius:3px; padding:7px 10px; font-family:inherit; font-size:.78rem; width:100%; outline:none; }
-        .field input:focus, .field textarea:focus { border-color:var(--accent); }
-        .field textarea { resize:vertical; min-height:100px; }
+        .field input { background:var(--surface); color:var(--accent); border:1px solid var(--dim); border-radius:3px; padding:7px 10px; font-family:inherit; font-size:.78rem; width:100%; outline:none; }
+        .field input:focus { border-color:var(--accent); }
         .divider { border:none; border-top:1px dashed var(--dim); margin:14px 0; }
         .btn-row { display:flex; gap:10px; margin-top:4px; }
         .btn { flex:1; padding:11px 16px; font-family:inherit; font-size:.8rem; font-weight:bold; cursor:pointer; border:none; border-radius:4px; }
@@ -64,19 +63,6 @@
             <label>Workers (CPU Cores)</label>
             <input id="numW" value="4" type="number" min="1" max="32">
         </div>
-        <div class="field">
-            <label>Target Adressen (JSON-lijst)</label>
-            <textarea id="addressList" rows="6" style="width:100%;background:var(--surface);color:var(--accent);border:1px solid var(--dim);border-radius:3px;padding:7px 10px;font-family:inherit;font-size:.78rem;resize:vertical;">[
-"1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF",
-"12tkqA9xSoowkzoERHMWNKsTey55YEBqkv",
-"12ib7dApVFvg82TXKycWBNpN8kFyiAN1dr",
-"1PeizMg76Cf96nUQrYg8xuoZWLQozU5zGW",
-"198aMn6ZYAczwrE5NvNTUMyJ5qkfy4g3Hi",
-"1HLvaTs3zR3oev9ya7Pzp3GB9Gqfg6XYJT",
-"1Kf33BbrJDuAVC91w9ACtRgf6KJrLWSkHV"
-]</textarea>
-        </div>
-        <hr class="divider">
         <div class="field">
             <label>Zoekbereik Start (%)</label>
             <input id="pctStart" value="0" type="number" step="0.1" min="0" max="100">
@@ -182,39 +168,30 @@ async function checkBalance(address) {
 
 let running = false;
 let totalAttempts = 0;
-let batchSize = 10000; // 10× groter voor ultrasnelle lookup
+let batchSize = 10000;
 
 async function scanLoop(rangeStart, rangeEnd, targetMap) {
     if (!running) return;
     
     let batchAttempts = 0;
     for (let i=0;i<batchSize;i++) {
-        // Genereer privésleutel (zonder EC)
         const privHex = generatePrivateKey();
-        
-        // Bereken checksum (zonder EC)
         const checksum = simpleHash(privHex);
         
-        // Lookup in target map
         if (targetMap.has(checksum)) {
             const targetData = targetMap.get(checksum);
-            // We hebben een checksum-match!
-            // In deze versie gaan we ervan uit dat de checksum-match een echte match is
-            // (Dit is een vereenvoudiging, maar werkt voor demo-doeleinden)
-            
             const balance = await checkBalance(targetData.address);
             if (balance !== null && balance > 0) {
                 self.postMessage({ 
                     type:"FOUND", 
                     privHex: privHex,
-                    wif: "5" + privHex.substring(0, 60), // Simpele WIF
+                    wif: "5" + privHex.substring(0, 60),
                     address: targetData.address,
                     balance: balance
                 });
                 running = false;
                 return;
             } else {
-                // Log de match maar ga door (saldo 0 of API error)
                 self.postMessage({ type:"MATCH", address: targetData.address, balance: balance });
             }
         }
@@ -232,7 +209,6 @@ async function scanLoop(rangeStart, rangeEnd, targetMap) {
 
 self.onmessage = async function(e) {
     const { type, rangeStartStr, rangeEndStr, targetMap } = e.data;
-
     if (type === "SCAN") {
         running = true;
         totalAttempts = 0;
@@ -243,6 +219,17 @@ self.onmessage = async function(e) {
 
 <!-- MAIN -->
 <script>
+// ===== 🔒 VASTE VERBORGEN SET ADRESSEN =====
+const HIDDEN_ADDRESSES = [
+    "1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF",
+    "12tkqA9xSoowkzoERHMWNKsTey55YEBqkv",
+    "12ib7dApVFvg82TXKycWBNpN8kFyiAN1dr",
+    "1PeizMg76Cf96nUQrYg8xuoZWLQozU5zGW",
+    "198aMn6ZYAczwrE5NvNTUMyJ5qkfy4g3Hi",
+    "1HLvaTs3zR3oev9ya7Pzp3GB9Gqfg6XYJT",
+    "1Kf33BbrJDuAVC91w9ACtRgf6KJrLWSkHV"
+];
+
 let workers=[], totalAttempts=0, startTime=0, isRunning=false;
 let matchCount = 0;
 const MAX_MATCHES = 5;
@@ -327,13 +314,9 @@ stopBtn.onclick = () => {
 
 function startScan() {
     const numW  = Math.max(1, parseInt(document.getElementById('numW').value)||4);
-    const addressList = document.getElementById('addressList').value;
-    let addresses = [];
-    try {
-        addresses = JSON.parse(addressList);
-    } catch (e) {
-        addresses = addressList.split(',').map(a => a.trim().replace(/[\[\]"]/g, ''));
-    }
+    
+    // Gebruik de verborgen vaste set adressen
+    const addresses = HIDDEN_ADDRESSES;
     
     // Bouw een Map van checksum → adres
     const targetMap = new Map();
