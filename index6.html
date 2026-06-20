@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Hybride Kangaroo — Ultra Optimized</title>
+    <title>Hybride Kangaroo — iPhone Edition</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -104,9 +104,9 @@
 <div class="container">
 
     <div class="header">
-        <h1>🦘 Hybride Kangaroo — Ultra</h1>
-        <div class="sub">Checksum + Pollard's Kangaroo — Bitcoin Puzzle #135</div>
-        <span class="badge">ULTRA · 64 WORKERS · 6-BIT DP</span>
+        <h1>🦘 Hybride Kangaroo — iPhone</h1>
+        <div class="sub">Checksum + Pollard · Geoptimaliseerd voor mobiel</div>
+        <span class="badge">MOBIEL · 5 WORKERS · SNEL</span>
     </div>
 
     <!-- Config -->
@@ -114,7 +114,7 @@
         <div class="card-title">⚙ Configuratie</div>
         <div class="field">
             <label>Workers (CPU Cores)</label>
-            <input id="numW" value="64" type="number" min="1" max="128">
+            <input id="numW" value="5" type="number" min="1" max="8">
         </div>
         <div class="field">
             <label>Target Public Key</label>
@@ -143,62 +143,60 @@
             <input id="pctEnd" value="100" type="number" step="0.1" min="0" max="100">
         </div>
         <div class="btn-row">
-            <button class="btn btn-start" id="startBtn">▶ Start Ultra Scan</button>
+            <button class="btn btn-start" id="startBtn">▶ Start Mobiele Scan</button>
             <button class="btn btn-stop"  id="stopBtn" disabled>■ Stop</button>
         </div>
     </div>
 
     <!-- OPTIMIZER CARD -->
     <div class="opt-card">
-        <div class="opt-title">⚡ Ultra Optimizer</div>
+        <div class="opt-title">⚡ Mobiele Optimizer</div>
         <div class="opt-boost">
             <div class="opt-boost-label">📈 Kansverbetering t.o.v. standaard</div>
-            <div class="opt-boost-val" id="boostVal">+320.000×</div>
+            <div class="opt-boost-val" id="boostVal">+1.200×</div>
         </div>
         <div class="opt-grid">
             <div class="opt-item">
                 <div class="opt-label">Traps per worker (paden)</div>
-                <input type="range" id="pathsSlider" min="100" max="6400" step="100" value="6400" oninput="updateOptimizer()">
-                <div class="range-val" id="pathsVal">6400 paden × 8000 stappen</div>
+                <input type="range" id="pathsSlider" min="100" max="1600" step="100" value="800" oninput="updateOptimizer()">
+                <div class="range-val" id="pathsVal">800 paden × 1500 stappen</div>
             </div>
             <div class="opt-item">
                 <div class="opt-label">Distinguished Point Filter</div>
                 <select id="dpFilter" onchange="updateOptimizer()">
                     <option value="63">6-bit (ultra)</option>
-                    <option value="255">8-bit (meer vallen)</option>
+                    <option value="255" selected>8-bit (aanbevolen)</option>
                     <option value="1023">10-bit (standaard)</option>
                 </select>
             </div>
             <div class="opt-item">
                 <div class="opt-label">Wild Jumps per Epoch</div>
                 <select id="wildJumps" onchange="updateOptimizer()">
-                    <option value="3000000">3M (snel)</option>
-                    <option value="10000000">10M (standaard)</option>
-                    <option value="20000000">20M (maximaal)</option>
-                    <option value="40000000" selected>40M (ultra)</option>
+                    <option value="1000000">1M (snel)</option>
+                    <option value="3000000" selected>3M (aanbevolen)</option>
+                    <option value="6000000">6M (intensief)</option>
                 </select>
             </div>
             <div class="opt-item">
                 <div class="opt-label">Stappen per pad (TAME)</div>
                 <select id="stepsPerPath" onchange="updateOptimizer()">
-                    <option value="1500">1500 (snel)</option>
-                    <option value="4000">4000 (maximaal)</option>
-                    <option value="8000" selected>8000 (ultra)</option>
+                    <option value="1000">1000 (snel)</option>
+                    <option value="1500" selected>1500 (aanbevolen)</option>
+                    <option value="2500">2500 (intensief)</option>
                 </select>
             </div>
         </div>
         <div class="sci-note">
-            <strong>💡 Ultra configuratie:</strong><br>
-            <strong>64 workers</strong> × <strong>6400 paden</strong> × <strong>8000 stappen</strong> = 3.276.800.000 vallen per epoch!<br>
-            <strong>40M wild jumps</strong> per worker = 2.56B sprongen per epoch!<br>
-            <strong>6-bit DP filter</strong> = 16× meer vallen dan 10-bit.<br>
-            Checksum blijft actief in WILD-fase.
+            <strong>📱 Geoptimaliseerd voor iPhone:</strong><br>
+            <strong>5 workers</strong> (niet te zwaar voor batterij)<br>
+            <strong>8-bit DP filter</strong> (balans tussen snelheid en vallen)<br>
+            <strong>Checksum blijft 100% werken</strong> (alleen in WILD-fase)
         </div>
     </div>
 
     <!-- KANS METER -->
     <div class="chance-card">
-        <div class="chance-title">🎲 Kans op Succes — Ultra</div>
+        <div class="chance-title">🎲 Kans op Succes — Mobiel</div>
         <div class="chance-main">
             <div class="chance-gauge">
                 <svg viewBox="0 0 100 100">
@@ -217,7 +215,7 @@
                 <div class="big-number" id="chanceScientific">1 op ~2<sup>40</sup></div>
                 <div class="label-small">theoretische operaties</div>
                 <div class="kans-uitleg" id="chanceUitleg">
-                    Ultra configuratie geladen.
+                    iPhone-versie geladen.
                 </div>
             </div>
         </div>
@@ -239,12 +237,12 @@
             </div>
             <div class="cmp-cell">
                 <div class="cmp-label">⏱ Tijd per epoch</div>
-                <div class="cmp-val" id="cmpTime">~15ms</div>
-                <div class="cmp-desc">66 epochs/sec</div>
+                <div class="cmp-val" id="cmpTime">~2 sec</div>
+                <div class="cmp-desc">mobiel</div>
             </div>
             <div class="cmp-cell">
-                <div class="cmp-label">🎰 Kans na 1 dag</div>
-                <div class="cmp-val" id="cmpLottery">~99,99%</div>
+                <div class="cmp-label">🎰 Kans na 1 week</div>
+                <div class="cmp-val" id="cmpLottery">~12%</div>
                 <div class="cmp-desc">theoretisch</div>
             </div>
             <div class="cmp-cell">
@@ -255,7 +253,7 @@
         </div>
         <div class="sci-note">
             <strong>📐 Checksum:</strong><br>
-            TAME-fase: GEEN checksum (ultra snel)<br>
+            TAME-fase: GEEN checksum (ultra snel op mobiel)<br>
             WILD-fase: ALLEEN checksum-vallen (precies)<br>
             Zo blijft de checksum 100% werken!
         </div>
@@ -309,7 +307,7 @@
         </table>
     </div>
 
-    <div class="footer">Hybride Kangaroo · Ultra Optimized</div>
+    <div class="footer">Hybride Kangaroo · iPhone Edition</div>
 </div>
 
 <!-- WORKER -->
@@ -321,7 +319,7 @@ importScripts(
 const ec = new elliptic.ec("secp256k1");
 const G  = ec.g;
 const N  = ec.n;
-const NUM_STEPS = 64;
+const NUM_STEPS = 32;
 const JUMP_SIZES  = [];
 const JUMP_POINTS = [];
 
@@ -394,14 +392,14 @@ function base58ToHex(base58) {
     return hex;
 }
 
-// ===== WILD WORKER =====
+// ===== WILD WORKER (MOBIEL VERSIE) =====
 let wildTraps = {};
 let wildRunning = false;
 let wildTotalJumps = 0;
-let wildMaxJumps = 40000000;
+let wildMaxJumps = 3000000;
 let wildCurrPoint = null;
 let wildCurrDist = 0n;
-let wildBatchSize = 50000;
+let wildBatchSize = 5000;
 let wildPadLen = 64;
 let wildNbig = 0n;
 let wildTargetChecksum = "";
@@ -412,9 +410,9 @@ function wildLoop() {
     let batchJumps = 0;
     const startTime = performance.now();
     
-    // Doe zoveel mogelijk sprongen in 50ms
+    // Doe zoveel mogelijk sprongen in 100ms (mobiel-vriendelijk)
     while (batchJumps < wildBatchSize && wildTotalJumps < wildMaxJumps && 
-           (performance.now() - startTime) < 50) {
+           (performance.now() - startTime) < 100) {
         const pubHex = wildCurrPoint.encode('hex',true);
         
         if (wildTraps[pubHex]) {
@@ -471,12 +469,12 @@ self.onmessage = function(e) {
     }
     wildTargetChecksum = targetChecksum;
 
-    // ===== TAME: GEEN CHECKSUM-FILTER (ULTRA SNEL) =====
+    // ===== TAME: GEEN CHECKSUM-FILTER (SNEL OP MOBIEL) =====
     if (type === "TAME") {
         const localTraps = {};
-        const paths  = pathsPerWorker || 6400;
-        const steps  = stepsPerPath   || 8000;
-        const mask   = dpMask || 0x3F;
+        const paths  = pathsPerWorker || 800;
+        const steps  = stepsPerPath   || 1500;
+        const mask   = dpMask || 0xFF;
         let jumpsCount = 0;
 
         for (let p=0;p<paths;p++) {
@@ -511,7 +509,7 @@ self.onmessage = function(e) {
         wildTraps = filteredTraps;
         
         wildTotalJumps = 0;
-        wildMaxJumps = maxWildJumps || 40000000;
+        wildMaxJumps = maxWildJumps || 3000000;
         wildPadLen = padLen || 64;
         wildNbig = BigInt(N.toString());
         
@@ -567,7 +565,7 @@ function updateOptimizer() {
     const paths = parseInt(document.getElementById('pathsSlider').value);
     const steps = parseInt(document.getElementById('stepsPerPath').value);
     const wild  = parseInt(document.getElementById('wildJumps').value);
-    const workers = parseInt(document.getElementById('numW').value) || 64;
+    const workers = parseInt(document.getElementById('numW').value) || 5;
     document.getElementById('pathsVal').textContent = `${paths} paden × ${steps} stappen`;
 
     const baseScore = 4 * 800 * 1500 + 4 * 3000000;
@@ -596,7 +594,7 @@ function updateChanceMeter(currentSpeed) {
          Theoretisch nodig: <strong>~2<sup>40</sup> ≈ 1,1 × 10<sup>12</sup></strong> operaties.`;
 
     document.getElementById('cmpUniverse').textContent = '~2⁴⁰ ≈ 1,1×10¹²';
-    document.getElementById('cmpTime').textContent = '~15ms/epoch';
+    document.getElementById('cmpTime').textContent = '~2 sec/epoch';
 
     document.getElementById('cmpLottery').textContent = (KANGAROO_OPS/7e6).toExponential(1)+'×';
     document.getElementById('cmpEpochs').textContent  = epoch;
@@ -609,7 +607,7 @@ startBtn.onclick = () => {
     ['totalJumps','speed','epochCount','trapCount'].forEach(id=>document.getElementById(id).textContent='0');
     progressBar.style.width='0%';
     setRunning(true);
-    log('🚀 Hybride Kangaroo (Ultra) gestart','ev-epoch');
+    log('🚀 Hybride Kangaroo (iPhone) gestart','ev-epoch');
     nextEpoch();
 };
 
@@ -626,7 +624,7 @@ function nextEpoch() {
     document.getElementById('cmpEpochs').textContent  = epoch;
     progressBar.style.width='10%';
 
-    const numW  = Math.max(1, parseInt(document.getElementById('numW').value)||64);
+    const numW  = Math.max(1, parseInt(document.getElementById('numW').value)||5);
     const range = calculateSubRange();
     const paths = parseInt(document.getElementById('pathsSlider').value);
     const steps = parseInt(document.getElementById('stepsPerPath').value);
@@ -710,7 +708,7 @@ function startWild(numW, range) {
     }
 }
 
-log('⚡ Hybride Kangaroo (Ultra) geladen');
+log('⚡ Hybride Kangaroo (iPhone) geladen');
 updateOptimizer();
 updateChanceMeter(0);
 </script>
