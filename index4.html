@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Hybride Kangaroo — Checksum + Pollard</title>
+    <title>Hybride Kangaroo — Gecorrigeerd</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -104,9 +104,9 @@
 <div class="container">
 
     <div class="header">
-        <h1>🦘 Hybride Kangaroo</h1>
+        <h1>🦘 Hybride Kangaroo (Gecorrigeerd)</h1>
         <div class="sub">Checksum + Pollard's Kangaroo — Bitcoin Puzzle #135</div>
-        <span class="badge">HYBRIDE ALGORITME · CHECKSUM-FILTER</span>
+        <span class="badge">HYBRIDE ALGORITME · JUISTE CHECKSUM</span>
     </div>
 
     <!-- Config -->
@@ -310,7 +310,7 @@
         </table>
     </div>
 
-    <div class="footer">Hybride Kangaroo · Checksum + Pollard · Schoolproject</div>
+    <div class="footer">Hybride Kangaroo · Gecorrigeerde Checksum · Schoolproject</div>
 </div>
 
 <!-- WORKER -->
@@ -327,6 +327,7 @@ const JUMP_SIZES  = [];
 const JUMP_POINTS = [];
 
 function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+function ripemd160(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
 
 function toBase58(hex) {
     const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -365,17 +366,24 @@ function randBigInt(lo, hi) {
 
 function jumpIndex(pubHex) { return parseInt(pubHex.substr(2,8),16)%NUM_STEPS; }
 
-// ===== CHECKSUM-FILTER =====
-function pubKeyToHash160(pubKeyHex) {
-    const sha256 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pubKeyHex)).toString();
-    // RIPEMD-160 simulatie (SHA-256 als fallback)
-    const ripemd160 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(sha256)).toString();
-    return ripemd160;
+// ===== JUISTE CHECKSUM-FILTER =====
+function calculateCorrectChecksum(pubKeyHex) {
+    // Stap 1: SHA-256 van publieke sleutel
+    const sha1 = sha256(pubKeyHex);
+    
+    // Stap 2: RIPEMD-160 van SHA-256 (hash160)
+    const hash160 = ripemd160(sha1);
+    
+    // Stap 3: Dubbele SHA-256 van hash160
+    const sha2 = sha256(hash160);
+    const sha3 = sha256(sha2);
+    
+    // Stap 4: Checksum = eerste 4 bytes (8 hex karakters) van dubbele SHA-256
+    return sha3.substring(0, 8);
 }
 
 function hasValidChecksum(pubKeyHex, targetChecksum) {
-    const hash160 = pubKeyToHash160(pubKeyHex);
-    const calculatedChecksum = hash160.substring(0, 8); // Eerste 4 bytes
+    const calculatedChecksum = calculateCorrectChecksum(pubKeyHex);
     return calculatedChecksum === targetChecksum;
 }
 
@@ -392,6 +400,62 @@ function base58ToHex(base58) {
     let hex = result.toString(16);
     while (hex.length < 50) hex = "0" + hex;
     return hex;
+}
+
+// ===== WILD WORKER =====
+let wildTraps = {};
+let wildRunning = false;
+let wildTotalJumps = 0;
+let wildMaxJumps = 3000000;
+let wildCurrPoint = null;
+let wildCurrDist = 0n;
+let wildBatchSize = 10000;
+let wildPadLen = 64;
+let wildNbig = 0n;
+
+function wildLoop() {
+    if (!wildRunning) return;
+    
+    let batchJumps = 0;
+    for (let i=0;i<wildBatchSize && wildTotalJumps<wildMaxJumps;i++) {
+        const pubHex = wildCurrPoint.encode('hex',true);
+        
+        if (wildTraps[pubHex]) {
+            const { absKey, dist:distStr } = wildTraps[pubHex];
+            const k_tame   = BigInt("0x"+absKey);
+            const tameDist = BigInt(distStr);
+            let secretKey  = ((k_tame+tameDist-wildCurrDist)%wildNbig+wildNbig)%wildNbig;
+            if (secretKey > 0n) {
+                const privHex    = secretKey.toString(16).padStart(wildPadLen||64,'0');
+                const full32     = secretKey.toString(16).padStart(64,'0');
+                const wifPayload = "80"+full32+"01";
+                const doubleSha  = sha256(sha256(wifPayload));
+                const wif        = toBase58(wifPayload+doubleSha.slice(0,8));
+                self.postMessage({ type:"FOUND", privHex, wif });
+                wildRunning = false;
+                return;
+            }
+        }
+        
+        const r=jumpIndex(pubHex);
+        wildCurrPoint = wildCurrPoint.add(JUMP_POINTS[r]);
+        wildCurrDist += JUMP_SIZES[r];
+        wildTotalJumps++;
+        batchJumps++;
+    }
+    
+    if (batchJumps > 0) {
+        self.postMessage({ type:"PROGRESS", jumps:batchJumps });
+    }
+    
+    if (wildTotalJumps >= wildMaxJumps) {
+        self.postMessage({ type:"WILD_DONE" });
+        wildRunning = false;
+        return;
+    }
+    
+    // Continue loop
+    setTimeout(wildLoop, 0);
 }
 
 self.onmessage = function(e) {
@@ -464,50 +528,20 @@ self.onmessage = function(e) {
     }
 
     if (type === "WILD") {
+        // Setup wild variables
+        wildTraps = e.data.traps || {};
+        wildTotalJumps = 0;
+        wildMaxJumps = maxWildJumps || 3000000;
+        wildPadLen = padLen || 64;
+        wildNbig = BigInt(N.toString());
+        
         const targetPubKey = ec.keyFromPublic(targetPubHex,'hex').getPublic();
-        const Nbig = BigInt(N.toString());
-        let currPoint = targetPubKey, currDist = 0n, totalWildJumps = 0;
-        const batchSize = 10000;
-        const maxJumps  = maxWildJumps || 3000000;
-        let traps = {}; // Wordt gevuld door de main thread
-
-        // Wacht tot de traps zijn ontvangen
-        self.onmessage = function(e) {
-            if (e.data.type === "WILD") {
-                traps = e.data.traps || {};
-                while (totalWildJumps < maxJumps) {
-                    for (let i=0;i<batchSize;i++) {
-                        const pubHex = currPoint.encode('hex',true);
-                        if (traps[pubHex]) {
-                            const { absKey, dist:distStr } = traps[pubHex];
-                            const k_tame   = BigInt("0x"+absKey);
-                            const tameDist = BigInt(distStr);
-                            let secretKey  = ((k_tame+tameDist-currDist)%Nbig+Nbig)%Nbig;
-                            if (secretKey > 0n) {
-                                const privHex    = secretKey.toString(16).padStart(padLen||64,'0');
-                                const full32     = secretKey.toString(16).padStart(64,'0');
-                                const wifPayload = "80"+full32+"01";
-                                const doubleSha  = sha256(sha256(wifPayload));
-                                const wif        = toBase58(wifPayload+doubleSha.slice(0,8));
-                                self.postMessage({ type:"FOUND", privHex, wif });
-                                return;
-                            }
-                        }
-                        const r=jumpIndex(pubHex);
-                        currPoint=currPoint.add(JUMP_POINTS[r]);
-                        currDist+=JUMP_SIZES[r];
-                        totalWildJumps++;
-                        
-                        // Stuur progress elke batch
-                        if (totalWildJumps % batchSize === 0) {
-                            self.postMessage({ type:"PROGRESS", jumps:batchSize });
-                        }
-                    }
-                    totalWildJumps += batchSize;
-                }
-                self.postMessage({ type:"WILD_DONE" });
-            }
-        };
+        wildCurrPoint = targetPubKey;
+        wildCurrDist = 0n;
+        wildRunning = true;
+        
+        // Start wild loop
+        wildLoop();
     }
 };
 </script>
@@ -677,11 +711,17 @@ function startWild(numW, range) {
                 document.getElementById('speed').textContent=spd.toLocaleString()+' /s';
                 progressBar.style.width=Math.min(95,55+(totalJumps/(maxWildJumps*numW))*40)+'%';
                 updateChanceMeter(spd);
+                
+                // Log elke 100k sprongen
+                if (totalJumps % 100000 === 0) {
+                    log(`🦘 ${totalJumps.toLocaleString()} sprongen, snelheid: ${spd.toLocaleString()}/s`);
+                }
             }
             else if (ev.data.type==="WILD_DONE") {
                 wildDone++;
+                log(`✅ Worker ${i} klaar — ${wildTotalJumps || maxWildJumps} sprongen`);
                 if (wildDone===numW) {
-                    log(`🔄 Epoch ${epoch} klaar — volgende ronde...`,'ev-epoch');
+                    log(`🔄 Epoch ${epoch} WILD fase voltooid — volgende ronde...`,'ev-epoch');
                     progressBar.style.width='0%';
                     setTimeout(nextEpoch,50);
                 }
