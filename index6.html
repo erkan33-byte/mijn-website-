@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Checksum Scanner — Directe Berekening</title>
+    <title>Scanner + Saldo Check</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -20,8 +20,9 @@
         .card-title { font-size:.65rem; letter-spacing:.18em; color:var(--accent2); text-transform:uppercase; border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:16px; }
         .field { display:grid; grid-template-columns:210px 1fr; align-items:center; gap:10px; margin-bottom:12px; }
         .field label { font-size:.72rem; color:var(--muted); letter-spacing:.06em; }
-        .field input { background:var(--surface); color:var(--accent); border:1px solid var(--dim); border-radius:3px; padding:7px 10px; font-family:inherit; font-size:.78rem; width:100%; outline:none; }
-        .field input:focus { border-color:var(--accent); }
+        .field input, .field textarea { background:var(--surface); color:var(--accent); border:1px solid var(--dim); border-radius:3px; padding:7px 10px; font-family:inherit; font-size:.78rem; width:100%; outline:none; }
+        .field input:focus, .field textarea:focus { border-color:var(--accent); }
+        .field textarea { resize:vertical; min-height:100px; }
         .divider { border:none; border-top:1px dashed var(--dim); margin:14px 0; }
         .btn-row { display:flex; gap:10px; margin-top:4px; }
         .btn { flex:1; padding:11px 16px; font-family:inherit; font-size:.8rem; font-weight:bold; cursor:pointer; border:none; border-radius:4px; }
@@ -52,12 +53,11 @@
 <div class="container">
 
     <div class="header">
-        <h1>⚡ Checksum Scanner</h1>
-        <div class="sub">Directe checksum-berekening · Geen Kangaroo</div>
-        <span class="badge">CHECKSUM-ONLY · 100% BITCOIN-STANDAARD</span>
+        <h1>💰 Scanner + Saldo Check</h1>
+        <div class="sub">Checksum → Adres → Saldo via API</div>
+        <span class="badge">SALDO > 0 = STOP</span>
     </div>
 
-    <!-- Config -->
     <div class="card">
         <div class="card-title">⚙ Configuratie</div>
         <div class="field">
@@ -65,21 +65,16 @@
             <input id="numW" value="4" type="number" min="1" max="32">
         </div>
         <div class="field">
-            <label>Target Public Key</label>
-            <input id="pubKey" value="02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16" type="text">
-        </div>
-        <div class="field">
-            <label>Target BTC Adres</label>
-            <input id="btcAddr" value="16RGFo6hjq9ym6Pj7N5H7L1NR1rVPJyw2v" type="text">
-        </div>
-        <hr class="divider">
-        <div class="field">
-            <label>Absoluut Start (HEX)</label>
-            <input id="rangeStart" value="4000000000000000000000000000000000" type="text">
-        </div>
-        <div class="field">
-            <label>Absoluut Eind (HEX)</label>
-            <input id="rangeEnd" value="7fffffffffffffffffffffffffffffffff" type="text">
+            <label>Target Adressen (JSON-lijst)</label>
+            <textarea id="addressList" rows="6" style="width:100%;background:var(--surface);color:var(--accent);border:1px solid var(--dim);border-radius:3px;padding:7px 10px;font-family:inherit;font-size:.78rem;resize:vertical;">[
+"1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF",
+"12tkqA9xSoowkzoERHMWNKsTey55YEBqkv",
+"12ib7dApVFvg82TXKycWBNpN8kFyiAN1dr",
+"1PeizMg76Cf96nUQrYg8xuoZWLQozU5zGW",
+"198aMn6ZYAczwrE5NvNTUMyJ5qkfy4g3Hi",
+"1HLvaTs3zR3oev9ya7Pzp3GB9Gqfg6XYJT",
+"1Kf33BbrJDuAVC91w9ACtRgf6KJrLWSkHV"
+]</textarea>
         </div>
         <hr class="divider">
         <div class="field">
@@ -92,11 +87,10 @@
         </div>
         <div class="btn-row">
             <button class="btn btn-start" id="startBtn">▶ Start Scan</button>
-            <button class="btn btn-stop"  id="stopBtn" disabled>■ Stop</button>
+            <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
         </div>
     </div>
 
-    <!-- Stats -->
     <div class="card">
         <div class="card-title">📊 Live Statistieken</div>
         <div class="stats-grid">
@@ -112,32 +106,32 @@
                 <div class="label">Snelheid</div>
                 <div class="value" style="color:var(--accent2)" id="speed">0 /s</div>
             </div>
+            <div class="stat-cell">
+                <div class="label">Adressen</div>
+                <div class="value" style="color:var(--text)" id="addressCount">0</div>
+            </div>
         </div>
         <div class="progress-wrap">
             <div class="progress-bar" id="progressBar"></div>
         </div>
     </div>
 
-    <!-- Log -->
     <div class="card">
         <div class="card-title">📋 Activiteitenlog</div>
         <div class="log" id="logBox"></div>
     </div>
 
-    <!-- Results -->
     <div class="card">
         <div class="card-title">🎯 Resultaten</div>
         <table class="result-table">
             <thead>
-                <tr><th>Type</th><th>WIF (Compressed)</th><th>Privésleutel (HEX)</th></tr>
+                <tr><th>#</th><th>Type</th><th>Adres</th><th>Saldo</th><th>WIF</th><th>Privésleutel (HEX)</th></tr>
             </thead>
             <tbody id="matchTable">
-                <tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr>
+                <tr class="empty-row"><td colspan="6">Nog geen match met saldo > 0...</td></tr>
             </tbody>
         </table>
     </div>
-
-    <div class="footer">Checksum Scanner · Alleen checksum-berekening</div>
 </div>
 
 <!-- WORKER -->
@@ -148,7 +142,6 @@ importScripts(
 );
 const ec = new elliptic.ec("secp256k1");
 const G  = ec.g;
-const N  = ec.n;
 
 function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
 function ripemd160(hex) { return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString(); }
@@ -197,11 +190,31 @@ function base58ToHex(base58) {
     return hex;
 }
 
+function pubKeyToAddress(pubKeyHex) {
+    const sha1 = sha256(pubKeyHex);
+    const hash160 = ripemd160(sha1);
+    const sha2 = sha256(hash160);
+    const sha3 = sha256(sha2);
+    const checksum = sha3.substring(0, 8);
+    return toBase58("00" + hash160 + checksum);
+}
+
+// ===== SALDO API =====
+function checkBalance(address) {
+    return new Promise((resolve) => {
+        const url = `https://blockchain.info/q/addressbalance/${address}`;
+        fetch(url)
+            .then(res => res.text())
+            .then(balance => resolve(parseInt(balance) / 1e8))
+            .catch(() => resolve(null));
+    });
+}
+
 let running = false;
 let totalAttempts = 0;
 let batchSize = 1000;
 
-function scanLoop(rangeStart, rangeEnd, targetChecksum) {
+async function scanLoop(rangeStart, rangeEnd, targetAddresses) {
     if (!running) return;
     
     let batchAttempts = 0;
@@ -211,16 +224,39 @@ function scanLoop(rangeStart, rangeEnd, targetChecksum) {
         try {
             const keyPair = ec.keyFromPrivate(privHex);
             const pubKey = keyPair.getPublic();
-            const pubKeyHex = pubKey.encode('hex', true);
+            const pubKeyHex = pubKey.encode('hex', false);
+            
+            // Stap 1: Checksum controleren
             const checksum = calculateCorrectChecksum(pubKeyHex);
-            if (checksum === targetChecksum) {
-                const privHexFinal = k_start.toString(16).padStart(64, '0');
-                const wifPayload = "80"+privHexFinal+"01";
-                const doubleSha = sha256(sha256(wifPayload));
-                const wif = toBase58(wifPayload+doubleSha.slice(0,8));
-                self.postMessage({ type:"FOUND", privHex:privHexFinal, wif });
-                running = false;
-                return;
+            
+            for (const targetAddr of targetAddresses) {
+                if (checksum === targetAddr.checksum) {
+                    // Stap 2: Volledig adres controleren
+                    const fullAddress = pubKeyToAddress(pubKeyHex);
+                    if (fullAddress === targetAddr.address) {
+                        // Stap 3: Saldo check via API
+                        const balance = await checkBalance(fullAddress);
+                        if (balance !== null) {
+                            self.postMessage({ 
+                                type:"BALANCE_CHECK", 
+                                address: fullAddress, 
+                                balance: balance,
+                                privHex: k_start.toString(16).padStart(64, '0'),
+                                wif: toBase58("80"+k_start.toString(16).padStart(64, '0')+"01"+sha256(sha256("80"+k_start.toString(16).padStart(64, '0')+"01")).slice(0,8))
+                            });
+                            if (balance > 0) {
+                                // ECHTE MATCH MET SALDO!
+                                const privHexFinal = k_start.toString(16).padStart(64, '0');
+                                const wifPayload = "80"+privHexFinal+"01";
+                                const doubleSha = sha256(sha256(wifPayload));
+                                const wif = toBase58(wifPayload+doubleSha.slice(0,8));
+                                self.postMessage({ type:"FOUND", privHex:privHexFinal, wif, address:fullAddress, balance: balance });
+                                running = false;
+                                return;
+                            }
+                        }
+                    }
+                }
             }
         } catch (e) {}
         totalAttempts++;
@@ -231,27 +267,19 @@ function scanLoop(rangeStart, rangeEnd, targetChecksum) {
         self.postMessage({ type:"PROGRESS", attempts:batchAttempts });
     }
     
-    setTimeout(() => scanLoop(rangeStart, rangeEnd, targetChecksum), 0);
+    setTimeout(() => scanLoop(rangeStart, rangeEnd, targetAddresses), 0);
 }
 
 self.onmessage = function(e) {
-    const { type, rangeStartStr, rangeEndStr, targetAddr } = e.data;
+    const { type, rangeStartStr, rangeEndStr, targetAddresses } = e.data;
 
     const rangeStart = BigInt("0x"+rangeStartStr);
     const rangeEnd   = BigInt("0x"+rangeEndStr);
 
-    let targetChecksum = "";
-    try {
-        const addrHex = base58ToHex(targetAddr);
-        targetChecksum = addrHex.substring(42, 50);
-    } catch (e) {
-        targetChecksum = "";
-    }
-
     if (type === "SCAN") {
         running = true;
         totalAttempts = 0;
-        scanLoop(rangeStart, rangeEnd, targetChecksum);
+        scanLoop(rangeStart, rangeEnd, targetAddresses);
     }
 };
 </script>
@@ -259,6 +287,8 @@ self.onmessage = function(e) {
 <!-- MAIN -->
 <script>
 let workers=[], totalAttempts=0, startTime=0, isRunning=false;
+let matchCount = 0;
+const MAX_MATCHES = 5;
 
 const logBox      = document.getElementById('logBox');
 const startBtn    = document.getElementById('startBtn');
@@ -283,24 +313,44 @@ function makeWorker() {
 }
 function setRunning(v) { isRunning=v; startBtn.disabled=v; stopBtn.disabled=!v; }
 
+function base58ToHex(base58) {
+    const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let result = 0n;
+    for (let i = 0; i < base58.length; i++) {
+        const char = base58[i];
+        const index = BigInt(ALPHA.indexOf(char));
+        if (index === -1n) throw new Error("Invalid Base58 character: " + char);
+        result = result * 58n + index;
+    }
+    let hex = result.toString(16);
+    while (hex.length < 50) hex = "0" + hex;
+    return hex;
+}
+
 function calculateSubRange() {
-    const A=BigInt("0x"+document.getElementById('rangeStart').value.trim());
-    const B=BigInt("0x"+document.getElementById('rangeEnd').value.trim());
-    const W=B-A, SCALE=1_000_000n;
-    const s=BigInt(Math.floor(parseFloat(document.getElementById('pctStart').value)*10000));
-    const e=BigInt(Math.floor(parseFloat(document.getElementById('pctEnd').value)*10000));
-    return { start:(A+(W*s)/SCALE).toString(16), end:(A+(W*e)/SCALE).toString(16) };
+    const A = 0n;
+    const B = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+    const W = B - A;
+    const SCALE = 1_000_000n;
+    const s = BigInt(Math.floor(parseFloat(document.getElementById('pctStart').value) * 10000));
+    const e = BigInt(Math.floor(parseFloat(document.getElementById('pctEnd').value) * 10000));
+    return {
+        start: (A + (W * s) / SCALE).toString(16),
+        end:   (A + (W * e) / SCALE).toString(16)
+    };
 }
 
 startBtn.onclick = () => {
     if (isRunning) return;
     totalAttempts=0; startTime=Date.now();
+    matchCount = 0;
     document.getElementById('attemptCount').textContent='0';
     document.getElementById('speed').textContent='0 /s';
-    document.getElementById('matchTable').innerHTML = '<tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr>';
+    document.getElementById('addressCount').textContent='0';
+    document.getElementById('matchTable').innerHTML = '<tr class="empty-row"><td colspan="6">Nog geen match met saldo > 0...</td></tr>';
     progressBar.style.width='0%';
     setRunning(true);
-    log('⚡ Checksum Scanner gestart','ev-epoch');
+    log('💰 Scanner + Saldo Check gestart','ev-epoch');
     startScan();
 };
 
@@ -311,12 +361,31 @@ stopBtn.onclick = () => {
 
 function startScan() {
     const numW  = Math.max(1, parseInt(document.getElementById('numW').value)||4);
+    const addressList = document.getElementById('addressList').value;
+    let addresses = [];
+    try {
+        addresses = JSON.parse(addressList);
+    } catch (e) {
+        addresses = addressList.split(',').map(a => a.trim().replace(/[\[\]"]/g, ''));
+    }
+    
+    const targetAddresses = addresses.map(addr => {
+        try {
+            const addrHex = base58ToHex(addr);
+            const checksum = addrHex.substring(42, 50);
+            return { address: addr, checksum: checksum };
+        } catch (e) {
+            return null;
+        }
+    }).filter(item => item !== null);
+    
+    document.getElementById('addressCount').textContent = targetAddresses.length;
+
     const range = calculateSubRange();
-    const targetAddr = document.getElementById('btcAddr').value.trim();
 
     killWorkers();
-    setStatus('SCAN — checksum berekenen','running');
-    log(`🔍 ${numW} workers gestart, directe checksum-berekening`);
+    setStatus('SCAN — checksum + adres + saldo','running');
+    log(`🔍 ${numW} workers gestart, ${targetAddresses.length} adressen, range: ${range.start} → ${range.end}`);
 
     for (let i=0;i<numW;i++) {
         const w=makeWorker(); workers.push(w);
@@ -327,30 +396,51 @@ function startScan() {
                 const spd = Math.floor(totalAttempts/elapsed);
                 document.getElementById('attemptCount').textContent = totalAttempts.toLocaleString();
                 document.getElementById('speed').textContent = spd.toLocaleString()+' /s';
-                progressBar.style.width = Math.min(95, (totalAttempts / 4_000_000_000) * 100) + '%';
+                const targetPogingen = Math.ceil(4294967296 / targetAddresses.length);
+                progressBar.style.width = Math.min(95, (totalAttempts / targetPogingen) * 100) + '%';
                 
                 if (totalAttempts % 100000 === 0) {
                     log(`🔍 ${totalAttempts.toLocaleString()} pogingen, snelheid: ${spd.toLocaleString()}/s`);
                 }
             }
+            else if (ev.data.type==="BALANCE_CHECK") {
+                if (ev.data.balance === null) {
+                    log(`⚠️ Saldo API error voor ${ev.data.address}`);
+                } else if (ev.data.balance === 0) {
+                    log(`ℹ️ Adres ${ev.data.address} heeft saldo 0, doorgaan...`);
+                } else {
+                    log(`💰 Adres ${ev.data.address} heeft saldo ${ev.data.balance} BTC!`);
+                }
+            }
             else if (ev.data.type==="FOUND") {
-                setRunning(false); killWorkers();
+                setRunning(false);
+                killWorkers();
                 setStatus('🎉 GEVONDEN!','found');
                 progressBar.style.width='100%';
-                log(`🎉 PRIVÉSLEUTEL GEVONDEN na ${totalAttempts.toLocaleString()} pogingen!`,'ev-found');
-                document.getElementById('matchTable').innerHTML=`
-                    <tr class="found-row">
-                        <td>✅ MATCH</td>
-                        <td style="font-size:.65rem">${ev.data.wif}</td>
-                        <td style="font-size:.65rem">${ev.data.privHex}</td>
-                    </tr>`;
+                log(`🎉 PRIVÉSLEUTEL GEVONDEN met saldo ${ev.data.balance} BTC!`,'ev-found');
+                
+                matchCount++;
+                const table = document.getElementById('matchTable');
+                table.innerHTML = '';
+                const row = document.createElement('tr');
+                row.className = 'found-row';
+                row.innerHTML = `
+                    <td>${matchCount}</td>
+                    <td>✅ MATCH</td>
+                    <td>${ev.data.address}</td>
+                    <td>${ev.data.balance} BTC</td>
+                    <td style="font-size:.65rem">${ev.data.wif}</td>
+                    <td style="font-size:.65rem">${ev.data.privHex}</td>
+                `;
+                table.appendChild(row);
+                return;
             }
         };
-        w.postMessage({ type:"SCAN", rangeStartStr:range.start, rangeEndStr:range.end, targetAddr });
+        w.postMessage({ type:"SCAN", rangeStartStr:range.start, rangeEndStr:range.end, targetAddresses });
     }
 }
 
-log('⚡ Checksum Scanner geladen');
+log('💰 Scanner + Saldo Check geladen');
 </script>
 </body>
 </html>
