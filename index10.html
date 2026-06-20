@@ -154,7 +154,7 @@ let elliptic = null;
 
 async function loadLibraries() {
     try {
-        // Laad CryptoJS
+        // Laad CryptoJS eerst
         await new Promise((resolve, reject) => {
             const script = document.createElement('script');
             script.src = 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js';
@@ -163,8 +163,9 @@ async function loadLibraries() {
             document.head.appendChild(script);
         });
         cryptoJS = CryptoJS;
+        log("✅ CryptoJS geladen", "ev-info");
         
-        // Laad elliptic
+        // Laad elliptic daarna
         await new Promise((resolve, reject) => {
             const script = document.createElement('script');
             script.src = 'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js';
@@ -172,12 +173,14 @@ async function loadLibraries() {
             script.onerror = reject;
             document.head.appendChild(script);
         });
-        elliptic = new elliptic.ec("secp256k1");
         
-        log("✅ Bibliotheken geladen", "ev-info");
+        // CORRECTE INITIALISATIE: gebruik elliptic.ec() zonder new
+        elliptic = elliptic.ec("secp256k1");
+        log("✅ Elliptic geladen", "ev-info");
         return true;
     } catch (e) {
         log("❌ Fout bij laden bibliotheken: " + e.message, "ev-error");
+        console.error(e);
         return false;
     }
 }
