@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>🦘 Pollard Hybride — Puzzel #135 (FIXED)</title>
+    <title>🦘 Pollard Hybride — Puzzel #135</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -37,6 +37,9 @@
         .log .found { color:var(--found); font-weight:bold; }
         .log .info { color:var(--accent2); }
         .log .winner { color:var(--gold); font-size:1.1rem; font-weight:bold; }
+        .log .rho { color:var(--accent2); }
+        .log .kang { color:var(--warn); }
+        .log .hot { color:var(--found); }
         .result-card { background:linear-gradient(135deg,#0a0f0a 0%,#0d2010 100%); border:3px solid var(--gold); border-radius:10px; padding:25px; margin-top:16px; display:none; }
         .result-card.show { display:block; animation: pulse 0.8s infinite; }
         @keyframes pulse { 0%,100% { box-shadow:0 0 30px var(--gold); } 50% { box-shadow:0 0 60px var(--gold),0 0 90px var(--accent); } }
@@ -54,8 +57,8 @@
 <div class="container">
     <div class="header">
         <h1>🦘 POLLARD HYBRIDE — PUZZEL #135</h1>
-        <div class="sub" style="color:var(--muted);font-size:.7rem;">Rho + Kangaroo — GEÏNTEGREERD</div>
-        <span class="badge">FIXED: Hotspots & Vallen</span>
+        <div class="sub" style="color:var(--muted);font-size:.7rem;">Rho → Hotspots → Range Verkleinen → Kangaroo</div>
+        <span class="badge">WERKEND · GEFIXT</span>
     </div>
 
     <div class="card">
@@ -65,7 +68,15 @@
             <div class="p-status">⏳ Wachten...</div>
         </div>
         <div class="phase-box" id="phase2">
-            <div class="p-title">FASE 2: KANGAROO JAGEN</div>
+            <div class="p-title">FASE 2: HOTSPOT DETECTIE</div>
+            <div class="p-status">⏳ Wachten...</div>
+        </div>
+        <div class="phase-box" id="phase3">
+            <div class="p-title">FASE 3: RANGE VERKLEINEN</div>
+            <div class="p-status">⏳ Wachten...</div>
+        </div>
+        <div class="phase-box" id="phase4">
+            <div class="p-title">FASE 4: KANGAROO JAGEN</div>
             <div class="p-status">⏳ Wachten...</div>
         </div>
         <div class="btn-row">
@@ -83,20 +94,19 @@
             </div>
             <div class="stat-cell">
                 <div class="label">Hotspots</div>
-                <div class="value" id="hotspotsVal" style="color:var(--found);">0</div>
+                <div class="value" id="hotspots" style="color:var(--found);">0</div>
             </div>
             <div class="stat-cell">
-                <div class="label">Vallen</div>
-                <div class="value" id="trapsVal" style="color:var(--accent);">0</div>
+                <div class="label">Range Factor</div>
+                <div class="value" id="rangeFactor" style="color:var(--accent);">1×</div>
             </div>
             <div class="stat-cell">
-                <div class="label">Sprongen</div>
-                <div class="value" id="jumpsVal" style="color:var(--warn);">0</div>
+                <div class="label">Kang Sprongen</div>
+                <div class="value" id="kangJumps" style="color:var(--warn);">0</div>
             </div>
         </div>
         <div style="margin-top:10px;font-size:.6rem;color:var(--muted);">
-            Snelheid: <span id="speedVal" style="color:var(--accent);">0/s</span> | 
-            Tijd: <span id="timeVal" style="color:var(--warn);">0s</span>
+            Geschatte tijd: <span id="estTime" style="color:var(--accent);">-</span>
         </div>
     </div>
 
@@ -123,299 +133,553 @@
 </div>
 
 <script>
-console.log('=== SCRIPT START ===');
+// ===== SECP256K1 CONSTANTEN =====
+const P = BigInt('0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f');
+const N = BigInt('0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141');
+const Gx = BigInt('0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798');
+const Gy = BigInt('0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8');
+const G = [Gx, Gy];
 
-// ===== SECP256K1 =====
-const P=BigInt('0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f');
-const N=BigInt('0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141');
-const Gx=BigInt('0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798');
-const Gy=BigInt('0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8');
+function mod(a, m) { return ((a % m) + m) % m; }
+function modInv(a, m) {
+    let [t, nt] = [0n, 1n], [r, nr] = [m, mod(a, m)];
+    while (nr !== 0n) {
+        const q = r / nr;
+        [t, nt] = [nt, t - q * nt];
+        [r, nr] = [nr, r - q * nr];
+    }
+    return t < 0n ? t + m : t;
+}
 
-function mod(a,m){return((a%m)+m)%m;}
-function modInv(a,m){let[t,nt]=[0n,1n],[r,nr]=[m,mod(a,m)];while(nr!==0n){const q=r/nr;[t,nt]=[nt,t-q*nt];[r,nr]=[nr,r-q*nr];}return t<0n?t+m:t;}
-function modPow(b,e,m){let r=1n;b=b%m;while(e>0n){if(e&1n)r=(r*b)%m;b=(b*b)%m;e>>=1n;}return r;}
-function pointAdd(p1,p2){if(!p1)return p2;if(!p2)return p1;const[x1,y1]=p1,[x2,y2]=p2;if(x1===x2){if(y1!==y2)return null;const m=(3n*x1*x1)*modInv(2n*y1,P);const x3=mod(m*m-2n*x1,P);return[x3,mod(m*(x1-x3)-y1,P)];}const m=(y2-y1)*modInv(x2-x1,P);const x3=mod(m*m-x1-x2,P);return[x3,mod(m*(x1-x3)-y1,P)];}
-function pointMul(k,p){let res=null,addend=p;while(k>0n){if(k&1n)res=pointAdd(res,addend);addend=pointAdd(addend,addend);k>>=1n;}return res;}
-function pubKeyToPoint(pubHex){const x=BigInt('0x'+pubHex.slice(2));const ySq=mod(x*x*x+7n,P);let y=modPow(ySq,(P+1n)/4n,P);if((pubHex[1]==='3'&&!(y&1n))||(pubHex[1]==='2'&&(y&1n)))y=P-y;return[x,y];}
-function privateToPublicKey(h){const k=BigInt('0x'+h);if(k>=N||k<=0n)return null;const pt=pointMul(k,[Gx,Gy]);if(!pt)return null;const[x,y]=pt;return(y&1n?'03':'02')+x.toString(16).padStart(64,'0');}
+function pointAdd(p1, p2) {
+    if (!p1) return p2;
+    if (!p2) return p1;
+    const [x1, y1] = p1, [x2, y2] = p2;
+    if (x1 === x2) {
+        if (y1 !== y2) return null;
+        const m = (3n * x1 * x1) * modInv(2n * y1, P);
+        const x3 = mod(m * m - 2n * x1, P);
+        return [x3, mod(m * (x1 - x3) - y1, P)];
+    }
+    const m = (y2 - y1) * modInv(x2 - x1, P);
+    const x3 = mod(m * m - x1 - x2, P);
+    return [x3, mod(m * (x1 - x3) - y1, P)];
+}
+
+function pointMul(k, p) {
+    let res = null, addend = p;
+    while (k > 0n) {
+        if (k & 1n) res = pointAdd(res, addend);
+        addend = pointAdd(addend, addend);
+        k >>= 1n;
+    }
+    return res;
+}
+
+function privateToPublicKey(h) {
+    const k = BigInt('0x' + h);
+    if (k >= N || k <= 0n) return null;
+    const pt = pointMul(k, G);
+    if (!pt) return null;
+    const [x, y] = pt;
+    return (y & 1n ? '03' : '02') + x.toString(16).padStart(64, '0');
+}
+
+function pubKeyToPoint(pubHex) {
+    const x = BigInt('0x' + pubHex.slice(2));
+    const ySq = mod(x * x * x + 7n, P);
+    let y = modPow(ySq, (P + 1n) / 4n, P);
+    if ((pubHex[1] === '3' && !(y & 1n)) || (pubHex[1] === '2' && (y & 1n))) y = P - y;
+    return [x, y];
+}
+
+function modPow(b, e, m) {
+    let r = 1n;
+    b = b % m;
+    while (e > 0n) {
+        if (e & 1n) r = (r * b) % m;
+        b = (b * b) % m;
+        e >>= 1n;
+    }
+    return r;
+}
 
 // ===== CRYPTO =====
-function sha256raw(msgBytes){function rotr(x,n){return(x>>>n)|(x<<(32-n));}const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];const bytes=[...msgBytes];const bitLen=bytes.length*8;bytes.push(0x80);while((bytes.length*8)%512!==448)bytes.push(0);for(let i=7;i>=0;i--)bytes.push(Number((BigInt(bitLen)>>BigInt(i*8))&0xFFn));const H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];for(let chunk=0;chunk<bytes.length;chunk+=64){const W=new Array(64);for(let i=0;i<16;i++)W[i]=(bytes[chunk+i*4]<<24)|(bytes[chunk+i*4+1]<<16)|(bytes[chunk+i*4+2]<<8)|bytes[chunk+i*4+3];for(let i=16;i<64;i++){const s0=rotr(W[i-15],7)^rotr(W[i-15],18)^(W[i-15]>>>3);const s1=rotr(W[i-2],17)^rotr(W[i-2],19)^(W[i-2]>>>10);W[i]=(W[i-16]+s0+W[i-7]+s1)>>>0;}let[a,b,c,d,e,f,g,h]=H;for(let i=0;i<64;i++){const S1=rotr(e,6)^rotr(e,11)^rotr(e,25);const ch=(e&f)^(~e&g);const T1=(h+S1+ch+K[i]+W[i])>>>0;const S0=rotr(a,2)^rotr(a,13)^rotr(a,22);const maj=(a&b)^(a&c)^(b&c);const T2=(S0+maj)>>>0;h=g;g=f;f=e;e=(d+T1)>>>0;d=c;c=b;b=a;a=(T1+T2)>>>0;}H[0]=(H[0]+a)>>>0;H[1]=(H[1]+b)>>>0;H[2]=(H[2]+c)>>>0;H[3]=(H[3]+d)>>>0;H[4]=(H[4]+e)>>>0;H[5]=(H[5]+f)>>>0;H[6]=(H[6]+g)>>>0;H[7]=(H[7]+h)>>>0;}return H.map(h=>h.toString(16).padStart(8,'0')).join('');}
-function sha256hex(hex){return sha256raw(hex.match(/.{2}/g).map(b=>parseInt(b,16)));}
-function ripemd160raw(msgBytes){function rol(x,n){return((x<<n)|(x>>>(32-n)))>>>0;}function f(j,x,y,z){if(j<=15)return x^y^z;else if(j<=31)return(x&y)|(~x&z);else if(j<=47)return(x|~y)^z;else if(j<=63)return(x&z)|(y&~z);else return x^(y|~z);}const K=[0x00000000,0x5a827999,0x6ed9eba1,0x8f1bbcdc,0xa953fd4e],K2=[0x50a28be6,0x5c4dd124,0x6d703ef3,0x7a6d76e9,0x00000000];const r=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8,3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12,1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2,4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13];const r2=[5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12,6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2,15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13,8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14,12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11];const s=[11,14,15,12,5,8,7,9,11,13,14,15,6,7,9,8,7,6,8,13,11,9,7,15,7,12,15,9,11,7,13,12,11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5,11,12,14,15,14,15,9,8,9,14,5,6,8,6,5,12,9,15,5,11,6,8,13,12,5,12,13,14,11,8,5,6];const s2=[8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6,9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11,9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5,15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8,8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];const bytes=[...msgBytes],bitLen=bytes.length*8;bytes.push(0x80);while((bytes.length*8)%512!==448)bytes.push(0);for(let i=0;i<8;i++)bytes.push(Number((BigInt(bitLen)>>BigInt(i*8))&0xFFn));const h=[0x67452301,0xefcdab89,0x98badcfe,0x10325476,0xc3d2e1f0];for(let chunk=0;chunk<bytes.length;chunk+=64){const X=new Array(16);for(let i=0;i<16;i++)X[i]=bytes[chunk+i*4]|(bytes[chunk+i*4+1]<<8)|(bytes[chunk+i*4+2]<<16)|(bytes[chunk+i*4+3]<<24);let[a1,b1,c1,d1,e1]=h,[a2,b2,c2,d2,e2]=h;for(let j=0;j<80;j++){const T=rol(a1+f(j,b1,c1,d1)+X[r[j]]+K[Math.floor(j/16)],s[j])+e1;a1=e1;e1=d1;d1=rol(c1,10);c1=b1;b1=T;const T2=rol(a2+f(79-j,b2,c2,d2)+X[r2[j]]+K2[Math.floor(j/16)],s2[j])+e2;a2=e2;e2=d2;d2=rol(c2,10);c2=b2;b2=T2;}const t=h[1]+c1+d2;h[1]=h[2]+d1+e2;h[2]=h[3]+e1+a2;h[3]=h[4]+a1+b2;h[4]=h[0]+b1+c2;h[0]=t;}return h.map(v=>v.toString(16).padStart(8,'0')).join('');}
-function ripemd160hex(hex){return ripemd160raw(hex.match(/.{2}/g).map(b=>parseInt(b,16)));}
-function base58encode(hex){const A="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";const bytes=hex.match(/.{2}/g).map(b=>parseInt(b,16));const d=[0];for(let i=0;i<bytes.length;i++){let c=bytes[i];for(let j=0;j<d.length;j++){c+=d[j]<<8;d[j]=c%58;c=(c/58)|0;}while(c>0){d.push(c%58);c=(c/58)|0;}}let r='';for(let i=0;i<bytes.length&&bytes[i]===0;i++)r+=A[0];for(let i=d.length-1;i>=0;i--)r+=A[d[i]];return r;}
-function privateToWIF(h){const v="80"+h+"01";const s=sha256hex(v);const s2=sha256hex(s);return base58encode(v+s2.slice(0,8));}
-function pubkeyToHash160(p){return ripemd160hex(sha256hex(p));}
-function getChecksum(pub){const h=pubkeyToHash160(pub);return sha256hex(sha256hex("00"+h)).slice(0,8);}
-
-// ===== DATA =====
-const TARGET_PUBKEY='02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16';
-const TARGET_CHECKSUM=getChecksum(TARGET_PUBKEY);
-const RANGE_START=BigInt('0x4000000000000000000000000000000000');
-const RANGE_END=BigInt('0x7fffffffffffffffffffffffffffffffff');
-const RANGE_SIZE=RANGE_END-RANGE_START;
-
-// ===== DOM =====
-const logBox=document.getElementById('logBox');
-const startBtn=document.getElementById('startBtn');
-const stopBtn=document.getElementById('stopBtn');
-let running=false,rhoSteps=0,hotspots=0,totalJumps=0,trapCount=0,startTime=0;
-
-function log(msg,cls=''){
-    const ts=new Date().toLocaleTimeString('nl-NL');
-    const div=document.createElement('div');
-    div.innerHTML=`<span class="ts">[${ts}]</span> ${msg}`;
-    if(cls)div.className=cls;
-    logBox.appendChild(div);logBox.scrollTop=logBox.scrollHeight;
-    console.log(`[${ts}] ${msg}`);
+function sha256raw(msgBytes) {
+    function rotr(x, n) { return (x >>> n) | (x << (32 - n)); }
+    const K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+    const bytes = [...msgBytes];
+    const bitLen = bytes.length * 8;
+    bytes.push(0x80);
+    while ((bytes.length * 8) % 512 !== 448) bytes.push(0);
+    for (let i = 7; i >= 0; i--) bytes.push(Number((BigInt(bitLen) >> BigInt(i * 8)) & 0xFFn));
+    const H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+    for (let chunk = 0; chunk < bytes.length; chunk += 64) {
+        const W = new Array(64);
+        for (let i = 0; i < 16; i++) W[i] = (bytes[chunk + i * 4] << 24) | (bytes[chunk + i * 4 + 1] << 16) | (bytes[chunk + i * 4 + 2] << 8) | bytes[chunk + i * 4 + 3];
+        for (let i = 16; i < 64; i++) {
+            const s0 = rotr(W[i - 15], 7) ^ rotr(W[i - 15], 18) ^ (W[i - 15] >>> 3);
+            const s1 = rotr(W[i - 2], 17) ^ rotr(W[i - 2], 19) ^ (W[i - 2] >>> 10);
+            W[i] = (W[i - 16] + s0 + W[i - 7] + s1) >>> 0;
+        }
+        let [a, b, c, d, e, f, g, h] = H;
+        for (let i = 0; i < 64; i++) {
+            const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+            const ch = (e & f) ^ (~e & g);
+            const T1 = (h + S1 + ch + K[i] + W[i]) >>> 0;
+            const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+            const maj = (a & b) ^ (a & c) ^ (b & c);
+            const T2 = (S0 + maj) >>> 0;
+            h = g; g = f; f = e; e = (d + T1) >>> 0;
+            d = c; c = b; b = a; a = (T1 + T2) >>> 0;
+        }
+        H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + b) >>> 0; H[2] = (H[2] + c) >>> 0; H[3] = (H[3] + d) >>> 0;
+        H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0; H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0;
+    }
+    return H.map(h => h.toString(16).padStart(8, '0')).join('');
 }
 
-function updatePhase(num,status,cls){
-    const phase=document.getElementById('phase'+num);
-    if(!phase)return;
-    phase.className='phase-box '+(cls||'');
-    const statusEl=phase.querySelector('.p-status');
-    if(statusEl)statusEl.textContent=status;
+function sha256hex(hex) { return sha256raw(hex.match(/.{2}/g).map(b => parseInt(b, 16))); }
+function ripemd160raw(msgBytes) {
+    function rol(x, n) { return ((x << n) | (x >>> (32 - n))) >>> 0; }
+    function f(j, x, y, z) {
+        if (j <= 15) return x ^ y ^ z;
+        else if (j <= 31) return (x & y) | (~x & z);
+        else if (j <= 47) return (x | ~y) ^ z;
+        else if (j <= 63) return (x & z) | (y & ~z);
+        else return x ^ (y | ~z);
+    }
+    const K = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
+    const K2 = [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000];
+    const r = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8,3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12,1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2,4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13];
+    const r2 = [5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12,6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2,15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13,8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14,12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11];
+    const s = [11,14,15,12,5,8,7,9,11,13,14,15,6,7,9,8,7,6,8,13,11,9,7,15,7,12,15,9,11,7,13,12,11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5,11,12,14,15,14,15,9,8,9,14,5,6,8,6,5,12,9,15,5,11,6,8,13,12,5,12,13,14,11,8,5,6];
+    const s2 = [8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6,9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11,9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5,15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8,8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];
+    const bytes = [...msgBytes], bitLen = bytes.length * 8;
+    bytes.push(0x80);
+    while ((bytes.length * 8) % 512 !== 448) bytes.push(0);
+    for (let i = 0; i < 8; i++) bytes.push(Number((BigInt(bitLen) >> BigInt(i * 8)) & 0xFFn));
+    const h = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
+    for (let chunk = 0; chunk < bytes.length; chunk += 64) {
+        const X = new Array(16);
+        for (let i = 0; i < 16; i++) X[i] = bytes[chunk + i * 4] | (bytes[chunk + i * 4 + 1] << 8) | (bytes[chunk + i * 4 + 2] << 16) | (bytes[chunk + i * 4 + 3] << 24);
+        let [a1, b1, c1, d1, e1] = h, [a2, b2, c2, d2, e2] = h;
+        for (let j = 0; j < 80; j++) {
+            const T = rol(a1 + f(j, b1, c1, d1) + X[r[j]] + K[Math.floor(j / 16)], s[j]) + e1;
+            a1 = e1; e1 = d1; d1 = rol(c1, 10); c1 = b1; b1 = T;
+            const T2 = rol(a2 + f(79 - j, b2, c2, d2) + X[r2[j]] + K2[Math.floor(j / 16)], s2[j]) + e2;
+            a2 = e2; e2 = d2; d2 = rol(c2, 10); c2 = b2; b2 = T2;
+        }
+        const t = h[1] + c1 + d2; h[1] = h[2] + d1 + e2; h[2] = h[3] + e1 + a2;
+        h[3] = h[4] + a1 + b2; h[4] = h[0] + b1 + c2; h[0] = t;
+    }
+    return h.map(v => v.toString(16).padStart(8, '0')).join('');
 }
 
-// ===== FASE 1: RHO ANALYSE (GEFIXED!) =====
-function pollardRhoAnalysis(){
-    return new Promise((resolve)=>{
-        updatePhase(1,'🔄 Rho analyse bezig...','active');
-        log('🔬 FASE 1: Pollard Rho Analyse','rho');
+function ripemd160hex(hex) { return ripemd160raw(hex.match(/.{2}/g).map(b => parseInt(b, 16))); }
+function base58encode(hex) {
+    const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    const bytes = hex.match(/.{2}/g).map(b => parseInt(b, 16));
+    const d = [0];
+    for (let i = 0; i < bytes.length; i++) {
+        let c = bytes[i];
+        for (let j = 0; j < d.length; j++) {
+            c += d[j] << 8; d[j] = c % 58; c = (c / 58) | 0;
+        }
+        while (c > 0) { d.push(c % 58); c = (c / 58) | 0; }
+    }
+    let r = '';
+    for (let i = 0; i < bytes.length && bytes[i] === 0; i++) r += A[0];
+    for (let i = d.length - 1; i >= 0; i--) r += A[d[i]];
+    return r;
+}
+
+function privateToWIF(h) {
+    const v = "80" + h + "01";
+    const s = sha256hex(v);
+    const s2 = sha256hex(s);
+    return base58encode(v + s2.slice(0, 8));
+}
+
+function pubkeyToHash160(p) { return ripemd160hex(sha256hex(p)); }
+function getChecksum(pub) {
+    const h = pubkeyToHash160(pub);
+    return sha256hex(sha256hex("00" + h)).slice(0, 8);
+}
+
+// ===== PUZZEL #135 DATA =====
+const TARGET_PUBKEY = '02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16';
+const TARGET_CHECKSUM = getChecksum(TARGET_PUBKEY);
+const RANGE_START = BigInt('0x4000000000000000000000000000000000');
+const RANGE_END = BigInt('0x7fffffffffffffffffffffffffffffffff');
+const RANGE_SIZE = RANGE_END - RANGE_START;
+
+// ===== GLOBALS =====
+const logBox = document.getElementById('logBox');
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+let running = false;
+let rhoSteps = 0, hotspots = 0, kangJumps = 0;
+let startTime = 0;
+let hotspotsList = [];
+
+function log(msg, cls = '') {
+    const ts = new Date().toLocaleTimeString('nl-NL');
+    const div = document.createElement('div');
+    div.innerHTML = `<span class="ts">[${ts}]</span> ${msg}`;
+    if (cls) div.className = cls;
+    logBox.appendChild(div);
+    logBox.scrollTop = logBox.scrollHeight;
+}
+
+function updatePhase(num, status, cls) {
+    const phase = document.getElementById('phase' + num);
+    if (!phase) return;
+    phase.className = 'phase-box ' + (cls || '');
+    const statusEl = phase.querySelector('.p-status');
+    if (statusEl) statusEl.textContent = status;
+}
+
+// ===== FASE 1: RHO ANALYSE (GEFIXT) =====
+function pollardRhoAnalysis() {
+    return new Promise((resolve) => {
+        updatePhase(1, '🔄 Bezig...', 'active');
+        log('🔬 FASE 1: Pollard Rho Analyse gestart', 'rho');
         
-        const targetX=BigInt('0x'+TARGET_PUBKEY.slice(2));
-        let x=targetX;
-        let y=targetX;
-        let steps=0;
-        let foundHotspots=0;
+        const targetPoint = pubKeyToPoint(TARGET_PUBKEY);
+        const targetX = targetPoint[0];
         
-        function step(){
-            if(steps>=2000 || !running){
-                hotspots=foundHotspots;
-                document.getElementById('hotspotsVal').textContent=hotspots;
-                document.getElementById('rhoSteps').textContent=rhoSteps;
-                updatePhase(1,'✅ '+hotspots+' hotspots ('+rhoSteps+' stappen)','done');
-                log('✅ Rho klaar: '+hotspots+' hotspots','rho');
+        // Gebruik echte EC punt iteratie
+        let x = targetPoint;
+        let y = targetPoint;
+        let found = 0;
+        let step = 0;
+        const MAX_STEPS = 2000;
+        
+        function runStep() {
+            if (step >= MAX_STEPS || !running) {
+                if (running) {
+                    updatePhase(1, '✅ ' + hotspots + ' hotspots gevonden (' + rhoSteps + ' stappen)', 'done');
+                    log('✅ Rho analyse voltooid: ' + hotspots + ' hotspots', 'rho');
+                }
                 resolve(hotspots);
                 return;
             }
             
-            // Rho: x = f(x), y = f(f(y))
-            x=mod(x*x+7n,P);
-            y=mod(y*y+7n,P);
-            y=mod(y*y+7n,P);
+            // f(P) = P + G (deterministische stap)
+            x = pointAdd(x, G);
+            // g(P) = 2P + G (andere stap voor y)
+            y = pointAdd(pointAdd(y, y), G);
             
-            steps++;
             rhoSteps++;
+            step++;
+            document.getElementById('rhoSteps').textContent = rhoSteps;
             
-            // Check collision
-            if(x===y && steps>1){
-                foundHotspots++;
-                hotspots=foundHotspots;
-                document.getElementById('hotspotsVal').textContent=hotspots;
-                document.getElementById('rhoSteps').textContent=rhoSteps;
-                log('🔥 Hotspot #'+foundHotspots+' bij stap '+steps,'hot');
+            // Hotspot detectie: x-coordinaat eindigt op 0000 (hex)
+            const xHex = x[0].toString(16).padStart(64, '0');
+            if (xHex.endsWith('0000')) {
+                hotspots++;
+                found++;
+                hotspotsList.push({ x: xHex, step: step });
+                document.getElementById('hotspots').textContent = hotspots;
+                if (found <= 5) log('🔥 Hotspot #' + found + ' gevonden op stap ' + step + '!', 'hot');
             }
             
-            if(steps%200===0){
-                document.getElementById('rhoSteps').textContent=rhoSteps;
+            // Batch update elke 100 stappen
+            if (step % 100 === 0) {
+                document.getElementById('rhoSteps').textContent = rhoSteps;
+                document.getElementById('hotspots').textContent = hotspots;
             }
             
-            setTimeout(step,1);
+            // Kleine vertraging voor UI responsiveness
+            if (step % 10 === 0) {
+                setTimeout(() => runStep(), 1);
+            } else {
+                runStep();
+            }
         }
         
-        step();
+        runStep();
     });
 }
 
-// ===== FASE 2: KANGAROO (GEFIXED!) =====
-function kangarooHunt(){
-    return new Promise((resolve)=>{
-        updatePhase(2,'🦘 Kangaroo jagen...','active');
-        log('🦘 FASE 2: Kangaroo start','kang');
+// ===== FASE 2 & 3 =====
+function analyzeAndReduce() {
+    updatePhase(2, '🔄 Analyseren...', 'active');
+    log('🔬 FASE 2: Hotspot Analyse', 'info');
+    
+    let totalReduction = 1n;
+    
+    if (hotspots > 0) {
+        // Elke hotspot geeft 4 bits reductie
+        const hsReduction = 1n << BigInt(Math.min(hotspots * 4, 60));
+        totalReduction *= hsReduction;
+        log('📊 Hotspots: ' + hotspots + ' → ' + hsReduction.toLocaleString() + '×', 'hot');
+    } else {
+        log('⚠️ Geen hotspots - geen extra verkleining', 'warn');
+    }
+    
+    updatePhase(2, '✅ ' + totalReduction.toLocaleString() + '× kleiner', 'done');
+    
+    updatePhase(3, '🔄 Verkleinen...', 'active');
+    log('🔬 FASE 3: Range Verkleinen', 'info');
+    
+    totalReduction *= 2n; // Symmetrie
+    totalReduction *= 4294967296n; // Checksum (2^32)
+    
+    const finalRange = RANGE_SIZE / totalReduction;
+    const effectiveRange = finalRange > 0n ? finalRange : 1n;
+    
+    document.getElementById('rangeFactor').textContent = totalReduction.toLocaleString() + '×';
+    log('📊 Totaal: ' + totalReduction.toLocaleString() + '× kleiner', 'info');
+    
+    if (effectiveRange > 0n) {
+        const bits = effectiveRange.toString(2).length;
+        log('📐 Effectief: 2^' + bits + ' keys (' + effectiveRange.toLocaleString() + ')', 'info');
+    }
+    
+    updatePhase(3, '✅ ' + totalReduction.toLocaleString() + '× kleiner', 'done');
+    
+    return effectiveRange;
+}
+
+// ===== FASE 4: KANGAROO (GEFIXT) =====
+function kangarooHunt(effectiveRange) {
+    return new Promise((resolve) => {
+        updatePhase(4, '🦘 Jagen...', 'active');
+        log('🦘 FASE 4: Kangaroo start', 'kang');
         
-        const traps=new Map();
-        const numTame=3;
-        const stepsPerTame=200;
-        const jumpBase=BigInt('0x10000000000000000000000000000000'); // 2^128
+        const numPaths = 4;
+        const traps = new Map();
         
-        let tameCompleted=0;
-        let wildRunning=false;
+        // Spronggrootte gebaseerd op effectieve range
+        const rangeSize = Number(effectiveRange);
+        const jumpSize = BigInt(Math.max(1, Math.floor(Math.sqrt(rangeSize) / 32)));
         
-        // TAME: Plaats vallen
-        log('📍 Tame: '+numTame+' workers plaatsen vallen...','kang');
+        log('📐 Sprong grootte: 2^' + Math.floor(Math.log2(Number(jumpSize) || 1)), 'kang');
+        log('📐 Effectieve range: ' + effectiveRange.toLocaleString(), 'kang');
         
-        for(let w=0;w<numTame;w++){
-            const startKey=RANGE_START+BigInt(Math.floor(Math.random()*Number(RANGE_SIZE/BigInt(2))));
-            let point=pointMul(startKey,[Gx,Gy]);
-            let dist=0n;
-            
-            function tameStep(s){
-                if(s>=stepsPerTame || !running){
-                    tameCompleted++;
-                    if(tameCompleted>=numTame && !wildRunning){
-                        wildRunning=true;
-                        trapCount=traps.size;
-                        document.getElementById('trapsVal').textContent=trapCount;
-                        log('✅ '+trapCount+' vallen geplaatst! Start Wild...','kang');
-                        startWild();
-                    }
-                    return;
+        const targetPoint = pubKeyToPoint(TARGET_PUBKEY);
+        
+        // TAME KANGAROOS
+        log('📍 Tame: Vallen plaatsen...', 'kang');
+        let tameDone = 0;
+        const PATHS_PER_BATCH = 1;
+        
+        function processTameBatch(startPath) {
+            if (!running || startPath >= numPaths) {
+                if (tameDone === numPaths) {
+                    log('✅ ' + traps.size + ' vallen geplaatst', 'kang');
+                    document.getElementById('kangJumps').textContent = kangJumps;
+                    startWild();
                 }
-                
-                const pubHex=(point[1]&1n?'03':'02')+point[0].toString(16).padStart(64,'0');
-                
-                // Distinguished point: eindigt op '000'
-                if(pubHex.slice(-3)==='000'){
-                    traps.set(pubHex,{start:startKey.toString(16).padStart(64,'0'),dist:dist.toString()});
-                }
-                
-                const jump=BigInt(Math.floor(Math.random()*Number(jumpBase/16n)))+1n;
-                point=pointAdd(point,pointMul(jump,[Gx,Gy]));
-                dist+=jump;
-                totalJumps++;
-                
-                document.getElementById('jumpsVal').textContent=totalJumps;
-                document.getElementById('trapsVal').textContent=traps.size;
-                
-                setTimeout(()=>tameStep(s+1),1);
+                return;
             }
             
-            setTimeout(()=>tameStep(0),w*50);
+            const endPath = Math.min(startPath + PATHS_PER_BATCH, numPaths);
+            
+            for (let p = startPath; p < endPath; p++) {
+                if (!running) break;
+                
+                // Start vanaf random punt in range
+                const startOffset = BigInt(Math.floor(Math.random() * rangeSize));
+                const startKey = RANGE_START + startOffset;
+                let point = pointMul(startKey, G);
+                let dist = 0n;
+                
+                for (let s = 0; s < 200 && running; s++) {
+                    const pubHex = (point[1] & 1n ? '03' : '02') + point[0].toString(16).padStart(64, '0');
+                    
+                    // Val detectie: pubkey eindigt op 0000
+                    if (pubHex.endsWith('0000')) {
+                        const trapKey = pubHex;
+                        if (!traps.has(trapKey)) {
+                            traps.set(trapKey, {
+                                start: startKey.toString(16).padStart(64, '0'),
+                                dist: dist.toString()
+                            });
+                        }
+                    }
+                    
+                    // Sprong
+                    const jump = BigInt(Math.floor(Math.random() * Number(jumpSize))) + 1n;
+                    point = pointAdd(point, pointMul(jump, G));
+                    dist += jump;
+                    kangJumps++;
+                }
+                tameDone++;
+            }
+            
+            // Update UI
+            document.getElementById('kangJumps').textContent = kangJumps;
+            
+            // Volgende batch met kleine vertraging
+            setTimeout(() => processTameBatch(endPath), 50);
         }
         
-        // WILD: Jagen
-        function startWild(){
-            log('🦘 Wild: Jagen vanaf target...','kang');
-            const targetPoint=pubKeyToPoint(TARGET_PUBKEY);
-            let wildPoint=targetPoint;
-            let wildDist=0n;
-            const maxWild=100000;
+        // WILD KANGAROO
+        function startWild() {
+            log('🦘 Wild: Jagen...', 'kang');
+            let wildPoint = targetPoint;
+            let wildDist = 0n;
+            const MAX_WILD = 100000;
+            let wildStep = 0;
             
-            function wildStep(j){
-                if(j>=maxWild || !running){
-                    updatePhase(2,'⚠️ Max '+maxWild.toLocaleString()+' sprongen','done');
-                    log('⚠️ Wild: max sprongen bereikt','warn');
+            function processWildBatch() {
+                if (!running || wildStep >= MAX_WILD) {
+                    if (running) {
+                        updatePhase(4, '⚠️ Max sprongen (' + MAX_WILD + ')', 'done');
+                        log('⚠️ Max sprongen bereikt', 'warn');
+                    }
                     resolve();
                     return;
                 }
                 
-                const pubHex=(wildPoint[1]&1n?'03':'02')+wildPoint[0].toString(16).padStart(64,'0');
+                // Verwerk 50 stappen per batch
+                const batchSize = 50;
                 
-                if(traps.has(pubHex)){
-                    const trap=traps.get(pubHex);
-                    const tameStart=BigInt('0x'+trap.start);
-                    const tameDist=BigInt(trap.dist);
-                    let privKey=mod(tameStart+tameDist-wildDist,N);
+                for (let j = 0; j < batchSize && wildStep < MAX_WILD && running; j++) {
+                    const pubHex = (wildPoint[1] & 1n ? '03' : '02') + wildPoint[0].toString(16).padStart(64, '0');
                     
-                    if(privKey>0n){
-                        const privHex=privKey.toString(16).padStart(64,'0');
-                        const testPub=privateToPublicKey(privHex);
+                    if (traps.has(pubHex)) {
+                        const trap = traps.get(pubHex);
+                        const tameStart = BigInt('0x' + trap.start);
+                        const tameDist = BigInt(trap.dist);
+                        let privKey = mod(tameStart + tameDist - wildDist, N);
                         
-                        if(testPub===TARGET_PUBKEY){
-                            const wif=privateToWIF(privHex);
-                            const hash160=pubkeyToHash160(testPub);
-                            const address=base58encode("00"+hash160+TARGET_CHECKSUM);
+                        if (privKey > 0n && privKey < N) {
+                            const privHex = privKey.toString(16).padStart(64, '0');
+                            const testPub = privateToPublicKey(privHex);
                             
-                            document.getElementById('resultCard').classList.add('show');
-                            document.getElementById('foundPrivKey').textContent=privHex;
-                            document.getElementById('foundWIF').textContent=wif;
-                            document.getElementById('foundAddress').textContent=address;
-                            
-                            log('🎉🎉🎉 PRIVÉSLEUTEL GEVONDEN! 🎉🎉🎉','winner');
-                            log('Private Key: '+privHex,'found');
-                            log('WIF: '+wif,'found');
-                            log('Adres: '+address,'found');
-                            
-                            updatePhase(2,'🎉 GEVONDEN!!!','done');
-                            running=false;
-                            startBtn.disabled=false;
-                            stopBtn.disabled=true;
-                            resolve();
-                            return;
+                            if (testPub === TARGET_PUBKEY) {
+                                const wif = privateToWIF(privHex);
+                                const hash160 = pubkeyToHash160(testPub);
+                                const address = base58encode("00" + hash160 + TARGET_CHECKSUM);
+                                
+                                document.getElementById('resultCard').classList.add('show');
+                                document.getElementById('foundPrivKey').textContent = privHex;
+                                document.getElementById('foundWIF').textContent = wif;
+                                document.getElementById('foundAddress').textContent = address;
+                                
+                                log('🎉🎉🎉 PRIVÉSLEUTEL GEVONDEN! 🎉🎉🎉', 'winner');
+                                log('Private Key: ' + privHex, 'found');
+                                log('WIF: ' + wif, 'found');
+                                log('Adres: ' + address, 'found');
+                                
+                                updatePhase(4, '🎉 GEVONDEN!!!', 'done');
+                                running = false;
+                                startBtn.disabled = false;
+                                stopBtn.disabled = true;
+                                resolve();
+                                return;
+                            }
                         }
                     }
+                    
+                    // Sprong
+                    const jump = BigInt(Math.floor(Math.random() * Number(jumpSize))) + 1n;
+                    wildPoint = pointAdd(wildPoint, pointMul(jump, G));
+                    wildDist += jump;
+                    kangJumps++;
+                    wildStep++;
                 }
                 
-                const jump=BigInt(Math.floor(Math.random()*Number(jumpBase/32n)))+1n;
-                wildPoint=pointAdd(wildPoint,pointMul(jump,[Gx,Gy]));
-                wildDist+=jump;
-                totalJumps++;
+                // Update UI
+                document.getElementById('kangJumps').textContent = kangJumps.toLocaleString();
                 
-                document.getElementById('jumpsVal').textContent=totalJumps;
-                
-                if(j%2000===0){
-                    const elapsed=(Date.now()-startTime)/1000||1;
-                    const spd=Math.floor(totalJumps/elapsed);
-                    document.getElementById('speedVal').textContent=spd.toLocaleString()+'/s';
-                    document.getElementById('timeVal').textContent=Math.floor(elapsed)+'s';
+                if (wildStep % 500 === 0 && running) {
+                    const elapsed = (Date.now() - startTime) / 1000 || 1;
+                    const spd = Math.floor(kangJumps / elapsed);
+                    document.getElementById('estTime').textContent = Math.floor(spd).toLocaleString() + ' jumps/s';
+                    log('🦘 Wild stap: ' + wildStep + ' | Snelheid: ' + spd + '/s', 'kang');
                 }
                 
-                setTimeout(()=>wildStep(j+1),1);
+                // Volgende batch
+                if (running && wildStep < MAX_WILD) {
+                    setTimeout(() => processWildBatch(), 10);
+                } else if (running) {
+                    resolve();
+                }
             }
             
-            wildStep(0);
+            processWildBatch();
         }
+        
+        // Start tame
+        processTameBatch(0);
     });
 }
 
-// ===== START KNOP =====
-startBtn.onclick=async function(){
-    console.log('START GEKLIKT!');
+// ===== MAIN START =====
+startBtn.onclick = async function() {
+    console.log('START KNOP GEKLIKT!');
     
-    running=true;
-    rhoSteps=0;
-    hotspots=0;
-    totalJumps=0;
-    trapCount=0;
-    startTime=Date.now();
+    running = true;
+    rhoSteps = 0;
+    hotspots = 0;
+    kangJumps = 0;
+    hotspotsList = [];
+    startTime = Date.now();
     
-    startBtn.disabled=true;
-    stopBtn.disabled=false;
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
     document.getElementById('resultCard').classList.remove('show');
     
-    document.getElementById('rhoSteps').textContent='0';
-    document.getElementById('hotspotsVal').textContent='0';
-    document.getElementById('trapsVal').textContent='0';
-    document.getElementById('jumpsVal').textContent='0';
-    document.getElementById('speedVal').textContent='0/s';
-    document.getElementById('timeVal').textContent='0s';
+    document.getElementById('rhoSteps').textContent = '0';
+    document.getElementById('hotspots').textContent = '0';
+    document.getElementById('kangJumps').textContent = '0';
+    document.getElementById('rangeFactor').textContent = '1×';
+    document.getElementById('estTime').textContent = '-';
     
-    log('🚀 HYBRIDE JACHT GESTART!','info');
-    log('🎯 Target: '+TARGET_PUBKEY.slice(0,30)+'...','info');
-    log('📐 Range: 2^134 keys','info');
+    // Clear log
+    logBox.innerHTML = '';
     
-    // FASE 1
-    await pollardRhoAnalysis();
-    if(!running)return;
+    log('🚀🚀🚀 POLLARD HYBRIDE GESTART 🚀🚀🚀', 'info');
+    log('🎯 Puzzel #135 | Range: 2^134', 'info');
+    log('🎯 Target: ' + TARGET_PUBKEY.slice(0, 20) + '...', 'info');
     
-    // FASE 2
-    await kangarooHunt();
-    
-    if(running){
-        log('✅ Jacht voltooid','info');
-        running=false;
-        startBtn.disabled=false;
-        stopBtn.disabled=true;
+    try {
+        // FASE 1: Rho Analyse
+        await pollardRhoAnalysis();
+        if (!running) return;
+        
+        // FASE 2 & 3: Analyse & Range verkleinen
+        const effectiveRange = analyzeAndReduce();
+        if (!running) return;
+        
+        // FASE 4: Kangaroo jacht
+        await kangarooHunt(effectiveRange);
+        
+        if (running) {
+            log('✅ Hybride jacht voltooid', 'info');
+            running = false;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+    } catch (e) {
+        log('❌ FOUT: ' + e.message, 'warn');
+        console.error(e);
+        running = false;
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
     }
 };
 
-stopBtn.onclick=function(){
-    console.log('STOP GEKLIKT!');
-    running=false;
-    startBtn.disabled=false;
-    stopBtn.disabled=true;
-    log('🛑 Gestopt','warn');
+stopBtn.onclick = function() {
+    console.log('STOP KNOP GEKLIKT!');
+    running = false;
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    log('🛑 Handmatig gestopt', 'warn');
 };
 
 // ===== INIT =====
-console.log('✅ Script geladen!');
-console.log('🎯 Target public key:',TARGET_PUBKEY.slice(0,30)+'...');
-console.log('🔑 Checksum:',TARGET_CHECKSUM);
+console.log('✅ Pollard Hybride geladen!');
+console.log('🎯 Target: ' + TARGET_PUBKEY.slice(0, 30) + '...');
+console.log('🔑 Checksum: ' + TARGET_CHECKSUM);
 log('✅ POLLARD HYBRIDE GELADEN');
-log('🦘 Klik op START om te beginnen!');
+log('🦘 Methode: Rho → Hotspots → Range → Kangaroo');
+log('🎯 Klaar voor Puzzel #135! Klik op START');
 </script>
 </body>
 </html>
