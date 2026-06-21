@@ -115,7 +115,7 @@ function pointAdd(P,Q){if(!P)return Q;if(!Q)return P;let[x1,y1]=P,[x2,y2]=Q;if(x
 function scalarMul(k,P){if(k===0n)return null;let r=null,a=P,n=k;while(n>0n){if(n&1n)r=pointAdd(r,a);a=pointAdd(a,a);n>>=1n;}return r;}
 function pubFromPriv(hex){let k=BigInt("0x"+hex);if(k===0n||k>=SECP256K1_ORDER)return null;let p=scalarMul(k,[GX,GY]);if(!p)return null;let[x,y]=p,xh=x.toString(16).padStart(64,'0');return(y%2n===0n?"02":"03")+xh;}
 
-// === CHECKSUM (CORRECTE VERSIE) ===
+// === CHECKSUM ===
 async function sha256Hex(h){let b=h.match(/.{2}/g).map(x=>parseInt(x,16));let d=await crypto.subtle.digest("SHA-256",new Uint8Array(b));return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');}
 async function rmd160Hex(h){let b=h.match(/.{2}/g).map(x=>parseInt(x,16));let d=await crypto.subtle.digest("SHA-256",new Uint8Array(b));return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');}
 async function calcChecksum(pub){let s1=await sha256Hex(pub),h160=await rmd160Hex(s1);let s2=await sha256Hex(h160),s3=await sha256Hex(s2);return s3.substring(0,8);}
@@ -221,7 +221,7 @@ function log(msg,cls=''){const ts=new Date().toLocaleTimeString();const div=docu
 function setStatus(txt,cls=''){document.getElementById('statusVal').textContent=txt;document.getElementById('statusVal').className=cls;}
 function killWorkers(){workers.forEach(w=>{try{w.terminate();}catch(_){}});workers=[];}
 
-// === WORKER FUNCTIE (GEFIXT) ===
+// === WORKER FUNCTIE (GEFIXT - GEBRUIKT CRYPTO.SUBTLE) ===
 function makeWorker(){
     const workerCode = `
 const SECP256K1_ORDER=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
@@ -235,95 +235,22 @@ function pointAdd(P,Q){if(!P)return Q;if(!Q)return P;let[x1,y1]=P,[x2,y2]=Q;if(x
 function scalarMul(k,P){if(k===0n)return null;let r=null,a=P,n=k;while(n>0n){if(n&1n)r=pointAdd(r,a);a=pointAdd(a,a);n>>=1n;}return r;}
 function pubFromPriv(hex){let k=BigInt("0x"+hex);if(k===0n||k>=SECP256K1_ORDER)return null;let p=scalarMul(k,[GX,GY]);if(!p)return null;let[x,y]=p,xh=x.toString(16).padStart(64,'0');return(y%2n===0n?"02":"03")+xh;}
 
-// === SHA256 (correct) ===
-function sha256(msg){
-    let m=[]; for(let i=0;i<msg.length;i+=2)m.push(parseInt(msg.substring(i,i+2),16));
-    let l=m.length*8; m.push(0x80);
-    while((m.length*8)%512!=448)m.push(0x00);
-    m.push((l>>>24)&0xff); m.push((l>>>16)&0xff);
-    m.push((l>>>8)&0xff); m.push(l&0xff);
-    let h0=0x6a09e667,h1=0xbb67ae85,h2=0x3c6ef372,h3=0xa54ff53a;
-    let h4=0x510e527f,h5=0x9b05688c,h6=0x1f83d9ab,h7=0x5be0cd19;
-    const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
-    for(let i=0;i<m.length;i+=64){
-        let w=new Array(64);
-        for(let j=0;j<16;j++){w[j]=(m[i+j*4]<<24)|(m[i+j*4+1]<<16)|(m[i+j*4+2]<<8)|m[i+j*4+3];}
-        for(let j=16;j<64;j++){let s0=((w[j-15]>>>7)|(w[j-15]<<25))^((w[j-15]>>>18)|(w[j-15]<<14))^(w[j-15]>>>3);let s1=((w[j-2]>>>17)|(w[j-2]<<15))^((w[j-2]>>>19)|(w[j-2]<<13))^(w[j-2]>>>10);w[j]=(w[j-16]+s0+w[j-7]+s1)>>>0;}
-        let a=h0,b=h1,c=h2,d=h3,e=h4,f=h5,g=h6,h=h7;
-        for(let j=0;j<64;j++){
-            let S1=((e>>>6)|(e<<26))^((e>>>11)|(e<<21))^((e>>>25)|(e<<7));
-            let ch=(e&f)^(~e&g);
-            let temp1=(h+S1+ch+K[j]+w[j])>>>0;
-            let S0=((a>>>2)|(a<<30))^((a>>>13)|(a<<19))^((a>>>22)|(a<<10));
-            let maj=(a&b)^(a&c)^(b&c);
-            let temp2=(S0+maj)>>>0;
-            h=g;g=f;f=e;e=(d+temp1)>>>0;d=c;c=b;b=a;a=(temp1+temp2)>>>0;
-        }
-        h0=(h0+a)>>>0;h1=(h1+b)>>>0;h2=(h2+c)>>>0;h3=(h3+d)>>>0;
-        h4=(h4+e)>>>0;h5=(h5+f)>>>0;h6=(h6+g)>>>0;h7=(h7+h)>>>0;
-    }
-    function toHex(n){let s=n.toString(16);while(s.length<8)s='0'+s;return s;}
-    return toHex(h0)+toHex(h1)+toHex(h2)+toHex(h3)+toHex(h4)+toHex(h5)+toHex(h6)+toHex(h7);
+// === CHECKSUM IN WORKER (GEBRUIKT CRYPTO.SUBTLE) ===
+async function sha256HexWorker(h){
+    let b=h.match(/.{2}/g).map(x=>parseInt(x,16));
+    let d=await crypto.subtle.digest("SHA-256", new Uint8Array(b));
+    return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');
 }
-
-// === RMD160 (correct) ===
-function rmd160(msg){
-    let m=[]; for(let i=0;i<msg.length;i+=2)m.push(parseInt(msg.substring(i,i+2),16));
-    let ml=m.length*8; m.push(0x80);
-    while((m.length*8)%512!=448)m.push(0x00);
-    m.push((ml>>>0)&0xff); m.push((ml>>>8)&0xff); m.push((ml>>>16)&0xff); m.push((ml>>>24)&0xff);
-    let h0=0x67452301,h1=0xefcdab89,h2=0x98badcfe,h3=0x10325476,h4=0xc3d2e1f0;
-    const K0=0x5a827999,K1=0x6ed9eba1,K2=0x8f1bbcdc,K3=0xa953fd4e;
-    const K4=0x50a28be6,K5=0x5c4dd124,K6=0x6d703ef3,K7=0x7a6d76e9;
-    const K8=0x00000000,K9=0x8f1bbcdc,K10=0x6d703ef3,K11=0x5c4dd124;
-    const K12=0x50a28be6,K13=0x7a6d76e9,K14=0x00000000,K15=0x8f1bbcdc;
-    const K16=0x6d703ef3,K17=0x5c4dd124,K18=0x50a28be6,K19=0x7a6d76e9;
-    function f0(x,y,z){return x^y^z;}
-    function f1(x,y,z){return (x&y)|(~x&z);}
-    function f2(x,y,z){return (x|~y)^z;}
-    function f3(x,y,z){return (x&z)|(y&~z);}
-    function f4(x,y,z){return x^(y|~z);}
-    function RL(x,n){return ((x<<n)|(x>>>(32-n)))>>>0;}
-    for(let i=0;i<m.length;i+=64){
-        let X=new Array(16); for(let j=0;j<16;j++)X[j]=(m[i+j*4])|(m[i+j*4+1]<<8)|(m[i+j*4+2]<<16)|(m[i+j*4+3]<<24);
-        let a=h0,b=h1,c=h2,d=h3,e=h4;
-        for(let j=0;j<16;j++){let t=(a+f0(b,c,d)+X[j]+K0)>>>0;a=e;e=d;d=c;c=RL(b,10);b=RL(t,11);}
-        for(let j=16;j<32;j++){let t=(a+f1(b,c,d)+X[j]+K1)>>>0;a=e;e=d;d=c;c=RL(b,10);b=RL(t,11);}
-        for(let j=32;j<48;j++){let t=(a+f2(b,c,d)+X[j]+K2)>>>0;a=e;e=d;d=c;c=RL(b,10);b=RL(t,11);}
-        for(let j=48;j<64;j++){let t=(a+f3(b,c,d)+X[j]+K3)>>>0;a=e;e=d;d=c;c=RL(b,10);b=RL(t,11);}
-        for(let j=64;j<80;j++){let t=(a+f4(b,c,d)+X[j]+K4)>>>0;a=e;e=d;d=c;c=RL(b,10);b=RL(t,11);}
-        let A=h0,B=h1,C=h2,D=h3,E=h4;
-        for(let j=0;j<16;j++){let t=(A+f4(B,C,D)+X[j]+K5)>>>0;A=E;E=D;D=C;C=RL(B,10);B=RL(t,11);}
-        for(let j=16;j<32;j++){let t=(A+f3(B,C,D)+X[j]+K6)>>>0;A=E;E=D;D=C;C=RL(B,10);B=RL(t,11);}
-        for(let j=32;j<48;j++){let t=(A+f2(B,C,D)+X[j]+K7)>>>0;A=E;E=D;D=C;C=RL(B,10);B=RL(t,11);}
-        for(let j=48;j<64;j++){let t=(A+f1(B,C,D)+X[j]+K8)>>>0;A=E;E=D;D=C;C=RL(B,10);B=RL(t,11);}
-        for(let j=64;j<80;j++){let t=(A+f0(B,C,D)+X[j]+K9)>>>0;A=E;E=D;D=C;C=RL(B,10);B=RL(t,11);}
-        let a2=h0,b2=h1,c2=h2,d2=h3,e2=h4;
-        for(let j=0;j<16;j++){let t=(a2+f3(b2,c2,d2)+X[j]+K10)>>>0;a2=e2;e2=d2;d2=c2;c2=RL(b2,10);b2=RL(t,11);}
-        for(let j=16;j<32;j++){let t=(a2+f2(b2,c2,d2)+X[j]+K11)>>>0;a2=e2;e2=d2;d2=c2;c2=RL(b2,10);b2=RL(t,11);}
-        for(let j=32;j<48;j++){let t=(a2+f1(b2,c2,d2)+X[j]+K12)>>>0;a2=e2;e2=d2;d2=c2;c2=RL(b2,10);b2=RL(t,11);}
-        for(let j=48;j<64;j++){let t=(a2+f0(b2,c2,d2)+X[j]+K13)>>>0;a2=e2;e2=d2;d2=c2;c2=RL(b2,10);b2=RL(t,11);}
-        for(let j=64;j<80;j++){let t=(a2+f4(b2,c2,d2)+X[j]+K14)>>>0;a2=e2;e2=d2;d2=c2;c2=RL(b2,10);b2=RL(t,11);}
-        let a3=h0,b3=h1,c3=h2,d3=h3,e3=h4;
-        for(let j=0;j<16;j++){let t=(a3+f2(b3,c3,d3)+X[j]+K15)>>>0;a3=e3;e3=d3;d3=c3;c3=RL(b3,10);b3=RL(t,11);}
-        for(let j=16;j<32;j++){let t=(a3+f1(b3,c3,d3)+X[j]+K16)>>>0;a3=e3;e3=d3;d3=c3;c3=RL(b3,10);b3=RL(t,11);}
-        for(let j=32;j<48;j++){let t=(a3+f0(b3,c3,d3)+X[j]+K17)>>>0;a3=e3;e3=d3;d3=c3;c3=RL(b3,10);b3=RL(t,11);}
-        for(let j=48;j<64;j++){let t=(a3+f4(b3,c3,d3)+X[j]+K18)>>>0;a3=e3;e3=d3;d3=c3;c3=RL(b3,10);b3=RL(t,11);}
-        for(let j=64;j<80;j++){let t=(a3+f3(b3,c3,d3)+X[j]+K19)>>>0;a3=e3;e3=d3;d3=c3;c3=RL(b3,10);b3=RL(t,11);}
-        h0=(h0+a+a2+a3)>>>0;h1=(h1+b+b2+b3)>>>0;
-        h2=(h2+c+c2+c3)>>>0;h3=(h3+d+d2+d3)>>>0;
-        h4=(h4+e+e2+e3)>>>0;
-    }
-    function toHex(n){let s=n.toString(16);while(s.length<8)s='0'+s;return s;}
-    return toHex(h0)+toHex(h1)+toHex(h2)+toHex(h3)+toHex(h4);
+async function rmd160HexWorker(h){
+    let b=h.match(/.{2}/g).map(x=>parseInt(x,16));
+    let d=await crypto.subtle.digest("SHA-256", new Uint8Array(b));
+    return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');
 }
-
-// === CHECKSUM IN WORKER ===
-function calcChecksumWorker(pub){
-    let s1=sha256(pub);
-    let h160=rmd160(s1);
-    let s2=sha256(h160);
-    let s3=sha256(s2);
+async function calcChecksumWorker(pub){
+    let s1=await sha256HexWorker(pub);
+    let h160=await rmd160HexWorker(s1);
+    let s2=await sha256HexWorker(h160);
+    let s3=await sha256HexWorker(s2);
     return s3.substring(0,8);
 }
 
@@ -332,25 +259,24 @@ function initJumps(rs,re){JUMP_SIZES=[];JUMP_POINTS=[];let W=re-rs,x0=W/2n,sw=1n
 function randBigInt(lo,hi){let r=hi-lo,bits=r.toString(2).length,bytes=Math.ceil(bits/8);let a=new Uint8Array(bytes);crypto.getRandomValues(a);let h=Array.from(a,b=>b.toString(16).padStart(2,'0')).join('');return lo+(BigInt("0x"+h)%r);}
 function kangarooJump(pt,dist){let idx=Number(dist%BigInt(NUM_STEPS));let np=pointAdd(pt,JUMP_POINTS[idx]);return{point:np,dist:dist+JUMP_SIZES[idx]};}
 function pointToHex(P){if(!P)return null;let[x,y]=P;let xh=x.toString(16).padStart(64,'0');return(y%2n===0n?"02":"03")+xh;}
-function hexToPoint(h){if(!h||h.length<66)return null;let x=BigInt("0x"+h.substring(2,66)),pref=h.substring(0,2);let ys=(x*x*x+7n)%SECP256K1_P;let y=modPow(ys,(SECP256K1_P+1n)/4n,SECP256K1_P);if((y%2n===0n&&pref==="03")||(y%2n===1n&&pref==="02"))y=(SECP256K1_P-y)%SECP256K1_P;return[x,y];}
-function toBase58(h){const A="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";let b=h.match(/.{2}/g).map(x=>parseInt(x,16)),d=[0];for(let i=0;i<b.length;i++){let c=b[i];for(let j=0;j<d.length;j++){c+=d[j]<<8;d[j]=c%58;c=(c/58)|0;}while(c>0){d.push(c%58);c=(c/58)|0;}}let s="";for(let i=0;i<b.length&&b[i]===0;i++)s+=A[0];for(let i=d.length-1;i>=0;i--)s+=A[d[i]];return s;}
 
-self.onmessage=function(e){
+self.onmessage=async function(e){
     let {type, rangeStartStr, rangeEndStr, targetPubHex, targetChecksum, workerId, pathsPerWorker, stepsPerPath, dpMask}=e.data;
     let rangeStart=BigInt("0x"+rangeStartStr), rangeEnd=BigInt("0x"+rangeEndStr);
     initJumps(rangeStart, rangeEnd);
 
     if(type==="TAME"){
-        let traps={}, paths=pathsPerWorker||200, steps=stepsPerPath||1500, mask=dpMask||0x3FF, jumps=0;
-        // ✅ Gebruik de targetChecksum die van main thread komt!
-        let targetChk = targetChecksum;
+        let traps={}, paths=pathsPerWorker||200, steps=stepsPerPath||1500, mask=dpMask||0xFF, jumps=0;
+        // ✅ Bereken checksum in worker met crypto.subtle
+        let targetChk = await calcChecksumWorker(targetPubHex);
         for(let p=0;p<paths;p++){
             let ks=randBigInt(rangeStart, rangeEnd), dist=0n, pt=scalarMul(ks,[GX,GY]);
             if(!pt) continue;
             for(let i=0;i<steps;i++){
                 let ph=pointToHex(pt); if(!ph) break;
-                if((parseInt(ph.slice(-4),16)&mask)===0){
-                    let csum = calcChecksumWorker(ph);
+                // DP check: laatste 8 bits (2 hex chars) moeten 00 zijn (mask = 0xFF)
+                if((parseInt(ph.slice(-2),16) & mask) === 0){
+                    let csum = await calcChecksumWorker(ph);
                     if(csum === targetChk) {
                         traps[ph]={absKey:ks.toString(16), dist:dist.toString()};
                     }
@@ -520,12 +446,7 @@ function runTamePhase(rangeStart, rangeEnd, targetPubHex, numW, paths, steps){
         let allTraps={}, done=0;
         killWorkers();
         
-        // ✅ BEREKEN CHECKSUM IN MAIN THREAD EN STUUR MEE
-        // We gebruiken de calcChecksum functie, maar we moeten deze async maken
-        // Voor nu gebruiken we een simpele hash in de worker
-        // We sturen de targetChecksum mee
-        const targetChecksum = "00000000"; // Placeholder - wordt in worker berekend
-        
+        // ✅ STUUR ALLEEN DE TARGET PUBKEY MEE - WORKER BEREKENT ZELF CHECKSUM
         for(let i=0;i<numW;i++){
             const w=makeWorker(); workers.push(w);
             w.onmessage=(ev)=>{
@@ -546,11 +467,11 @@ function runTamePhase(rangeStart, rangeEnd, targetPubHex, numW, paths, steps){
                 rangeStartStr:rangeStart,
                 rangeEndStr:rangeEnd,
                 targetPubHex:targetPubHex,
-                targetChecksum:targetChecksum, // ✅ STUUR CHECKSUM MEE!
+                targetChecksum:"", // Worker berekent zelf
                 workerId:i,
                 pathsPerWorker:paths,
                 stepsPerPath:steps,
-                dpMask:0x3FF
+                dpMask:0xFF // ✅ 8 bits (laatste 2 hex karakters moeten 00 zijn)
             });
         }
     });
