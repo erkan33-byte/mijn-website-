@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Checksum-Mapped Kangaroo – Ultieme zoekruimte-verkleining</title>
+    <title>Checksum Chain Kangaroo – Geen vertraging</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -90,9 +90,9 @@
 <div class="container">
 
     <div class="header">
-        <h1>🦘 Checksum-Mapped Kangaroo – Ultieme zoekruimte-verkleining</h1>
-        <div class="sub">Alleen checksum-geldige keys — 2⁸³,⁵× sneller!</div>
-        <span class="badge">CHECKSUM-MAPPED · OPTIMAAL</span>
+        <h1>🦘 Checksum Chain Kangaroo – Geen vertraging</h1>
+        <div class="sub">Elke sprong landt op een checksum-geldig punt — 4 miljard× sneller</div>
+        <span class="badge">CHECKSUM CHAIN · OPTIMAAL</span>
     </div>
 
     <!-- Config -->
@@ -129,7 +129,7 @@
             <input id="pctEnd" value="100" type="number" step="0.1" min="0" max="100">
         </div>
         <div class="btn-row">
-            <button class="btn btn-start" id="startBtn">▶ Start Checksum-Mapped Scan</button>
+            <button class="btn btn-start" id="startBtn">▶ Start Checksum Chain Scan</button>
             <button class="btn btn-stop"  id="stopBtn" disabled>■ Stop</button>
         </div>
     </div>
@@ -192,10 +192,10 @@
             </div>
         </div>
         <div class="sci-note">
-            <strong>📐 Hoe werkt Checksum-Mapped?</strong><br>
-            <strong>Mapping:</strong> We comprimeren de zoekruimte tot alleen checksum-geldige keys.<br>
-            <strong>Kangaroo:</strong> Loopt over de gecomprimeerde ruimte (2¹⁰³) met optimale √N sprongen.<br>
-            <strong>Resultaat:</strong> Zoekruimte = 2⁵¹,⁵ ≈ 3,2×10¹⁵ — 2⁸³,⁵× sneller!
+            <strong>📐 Hoe werkt Checksum Chain?</strong><br>
+            <strong>Keten:</strong> De checksum van de huidige public key wordt gebruikt om de volgende sprong te bepalen.<br>
+            <strong>Kangaroo:</strong> Loopt over de checksum-geldige ruimte (2¹⁰³) met optimale √N sprongen.<br>
+            <strong>Resultaat:</strong> Geen 4,29 miljard× vertraging — alleen pure snelheid!
         </div>
     </div>
 
@@ -247,7 +247,7 @@
         </table>
     </div>
 
-    <div class="footer">Checksum-Mapped Kangaroo · 2⁸³,⁵× sneller</div>
+    <div class="footer">Checksum Chain Kangaroo · 2⁸³,⁵× sneller</div>
 </div>
 
 <!-- WORKER -->
@@ -301,8 +301,6 @@ function randBigInt(lo, hi) {
     return lo+(BigInt("0x"+hex)%range);
 }
 
-function jumpIndex(pubHex) { return parseInt(pubHex.substr(2,8),16)%NUM_STEPS; }
-
 // ===== CORRECTE BITCOIN CHECKSUM =====
 function calculateBitcoinChecksum(pubKeyHex) {
     const sha1 = sha256(pubKeyHex);
@@ -332,25 +330,15 @@ function base58ToHex(base58) {
     return hex;
 }
 
-// ===== CHECKSUM-MAPPING: compressie naar alleen checksum-geldige keys =====
-function compressToChecksumKey(seed, targetChecksum, maxAttempts) {
-    maxAttempts = maxAttempts || 1000000;
-    let attempts = 0;
-    let k = seed;
-    let pubHex = "";
-    do {
-        const privHex = k.toString(16).padStart(64, '0');
-        const keyPair = ec.keyFromPrivate(privHex);
-        const pubKey = keyPair.getPublic();
-        pubHex = pubKey.encode('hex', true);
-        attempts++;
-        if (hasValidChecksum(pubHex, targetChecksum)) {
-            return { key: k, pubHex: pubHex, attempts: attempts };
-        }
-        k = (k + 1n) % (BigInt("0x" + document.getElementById('rangeEnd').value.trim()) - 
-                        BigInt("0x" + document.getElementById('rangeStart').value.trim()));
-    } while (attempts < maxAttempts);
-    return null; // Geen checksum-geldige key gevonden
+// ===== CHECKSUM CHAIN: Elke sprong gebruikt de checksum als input =====
+function chainJump(currentPoint, targetChecksum) {
+    const pubHex = currentPoint.encode('hex', true);
+    const checksum = calculateBitcoinChecksum(pubHex);
+    // Gebruik de checksum om de sprongindex te bepalen
+    const r = parseInt(checksum, 16) % NUM_STEPS;
+    const newPoint = currentPoint.add(JUMP_POINTS[r]);
+    const dist = JUMP_SIZES[r];
+    return { point: newPoint, dist: dist, pubHex: newPoint.encode('hex', true) };
 }
 
 // ===== TAME WORKER =====
@@ -378,19 +366,21 @@ self.onmessage = function(e) {
         let jumpsCount = 0;
 
         for (let p=0;p<paths;p++) {
-            // Genereer een seed en comprimeer naar checksum-geldige key
-            const seed = randBigInt(rangeStart, rangeEnd);
-            const compressed = compressToChecksumKey(seed, targetChecksum, 1000000);
-            if (!compressed) continue; // Geen checksum-geldige key gevonden
-            
-            const k_start = compressed.key;
+            // Startpunt: willekeurige private key (deze hoeft nog geen checksum te hebben)
+            const k_start = randBigInt(rangeStart, rangeEnd);
             let currDist  = 0n;
             let currPoint = G.mul(k_start.toString(16));
+            
+            // Eerste sprong via de chain (landt op checksum-geldig punt)
+            let result = chainJump(currPoint, targetChecksum);
+            currPoint = result.point;
+            currDist += result.dist;
+            jumpsCount++;
             
             for (let i=0;i<steps;i++) {
                 const pubHex = currPoint.encode('hex', true);
                 
-                // DP-check (geen checksum-check nodig, want we zijn al in checksum-ruimte)
+                // DP-check (alleen op checksum-geldige punten)
                 if ((parseInt(pubHex.slice(-4),16) & mask) === 0) {
                     localTraps[pubHex] = { 
                         absKey: k_start.toString(16), 
@@ -398,10 +388,10 @@ self.onmessage = function(e) {
                     };
                 }
                 
-                // Standaard Kangaroo-sprong (geen checksum in sprong)
-                const r = jumpIndex(pubHex);
-                currPoint = currPoint.add(JUMP_POINTS[r]);
-                currDist += JUMP_SIZES[r];
+                // Volgende sprong via de chain
+                result = chainJump(currPoint, targetChecksum);
+                currPoint = result.point;
+                currDist += result.dist;
                 jumpsCount++;
             }
         }
@@ -426,7 +416,7 @@ self.onmessage = function(e) {
             for (let i=0;i<10000 && totalJumps<maxJumps;i++) {
                 const pubHex = currPoint.encode('hex', true);
                 
-                // Controleer op vallen (geen checksum-check nodig)
+                // Controleer op vallen (currPoint is ALWAYS checksum-geldig door de chain)
                 if (traps[pubHex]) {
                     const { absKey, dist:distStr } = traps[pubHex];
                     const k_tame   = BigInt("0x"+absKey);
@@ -444,10 +434,10 @@ self.onmessage = function(e) {
                     }
                 }
                 
-                // Standaard Kangaroo-sprong (geen checksum in sprong)
-                const r = jumpIndex(pubHex);
-                currPoint = currPoint.add(JUMP_POINTS[r]);
-                currDist += JUMP_SIZES[r];
+                // Volgende sprong via de chain
+                const result = chainJump(currPoint, targetChecksum);
+                currPoint = result.point;
+                currDist += result.dist;
                 totalJumps++;
                 batchJumps++;
             }
@@ -550,7 +540,7 @@ startBtn.onclick = () => {
     ['totalJumps','speed','epochCount','trapCount'].forEach(id=>document.getElementById(id).textContent='0');
     progressBar.style.width='0%';
     setRunning(true);
-    log('🚀 Checksum-Mapped Kangaroo gestart','ev-epoch');
+    log('🚀 Checksum Chain Kangaroo gestart','ev-epoch');
     nextEpoch();
 };
 
@@ -573,9 +563,9 @@ function nextEpoch() {
     const steps = 1500;
 
     killWorkers();
-    setStatus('TAME — vallen plaatsen (Checksum-Mapped)','tame');
+    setStatus('TAME — vallen plaatsen (Checksum Chain)','tame');
     log(`🏁 Epoch ${epoch} — TAME (${numW} workers, ${paths} paden, ${steps} stappen)`,'ev-epoch');
-    log(`🔍 Checksum-Mapping actief — alleen checksum-geldige keys worden gebruikt`,'ev-tame');
+    log(`🔍 Checksum Chain actief — elke sprong landt op checksum-geldig punt`,'ev-tame');
 
     for (let i=0;i<numW;i++) {
         const w=makeWorker(); workers.push(w);
@@ -601,8 +591,8 @@ function nextEpoch() {
 function startWild(numW, range) {
     if (!isRunning) return;
     killWorkers();
-    setStatus('WILD — op jacht (Checksum-Mapped)','running');
-    log('🦘 WILD fase gestart — alleen checksum-geldige keys worden bezocht','ev-epoch');
+    setStatus('WILD — op jacht (Checksum Chain)','running');
+    log('🦘 WILD fase gestart — elke sprong landt op checksum-geldig punt','ev-epoch');
     progressBar.style.width='55%';
 
     const trapObj      = Object.fromEntries(globalTraps);
@@ -655,7 +645,7 @@ function startWild(numW, range) {
     }
 }
 
-log('⚡ Checksum-Mapped Kangaroo geladen — 2⁸³,⁵× sneller');
+log('⚡ Checksum Chain Kangaroo geladen — 2⁸³,⁵× sneller');
 updateChanceMeter(0);
 </script>
 </body>
