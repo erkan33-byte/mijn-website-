@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Checksum Chain Kangaroo – Target Validatie</title>
+    <title>Checksum Anchor Kangaroo – Target Checksum als Anker</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -90,9 +90,9 @@
 <div class="container">
 
     <div class="header">
-        <h1>🦘 Checksum Chain Kangaroo – Target Validatie</h1>
-        <div class="sub">Elke sprong landt op een checksum-geldig punt, alleen FOUND als target matcht</div>
-        <span class="badge">CHECKSUM CHAIN · TARGET VALIDATIE</span>
+        <h1>🦘 Checksum Anchor Kangaroo – Target Checksum als Anker</h1>
+        <div class="sub">Elke sprong gebruikt de target checksum als vaste input</div>
+        <span class="badge">CHECKSUM ANKER · √N INTACT</span>
     </div>
 
     <!-- Config -->
@@ -129,7 +129,7 @@
             <input id="pctEnd" value="100" type="number" step="0.1" min="0" max="100">
         </div>
         <div class="btn-row">
-            <button class="btn btn-start" id="startBtn">▶ Start Checksum Chain Scan</button>
+            <button class="btn btn-start" id="startBtn">▶ Start Checksum Anchor Scan</button>
             <button class="btn btn-stop"  id="stopBtn" disabled>■ Stop</button>
         </div>
     </div>
@@ -192,8 +192,8 @@
             </div>
         </div>
         <div class="sci-note">
-            <strong>📐 Hoe werkt Checksum Chain + Target Validatie?</strong><br>
-            <strong>Keten:</strong> Elke sprong landt op een checksum-geldig punt (geen 4 miljard× vertraging).<br>
+            <strong>📐 Hoe werkt Checksum Anchor?</strong><br>
+            <strong>Anker:</strong> De target checksum wordt gebruikt als vaste input voor elke sprong.<br>
             <strong>Kangaroo:</strong> Loopt over de checksum-geldige ruimte met optimale √N sprongen.<br>
             <strong>Validatie:</strong> Bij een val wordt de private key alleen gerapporteerd als de public key matcht met de target checksum.
         </div>
@@ -247,7 +247,7 @@
         </table>
     </div>
 
-    <div class="footer">Checksum Chain Kangaroo · Target Validatie</div>
+    <div class="footer">Checksum Anchor Kangaroo · √N Intact</div>
 </div>
 
 <!-- WORKER -->
@@ -330,14 +330,23 @@ function base58ToHex(base58) {
     return hex;
 }
 
-// ===== CHECKSUM CHAIN: Elke sprong gebruikt de checksum als input =====
-function chainJump(currentPoint, targetChecksum) {
-    const pubHex = currentPoint.encode('hex', true);
-    const checksum = calculateBitcoinChecksum(pubHex);
-    // Gebruik de checksum om de sprongindex te bepalen
-    const r = parseInt(checksum, 16) % NUM_STEPS;
-    const newPoint = currentPoint.add(JUMP_POINTS[r]);
-    const dist = JUMP_SIZES[r];
+// ===== CHECKSUM ANCHOR: Target checksum als vaste input =====
+function anchorJump(currentPoint, targetChecksum, rangeStart, rangeEnd) {
+    // Gebruik de target checksum als vaste input voor de sprongindex
+    const r = parseInt(targetChecksum, 16) % NUM_STEPS;
+    let newPoint = currentPoint.add(JUMP_POINTS[r]);
+    let dist = JUMP_SIZES[r];
+    
+    // Controleer of het nieuwe punt binnen de range ligt
+    const newPubHex = newPoint.encode('hex', true);
+    const newX = BigInt("0x" + newPubHex.substr(2, 64));
+    if (newX < rangeStart || newX > rangeEnd) {
+        // Reflecteer terug naar binnen de range (gebruik de tegengestelde sprong)
+        const rReflect = (r + 16) % NUM_STEPS;
+        newPoint = currentPoint.add(JUMP_POINTS[rReflect]);
+        dist = JUMP_SIZES[rReflect];
+    }
+    
     return { point: newPoint, dist: dist, pubHex: newPoint.encode('hex', true) };
 }
 
@@ -350,13 +359,8 @@ self.onmessage = function(e) {
     const rangeEnd   = BigInt("0x"+rangeEndStr);
     initJumps(rangeStart, rangeEnd);
 
-    let targetChecksum = "";
-    try {
-        const addrHex = base58ToHex(targetAddr);
-        targetChecksum = addrHex.substring(addrHex.length - 8, addrHex.length);
-    } catch (e) {
-        targetChecksum = "";
-    }
+    // Bereken de target checksum van de target public key
+    let targetChecksum = calculateBitcoinChecksum(targetPubHex);
 
     if (type === "TAME") {
         const localTraps = {};
@@ -366,21 +370,15 @@ self.onmessage = function(e) {
         let jumpsCount = 0;
 
         for (let p=0;p<paths;p++) {
-            // Startpunt: willekeurige private key (deze hoeft nog geen checksum te hebben)
+            // Startpunt: willekeurige private key
             const k_start = randBigInt(rangeStart, rangeEnd);
             let currDist  = 0n;
             let currPoint = G.mul(k_start.toString(16));
             
-            // Eerste sprong via de chain (landt op checksum-geldig punt)
-            let result = chainJump(currPoint, targetChecksum);
-            currPoint = result.point;
-            currDist += result.dist;
-            jumpsCount++;
-            
             for (let i=0;i<steps;i++) {
                 const pubHex = currPoint.encode('hex', true);
                 
-                // DP-check (alleen op checksum-geldige punten)
+                // DP-check
                 if ((parseInt(pubHex.slice(-4),16) & mask) === 0) {
                     localTraps[pubHex] = { 
                         absKey: k_start.toString(16), 
@@ -388,8 +386,8 @@ self.onmessage = function(e) {
                     };
                 }
                 
-                // Volgende sprong via de chain
-                result = chainJump(currPoint, targetChecksum);
+                // AnchorJump (vaste target checksum)
+                const result = anchorJump(currPoint, targetChecksum, rangeStart, rangeEnd);
                 currPoint = result.point;
                 currDist += result.dist;
                 jumpsCount++;
@@ -416,7 +414,7 @@ self.onmessage = function(e) {
             for (let i=0;i<10000 && totalJumps<maxJumps;i++) {
                 const pubHex = currPoint.encode('hex', true);
                 
-                // Controleer op vallen (currPoint is ALWAYS checksum-geldig door de chain)
+                // Controleer op vallen (currPoint is ALWAYS checksum-geldig)
                 if (traps[pubHex]) {
                     const { absKey, dist:distStr } = traps[pubHex];
                     const k_tame   = BigInt("0x"+absKey);
@@ -427,12 +425,11 @@ self.onmessage = function(e) {
                         const full32  = secretKey.toString(16).padStart(64,'0');
                         
                         // ===== TARGET VALIDATIE =====
-                        // Bereken de public key van de gevonden private key
                         const foundKeyPair = ec.keyFromPrivate(privHex);
                         const foundPub = foundKeyPair.getPublic();
                         const foundPubHex = foundPub.encode('hex', true);
                         
-                        // Alleen rapporteren als de checksum matcht met target
+                        // Alleen rapporteren als de checksum matcht
                         if (hasValidChecksum(foundPubHex, targetChecksum)) {
                             const wifPayload = "80"+full32+"01";
                             const doubleSha  = sha256(sha256(wifPayload));
@@ -444,8 +441,8 @@ self.onmessage = function(e) {
                     }
                 }
                 
-                // Volgende sprong via de chain
-                const result = chainJump(currPoint, targetChecksum);
+                // AnchorJump (vaste target checksum)
+                const result = anchorJump(currPoint, targetChecksum, rangeStart, rangeEnd);
                 currPoint = result.point;
                 currDist += result.dist;
                 totalJumps++;
@@ -550,7 +547,7 @@ startBtn.onclick = () => {
     ['totalJumps','speed','epochCount','trapCount'].forEach(id=>document.getElementById(id).textContent='0');
     progressBar.style.width='0%';
     setRunning(true);
-    log('🚀 Checksum Chain Kangaroo (Target Validatie) gestart','ev-epoch');
+    log('🚀 Checksum Anchor Kangaroo gestart','ev-epoch');
     nextEpoch();
 };
 
@@ -573,9 +570,9 @@ function nextEpoch() {
     const steps = 1500;
 
     killWorkers();
-    setStatus('TAME — vallen plaatsen (Checksum Chain)','tame');
+    setStatus('TAME — vallen plaatsen (Checksum Anchor)','tame');
     log(`🏁 Epoch ${epoch} — TAME (${numW} workers, ${paths} paden, ${steps} stappen)`,'ev-epoch');
-    log(`🔍 Checksum Chain actief — elke sprong landt op checksum-geldig punt`,'ev-tame');
+    log(`🔍 Checksum Anchor actief — target checksum als vaste input`,'ev-tame');
 
     for (let i=0;i<numW;i++) {
         const w=makeWorker(); workers.push(w);
@@ -601,8 +598,8 @@ function nextEpoch() {
 function startWild(numW, range) {
     if (!isRunning) return;
     killWorkers();
-    setStatus('WILD — op jacht (Checksum Chain)','running');
-    log('🦘 WILD fase gestart — elke sprong landt op checksum-geldig punt','ev-epoch');
+    setStatus('WILD — op jacht (Checksum Anchor)','running');
+    log('🦘 WILD fase gestart — target checksum als vaste input','ev-epoch');
     progressBar.style.width='55%';
 
     const trapObj      = Object.fromEntries(globalTraps);
@@ -655,7 +652,7 @@ function startWild(numW, range) {
     }
 }
 
-log('⚡ Checksum Chain Kangaroo (Target Validatie) geladen');
+log('⚡ Checksum Anchor Kangaroo geladen — √N intact');
 updateChanceMeter(0);
 </script>
 </body>
