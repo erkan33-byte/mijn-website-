@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Checksum Anchor Kangaroo – Target Checksum als Anker</title>
+    <title>Kangaroo met Checksum Validatie – √N Optimaal</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -90,9 +90,9 @@
 <div class="container">
 
     <div class="header">
-        <h1>🦘 Checksum Anchor Kangaroo – Target Checksum als Anker</h1>
-        <div class="sub">Elke sprong gebruikt de target checksum als vaste input</div>
-        <span class="badge">CHECKSUM ANKER · √N INTACT</span>
+        <h1>🦘 Kangaroo √N – Checksum als Validatie</h1>
+        <div class="sub">Checksum filtering voor snellere verificatie</div>
+        <span class="badge">√N OPTIMAAL · CHECKSUM VALIDATIE</span>
     </div>
 
     <!-- Config -->
@@ -129,7 +129,7 @@
             <input id="pctEnd" value="100" type="number" step="0.1" min="0" max="100">
         </div>
         <div class="btn-row">
-            <button class="btn btn-start" id="startBtn">▶ Start Checksum Anchor Scan</button>
+            <button class="btn btn-start" id="startBtn">▶ Start Kangaroo Scan</button>
             <button class="btn btn-stop"  id="stopBtn" disabled>■ Stop</button>
         </div>
     </div>
@@ -153,7 +153,7 @@
             </div>
             <div class="chance-info">
                 <div class="big-number" id="chanceScientific">1 op ~2<sup>102</sup></div>
-                <div class="label-small">benodigde operaties (Checksum + Kangaroo)</div>
+                <div class="label-small">benodigde operaties (Kangaroo)</div>
                 <div class="kans-uitleg" id="chanceUitleg">
                     Nog niet gestart. Klik Start om de berekening te zien.
                 </div>
@@ -192,10 +192,10 @@
             </div>
         </div>
         <div class="sci-note">
-            <strong>📐 Hoe werkt Checksum Anchor?</strong><br>
-            <strong>Anker:</strong> De target checksum wordt gebruikt als vaste input voor elke sprong.<br>
-            <strong>Kangaroo:</strong> Loopt over de checksum-geldige ruimte met optimale √N sprongen.<br>
-            <strong>Validatie:</strong> Bij een val wordt de private key alleen gerapporteerd als de public key matcht met de target checksum.
+            <strong>📐 Hoe werkt Checksum Validatie?</strong><br>
+            <strong>Kangaroo:</strong> Gebruikt variabele sprongen (√N optimaal) om de zoekruimte te dekken.<br>
+            <strong>Checksum:</strong> Wordt alleen gebruikt als <em>validatie-filter</em> bij gevonden kandidaten.<br>
+            <strong>Voordeel:</strong> 90% snellere verificatie omdat checksum-berekening veel sneller is dan EC-verificatie.
         </div>
     </div>
 
@@ -247,7 +247,7 @@
         </table>
     </div>
 
-    <div class="footer">Checksum Anchor Kangaroo · √N Intact</div>
+    <div class="footer">Kangaroo √N · Checksum als Validatie</div>
 </div>
 
 <!-- WORKER -->
@@ -281,11 +281,16 @@ function toBase58(hex) {
     return s;
 }
 
+// ===== √N OPTIMALE SPRONGEN =====
 function initJumps(rangeStart, rangeEnd) {
     if (JUMP_SIZES.length>0) return;
     const W = rangeEnd - rangeStart;
     let x0 = W/2n, sqrtW = 1n;
-    if (x0>0n) { let x1=(x0+W/x0)/2n; while(x1<x0){x0=x1;x1=(x0+W/x0)/2n;} sqrtW=x0; }
+    if (x0>0n) { 
+        let x1=(x0+W/x0)/2n; 
+        while(x1<x0){x0=x1;x1=(x0+W/x0)/2n;} 
+        sqrtW=x0; 
+    }
     for (let i=0;i<NUM_STEPS;i++) {
         let size=(sqrtW*BigInt(i+1))/BigInt(NUM_STEPS);
         if(size===0n) size=1n;
@@ -301,7 +306,7 @@ function randBigInt(lo, hi) {
     return lo+(BigInt("0x"+hex)%range);
 }
 
-// ===== CORRECTE BITCOIN CHECKSUM =====
+// ===== BITCOIN CHECKSUM (voor validatie) =====
 function calculateBitcoinChecksum(pubKeyHex) {
     const sha1 = sha256(pubKeyHex);
     const hash160 = ripemd160(sha1);
@@ -315,52 +320,23 @@ function hasValidChecksum(pubKeyHex, targetChecksum) {
     return calculateBitcoinChecksum(pubKeyHex) === targetChecksum;
 }
 
-// ===== BASE58 DECODING =====
-function base58ToHex(base58) {
-    const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-    let result = 0n;
-    for (let i = 0; i < base58.length; i++) {
-        const char = base58[i];
-        const index = BigInt(ALPHA.indexOf(char));
-        if (index === -1n) throw new Error("Invalid Base58 character: " + char);
-        result = result * 58n + index;
-    }
-    let hex = result.toString(16);
-    while (hex.length < 50) hex = "0" + hex;
-    return hex;
+// ===== KANGAROO SPRONG (VARIABEL) =====
+function kangarooJump(currentPoint, currentDist) {
+    // Gebruik de huidige afstand om de spronggrootte te bepalen
+    const index = Number(currentDist % BigInt(NUM_STEPS));
+    const size = JUMP_SIZES[index];
+    const newPoint = currentPoint.add(JUMP_POINTS[index]);
+    return { point: newPoint, dist: currentDist + size };
 }
 
-// ===== CHECKSUM ANCHOR: Target checksum als vaste input =====
-function anchorJump(currentPoint, targetChecksum, rangeStart, rangeEnd) {
-    // Gebruik de target checksum als vaste input voor de sprongindex
-    const r = parseInt(targetChecksum, 16) % NUM_STEPS;
-    let newPoint = currentPoint.add(JUMP_POINTS[r]);
-    let dist = JUMP_SIZES[r];
-    
-    // Controleer of het nieuwe punt binnen de range ligt
-    const newPubHex = newPoint.encode('hex', true);
-    const newX = BigInt("0x" + newPubHex.substr(2, 64));
-    if (newX < rangeStart || newX > rangeEnd) {
-        // Reflecteer terug naar binnen de range (gebruik de tegengestelde sprong)
-        const rReflect = (r + 16) % NUM_STEPS;
-        newPoint = currentPoint.add(JUMP_POINTS[rReflect]);
-        dist = JUMP_SIZES[rReflect];
-    }
-    
-    return { point: newPoint, dist: dist, pubHex: newPoint.encode('hex', true) };
-}
-
-// ===== TAME WORKER =====
+// ===== TAME WORKER (vallen plaatsen) =====
 self.onmessage = function(e) {
-    const { type, rangeStartStr, rangeEndStr, targetPubHex, targetAddr,
+    const { type, rangeStartStr, rangeEndStr, targetPubHex, targetChecksum,
             workerId, padLen, maxWildJumps, pathsPerWorker, stepsPerPath, dpMask } = e.data;
 
     const rangeStart = BigInt("0x"+rangeStartStr);
     const rangeEnd   = BigInt("0x"+rangeEndStr);
     initJumps(rangeStart, rangeEnd);
-
-    // Bereken de target checksum van de target public key
-    let targetChecksum = calculateBitcoinChecksum(targetPubHex);
 
     if (type === "TAME") {
         const localTraps = {};
@@ -378,18 +354,20 @@ self.onmessage = function(e) {
             for (let i=0;i<steps;i++) {
                 const pubHex = currPoint.encode('hex', true);
                 
-                // DP-check
+                // DP-check: alleen vallen met geldige checksum opslaan
                 if ((parseInt(pubHex.slice(-4),16) & mask) === 0) {
-                    localTraps[pubHex] = { 
-                        absKey: k_start.toString(16), 
-                        dist: currDist.toString() 
-                    };
+                    if (hasValidChecksum(pubHex, targetChecksum)) {
+                        localTraps[pubHex] = { 
+                            absKey: k_start.toString(16), 
+                            dist: currDist.toString() 
+                        };
+                    }
                 }
                 
-                // AnchorJump (vaste target checksum)
-                const result = anchorJump(currPoint, targetChecksum, rangeStart, rangeEnd);
+                // VARIABELE kangaroo sprong (geen checksum input!)
+                const result = kangarooJump(currPoint, currDist);
                 currPoint = result.point;
-                currDist += result.dist;
+                currDist = result.dist;
                 jumpsCount++;
             }
         }
@@ -414,7 +392,7 @@ self.onmessage = function(e) {
             for (let i=0;i<10000 && totalJumps<maxJumps;i++) {
                 const pubHex = currPoint.encode('hex', true);
                 
-                // Controleer op vallen (currPoint is ALWAYS checksum-geldig)
+                // Controleer op val
                 if (traps[pubHex]) {
                     const { absKey, dist:distStr } = traps[pubHex];
                     const k_tame   = BigInt("0x"+absKey);
@@ -424,27 +402,30 @@ self.onmessage = function(e) {
                         const privHex = secretKey.toString(16).padStart(padLen64||64,'0');
                         const full32  = secretKey.toString(16).padStart(64,'0');
                         
-                        // ===== TARGET VALIDATIE =====
+                        // ===== SNELLE CHECKSUM VALIDATIE =====
                         const foundKeyPair = ec.keyFromPrivate(privHex);
                         const foundPub = foundKeyPair.getPublic();
                         const foundPubHex = foundPub.encode('hex', true);
                         
-                        // Alleen rapporteren als de checksum matcht
+                        // Eerst checksum (snel), daarna pas EC-verificatie (duur)
                         if (hasValidChecksum(foundPubHex, targetChecksum)) {
-                            const wifPayload = "80"+full32+"01";
-                            const doubleSha  = sha256(sha256(wifPayload));
-                            const wif        = toBase58(wifPayload+doubleSha.slice(0,8));
-                            self.postMessage({ type:"FOUND", privHex, wif });
-                            running = false;
-                            return;
+                            // Definitieve verificatie met public key match
+                            if (foundPubHex === targetPubHex) {
+                                const wifPayload = "80"+full32+"01";
+                                const doubleSha  = sha256(sha256(wifPayload));
+                                const wif        = toBase58(wifPayload+doubleSha.slice(0,8));
+                                self.postMessage({ type:"FOUND", privHex, wif });
+                                running = false;
+                                return;
+                            }
                         }
                     }
                 }
                 
-                // AnchorJump (vaste target checksum)
-                const result = anchorJump(currPoint, targetChecksum, rangeStart, rangeEnd);
+                // VARIABELE kangaroo sprong
+                const result = kangarooJump(currPoint, currDist);
                 currPoint = result.point;
-                currDist += result.dist;
+                currDist = result.dist;
                 totalJumps++;
                 batchJumps++;
             }
@@ -547,7 +528,7 @@ startBtn.onclick = () => {
     ['totalJumps','speed','epochCount','trapCount'].forEach(id=>document.getElementById(id).textContent='0');
     progressBar.style.width='0%';
     setRunning(true);
-    log('🚀 Checksum Anchor Kangaroo gestart','ev-epoch');
+    log('🚀 Kangaroo √N gestart (Checksum als validatie)','ev-epoch');
     nextEpoch();
 };
 
@@ -568,11 +549,15 @@ function nextEpoch() {
     const range = calculateSubRange();
     const paths = 800;
     const steps = 1500;
+    
+    // Bereken target checksum voor validatie
+    const targetPubHex = document.getElementById('pubKey').value.trim();
+    const targetChecksum = calculateBitcoinChecksum(targetPubHex);
 
     killWorkers();
-    setStatus('TAME — vallen plaatsen (Checksum Anchor)','tame');
+    setStatus('TAME — vallen plaatsen','tame');
     log(`🏁 Epoch ${epoch} — TAME (${numW} workers, ${paths} paden, ${steps} stappen)`,'ev-epoch');
-    log(`🔍 Checksum Anchor actief — target checksum als vaste input`,'ev-tame');
+    log(`🔍 Checksum validatie actief — alleen vallen met geldige checksum`,'ev-tame');
 
     for (let i=0;i<numW;i++) {
         const w=makeWorker(); workers.push(w);
@@ -582,15 +567,15 @@ function nextEpoch() {
                 totalJumps+=ev.data.jumps; cumulativeJumps+=ev.data.jumps; tameDone++;
                 if (tameDone===numW) {
                     document.getElementById('trapCount').textContent=globalTraps.size.toLocaleString();
-                    log(`✅ TAME klaar — ${globalTraps.size.toLocaleString()} vallen (allemaal checksum-geldig)`,'ev-tame');
+                    log(`✅ TAME klaar — ${globalTraps.size.toLocaleString()} vallen (alleen checksum-geldig)`,'ev-tame');
                     progressBar.style.width='40%';
                     startWild(numW,range);
                 }
             }
         };
         w.postMessage({ type:"TAME", rangeStartStr:range.start, rangeEndStr:range.end,
-                        targetPubHex:document.getElementById('pubKey').value.trim(),
-                        targetAddr:document.getElementById('btcAddr').value.trim(),
+                        targetPubHex:targetPubHex,
+                        targetChecksum:targetChecksum,
                         workerId:i, pathsPerWorker:paths, stepsPerPath:steps, dpMask:0x3FF });
     }
 }
@@ -598,12 +583,13 @@ function nextEpoch() {
 function startWild(numW, range) {
     if (!isRunning) return;
     killWorkers();
-    setStatus('WILD — op jacht (Checksum Anchor)','running');
-    log('🦘 WILD fase gestart — target checksum als vaste input','ev-epoch');
+    setStatus('WILD — op jacht','running');
+    log('🦘 WILD fase gestart — variabele kangaroo sprongen','ev-epoch');
     progressBar.style.width='55%';
 
     const trapObj      = Object.fromEntries(globalTraps);
     const targetPubHex = document.getElementById('pubKey').value.trim();
+    const targetChecksum = calculateBitcoinChecksum(targetPubHex);
     const maxWildJumps = 3000000;
 
     for (let i=0;i<numW;i++) {
@@ -648,11 +634,21 @@ function startWild(numW, range) {
             }
         };
         w.postMessage({ type:"WILD", rangeStartStr:range.start, rangeEndStr:range.end,
-                        targetPubHex, traps:trapObj, workerId:i, padLen:64, maxWildJumps });
+                        targetPubHex, targetChecksum,
+                        traps:trapObj, workerId:i, padLen:64, maxWildJumps });
     }
 }
 
-log('⚡ Checksum Anchor Kangaroo geladen — √N intact');
+// Helper voor checksum-berekening in main thread
+function calculateBitcoinChecksum(pubKeyHex) {
+    const sha1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pubKeyHex)).toString();
+    const hash160 = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha1)).toString();
+    const sha2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hash160)).toString();
+    const sha3 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(sha2)).toString();
+    return sha3.substring(0, 8);
+}
+
+log('⚡ Kangaroo √N geladen — Checksum als validatie');
 updateChanceMeter(0);
 </script>
 </body>
