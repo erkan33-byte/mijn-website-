@@ -256,7 +256,8 @@ self.onmessage=function(e){
 
     if(type==="TAME"){
         let traps={}, paths=pathsPerWorker||200, steps=stepsPerPath||1500, mask=dpMask||0x3FF, jumps=0;
-        let targetChk = targetChecksum || calcChecksum(targetPubHex);
+        // ✅ FIX: Gebruik de targetChecksum die van main thread komt!
+        let targetChk = targetChecksum;
         for(let p=0;p<paths;p++){
             let ks=randBigInt(rangeStart, rangeEnd), dist=0n, pt=scalarMul(ks,[GX,GY]);
             if(!pt) continue;
@@ -353,7 +354,7 @@ loadBtn.onclick=()=>{
         document.getElementById('mitmLow').textContent=Object.keys(mitmLowTraps).length;
         document.getElementById('totalJumps').textContent=totalJumps.toLocaleString();
         
-        // ✅ TRAP COUNT BIJ LADEN
+        // TRAP COUNT BIJ LADEN
         const totalTraps = Object.keys(mitmHighTraps).length + Object.keys(mitmLowTraps).length;
         document.getElementById('trapCount').textContent = totalTraps;
         
@@ -425,6 +426,10 @@ function runTamePhase(rangeStart, rangeEnd, targetPubHex, numW, paths, steps){
     return new Promise((resolve)=>{
         let allTraps={}, done=0;
         killWorkers();
+        
+        // ✅ BEREKEN CHECKSUM IN MAIN THREAD EN STUUR MEE
+        const targetChecksum = calcChecksum(targetPubHex);
+        
         for(let i=0;i<numW;i++){
             const w=makeWorker(); workers.push(w);
             w.onmessage=(ev)=>{
@@ -433,7 +438,7 @@ function runTamePhase(rangeStart, rangeEnd, targetPubHex, numW, paths, steps){
                     totalJumps+=ev.data.jumps;
                     document.getElementById('totalJumps').textContent=totalJumps.toLocaleString();
                     
-                    // ✅ TRAP COUNT UPDATE
+                    // TRAP COUNT UPDATE
                     const trapCount = Object.keys(allTraps).length;
                     document.getElementById('trapCount').textContent = trapCount;
                     
@@ -446,7 +451,7 @@ function runTamePhase(rangeStart, rangeEnd, targetPubHex, numW, paths, steps){
                 rangeStartStr:rangeStart,
                 rangeEndStr:rangeEnd,
                 targetPubHex:targetPubHex,
-                targetChecksum:null,
+                targetChecksum:targetChecksum, // ✅ STUUR CHECKSUM MEE!
                 workerId:i,
                 pathsPerWorker:paths,
                 stepsPerPath:steps,
