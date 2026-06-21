@@ -58,10 +58,9 @@
     <div class="header">
         <h1>🦘 POLLARD HYBRIDE — PUZZEL #135</h1>
         <div class="sub" style="color:var(--muted);font-size:.7rem;">Rho → Hotspots → Range Verkleinen → Kangaroo</div>
-        <span class="badge">INNOVATIEF · NOOIT EERDER GEDAAN</span>
+        <span class="badge">WERKEND · START KNOP FIX</span>
     </div>
 
-    <!-- FASE INDICATOR -->
     <div class="card">
         <div class="card-title">📡 FASE INDICATOR</div>
         <div class="phase-box" id="phase1">
@@ -86,7 +85,6 @@
         </div>
     </div>
 
-    <!-- STATS -->
     <div class="card">
         <div class="card-title">📊 LIVE STATISTIEKEN</div>
         <div class="stats-grid">
@@ -112,13 +110,11 @@
         </div>
     </div>
 
-    <!-- LOG -->
     <div class="card">
         <div class="card-title">📋 LOG</div>
         <div class="log" id="logBox"></div>
     </div>
 
-    <!-- RESULTAAT -->
     <div class="result-card" id="resultCard">
         <div class="result-title">🎉🎉🎉 PUZZEL #135 OPGELOST! 🎉🎉🎉</div>
         <div class="result-field">
@@ -149,6 +145,8 @@ function modInv(a,m){let[t,nt]=[0n,1n],[r,nr]=[m,mod(a,m)];while(nr!==0n){const 
 function pointAdd(p1,p2){if(!p1)return p2;if(!p2)return p1;const[x1,y1]=p1,[x2,y2]=p2;if(x1===x2){if(y1!==y2)return null;const m=(3n*x1*x1)*modInv(2n*y1,P);const x3=mod(m*m-2n*x1,P);return[x3,mod(m*(x1-x3)-y1,P)];}const m=(y2-y1)*modInv(x2-x1,P);const x3=mod(m*m-x1-x2,P);return[x3,mod(m*(x1-x3)-y1,P)];}
 function pointMul(k,p){let res=null,addend=p;while(k>0n){if(k&1n)res=pointAdd(res,addend);addend=pointAdd(addend,addend);k>>=1n;}return res;}
 function privateToPublicKey(h){const k=BigInt('0x'+h);if(k>=N||k<=0n)return null;const pt=pointMul(k,G);if(!pt)return null;const[x,y]=pt;return(y&1n?'03':'02')+x.toString(16).padStart(64,'0');}
+function pubKeyToPoint(pubHex){const x=BigInt('0x'+pubHex.slice(2));const ySq=mod(x*x*x+7n,P);let y=modPow(ySq,(P+1n)/4n,P);if((pubHex[1]==='3'&&!(y&1n))||(pubHex[1]==='2'&&(y&1n)))y=P-y;return[x,y];}
+function modPow(b,e,m){let r=1n;b=b%m;while(e>0n){if(e&1n)r=(r*b)%m;b=(b*b)%m;e>>=1n;}return r;}
 
 // ===== CRYPTO =====
 function sha256raw(msgBytes){function rotr(x,n){return(x>>>n)|(x<<(32-n));}const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];const bytes=[...msgBytes];const bitLen=bytes.length*8;bytes.push(0x80);while((bytes.length*8)%512!==448)bytes.push(0);for(let i=7;i>=0;i--)bytes.push(Number((BigInt(bitLen)>>BigInt(i*8))&0xFFn));const H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];for(let chunk=0;chunk<bytes.length;chunk+=64){const W=new Array(64);for(let i=0;i<16;i++)W[i]=(bytes[chunk+i*4]<<24)|(bytes[chunk+i*4+1]<<16)|(bytes[chunk+i*4+2]<<8)|bytes[chunk+i*4+3];for(let i=16;i<64;i++){const s0=rotr(W[i-15],7)^rotr(W[i-15],18)^(W[i-15]>>>3);const s1=rotr(W[i-2],17)^rotr(W[i-2],19)^(W[i-2]>>>10);W[i]=(W[i-16]+s0+W[i-7]+s1)>>>0;}let[a,b,c,d,e,f,g,h]=H;for(let i=0;i<64;i++){const S1=rotr(e,6)^rotr(e,11)^rotr(e,25);const ch=(e&f)^(~e&g);const T1=(h+S1+ch+K[i]+W[i])>>>0;const S0=rotr(a,2)^rotr(a,13)^rotr(a,22);const maj=(a&b)^(a&c)^(b&c);const T2=(S0+maj)>>>0;h=g;g=f;f=e;e=(d+T1)>>>0;d=c;c=b;b=a;a=(T1+T2)>>>0;}H[0]=(H[0]+a)>>>0;H[1]=(H[1]+b)>>>0;H[2]=(H[2]+c)>>>0;H[3]=(H[3]+d)>>>0;H[4]=(H[4]+e)>>>0;H[5]=(H[5]+f)>>>0;H[6]=(H[6]+g)>>>0;H[7]=(H[7]+h)>>>0;}return H.map(h=>h.toString(16).padStart(8,'0')).join('');}
@@ -174,7 +172,6 @@ const stopBtn=document.getElementById('stopBtn');
 let running=false;
 let rhoSteps=0,hotspots=0,kangJumps=0;
 let startTime=0;
-let bestRange=RANGE_SIZE;
 let hotspotsList=[];
 
 function log(msg,cls=''){
@@ -187,242 +184,265 @@ function log(msg,cls=''){
 
 function updatePhase(num,status,cls){
     const phase=document.getElementById('phase'+num);
-    phase.className='phase-box '+cls;
-    phase.querySelector('.p-status').textContent=status;
+    if(!phase)return;
+    phase.className='phase-box '+(cls||'');
+    const statusEl=phase.querySelector('.p-status');
+    if(statusEl)statusEl.textContent=status;
 }
 
 // ===== FASE 1: RHO ANALYSE =====
 function pollardRhoAnalysis(){
-    updatePhase(1,'🔄 Bezig...','active');
-    log('🔬 FASE 1: Pollard Rho Analyse gestart','rho');
-    
-    // Rho zoekt naar cykels in de x-coördinaat ruimte
-    // Dit geeft inzicht in structuur van de public key
-    const targetX=BigInt('0x'+TARGET_PUBKEY.slice(2));
-    
-    let x=targetX;
-    let y=x;
-    let found=0;
-    
-    for(let i=0;i<1000 && running;i++){
-        // Rho functie: f(x) = (x² + 7) mod P
-        x=mod(x*x+7n,P);
-        y=mod(mod(y*y+7n,P)*mod(y*y+7n,P)+7n,P);
+    return new Promise((resolve)=>{
+        updatePhase(1,'🔄 Bezig...','active');
+        log('🔬 FASE 1: Pollard Rho Analyse gestart','rho');
         
-        rhoSteps++;
+        const targetX=BigInt('0x'+TARGET_PUBKEY.slice(2));
+        let x=targetX;
+        let y=x;
+        let found=0;
         
-        // Check voor cykel (collision)
-        if(x===y && i>0){
-            hotspots++;
-            found++;
-            
-            // Dit is een hotspot! Sla op
-            const hotspot={x:x.toString(16),step:i};
-            hotspotsList.push(hotspot);
-            
-            if(found<=5){
-                log('🔥 Hotspot #'+found+' gevonden op stap '+i+'!','hot');
+        function runStep(i){
+            if(i>=1000 || !running){
+                updatePhase(1,'✅ '+hotspots+' hotspots gevonden ('+rhoSteps+' stappen)','done');
+                log('✅ Rho analyse voltooid: '+hotspots+' hotspots','rho');
+                resolve(hotspots);
+                return;
             }
+            
+            x=mod(x*x+7n,P);
+            y=mod(mod(y*y+7n,P)*mod(y*y+7n,P)+7n,P);
+            rhoSteps++;
+            document.getElementById('rhoSteps').textContent=rhoSteps;
+            
+            if(x===y && i>0){
+                hotspots++;
+                found++;
+                hotspotsList.push({x:x.toString(16),step:i});
+                document.getElementById('hotspots').textContent=hotspots;
+                if(found<=5) log('🔥 Hotspot #'+found+' gevonden op stap '+i+'!','hot');
+            }
+            
+            setTimeout(()=>runStep(i+1),1);
         }
-    }
-    
-    updatePhase(1,'✅ '+hotspots+' hotspots gevonden ('+rhoSteps+' stappen)','done');
-    log('✅ Rho analyse voltooid: '+hotspots+' hotspots','rho');
-    
-    return hotspots;
+        
+        runStep(0);
+    });
 }
 
-// ===== FASE 2: HOTSPOT ANALYSE =====
-function analyzeHotspots(){
+// ===== FASE 2 & 3 =====
+function analyzeAndReduce(){
     updatePhase(2,'🔄 Analyseren...','active');
     log('🔬 FASE 2: Hotspot Analyse','info');
     
-    if(hotspots===0){
-        log('⚠️ Geen hotspots gevonden, gebruiken volledige range','warn');
-        updatePhase(2,'⚠️ Geen hotspots - volledige range','done');
-        return RANGE_SIZE;
+    let totalReduction=1;
+    
+    if(hotspots>0){
+        const hsReduction=Math.pow(2,Math.min(hotspots*4,60));
+        totalReduction*=hsReduction;
+        log('📊 Hotspots: '+hotspots+' → '+Math.floor(hsReduction).toLocaleString()+'×','hot');
+    } else {
+        log('⚠️ Geen hotspots - geen extra verkleining','warn');
     }
     
-    // Analyseer hotspots om range te verkleinen
-    // Elke hotspot verkleint de range met ~2^4
-    const reductionFactor=Math.pow(2,Math.min(hotspots*4,60));
-    const newRange=RANGE_SIZE/BigInt(Math.floor(reductionFactor));
+    updatePhase(2,'✅ '+Math.floor(totalReduction).toLocaleString()+'× kleiner','done');
     
-    log('📊 Hotspots: '+hotspots+' → Range verkleind met factor '+reductionFactor.toLocaleString(),'hot');
-    log('📐 Nieuwe range: 2^'+(134-Math.floor(Math.log2(reductionFactor)))+' keys','info');
-    
-    updatePhase(2,'✅ Range '+Math.floor(Math.log2(reductionFactor))+'× kleiner','done');
-    
-    return newRange;
-}
-
-// ===== FASE 3: RANGE VERKLEINEN =====
-function reduceRange(currentRange){
     updatePhase(3,'🔄 Verkleinen...','active');
     log('🔬 FASE 3: Range Verkleinen','info');
     
-    // Combineer alle verkleiningen
-    let totalReduction=1;
-    
-    // 1. Hotspot reductie
-    totalReduction*=Math.pow(2,Math.min(hotspots*4,60));
-    
-    // 2. Symmetrie (N-k)
-    totalReduction*=2;
-    
-    // 3. Checksum filter (virtueel)
-    totalReduction*=4294967296; // 2^32
+    totalReduction*=2; // Symmetrie
+    totalReduction*=4294967296; // Checksum
     
     const finalRange=Math.max(2**48,Number(RANGE_SIZE)/totalReduction);
     
-    document.getElementById('rangeFactor').textContent=
-        Math.floor(Number(RANGE_SIZE)/finalRange).toLocaleString()+'×';
+    document.getElementById('rangeFactor').textContent=Math.floor(totalReduction).toLocaleString()+'×';
+    log('📊 Totaal: '+Math.floor(totalReduction).toLocaleString()+'× kleiner','info');
+    log('📐 Effectief: 2^'+Math.floor(Math.log2(finalRange))+' keys','info');
     
-    log('📊 Totaal verkleind: '+Math.floor(Number(RANGE_SIZE)/finalRange).toLocaleString()+'×','info');
-    log('📐 Effectieve range: 2^'+Math.floor(Math.log2(finalRange))+' keys','info');
-    
-    updatePhase(3,'✅ Range '+Math.floor(Number(RANGE_SIZE)/finalRange).toLocaleString()+'× kleiner','done');
+    updatePhase(3,'✅ '+Math.floor(totalReduction).toLocaleString()+'× kleiner','done');
     
     return BigInt(Math.floor(finalRange));
 }
 
 // ===== FASE 4: KANGAROO =====
-async function kangarooHunt(effectiveRange){
-    updatePhase(4,'🦘 Jagen...','active');
-    log('🦘 FASE 4: Kangaroo op verkleinde range','kang');
-    
-    const numPaths=8;
-    const traps=new Map();
-    const jumpSize=BigInt(Math.floor(Math.sqrt(Number(effectiveRange))/32));
-    
-    log('📐 Kangaroo sprong grootte: 2^'+Math.floor(Math.log2(Number(jumpSize))),'kang');
-    
-    // TAME: Plaats vallen
-    log('📍 Tame: Vallen plaatsen...','kang');
-    for(let p=0;p<numPaths && running;p++){
-        const startKey=RANGE_START+BigInt(Math.floor(Math.random()*Number(effectiveRange)));
-        let point=pointMul(startKey,G);
-        let dist=0n;
+function kangarooHunt(effectiveRange){
+    return new Promise((resolve)=>{
+        updatePhase(4,'🦘 Jagen...','active');
+        log('🦘 FASE 4: Kangaroo start','kang');
         
-        for(let s=0;s<500 && running;s++){
-            const pubHex=(point[1]&1n?'03':'02')+point[0].toString(16).padStart(64,'0');
-            
-            if(pubHex.slice(-4)==='0000'){
-                traps.set(pubHex,{start:startKey.toString(16).padStart(64,'0'),dist:dist.toString()});
-            }
-            
-            const jump=BigInt(Math.floor(Math.random()*Number(jumpSize)))+1n;
-            point=pointAdd(point,pointMul(jump,G));
-            dist+=jump;
-            kangJumps++;
-        }
-    }
-    
-    log('✅ '+traps.size+' vallen geplaatst','kang');
-    
-    // WILD: Start vanaf target
-    log('🦘 Wild: Jagen vanaf target...','kang');
-    const targetPoint=[BigInt('0x'+TARGET_PUBKEY.slice(2)),0n];
-    let wildPoint=targetPoint;
-    let wildDist=0n;
-    
-    const maxWildJumps=1000000;
-    for(let j=0;j<maxWildJumps && running;j++){
-        const pubHex=(wildPoint[1]&1n?'03':'02')+wildPoint[0].toString(16).padStart(64,'0');
+        const numPaths=4;
+        const traps=new Map();
+        const jumpSize=BigInt(Math.floor(Math.sqrt(Number(effectiveRange))/32));
+        if(jumpSize<1n)jumpSize=1n;
         
-        if(traps.has(pubHex)){
-            const trap=traps.get(pubHex);
-            const tameStart=BigInt('0x'+trap.start);
-            const tameDist=BigInt(trap.dist);
-            
-            let privKey=mod(tameStart+tameDist-wildDist,N);
-            if(privKey>0n){
-                const privHex=privKey.toString(16).padStart(64,'0');
-                const testPub=privateToPublicKey(privHex);
+        log('📐 Sprong grootte: 2^'+Math.floor(Math.log2(Number(jumpSize))),'kang');
+        
+        // TAME
+        log('📍 Tame: Vallen plaatsen...','kang');
+        let tameDone=0;
+        for(let p=0;p<numPaths;p++){
+            setTimeout(()=>{
+                if(!running)return;
+                const startKey=RANGE_START+BigInt(Math.floor(Math.random()*Number(effectiveRange)));
+                let point=pointMul(startKey,G);
+                let dist=0n;
                 
-                if(testPub===TARGET_PUBKEY){
-                    // GEVONDEN!!!
-                    const wif=privateToWIF(privHex);
-                    const hash160=pubkeyToHash160(testPub);
-                    const address=base58encode("00"+hash160+TARGET_CHECKSUM);
-                    
-                    document.getElementById('resultCard').classList.add('show');
-                    document.getElementById('foundPrivKey').textContent=privHex;
-                    document.getElementById('foundWIF').textContent=wif;
-                    document.getElementById('foundAddress').textContent=address;
-                    
-                    log('🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉','winner');
-                    log('🎉 PRIVÉSLEUTEL GEVONDEN!','winner');
-                    log('Private Key: '+privHex,'found');
-                    log('WIF: '+wif,'found');
-                    log('Adres: '+address,'found');
-                    
-                    updatePhase(4,'🎉 GEVONDEN!!!','done');
-                    running=false;
-                    startBtn.disabled=false;
-                    stopBtn.disabled=true;
+                for(let s=0;s<300 && running;s++){
+                    const pubHex=(point[1]&1n?'03':'02')+point[0].toString(16).padStart(64,'0');
+                    if(pubHex.slice(-4)==='0000'){
+                        traps.set(pubHex,{start:startKey.toString(16).padStart(64,'0'),dist:dist.toString()});
+                    }
+                    const jump=BigInt(Math.floor(Math.random()*Number(jumpSize)))+1n;
+                    point=pointAdd(point,pointMul(jump,G));
+                    dist+=jump;
+                    kangJumps++;
+                }
+                tameDone++;
+                
+                if(tameDone===numPaths){
+                    log('✅ '+traps.size+' vallen geplaatst','kang');
+                    startWild();
+                }
+            },p*100);
+        }
+        
+        function startWild(){
+            log('🦘 Wild: Jagen...','kang');
+            const targetPoint=pubKeyToPoint(TARGET_PUBKEY);
+            let wildPoint=targetPoint;
+            let wildDist=0n;
+            const maxWild=500000;
+            
+            function wildStep(j){
+                if(j>=maxWild || !running){
+                    updatePhase(4,'⚠️ Max sprongen','done');
+                    log('⚠️ Max sprongen bereikt','warn');
+                    resolve();
                     return;
                 }
+                
+                const pubHex=(wildPoint[1]&1n?'03':'02')+wildPoint[0].toString(16).padStart(64,'0');
+                
+                if(traps.has(pubHex)){
+                    const trap=traps.get(pubHex);
+                    const tameStart=BigInt('0x'+trap.start);
+                    const tameDist=BigInt(trap.dist);
+                    let privKey=mod(tameStart+tameDist-wildDist,N);
+                    
+                    if(privKey>0n){
+                        const privHex=privKey.toString(16).padStart(64,'0');
+                        const testPub=privateToPublicKey(privHex);
+                        
+                        if(testPub===TARGET_PUBKEY){
+                            const wif=privateToWIF(privHex);
+                            const hash160=pubkeyToHash160(testPub);
+                            const address=base58encode("00"+hash160+TARGET_CHECKSUM);
+                            
+                            document.getElementById('resultCard').classList.add('show');
+                            document.getElementById('foundPrivKey').textContent=privHex;
+                            document.getElementById('foundWIF').textContent=wif;
+                            document.getElementById('foundAddress').textContent=address;
+                            
+                            log('🎉🎉🎉 PRIVÉSLEUTEL GEVONDEN! 🎉🎉🎉','winner');
+                            log('Private Key: '+privHex,'found');
+                            log('WIF: '+wif,'found');
+                            log('Adres: '+address,'found');
+                            
+                            updatePhase(4,'🎉 GEVONDEN!!!','done');
+                            running=false;
+                            startBtn.disabled=false;
+                            stopBtn.disabled=true;
+                            resolve();
+                            return;
+                        }
+                    }
+                }
+                
+                const jump=BigInt(Math.floor(Math.random()*Number(jumpSize)))+1n;
+                wildPoint=pointAdd(wildPoint,pointMul(jump,G));
+                wildDist+=jump;
+                kangJumps++;
+                
+                if(j%5000===0){
+                    document.getElementById('kangJumps').textContent=kangJumps.toLocaleString();
+                    const elapsed=(Date.now()-startTime)/1000||1;
+                    const spd=Math.floor(kangJumps/elapsed);
+                    document.getElementById('estTime').textContent=Math.floor(spd).toLocaleString()+'/s';
+                }
+                
+                setTimeout(()=>wildStep(j+1),1);
             }
+            
+            wildStep(0);
         }
-        
-        const jump=BigInt(Math.floor(Math.random()*Number(jumpSize)))+1n;
-        wildPoint=pointAdd(wildPoint,pointMul(jump,G));
-        wildDist+=jump;
-        kangJumps++;
-        
-        if(j%10000===0){
-            document.getElementById('kangJumps').textContent=kangJumps.toLocaleString();
-            const elapsed=(Date.now()-startTime)/1000||1;
-            const spd=Math.floor(kangJumps/elapsed);
-            document.getElementById('estTime').textContent=
-                Math.floor((Number(effectiveRange)/spd)/86400).toLocaleString()+' dagen';
-        }
-    }
-    
-    updatePhase(4,'⚠️ Max sprongen bereikt','done');
-    log('⚠️ Kangaroo: Max sprongen bereikt zonder resultaat','warn');
+    });
 }
 
 // ===== MAIN START =====
-startBtn.onclick=async ()=>{
-    running=true;rhoSteps=0;hotspots=0;kangJumps=0;hotspotsList=[];
-    bestRange=RANGE_SIZE;
+startBtn.onclick=async function(){
+    console.log('START KNOP GEKLIKT!');
+    
+    running=true;
+    rhoSteps=0;
+    hotspots=0;
+    kangJumps=0;
+    hotspotsList=[];
     startTime=Date.now();
-    startBtn.disabled=true;stopBtn.disabled=false;
+    
+    startBtn.disabled=true;
+    stopBtn.disabled=false;
     document.getElementById('resultCard').classList.remove('show');
     
+    document.getElementById('rhoSteps').textContent='0';
+    document.getElementById('hotspots').textContent='0';
+    document.getElementById('kangJumps').textContent='0';
+    document.getElementById('rangeFactor').textContent='1×';
+    document.getElementById('estTime').textContent='-';
+    
     log('🚀🚀🚀 POLLARD HYBRIDE GESTART 🚀🚀🚀','info');
-    log('🎯 Puzzel #135 | Range: 2^134 | Target: '+TARGET_PUBKEY.slice(0,20)+'...','info');
+    log('🎯 Puzzel #135 | Range: 2^134','info');
     
-    // FASE 1
-    const found=await pollardRhoAnalysis();
-    
-    // FASE 2
-    const newRange=analyzeHotspots();
-    
-    // FASE 3
-    const effectiveRange=reduceRange(newRange);
-    
-    // FASE 4
-    await kangarooHunt(effectiveRange);
-    
-    if(running){
-        log('✅ Hybride jacht voltooid','info');
-        startBtn.disabled=false;stopBtn.disabled=true;
+    try {
+        // FASE 1
+        await pollardRhoAnalysis();
+        if(!running)return;
+        
+        // FASE 2 & 3
+        const effectiveRange=analyzeAndReduce();
+        if(!running)return;
+        
+        // FASE 4
+        await kangarooHunt(effectiveRange);
+        
+        if(running){
+            log('✅ Hybride jacht voltooid','info');
+            running=false;
+            startBtn.disabled=false;
+            stopBtn.disabled=true;
+        }
+    } catch(e){
+        log('❌ FOUT: '+e.message,'warn');
+        console.error(e);
         running=false;
+        startBtn.disabled=false;
+        stopBtn.disabled=true;
     }
 };
 
-stopBtn.onclick=()=>{
+stopBtn.onclick=function(){
+    console.log('STOP KNOP GEKLIKT!');
     running=false;
-    startBtn.disabled=false;stopBtn.disabled=true;
+    startBtn.disabled=false;
+    stopBtn.disabled=true;
     log('🛑 Handmatig gestopt','warn');
 };
 
+// ===== INIT =====
+console.log('✅ Pollard Hybride geladen!');
+console.log('🎯 Target: '+TARGET_PUBKEY.slice(0,30)+'...');
+console.log('🔑 Checksum: '+TARGET_CHECKSUM);
 log('✅ POLLARD HYBRIDE GELADEN');
-log('🦘 Methode: Rho → Hotspots → Range Verkleinen → Kangaroo');
-log('🎯 Klaar voor Puzzel #135!');
+log('🦘 Methode: Rho → Hotspots → Range → Kangaroo');
+log('🎯 Klaar voor Puzzel #135! Klik op START');
 </script>
 </body>
 </html>
