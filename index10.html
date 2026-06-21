@@ -115,15 +115,35 @@ function pointAdd(P,Q){if(!P)return Q;if(!Q)return P;let[x1,y1]=P,[x2,y2]=Q;if(x
 function scalarMul(k,P){if(k===0n)return null;let r=null,a=P,n=k;while(n>0n){if(n&1n)r=pointAdd(r,a);a=pointAdd(a,a);n>>=1n;}return r;}
 function pubFromPriv(hex){let k=BigInt("0x"+hex);if(k===0n||k>=SECP256K1_ORDER)return null;let p=scalarMul(k,[GX,GY]);if(!p)return null;let[x,y]=p,xh=x.toString(16).padStart(64,'0');return(y%2n===0n?"02":"03")+xh;}
 
-// === CHECKSUM (MAIN THREAD) ===
+// === CHECKSUM ===
 async function sha256Hex(h){let b=h.match(/.{2}/g).map(x=>parseInt(x,16));let d=await crypto.subtle.digest("SHA-256",new Uint8Array(b));return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');}
 async function rmd160Hex(h){let b=h.match(/.{2}/g).map(x=>parseInt(x,16));let d=await crypto.subtle.digest("SHA-256",new Uint8Array(b));return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');}
 async function calcChecksum(pub){let s1=await sha256Hex(pub),h160=await rmd160Hex(s1);let s2=await sha256Hex(h160),s3=await sha256Hex(s2);return s3.substring(0,8);}
 async function validChecksum(pub,target){if(!target)return false;return(await calcChecksum(pub))===target;}
 
 // === KANGAROO ===
-const NUM_STEPS=32;const JUMP_SIZES=[];const JUMP_POINTS=[];
-function initJumps(rs,re){if(JUMP_SIZES.length>0)return;let W=re-rs,x0=W/2n,sw=1n;if(x0>0n){let x1=(x0+W/x0)/2n;while(x1<x0){x0=x1;x1=(x0+W/x0)/2n;}sw=x0;}for(let i=0;i<NUM_STEPS;i++){let s=(sw*BigInt(i+1))/BigInt(NUM_STEPS);if(s===0n)s=1n;JUMP_SIZES.push(s);JUMP_POINTS.push(scalarMul(s,[GX,GY]));}}
+const NUM_STEPS=32;
+let JUMP_SIZES=[];
+let JUMP_POINTS=[];
+
+function initJumps(rs,re){
+    JUMP_SIZES=[];
+    JUMP_POINTS=[];
+    let W=re-rs;
+    let x0=W/2n,sw=1n;
+    if(x0>0n){
+        let x1=(x0+W/x0)/2n;
+        while(x1<x0){x0=x1;x1=(x0+W/x0)/2n;}
+        sw=x0;
+    }
+    for(let i=0;i<NUM_STEPS;i++){
+        let s=(sw*BigInt(i+1))/BigInt(NUM_STEPS);
+        if(s===0n)s=1n;
+        JUMP_SIZES.push(s);
+        JUMP_POINTS.push(scalarMul(s,[GX,GY]));
+    }
+}
+
 function randBigInt(lo,hi){let r=hi-lo,bits=r.toString(2).length,bytes=Math.ceil(bits/8);let a=new Uint8Array(bytes);crypto.getRandomValues(a);let h=Array.from(a,b=>b.toString(16).padStart(2,'0')).join('');return lo+(BigInt("0x"+h)%r);}
 function kangarooJump(pt,dist){let idx=Number(dist%BigInt(NUM_STEPS));let np=pointAdd(pt,JUMP_POINTS[idx]);return{point:np,dist:dist+JUMP_SIZES[idx]};}
 function pointToHex(P){if(!P)return null;let[x,y]=P;let xh=x.toString(16).padStart(64,'0');return(y%2n===0n?"02":"03")+xh;}
@@ -190,6 +210,7 @@ function updateMemoryBar(size){
 // === MAIN LOGICA ===
 let workers=[], globalTraps={}, totalJumps=0, startTime=0, isRunning=false;
 let mitmHighTraps={}, mitmLowTraps={}, mitmPhase=0;
+let kangarooLoopActive=false;
 const logBox=document.getElementById('logBox');
 const startBtn=document.getElementById('startBtn');
 const stopBtn=document.getElementById('stopBtn');
@@ -220,8 +241,8 @@ function sha256(msg){let m=[];for(let i=0;i<msg.length;i+=2)m.push(parseInt(msg.
 function rmd160(str){let hash=0;for(let i=0;i<str.length;i+=2){let val=parseInt(str.substring(i,i+2),16);if(isNaN(val))continue;hash=((hash<<5)-hash+val)|0;}return hash.toString(16).padStart(40,'0');}
 function calcChecksum(pub){let s1=sha256(pub);let h160=rmd160(s1);let s2=sha256(h160);let s3=sha256(s2);return s3.substring(0,8);}
 
-const NUM_STEPS=32;const JUMP_SIZES=[];const JUMP_POINTS=[];
-function initJumps(rs,re){if(JUMP_SIZES.length>0)return;let W=re-rs,x0=W/2n,sw=1n;if(x0>0n){let x1=(x0+W/x0)/2n;while(x1<x0){x0=x1;x1=(x0+W/x0)/2n;}sw=x0;}for(let i=0;i<NUM_STEPS;i++){let s=(sw*BigInt(i+1))/BigInt(NUM_STEPS);if(s===0n)s=1n;JUMP_SIZES.push(s);JUMP_POINTS.push(scalarMul(s,[GX,GY]));}}
+const NUM_STEPS=32;let JUMP_SIZES=[];let JUMP_POINTS=[];
+function initJumps(rs,re){JUMP_SIZES=[];JUMP_POINTS=[];let W=re-rs,x0=W/2n,sw=1n;if(x0>0n){let x1=(x0+W/x0)/2n;while(x1<x0){x0=x1;x1=(x0+W/x0)/2n;}sw=x0;}for(let i=0;i<NUM_STEPS;i++){let s=(sw*BigInt(i+1))/BigInt(NUM_STEPS);if(s===0n)s=1n;JUMP_SIZES.push(s);JUMP_POINTS.push(scalarMul(s,[GX,GY]));}}
 function randBigInt(lo,hi){let r=hi-lo,bits=r.toString(2).length,bytes=Math.ceil(bits/8);let a=new Uint8Array(bytes);crypto.getRandomValues(a);let h=Array.from(a,b=>b.toString(16).padStart(2,'0')).join('');return lo+(BigInt("0x"+h)%r);}
 function kangarooJump(pt,dist){let idx=Number(dist%BigInt(NUM_STEPS));let np=pointAdd(pt,JUMP_POINTS[idx]);return{point:np,dist:dist+JUMP_SIZES[idx]};}
 function pointToHex(P){if(!P)return null;let[x,y]=P;let xh=x.toString(16).padStart(64,'0');return(y%2n===0n?"02":"03")+xh;}
@@ -263,7 +284,7 @@ self.onmessage=function(e){
 function splitRange(rangeStart, rangeEnd, splitPct){
     const A=BigInt("0x"+rangeStart), B=BigInt("0x"+rangeEnd);
     const W=B-A, mid=A+(W*BigInt(splitPct))/100n;
-    return { high:{start:rangeStart, end:mid.toString(16)}, low:{start:mid.toString(16), end:rangeEnd} };
+    return { high:{start:rangeStart, end:mid.toString(16).padStart(64,'0')}, low:{start:mid.toString(16).padStart(64,'0'), end:rangeEnd} };
 }
 
 function calculateSubRange(){
@@ -272,7 +293,7 @@ function calculateSubRange(){
     const W=B-A, SCALE=1_000_000n;
     const s=BigInt(Math.floor(parseFloat(document.getElementById('pctStart').value)*10000));
     const e=BigInt(Math.floor(parseFloat(document.getElementById('pctEnd').value)*10000));
-    return { start:(A+(W*s)/SCALE).toString(16), end:(A+(W*e)/SCALE).toString(16) };
+    return { start:(A+(W*s)/SCALE).toString(16).padStart(64,'0'), end:(A+(W*e)/SCALE).toString(16).padStart(64,'0') };
 }
 
 // === START ===
@@ -280,6 +301,7 @@ startBtn.onclick=async()=>{
     if(isRunning)return;
     totalJumps=0; startTime=Date.now(); globalTraps={}; 
     mitmHighTraps={}; mitmLowTraps={}; mitmPhase=0;
+    kangarooLoopActive=false;
     document.getElementById('totalJumps').textContent='0';
     document.getElementById('speed').textContent='0 /s';
     document.getElementById('trapCount').textContent='0';
@@ -294,6 +316,7 @@ startBtn.onclick=async()=>{
 };
 
 stopBtn.onclick=()=>{
+    kangarooLoopActive=false;
     setRunning(false); killWorkers(); setStatus('Gestopt');
     document.getElementById('progressBar').style.width='0%';
     log('🛑 Gestopt door gebruiker');
@@ -383,6 +406,12 @@ async function runMITM(){
     log(`🦘 Fase 3: Kangaroo algoritme (Pollard's Kangaroo)`);
     document.getElementById('progressBar').style.width='80%';
     
+    // Initialiseer jumps voor main thread
+    const rs=BigInt("0x"+document.getElementById('rangeStart').value.trim());
+    const re=BigInt("0x"+document.getElementById('rangeEnd').value.trim());
+    initJumps(rs, re);
+    
+    kangarooLoopActive=true;
     await runKangarooPhase(targetPubHex, mitmHighTraps, mitmLowTraps, numW);
 }
 
@@ -419,24 +448,24 @@ function runTamePhase(rangeStart, rangeEnd, targetPubHex, numW, paths, steps){
 
 // === KANGAROO FASE ===
 async function runKangarooPhase(targetPubHex, highTraps, lowTraps, numW){
+    if(!kangarooLoopActive || !isRunning) return;
+    
     const targetChecksum=await calcChecksum(targetPubHex);
     const rangeStart=BigInt("0x"+document.getElementById('rangeStart').value.trim());
     const rangeEnd=BigInt("0x"+document.getElementById('rangeEnd').value.trim());
     const W=rangeEnd-rangeStart;
     const kangarooSteps=parseInt(document.getElementById('kangarooSteps').value)||100000;
-    const distRange=BigInt(Math.floor(Number(W)/10)); // 10% van range als springafstand
-    let kangarooCount=0;
+    let kangarooCount=parseInt(document.getElementById('kangarooCount').textContent)||0;
 
     // Tame kangaroos (lopen vanaf rangeStart)
     const numTame=Math.min(numW*2, 8);
-    for(let i=0;i<numTame;i++){
-        if(!isRunning) break;
-        const startDist=randBigInt(0n, distRange);
+    for(let i=0;i<numTame && kangarooLoopActive && isRunning;i++){
+        const startDist=randBigInt(0n, W/100n);
         let pos=rangeStart+startDist;
         let dist=startDist;
         let jumps=0;
         
-        while(jumps<kangarooSteps && isRunning){
+        while(jumps<kangarooSteps/numTame && kangarooLoopActive && isRunning){
             const idx=Number(dist%BigInt(NUM_STEPS));
             pos+=JUMP_SIZES[idx];
             dist+=JUMP_SIZES[idx];
@@ -447,12 +476,10 @@ async function runKangarooPhase(targetPubHex, highTraps, lowTraps, numW){
             if(jumps%100===0){
                 const privHex=pos.toString(16).padStart(64,'0');
                 const pubHex=pubFromPriv(privHex);
-                if(pubHex && await validChecksum(pubHex, targetChecksum)){
-                    if(pubHex===targetPubHex){
-                        // GEVONDEN!
-                        await foundPrivateKey(privHex);
-                        return;
-                    }
+                if(pubHex && pubHex===targetPubHex){
+                    // GEVONDEN!
+                    await foundPrivateKey(privHex);
+                    return;
                 }
             }
         }
@@ -463,13 +490,12 @@ async function runKangarooPhase(targetPubHex, highTraps, lowTraps, numW){
     const targetPoint=hexToPoint(targetPubHex);
     if(!targetPoint) return;
 
-    for(let i=0;i<numWild;i++){
-        if(!isRunning) break;
+    for(let i=0;i<numWild && kangarooLoopActive && isRunning;i++){
         let pos=targetPoint;
         let dist=0n;
         let jumps=0;
         
-        while(jumps<kangarooSteps && isRunning){
+        while(jumps<kangarooSteps/numWild && kangarooLoopActive && isRunning){
             const idx=Number(dist%BigInt(NUM_STEPS));
             pos=pointAdd(pos, JUMP_POINTS[idx]);
             dist+=JUMP_SIZES[idx];
@@ -478,12 +504,22 @@ async function runKangarooPhase(targetPubHex, highTraps, lowTraps, numW){
             
             // Check of we een tame kangaroo tegenkomen
             const ph=pointToHex(pos);
-            if(ph && (ph in highTraps || ph in lowTraps)){
-                // GEVONDEN via MITM trap!
-                const privHex=(dist+BigInt(highTraps[ph]?.dist||0)+BigInt(lowTraps[ph]?.dist||0)).toString(16).padStart(64,'0');
-                const pubHex=pubFromPriv(privHex);
-                if(pubHex && await validChecksum(pubHex, targetChecksum)){
-                    if(pubHex===targetPubHex){
+            if(ph){
+                if(ph in highTraps){
+                    // GEVONDEN via MITM trap!
+                    const trapData=highTraps[ph];
+                    const privHex=(dist+BigInt(trapData.dist)).toString(16).padStart(64,'0');
+                    const pubHex=pubFromPriv(privHex);
+                    if(pubHex && pubHex===targetPubHex){
+                        await foundPrivateKey(privHex);
+                        return;
+                    }
+                }
+                if(ph in lowTraps){
+                    const trapData=lowTraps[ph];
+                    const privHex=(dist+BigInt(trapData.dist)).toString(16).padStart(64,'0');
+                    const pubHex=pubFromPriv(privHex);
+                    if(pubHex && pubHex===targetPubHex){
                         await foundPrivateKey(privHex);
                         return;
                     }
@@ -492,20 +528,27 @@ async function runKangarooPhase(targetPubHex, highTraps, lowTraps, numW){
         }
         
         document.getElementById('kangarooCount').textContent=kangarooCount;
-        document.getElementById('speed').textContent=`${Math.floor(kangarooCount/((Date.now()-startTime)/1000))}/s`;
+        const elapsed=(Date.now()-startTime)/1000;
+        if(elapsed>0){
+            document.getElementById('speed').textContent=`${Math.floor(kangarooCount/elapsed)}/s`;
+        }
         if(i%2===0) log(`🦘 ${kangarooCount.toLocaleString()} kangaroo sprongen gedaan...`);
     }
 
-    if(isRunning){
+    // Herstart de kangaroo fase als we nog steeds draaien
+    if(kangarooLoopActive && isRunning){
         log(`🔄 Kangaroo ronde klaar (${kangarooCount.toLocaleString()} sprongen), herstart...`);
         setTimeout(()=>{
-            if(isRunning) runKangarooPhase(targetPubHex, highTraps, lowTraps, numW);
+            if(kangarooLoopActive && isRunning) {
+                runKangarooPhase(targetPubHex, highTraps, lowTraps, numW);
+            }
         }, 100);
     }
 }
 
 // === FOUND HANDLER ===
 async function foundPrivateKey(privHex){
+    kangarooLoopActive=false;
     setRunning(false); killWorkers();
     setStatus('🎉 GEVONDEN!','running');
     document.getElementById('progressBar').style.width='100%';
