@@ -119,7 +119,6 @@ function pubFromPriv(hex){let k=BigInt("0x"+hex);if(k===0n||k>=SECP256K1_ORDER)r
 async function sha256Hex(h){let b=h.match(/.{2}/g).map(x=>parseInt(x,16));let d=await crypto.subtle.digest("SHA-256",new Uint8Array(b));return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');}
 async function rmd160Hex(h){let b=h.match(/.{2}/g).map(x=>parseInt(x,16));let d=await crypto.subtle.digest("SHA-256",new Uint8Array(b));return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');}
 async function calcChecksum(pub){let s1=await sha256Hex(pub),h160=await rmd160Hex(s1);let s2=await sha256Hex(h160),s3=await sha256Hex(s2);return s3.substring(0,8);}
-async function validChecksum(pub,target){if(!target)return false;return(await calcChecksum(pub))===target;}
 
 // === KANGAROO ===
 const NUM_STEPS=32;
@@ -182,7 +181,7 @@ function loadFromStorage(){
         const raw=localStorage.getItem(STORAGE_KEY);
         if(!raw)return null;
         const data=JSON.parse(raw);
-        log(`📂 Geladen: ${Object.keys(data.highTraps).length} high, ${Object.keys(data.lowTraps).length} low traps`);
+        log(`📂 Geladen: ${Object.keys(data.highTraps||{}).length} high, ${Object.keys(data.lowTraps||{}).length} low traps`);
         return data;
     }catch(e){
         log(`❌ Load mislukt: ${e.message}`);
@@ -221,7 +220,7 @@ function log(msg,cls=''){const ts=new Date().toLocaleTimeString();const div=docu
 function setStatus(txt,cls=''){document.getElementById('statusVal').textContent=txt;document.getElementById('statusVal').className=cls;}
 function killWorkers(){workers.forEach(w=>{try{w.terminate();}catch(_){}});workers=[];}
 
-// === WORKER FUNCTIE (GEFIXT - GEBRUIKT CRYPTO.SUBTLE) ===
+// === WORKER FUNCTIE (GEFIXT) ===
 function makeWorker(){
     const workerCode = `
 const SECP256K1_ORDER=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
@@ -233,9 +232,7 @@ function modPow(a,e,m){let r=1n;a%=m;while(e>0n){if(e&1n)r=(r*a)%m;a=(a*a)%m;e>>
 function modInv(a,m){if(m===1n)return 0n;let m0=m,y=0n,x=1n;while(a>1n){let q=a/m,t=m;m=a%m;a=t;t=y;y=x-q*y;x=t;}if(x<0n)x+=m0;return x;}
 function pointAdd(P,Q){if(!P)return Q;if(!Q)return P;let[x1,y1]=P,[x2,y2]=Q;if(x1===x2&&y1===y2){if(y1===0n)return null;let s=(3n*x1*x1*modInv(2n*y1,SECP256K1_P))%SECP256K1_P;let x3=(s*s-2n*x1)%SECP256K1_P;let y3=(s*(x1-x3)-y1)%SECP256K1_P;return[x3<0n?x3+SECP256K1_P:x3,y3<0n?y3+SECP256K1_P:y3];}else{if(x1===x2)return null;let s=((y2-y1)*modInv(x2-x1,SECP256K1_P))%SECP256K1_P;let x3=(s*s-x1-x2)%SECP256K1_P;let y3=(s*(x1-x3)-y1)%SECP256K1_P;return[x3<0n?x3+SECP256K1_P:x3,y3<0n?y3+SECP256K1_P:y3];}}
 function scalarMul(k,P){if(k===0n)return null;let r=null,a=P,n=k;while(n>0n){if(n&1n)r=pointAdd(r,a);a=pointAdd(a,a);n>>=1n;}return r;}
-function pubFromPriv(hex){let k=BigInt("0x"+hex);if(k===0n||k>=SECP256K1_ORDER)return null;let p=scalarMul(k,[GX,GY]);if(!p)return null;let[x,y]=p,xh=x.toString(16).padStart(64,'0');return(y%2n===0n?"02":"03")+xh;}
 
-// === CHECKSUM IN WORKER (GEBRUIKT CRYPTO.SUBTLE) ===
 async function sha256HexWorker(h){
     let b=h.match(/.{2}/g).map(x=>parseInt(x,16));
     let d=await crypto.subtle.digest("SHA-256", new Uint8Array(b));
@@ -261,30 +258,34 @@ function kangarooJump(pt,dist){let idx=Number(dist%BigInt(NUM_STEPS));let np=poi
 function pointToHex(P){if(!P)return null;let[x,y]=P;let xh=x.toString(16).padStart(64,'0');return(y%2n===0n?"02":"03")+xh;}
 
 self.onmessage=async function(e){
-    let {type, rangeStartStr, rangeEndStr, targetPubHex, targetChecksum, workerId, pathsPerWorker, stepsPerPath, dpMask}=e.data;
+    if(e.data.type==="FORCE_DONE"){
+        self.postMessage({type:"TAME_READY",traps:{},jumps:0,workerId:-1});
+        return;
+    }
+    
+    let {type, rangeStartStr, rangeEndStr, targetPubHex, workerId, pathsPerWorker, stepsPerPath, dpMask}=e.data;
     let rangeStart=BigInt("0x"+rangeStartStr), rangeEnd=BigInt("0x"+rangeEndStr);
     initJumps(rangeStart, rangeEnd);
 
     if(type==="TAME"){
-        let traps={}, paths=pathsPerWorker||200, steps=stepsPerPath||1500, mask=dpMask||0xFF, jumps=0;
-        // ✅ Bereken checksum in worker met crypto.subtle
+        let traps={}, paths=pathsPerWorker||200, steps=stepsPerPath||1500, mask=dpMask||0x0F, jumps=0;
         let targetChk = await calcChecksumWorker(targetPubHex);
+        
         for(let p=0;p<paths;p++){
             let ks=randBigInt(rangeStart, rangeEnd), dist=0n, pt=scalarMul(ks,[GX,GY]);
             if(!pt) continue;
             for(let i=0;i<steps;i++){
                 let ph=pointToHex(pt); if(!ph) break;
-                // DP check: laatste 8 bits (2 hex chars) moeten 00 zijn (mask = 0xFF)
-                if((parseInt(ph.slice(-2),16) & mask) === 0){
-                    let csum = await calcChecksumWorker(ph);
-                    if(csum === targetChk) {
-                        traps[ph]={absKey:ks.toString(16), dist:dist.toString()};
-                    }
+                // DP check: laatste 4 bits (1 hex char) moeten 0 zijn met mask 0x0F
+                if((parseInt(ph.slice(-1),16) & mask) === 0){
+                    traps[ph]={absKey:ks.toString(16), dist:dist.toString()};
                 }
                 let r=kangarooJump(pt,dist); pt=r.point; dist=r.dist; jumps++;
                 if(!pt) break;
             }
         }
+        
+        // ALTIJD een bericht terugsturen, ook als er geen traps zijn
         self.postMessage({type:"TAME_READY",traps,jumps,workerId});
         return;
     }
@@ -384,7 +385,7 @@ async function runMITM(){
     const split=splitRange(range.start, range.end, splitPct);
     const targetPubHex=document.getElementById('pubKey').value.trim();
     const numW=Math.max(1,parseInt(document.getElementById('numW').value)||4);
-    const paths=400, steps=1000;
+    const paths=200, steps=1000;
 
     // FASE 1: Hoge bits
     if(Object.keys(mitmHighTraps).length===0){
@@ -446,32 +447,51 @@ function runTamePhase(rangeStart, rangeEnd, targetPubHex, numW, paths, steps){
         let allTraps={}, done=0;
         killWorkers();
         
-        // ✅ STUUR ALLEEN DE TARGET PUBKEY MEE - WORKER BEREKENT ZELF CHECKSUM
         for(let i=0;i<numW;i++){
             const w=makeWorker(); workers.push(w);
+            
+            // Timeout om vastgelopen workers te forceren
+            const timeoutId = setTimeout(() => {
+                try { w.postMessage({type:"FORCE_DONE"}); } catch(e) {}
+            }, 30000);
+            
             w.onmessage=(ev)=>{
+                clearTimeout(timeoutId);
                 if(ev.data.type==="TAME_READY"){
-                    Object.assign(allTraps, ev.data.traps);
-                    totalJumps+=ev.data.jumps;
+                    // Voeg gevonden traps toe
+                    if(ev.data.traps && Object.keys(ev.data.traps).length > 0){
+                        Object.assign(allTraps, ev.data.traps);
+                    }
+                    totalJumps+=ev.data.jumps || 0;
                     document.getElementById('totalJumps').textContent=totalJumps.toLocaleString();
                     
                     const trapCount = Object.keys(allTraps).length;
                     document.getElementById('trapCount').textContent = trapCount;
                     
                     done++;
-                    if(done===numW) resolve(allTraps);
+                    if(done===numW) {
+                        log(`🔍 Tame fase klaar: ${trapCount} vallen gevonden (${totalJumps.toLocaleString()} sprongen)`);
+                        resolve(allTraps);
+                    }
                 }
             };
+            
+            w.onerror=(err)=>{
+                clearTimeout(timeoutId);
+                log(`❌ Worker error: ${err.message}`);
+                done++;
+                if(done===numW) resolve(allTraps);
+            };
+            
             w.postMessage({
                 type:"TAME",
                 rangeStartStr:rangeStart,
                 rangeEndStr:rangeEnd,
                 targetPubHex:targetPubHex,
-                targetChecksum:"", // Worker berekent zelf
                 workerId:i,
                 pathsPerWorker:paths,
                 stepsPerPath:steps,
-                dpMask:0xFF // ✅ 8 bits (laatste 2 hex karakters moeten 00 zijn)
+                dpMask:0x0F // Minder strikt masker: laatste 4 bits moeten 0 zijn
             });
         }
     });
@@ -535,7 +555,7 @@ async function runKangarooPhase(targetPubHex, highTraps, lowTraps, numW){
             if(ph){
                 if(ph in highTraps){
                     const trapData=highTraps[ph];
-                    const privHex=(dist+BigInt(trapData.dist)).toString(16).padStart(64,'0');
+                    const privHex=(BigInt(trapData.dist)+dist).toString(16).padStart(64,'0');
                     const pubHex=pubFromPriv(privHex);
                     if(pubHex && pubHex===targetPubHex){
                         await foundPrivateKey(privHex);
@@ -544,7 +564,7 @@ async function runKangarooPhase(targetPubHex, highTraps, lowTraps, numW){
                 }
                 if(ph in lowTraps){
                     const trapData=lowTraps[ph];
-                    const privHex=(dist+BigInt(trapData.dist)).toString(16).padStart(64,'0');
+                    const privHex=(BigInt(trapData.dist)+dist).toString(16).padStart(64,'0');
                     const pubHex=pubFromPriv(privHex);
                     if(pubHex && pubHex===targetPubHex){
                         await foundPrivateKey(privHex);
@@ -616,6 +636,7 @@ async function foundPrivateKey(privHex){
         </tr>`;
 }
 
+// === INITIALISATIE ===
 const savedData=loadFromStorage();
 if(savedData){
     log('📂 Opgeslagen state gevonden! Gebruik "Load" om te hervatten.');
@@ -623,6 +644,8 @@ if(savedData){
 }
 
 log('🦘 Kangaroo √N geladen - klaar voor MITM + Kangaroo + Range Reduction');
+log('⚙️ Configuratie: DP masker = 0x0F (elke 16e punt wordt opgeslagen)');
+log('💡 Tips: Start de MITM fase eerst, daarna automatisch Kangaroo');
 </script>
 </body>
 </html>
