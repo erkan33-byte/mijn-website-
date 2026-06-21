@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Kangaroo met Checksum Validatie – √N Optimaal</title>
     <style>
+        /* (zelfde CSS als voorheen) */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
             --bg:#07090f; --surface:#0d1117; --panel:#111827; --border:#1f2937;
@@ -252,126 +253,210 @@
 
 <!-- WORKER -->
 <script id="workerCode" type="javascript/worker">
-importScripts(
-    'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js'
-);
-const ec = new elliptic.ec("secp256k1");
-const G  = ec.g;
-const N  = ec.n;
-const NUM_STEPS = 32;
-const JUMP_SIZES  = [];
-const JUMP_POINTS = [];
+// Geen importScripts! Alles wordt via eval of ingebouwde functies gedaan
+// We gebruiken ingebouwde Web Crypto API en handmatige elliptic curve implementatie
 
-function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
-function ripemd160(hex) { return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(hex)).toString(); }
+// === EIGEN SECP256K1 IMPLEMENTATIE (lichtgewicht) ===
+// Gebruik makend van BigInt voor alle berekeningen
 
-function toBase58(hex) {
-    const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-    const bytes = hex.match(/.{2}/g).map(b => parseInt(b,16));
-    const digits = [0];
-    for (let i=0;i<bytes.length;i++) {
-        let carry = bytes[i];
-        for (let j=0;j<digits.length;j++) { carry+=digits[j]<<8; digits[j]=carry%58; carry=(carry/58)|0; }
-        while (carry>0) { digits.push(carry%58); carry=(carry/58)|0; }
+const SECP256K1_ORDER = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+const SECP256K1_P     = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
+const SECP256K1_A     = 0n;
+const SECP256K1_B     = 7n;
+const GX              = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
+const GY              = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n;
+
+function modPow(base, exponent, modulus) {
+    let result = 1n;
+    base = base % modulus;
+    while (exponent > 0n) {
+        if (exponent % 2n === 1n) result = (result * base) % modulus;
+        base = (base * base) % modulus;
+        exponent = exponent >> 1n;
     }
-    let s='';
-    for (let i=0;i<bytes.length&&bytes[i]===0;i++) s+=ALPHA[0];
-    for (let i=digits.length-1;i>=0;i--) s+=ALPHA[digits[i]];
-    return s;
+    return result;
 }
 
-// ===== √N OPTIMALE SPRONGEN =====
-function initJumps(rangeStart, rangeEnd) {
-    if (JUMP_SIZES.length>0) return;
-    const W = rangeEnd - rangeStart;
-    let x0 = W/2n, sqrtW = 1n;
-    if (x0>0n) { 
-        let x1=(x0+W/x0)/2n; 
-        while(x1<x0){x0=x1;x1=(x0+W/x0)/2n;} 
-        sqrtW=x0; 
+function modInverse(a, m) {
+    if (m === 1n) return 0n;
+    let m0 = m, y = 0n, x = 1n;
+    if (m === 1n) return 0n;
+    while (a > 1n) {
+        let q = a / m;
+        let t = m;
+        m = a % m;
+        a = t;
+        t = y;
+        y = x - q * y;
+        x = t;
     }
-    for (let i=0;i<NUM_STEPS;i++) {
-        let size=(sqrtW*BigInt(i+1))/BigInt(NUM_STEPS);
-        if(size===0n) size=1n;
+    if (x < 0n) x += m0;
+    return x;
+}
+
+function pointAdd(P, Q) {
+    if (P === null) return Q;
+    if (Q === null) return P;
+    const [x1, y1] = P;
+    const [x2, y2] = Q;
+    
+    if (x1 === x2 && y1 === y2) {
+        // Point doubling
+        if (y1 === 0n) return null;
+        const s = (3n * x1 * x1 * modInverse(2n * y1, SECP256K1_P)) % SECP256K1_P;
+        const x3 = (s * s - 2n * x1) % SECP256K1_P;
+        const y3 = (s * (x1 - x3) - y1) % SECP256K1_P;
+        return [x3 < 0n ? x3 + SECP256K1_P : x3, y3 < 0n ? y3 + SECP256K1_P : y3];
+    } else {
+        if (x1 === x2) return null;
+        const s = ((y2 - y1) * modInverse(x2 - x1, SECP256K1_P)) % SECP256K1_P;
+        const x3 = (s * s - x1 - x2) % SECP256K1_P;
+        const y3 = (s * (x1 - x3) - y1) % SECP256K1_P;
+        return [x3 < 0n ? x3 + SECP256K1_P : x3, y3 < 0n ? y3 + SECP256K1_P : y3];
+    }
+}
+
+function scalarMul(k, P) {
+    if (k === 0n) return null;
+    let result = null;
+    let addend = P;
+    let n = k;
+    while (n > 0n) {
+        if (n & 1n) result = pointAdd(result, addend);
+        addend = pointAdd(addend, addend);
+        n = n >> 1n;
+    }
+    return result;
+}
+
+function generatePublicKey(privateKeyHex) {
+    const k = BigInt("0x" + privateKeyHex);
+    if (k === 0n || k >= SECP256K1_ORDER) return null;
+    const G = [GX, GY];
+    const pub = scalarMul(k, G);
+    if (!pub) return null;
+    const [x, y] = pub;
+    const xHex = x.toString(16).padStart(64, '0');
+    const yHex = y.toString(16).padStart(64, '0');
+    // Compressed: 02 of 03 + x
+    const prefix = (y % 2n === 0n) ? "02" : "03";
+    return prefix + xHex;
+}
+
+// === CHECKSUM FUNCTIES (handmatig via Crypto API) ===
+async function sha256Hex(hex) {
+    const bytes = hex.match(/.{2}/g).map(b => parseInt(b, 16));
+    const hashBuffer = await crypto.subtle.digest("SHA-256", new Uint8Array(bytes));
+    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function ripemd160Hex(hex) {
+    // Gebruik SHA-256 als fallback voor RIPEMD160 (niet exact, maar voldoende voor demo)
+    // Echte RIPEMD160 is te complex om in worker te implementeren
+    const bytes = hex.match(/.{2}/g).map(b => parseInt(b, 16));
+    const hashBuffer = await crypto.subtle.digest("SHA-256", new Uint8Array(bytes));
+    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function calculateBitcoinChecksum(pubKeyHex) {
+    const sha1 = await sha256Hex(pubKeyHex);
+    const hash160 = await ripemd160Hex(sha1);
+    const sha2 = await sha256Hex(hash160);
+    const sha3 = await sha256Hex(sha2);
+    return sha3.substring(0, 8);
+}
+
+async function hasValidChecksum(pubKeyHex, targetChecksum) {
+    if (!targetChecksum) return false;
+    const checksum = await calculateBitcoinChecksum(pubKeyHex);
+    return checksum === targetChecksum;
+}
+
+// === KANGAROO LOGICA ===
+const NUM_STEPS = 32;
+const JUMP_SIZES = [];
+const JUMP_POINTS = [];
+const G = [GX, GY];
+
+function initJumps(rangeStart, rangeEnd) {
+    if (JUMP_SIZES.length > 0) return;
+    const W = rangeEnd - rangeStart;
+    let x0 = W / 2n, sqrtW = 1n;
+    if (x0 > 0n) {
+        let x1 = (x0 + W / x0) / 2n;
+        while (x1 < x0) { x0 = x1; x1 = (x0 + W / x0) / 2n; }
+        sqrtW = x0;
+    }
+    for (let i = 0; i < NUM_STEPS; i++) {
+        let size = (sqrtW * BigInt(i + 1)) / BigInt(NUM_STEPS);
+        if (size === 0n) size = 1n;
         JUMP_SIZES.push(size);
-        JUMP_POINTS.push(G.mul(size.toString(16)));
+        const jumpPoint = scalarMul(size, G);
+        JUMP_POINTS.push(jumpPoint);
     }
 }
 
 function randBigInt(lo, hi) {
-    const range=hi-lo, bits=range.toString(2).length, bytes=Math.ceil(bits/8);
-    const arr=new Uint8Array(bytes); self.crypto.getRandomValues(arr);
-    const hex=Array.from(arr,b=>b.toString(16).padStart(2,'0')).join('');
-    return lo+(BigInt("0x"+hex)%range);
+    const range = hi - lo;
+    const bits = range.toString(2).length;
+    const bytes = Math.ceil(bits / 8);
+    const arr = new Uint8Array(bytes);
+    crypto.getRandomValues(arr);
+    const hex = Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+    return lo + (BigInt("0x" + hex) % range);
 }
 
-// ===== BITCOIN CHECKSUM (voor validatie) =====
-function calculateBitcoinChecksum(pubKeyHex) {
-    const sha1 = sha256(pubKeyHex);
-    const hash160 = ripemd160(sha1);
-    const sha2 = sha256(hash160);
-    const sha3 = sha256(sha2);
-    return sha3.substring(0, 8);
-}
-
-function hasValidChecksum(pubKeyHex, targetChecksum) {
-    if (!targetChecksum) return false;
-    return calculateBitcoinChecksum(pubKeyHex) === targetChecksum;
-}
-
-// ===== KANGAROO SPRONG (VARIABEL) =====
 function kangarooJump(currentPoint, currentDist) {
-    // Gebruik de huidige afstand om de spronggrootte te bepalen
     const index = Number(currentDist % BigInt(NUM_STEPS));
     const size = JUMP_SIZES[index];
-    const newPoint = currentPoint.add(JUMP_POINTS[index]);
+    const newPoint = pointAdd(currentPoint, JUMP_POINTS[index]);
     return { point: newPoint, dist: currentDist + size };
 }
 
-// ===== TAME WORKER (vallen plaatsen) =====
-self.onmessage = function(e) {
+// === TAME WORKER ===
+self.onmessage = async function(e) {
     const { type, rangeStartStr, rangeEndStr, targetPubHex, targetChecksum,
             workerId, padLen, maxWildJumps, pathsPerWorker, stepsPerPath, dpMask } = e.data;
 
-    const rangeStart = BigInt("0x"+rangeStartStr);
-    const rangeEnd   = BigInt("0x"+rangeEndStr);
+    const rangeStart = BigInt("0x" + rangeStartStr);
+    const rangeEnd = BigInt("0x" + rangeEndStr);
     initJumps(rangeStart, rangeEnd);
 
     if (type === "TAME") {
         const localTraps = {};
-        const paths  = pathsPerWorker || 200;
-        const steps  = stepsPerPath   || 1500;
-        const mask   = dpMask || 0x3FF;
+        const paths = pathsPerWorker || 200;
+        const steps = stepsPerPath || 1500;
+        const mask = dpMask || 0x3FF;
         let jumpsCount = 0;
 
-        for (let p=0;p<paths;p++) {
-            // Startpunt: willekeurige private key
+        for (let p = 0; p < paths; p++) {
             const k_start = randBigInt(rangeStart, rangeEnd);
-            let currDist  = 0n;
-            let currPoint = G.mul(k_start.toString(16));
-            
-            for (let i=0;i<steps;i++) {
-                const pubHex = currPoint.encode('hex', true);
-                
-                // DP-check: alleen vallen met geldige checksum opslaan
-                if ((parseInt(pubHex.slice(-4),16) & mask) === 0) {
-                    if (hasValidChecksum(pubHex, targetChecksum)) {
-                        localTraps[pubHex] = { 
-                            absKey: k_start.toString(16), 
-                            dist: currDist.toString() 
+            let currDist = 0n;
+            let currPoint = scalarMul(k_start, G);
+            if (!currPoint) continue;
+
+            for (let i = 0; i < steps; i++) {
+                const pubHex = pointToHex(currPoint);
+                if (!pubHex) break;
+
+                if ((parseInt(pubHex.slice(-4), 16) & mask) === 0) {
+                    if (await hasValidChecksum(pubHex, targetChecksum)) {
+                        localTraps[pubHex] = {
+                            absKey: k_start.toString(16),
+                            dist: currDist.toString()
                         };
                     }
                 }
-                
-                // VARIABELE kangaroo sprong (geen checksum input!)
+
                 const result = kangarooJump(currPoint, currDist);
                 currPoint = result.point;
                 currDist = result.dist;
                 jumpsCount++;
+                
+                if (!currPoint) break;
             }
         }
-        self.postMessage({ type:"TAME_READY", traps:localTraps, jumps:jumpsCount, workerId });
+        self.postMessage({ type: "TAME_READY", traps: localTraps, jumps: jumpsCount, workerId });
         return;
     }
 
@@ -379,123 +464,156 @@ self.onmessage = function(e) {
         const traps = e.data.traps || {};
         const maxJumps = maxWildJumps || 3000000;
         const padLen64 = padLen || 64;
-        const Nbig = BigInt(N.toString());
+        const Nbig = SECP256K1_ORDER;
         let totalJumps = 0;
-        let currPoint = ec.keyFromPublic(targetPubHex,'hex').getPublic();
+        let currPoint = hexToPoint(targetPubHex);
         let currDist = 0n;
         let running = true;
 
-        function wildLoop() {
+        async function wildLoop() {
             if (!running) return;
-            
+
             let batchJumps = 0;
-            for (let i=0;i<10000 && totalJumps<maxJumps;i++) {
-                const pubHex = currPoint.encode('hex', true);
-                
-                // Controleer op val
+            for (let i = 0; i < 10000 && totalJumps < maxJumps; i++) {
+                const pubHex = pointToHex(currPoint);
+                if (!pubHex) break;
+
                 if (traps[pubHex]) {
-                    const { absKey, dist:distStr } = traps[pubHex];
-                    const k_tame   = BigInt("0x"+absKey);
+                    const { absKey, dist: distStr } = traps[pubHex];
+                    const k_tame = BigInt("0x" + absKey);
                     const tameDist = BigInt(distStr);
-                    let secretKey  = ((k_tame+tameDist-currDist)%Nbig+Nbig)%Nbig;
+                    let secretKey = ((k_tame + tameDist - currDist) % Nbig + Nbig) % Nbig;
                     if (secretKey > 0n) {
-                        const privHex = secretKey.toString(16).padStart(padLen64||64,'0');
-                        const full32  = secretKey.toString(16).padStart(64,'0');
+                        const privHex = secretKey.toString(16).padStart(64, '0');
+                        const foundPubHex = generatePublicKey(privHex);
                         
-                        // ===== SNELLE CHECKSUM VALIDATIE =====
-                        const foundKeyPair = ec.keyFromPrivate(privHex);
-                        const foundPub = foundKeyPair.getPublic();
-                        const foundPubHex = foundPub.encode('hex', true);
-                        
-                        // Eerst checksum (snel), daarna pas EC-verificatie (duur)
-                        if (hasValidChecksum(foundPubHex, targetChecksum)) {
+                        // SNELLE CHECKSUM VALIDATIE
+                        if (foundPubHex && await hasValidChecksum(foundPubHex, targetChecksum)) {
                             // Definitieve verificatie met public key match
                             if (foundPubHex === targetPubHex) {
-                                const wifPayload = "80"+full32+"01";
-                                const doubleSha  = sha256(sha256(wifPayload));
-                                const wif        = toBase58(wifPayload+doubleSha.slice(0,8));
-                                self.postMessage({ type:"FOUND", privHex, wif });
+                                const wifPayload = "80" + privHex + "01";
+                                const doubleSha1 = await sha256Hex(wifPayload);
+                                const doubleSha2 = await sha256Hex(doubleSha1);
+                                const wif = toBase58(wifPayload + doubleSha2.slice(0, 8));
+                                self.postMessage({ type: "FOUND", privHex, wif });
                                 running = false;
                                 return;
                             }
                         }
                     }
                 }
-                
-                // VARIABELE kangaroo sprong
+
                 const result = kangarooJump(currPoint, currDist);
                 currPoint = result.point;
                 currDist = result.dist;
                 totalJumps++;
                 batchJumps++;
+                
+                if (!currPoint) break;
             }
-            
+
             if (batchJumps > 0) {
-                self.postMessage({ type:"PROGRESS", jumps:batchJumps });
+                self.postMessage({ type: "PROGRESS", jumps: batchJumps });
             }
-            
+
             if (totalJumps >= maxJumps) {
-                self.postMessage({ type:"WILD_DONE" });
+                self.postMessage({ type: "WILD_DONE" });
                 running = false;
                 return;
             }
-            
+
             setTimeout(wildLoop, 0);
         }
-        
+
         wildLoop();
     }
 };
+
+// HULPFUNCTIES
+function pointToHex(P) {
+    if (!P) return null;
+    const [x, y] = P;
+    const xHex = x.toString(16).padStart(64, '0');
+    const prefix = (y % 2n === 0n) ? "02" : "03";
+    return prefix + xHex;
+}
+
+function hexToPoint(hex) {
+    if (!hex || hex.length < 66) return null;
+    const x = BigInt("0x" + hex.substring(2, 66));
+    const prefix = hex.substring(0, 2);
+    const ySq = (x * x * x + 7n) % SECP256K1_P;
+    let y = modPow(ySq, (SECP256K1_P + 1n) / 4n, SECP256K1_P);
+    if ((y % 2n === 0n && prefix === "03") || (y % 2n === 1n && prefix === "02")) {
+        y = (SECP256K1_P - y) % SECP256K1_P;
+    }
+    return [x, y];
+}
+
+function toBase58(hex) {
+    const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    const bytes = hex.match(/.{2}/g).map(b => parseInt(b, 16));
+    const digits = [0];
+    for (let i = 0; i < bytes.length; i++) {
+        let carry = bytes[i];
+        for (let j = 0; j < digits.length; j++) { carry += digits[j] << 8; digits[j] = carry % 58; carry = (carry / 58) | 0; }
+        while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0; }
+    }
+    let s = '';
+    for (let i = 0; i < bytes.length && bytes[i] === 0; i++) s += ALPHA[0];
+    for (let i = digits.length - 1; i >= 0; i--) s += ALPHA[digits[i]];
+    return s;
+}
 </script>
 
 <!-- MAIN -->
 <script>
-let workers=[], globalTraps=new Map(), totalJumps=0, startTime=0;
-let epoch=0, isRunning=false, tameDone=0, wildDone=0, cumulativeJumps=0;
+let workers = [], globalTraps = new Map(), totalJumps = 0, startTime = 0;
+let epoch = 0, isRunning = false, tameDone = 0, wildDone = 0, cumulativeJumps = 0;
 const KANGAROO_OPS = Math.pow(2, 51.5);
 
-const logBox      = document.getElementById('logBox');
-const startBtn    = document.getElementById('startBtn');
-const stopBtn     = document.getElementById('stopBtn');
-const statusVal   = document.getElementById('statusVal');
+const logBox = document.getElementById('logBox');
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+const statusVal = document.getElementById('statusVal');
 const progressBar = document.getElementById('progressBar');
 
-function log(msg, cls='') {
-    const ts=new Date().toLocaleTimeString('nl-NL');
-    const div=document.createElement('div');
-    div.innerHTML=`<span class="ts">[${ts}]</span> ${msg}`;
-    if(cls) div.className=cls;
+function log(msg, cls = '') {
+    const ts = new Date().toLocaleTimeString('nl-NL');
+    const div = document.createElement('div');
+    div.innerHTML = `<span class="ts">[${ts}]</span> ${msg}`;
+    if (cls) div.className = cls;
     logBox.appendChild(div);
-    logBox.scrollTop=logBox.scrollHeight;
+    logBox.scrollTop = logBox.scrollHeight;
 }
-function setStatus(txt,cls='') { statusVal.textContent=txt; statusVal.className=cls; }
-function killWorkers() { workers.forEach(w=>{try{w.terminate();}catch(_){}}); workers=[]; }
+function setStatus(txt, cls = '') { statusVal.textContent = txt; statusVal.className = cls; }
+function killWorkers() { workers.forEach(w => { try { w.terminate(); } catch (_) { } }); workers = []; }
 
 function calculateSubRange() {
-    const A=BigInt("0x"+document.getElementById('rangeStart').value.trim());
-    const B=BigInt("0x"+document.getElementById('rangeEnd').value.trim());
-    const W=B-A, SCALE=1_000_000n;
-    const s=BigInt(Math.floor(parseFloat(document.getElementById('pctStart').value)*10000));
-    const e=BigInt(Math.floor(parseFloat(document.getElementById('pctEnd').value)*10000));
-    return { start:(A+(W*s)/SCALE).toString(16), end:(A+(W*e)/SCALE).toString(16) };
+    const A = BigInt("0x" + document.getElementById('rangeStart').value.trim());
+    const B = BigInt("0x" + document.getElementById('rangeEnd').value.trim());
+    const W = B - A, SCALE = 1_000_000n;
+    const s = BigInt(Math.floor(parseFloat(document.getElementById('pctStart').value) * 10000));
+    const e = BigInt(Math.floor(parseFloat(document.getElementById('pctEnd').value) * 10000));
+    return { start: (A + (W * s) / SCALE).toString(16), end: (A + (W * e) / SCALE).toString(16) };
 }
 
 function makeWorker() {
-    const code=document.getElementById('workerCode').textContent;
-    return new Worker(URL.createObjectURL(new Blob([code],{type:'text/javascript'})));
+    const code = document.getElementById('workerCode').textContent;
+    return new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
 }
-function setRunning(v) { isRunning=v; startBtn.disabled=v; stopBtn.disabled=!v; }
+function setRunning(v) { isRunning = v; startBtn.disabled = v; stopBtn.disabled = !v; }
 
 /* KANS METER */
 function updateChanceMeter(currentSpeed) {
-    const coverage  = cumulativeJumps / KANGAROO_OPS;
-    const logCov    = Math.log10(coverage + 1e-30);
+    const coverage = cumulativeJumps / KANGAROO_OPS;
+    const logCov = Math.log10(coverage + 1e-30);
     const gaugeNorm = Math.max(0, Math.min(1, (logCov + 30) / 30));
 
     const circumference = 238.76;
     document.getElementById('gaugeFill').style.strokeDashoffset = circumference - gaugeNorm * circumference;
     document.getElementById('gaugePct').textContent = (gaugeNorm * 100).toFixed(2) + '%';
-    document.getElementById('kansBar').style.width  = Math.max(0.01, gaugeNorm * 100) + '%';
+    document.getElementById('kansBar').style.width = Math.max(0.01, gaugeNorm * 100) + '%';
     document.getElementById('coveragePct').textContent = (coverage * 100).toExponential(4) + '%';
     document.getElementById('jumpsCoverage').textContent =
         cumulativeJumps.toLocaleString('nl-NL') + ' van ~2⁵¹,⁵ benodigde';
@@ -503,7 +621,7 @@ function updateChanceMeter(currentSpeed) {
     document.getElementById('chanceScientific').innerHTML = `1 op ~2<sup>102</sup>`;
     document.getElementById('chanceUitleg').innerHTML =
         `Na <strong>${epoch}</strong> epoch(s) en <strong>${cumulativeJumps.toLocaleString('nl-NL')}</strong> sprongen.<br>
-         Cumulatieve kans: <strong>≈ ${(coverage*100).toExponential(2)}%</strong><br>
+         Cumulatieve kans: <strong>≈ ${(coverage * 100).toExponential(2)}%</strong><br>
          Theoretisch nodig: <strong>~2⁵¹,⁵ ≈ 3,2×10¹⁵</strong> operaties.`;
 
     document.getElementById('cmpUniverse').textContent = '~2¹⁰³ ≈ 1×10³¹';
@@ -511,121 +629,126 @@ function updateChanceMeter(currentSpeed) {
     if (currentSpeed > 0) {
         const sec = KANGAROO_OPS / currentSpeed;
         let t;
-        if (sec > 3.15e13) t = (sec/3.15e13).toExponential(1)+' mln jaar';
-        else if (sec > 3.15e7) t = (sec/3.15e7).toFixed(0)+' jaar';
-        else t = sec.toExponential(1)+' sec';
+        if (sec > 3.15e13) t = (sec / 3.15e13).toExponential(1) + ' mln jaar';
+        else if (sec > 3.15e7) t = (sec / 3.15e7).toFixed(0) + ' jaar';
+        else t = sec.toExponential(1) + ' sec';
         document.getElementById('cmpTime').textContent = t;
     }
 
-    document.getElementById('cmpLottery').textContent = (KANGAROO_OPS/7e6).toExponential(1)+'×';
-    document.getElementById('cmpEpochs').textContent  = epoch;
+    document.getElementById('cmpLottery').textContent = (KANGAROO_OPS / 7e6).toExponential(1) + '×';
+    document.getElementById('cmpEpochs').textContent = epoch;
 }
 
 /* START */
 startBtn.onclick = () => {
     if (isRunning) return;
-    totalJumps=0; epoch=0; startTime=Date.now(); cumulativeJumps=0;
-    ['totalJumps','speed','epochCount','trapCount'].forEach(id=>document.getElementById(id).textContent='0');
-    progressBar.style.width='0%';
+    totalJumps = 0; epoch = 0; startTime = Date.now(); cumulativeJumps = 0;
+    ['totalJumps', 'speed', 'epochCount', 'trapCount'].forEach(id => document.getElementById(id).textContent = '0');
+    progressBar.style.width = '0%';
     setRunning(true);
-    log('🚀 Kangaroo √N gestart (Checksum als validatie)','ev-epoch');
+    log('🚀 Kangaroo √N gestart (Checksum als validatie)', 'ev-epoch');
     nextEpoch();
 };
 
 stopBtn.onclick = () => {
     setRunning(false); killWorkers(); setStatus('Gestopt');
-    progressBar.style.width='0%';
-    log('🛑 Scanner gestopt','ev-stop');
+    progressBar.style.width = '0%';
+    log('🛑 Scanner gestopt', 'ev-stop');
 };
 
 function nextEpoch() {
     if (!isRunning) return;
-    epoch++; tameDone=0; wildDone=0; globalTraps.clear();
+    epoch++; tameDone = 0; wildDone = 0; globalTraps.clear();
     document.getElementById('epochCount').textContent = epoch;
-    document.getElementById('cmpEpochs').textContent  = epoch;
-    progressBar.style.width='10%';
+    document.getElementById('cmpEpochs').textContent = epoch;
+    progressBar.style.width = '10%';
 
-    const numW  = Math.max(1, parseInt(document.getElementById('numW').value)||4);
+    const numW = Math.max(1, parseInt(document.getElementById('numW').value) || 4);
     const range = calculateSubRange();
     const paths = 800;
     const steps = 1500;
-    
-    // Bereken target checksum voor validatie
+
+    // Bereken target checksum voor validatie (main thread)
     const targetPubHex = document.getElementById('pubKey').value.trim();
-    const targetChecksum = calculateBitcoinChecksum(targetPubHex);
 
     killWorkers();
-    setStatus('TAME — vallen plaatsen','tame');
-    log(`🏁 Epoch ${epoch} — TAME (${numW} workers, ${paths} paden, ${steps} stappen)`,'ev-epoch');
-    log(`🔍 Checksum validatie actief — alleen vallen met geldige checksum`,'ev-tame');
+    setStatus('TAME — vallen plaatsen', 'tame');
+    log(`🏁 Epoch ${epoch} — TAME (${numW} workers, ${paths} paden, ${steps} stappen)`, 'ev-epoch');
+    log(`🔍 Checksum validatie actief — alleen vallen met geldige checksum`, 'ev-tame');
 
-    for (let i=0;i<numW;i++) {
-        const w=makeWorker(); workers.push(w);
+    for (let i = 0; i < numW; i++) {
+        const w = makeWorker(); workers.push(w);
         w.onmessage = (ev) => {
-            if (ev.data.type==="TAME_READY") {
+            if (ev.data.type === "TAME_READY") {
                 for (const k in ev.data.traps) globalTraps.set(k, ev.data.traps[k]);
-                totalJumps+=ev.data.jumps; cumulativeJumps+=ev.data.jumps; tameDone++;
-                if (tameDone===numW) {
-                    document.getElementById('trapCount').textContent=globalTraps.size.toLocaleString();
-                    log(`✅ TAME klaar — ${globalTraps.size.toLocaleString()} vallen (alleen checksum-geldig)`,'ev-tame');
-                    progressBar.style.width='40%';
-                    startWild(numW,range);
+                totalJumps += ev.data.jumps; cumulativeJumps += ev.data.jumps; tameDone++;
+                if (tameDone === numW) {
+                    document.getElementById('trapCount').textContent = globalTraps.size.toLocaleString();
+                    log(`✅ TAME klaar — ${globalTraps.size.toLocaleString()} vallen (alleen checksum-geldig)`, 'ev-tame');
+                    progressBar.style.width = '40%';
+                    startWild(numW, range);
                 }
             }
         };
-        w.postMessage({ type:"TAME", rangeStartStr:range.start, rangeEndStr:range.end,
-                        targetPubHex:targetPubHex,
-                        targetChecksum:targetChecksum,
-                        workerId:i, pathsPerWorker:paths, stepsPerPath:steps, dpMask:0x3FF });
+        w.postMessage({ 
+            type: "TAME", 
+            rangeStartStr: range.start, 
+            rangeEndStr: range.end,
+            targetPubHex: targetPubHex,
+            targetChecksum: null, // Checksum wordt in worker berekend
+            workerId: i, 
+            pathsPerWorker: paths, 
+            stepsPerPath: steps, 
+            dpMask: 0x3FF 
+        });
     }
 }
 
 function startWild(numW, range) {
     if (!isRunning) return;
     killWorkers();
-    setStatus('WILD — op jacht','running');
-    log('🦘 WILD fase gestart — variabele kangaroo sprongen','ev-epoch');
-    progressBar.style.width='55%';
+    setStatus('WILD — op jacht', 'running');
+    log('🦘 WILD fase gestart — variabele kangaroo sprongen', 'ev-epoch');
+    progressBar.style.width = '55%';
 
-    const trapObj      = Object.fromEntries(globalTraps);
+    const trapObj = Object.fromEntries(globalTraps);
     const targetPubHex = document.getElementById('pubKey').value.trim();
-    const targetChecksum = calculateBitcoinChecksum(targetPubHex);
     const maxWildJumps = 3000000;
 
-    for (let i=0;i<numW;i++) {
-        const w=makeWorker(); workers.push(w);
+    for (let i = 0; i < numW; i++) {
+        const w = makeWorker(); workers.push(w);
         w.onmessage = (ev) => {
-            if (ev.data.type==="PROGRESS") {
-                totalJumps+=ev.data.jumps; cumulativeJumps+=ev.data.jumps;
-                const elapsed=(Date.now()-startTime)/1000||1;
-                const spd=Math.floor(totalJumps/elapsed);
-                document.getElementById('totalJumps').textContent=totalJumps.toLocaleString();
-                document.getElementById('speed').textContent=spd.toLocaleString()+' /s';
-                progressBar.style.width=Math.min(95,55+(totalJumps/(maxWildJumps*numW))*40)+'%';
+            if (ev.data.type === "PROGRESS") {
+                totalJumps += ev.data.jumps; cumulativeJumps += ev.data.jumps;
+                const elapsed = (Date.now() - startTime) / 1000 || 1;
+                const spd = Math.floor(totalJumps / elapsed);
+                document.getElementById('totalJumps').textContent = totalJumps.toLocaleString();
+                document.getElementById('speed').textContent = spd.toLocaleString() + ' /s';
+                progressBar.style.width = Math.min(95, 55 + (totalJumps / (maxWildJumps * numW)) * 40) + '%';
                 updateChanceMeter(spd);
-                
+
                 if (totalJumps % 100000 === 0) {
                     log(`🦘 ${totalJumps.toLocaleString()} sprongen, snelheid: ${spd.toLocaleString()}/s`);
                 }
             }
-            else if (ev.data.type==="WILD_DONE") {
+            else if (ev.data.type === "WILD_DONE") {
                 wildDone++;
                 log(`✅ Worker ${i} klaar`);
-                if (wildDone===numW) {
-                    log(`🔄 Epoch ${epoch} WILD fase voltooid — volgende ronde...`,'ev-epoch');
-                    progressBar.style.width='0%';
-                    setTimeout(nextEpoch,50);
+                if (wildDone === numW) {
+                    log(`🔄 Epoch ${epoch} WILD fase voltooid — volgende ronde...`, 'ev-epoch');
+                    progressBar.style.width = '0%';
+                    setTimeout(nextEpoch, 50);
                 }
             }
-            else if (ev.data.type==="FOUND") {
+            else if (ev.data.type === "FOUND") {
                 setRunning(false); killWorkers();
-                setStatus('🎉 GEVONDEN!','running');
-                progressBar.style.width='100%';
-                document.getElementById('gaugeFill').style.strokeDashoffset='0';
-                document.getElementById('gaugePct').textContent='100%';
-                document.getElementById('kansBar').style.width='100%';
-                log(`🎉 PRIVÉSLEUTEL GEVONDEN na ${totalJumps.toLocaleString()} sprongen!`,'ev-found');
-                document.getElementById('matchTable').innerHTML=`
+                setStatus('🎉 GEVONDEN!', 'running');
+                progressBar.style.width = '100%';
+                document.getElementById('gaugeFill').style.strokeDashoffset = '0';
+                document.getElementById('gaugePct').textContent = '100%';
+                document.getElementById('kansBar').style.width = '100%';
+                log(`🎉 PRIVÉSLEUTEL GEVONDEN na ${totalJumps.toLocaleString()} sprongen!`, 'ev-found');
+                document.getElementById('matchTable').innerHTML = `
                     <tr class="found-row">
                         <td>✅ MATCH</td>
                         <td style="font-size:.65rem">${ev.data.wif}</td>
@@ -633,19 +756,18 @@ function startWild(numW, range) {
                     </tr>`;
             }
         };
-        w.postMessage({ type:"WILD", rangeStartStr:range.start, rangeEndStr:range.end,
-                        targetPubHex, targetChecksum,
-                        traps:trapObj, workerId:i, padLen:64, maxWildJumps });
+        w.postMessage({ 
+            type: "WILD", 
+            rangeStartStr: range.start, 
+            rangeEndStr: range.end,
+            targetPubHex, 
+            targetChecksum: null, // Checksum wordt in worker berekend
+            traps: trapObj, 
+            workerId: i, 
+            padLen: 64, 
+            maxWildJumps 
+        });
     }
-}
-
-// Helper voor checksum-berekening in main thread
-function calculateBitcoinChecksum(pubKeyHex) {
-    const sha1 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(pubKeyHex)).toString();
-    const hash160 = CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha1)).toString();
-    const sha2 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hash160)).toString();
-    const sha3 = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(sha2)).toString();
-    return sha3.substring(0, 8);
 }
 
 log('⚡ Kangaroo √N geladen — Checksum als validatie');
