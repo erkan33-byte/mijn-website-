@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Checksum Chain Kangaroo – Geen vertraging</title>
+    <title>Checksum Chain Kangaroo – Target Validatie</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -90,9 +90,9 @@
 <div class="container">
 
     <div class="header">
-        <h1>🦘 Checksum Chain Kangaroo – Geen vertraging</h1>
-        <div class="sub">Elke sprong landt op een checksum-geldig punt — 4 miljard× sneller</div>
-        <span class="badge">CHECKSUM CHAIN · OPTIMAAL</span>
+        <h1>🦘 Checksum Chain Kangaroo – Target Validatie</h1>
+        <div class="sub">Elke sprong landt op een checksum-geldig punt, alleen FOUND als target matcht</div>
+        <span class="badge">CHECKSUM CHAIN · TARGET VALIDATIE</span>
     </div>
 
     <!-- Config -->
@@ -192,10 +192,10 @@
             </div>
         </div>
         <div class="sci-note">
-            <strong>📐 Hoe werkt Checksum Chain?</strong><br>
-            <strong>Keten:</strong> De checksum van de huidige public key wordt gebruikt om de volgende sprong te bepalen.<br>
-            <strong>Kangaroo:</strong> Loopt over de checksum-geldige ruimte (2¹⁰³) met optimale √N sprongen.<br>
-            <strong>Resultaat:</strong> Geen 4,29 miljard× vertraging — alleen pure snelheid!
+            <strong>📐 Hoe werkt Checksum Chain + Target Validatie?</strong><br>
+            <strong>Keten:</strong> Elke sprong landt op een checksum-geldig punt (geen 4 miljard× vertraging).<br>
+            <strong>Kangaroo:</strong> Loopt over de checksum-geldige ruimte met optimale √N sprongen.<br>
+            <strong>Validatie:</strong> Bij een val wordt de private key alleen gerapporteerd als de public key matcht met de target checksum.
         </div>
     </div>
 
@@ -247,7 +247,7 @@
         </table>
     </div>
 
-    <div class="footer">Checksum Chain Kangaroo · 2⁸³,⁵× sneller</div>
+    <div class="footer">Checksum Chain Kangaroo · Target Validatie</div>
 </div>
 
 <!-- WORKER -->
@@ -425,12 +425,22 @@ self.onmessage = function(e) {
                     if (secretKey > 0n) {
                         const privHex = secretKey.toString(16).padStart(padLen64||64,'0');
                         const full32  = secretKey.toString(16).padStart(64,'0');
-                        const wifPayload = "80"+full32+"01";
-                        const doubleSha  = sha256(sha256(wifPayload));
-                        const wif        = toBase58(wifPayload+doubleSha.slice(0,8));
-                        self.postMessage({ type:"FOUND", privHex, wif });
-                        running = false;
-                        return;
+                        
+                        // ===== TARGET VALIDATIE =====
+                        // Bereken de public key van de gevonden private key
+                        const foundKeyPair = ec.keyFromPrivate(privHex);
+                        const foundPub = foundKeyPair.getPublic();
+                        const foundPubHex = foundPub.encode('hex', true);
+                        
+                        // Alleen rapporteren als de checksum matcht met target
+                        if (hasValidChecksum(foundPubHex, targetChecksum)) {
+                            const wifPayload = "80"+full32+"01";
+                            const doubleSha  = sha256(sha256(wifPayload));
+                            const wif        = toBase58(wifPayload+doubleSha.slice(0,8));
+                            self.postMessage({ type:"FOUND", privHex, wif });
+                            running = false;
+                            return;
+                        }
                     }
                 }
                 
@@ -540,7 +550,7 @@ startBtn.onclick = () => {
     ['totalJumps','speed','epochCount','trapCount'].forEach(id=>document.getElementById(id).textContent='0');
     progressBar.style.width='0%';
     setRunning(true);
-    log('🚀 Checksum Chain Kangaroo gestart','ev-epoch');
+    log('🚀 Checksum Chain Kangaroo (Target Validatie) gestart','ev-epoch');
     nextEpoch();
 };
 
@@ -645,7 +655,7 @@ function startWild(numW, range) {
     }
 }
 
-log('⚡ Checksum Chain Kangaroo geladen — 2⁸³,⁵× sneller');
+log('⚡ Checksum Chain Kangaroo (Target Validatie) geladen');
 updateChanceMeter(0);
 </script>
 </body>
