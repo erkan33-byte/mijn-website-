@@ -352,6 +352,11 @@ loadBtn.onclick=()=>{
         document.getElementById('mitmHigh').textContent=Object.keys(mitmHighTraps).length;
         document.getElementById('mitmLow').textContent=Object.keys(mitmLowTraps).length;
         document.getElementById('totalJumps').textContent=totalJumps.toLocaleString();
+        
+        // ✅ TRAP COUNT BIJ LADEN
+        const totalTraps = Object.keys(mitmHighTraps).length + Object.keys(mitmLowTraps).length;
+        document.getElementById('trapCount').textContent = totalTraps;
+        
         log(`📂 Geladen: ${Object.keys(mitmHighTraps).length} high + ${Object.keys(mitmLowTraps).length} low traps`);
         setStatus('Geladen','');
     }
@@ -427,6 +432,11 @@ function runTamePhase(rangeStart, rangeEnd, targetPubHex, numW, paths, steps){
                     Object.assign(allTraps, ev.data.traps);
                     totalJumps+=ev.data.jumps;
                     document.getElementById('totalJumps').textContent=totalJumps.toLocaleString();
+                    
+                    // ✅ TRAP COUNT UPDATE
+                    const trapCount = Object.keys(allTraps).length;
+                    document.getElementById('trapCount').textContent = trapCount;
+                    
                     done++;
                     if(done===numW) resolve(allTraps);
                 }
