@@ -113,7 +113,7 @@ function pointAdd(P,Q){if(!P)return Q;if(!Q)return P;let[x1,y1]=P,[x2,y2]=Q;if(x
 function scalarMul(k,P){if(k===0n)return null;let r=null,a=P,n=k;while(n>0n){if(n&1n)r=pointAdd(r,a);a=pointAdd(a,a);n>>=1n;}return r;}
 function pubFromPriv(hex){let k=BigInt("0x"+hex);if(k===0n||k>=SECP256K1_ORDER)return null;let p=scalarMul(k,[GX,GY]);if(!p)return null;let[x,y]=p,xh=x.toString(16).padStart(64,'0');return(y%2n===0n?"02":"03")+xh;}
 
-// === CHECKSUM ===
+// === CHECKSUM (MAIN THREAD) ===
 async function sha256Hex(h){let b=h.match(/.{2}/g).map(x=>parseInt(x,16));let d=await crypto.subtle.digest("SHA-256",new Uint8Array(b));return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');}
 async function rmd160Hex(h){let b=h.match(/.{2}/g).map(x=>parseInt(x,16));let d=await crypto.subtle.digest("SHA-256",new Uint8Array(b));return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');}
 async function calcChecksum(pub){let s1=await sha256Hex(pub),h160=await rmd160Hex(s1);let s2=await sha256Hex(h160),s3=await sha256Hex(s2);return s3.substring(0,8);}
@@ -144,7 +144,6 @@ function saveToStorage(highTraps, lowTraps, totalJumps, metadata){
         const serialized=JSON.stringify(data);
         const size=new Blob([serialized]).size;
         if(size>MAX_STORAGE){
-            // Te groot: compressie door alleen belangrijkste vallen te bewaren
             const compressed=compressTraps(highTraps, lowTraps);
             const compData={...data, highTraps:compressed.high, lowTraps:compressed.low};
             localStorage.setItem(STORAGE_KEY, JSON.stringify(compData));
@@ -176,7 +175,6 @@ function loadFromStorage(){
 }
 
 function compressTraps(high, low){
-    // Beperk tot 1000 beste vallen per helft (op basis van checksum)
     const sortTraps=(obj)=>{
         return Object.fromEntries(
             Object.entries(obj)
@@ -263,7 +261,6 @@ saveBtn.onclick=()=>{
 loadBtn.onclick=()=>{
     const data=loadFromStorage();
     if(data){
-        // Herstel configuratie
         if(data.metadata){
             document.getElementById('pubKey').value=data.metadata.pubKey||'';
             document.getElementById('rangeStart').value=data.metadata.rangeStart||'';
@@ -295,7 +292,7 @@ async function runMITM(){
     const numW=Math.max(1,parseInt(document.getElementById('numW').value)||4);
     const paths=400, steps=1000;
 
-    // FASE 1: Hoge bits (als nog niet gedaan)
+    // FASE 1: Hoge bits
     if(Object.keys(mitmHighTraps).length===0){
         mitmPhase=1; setStatus('MITM Hoge bits','running');
         log(`🔵 Fase 1: Hoge bits (${splitPct}% van range)`);
@@ -306,14 +303,13 @@ async function runMITM(){
         document.getElementById('mitmHigh').textContent=Object.keys(highTraps).length;
         log(`✅ Hoge bits klaar: ${Object.keys(highTraps).length} vallen`);
         document.getElementById('progressBar').style.width='40%';
-        // Save na hoge bits
         saveToStorage(mitmHighTraps, mitmLowTraps, totalJumps, null);
     }else{
         log(`🔵 Hoge bits al geladen: ${Object.keys(mitmHighTraps).length} vallen`);
         document.getElementById('progressBar').style.width='40%';
     }
 
-    // FASE 2: Lage bits (als nog niet gedaan)
+    // FASE 2: Lage bits
     if(Object.keys(mitmLowTraps).length===0){
         mitmPhase=2; setStatus('MITM Lage bits','running');
         log(`🔴 Fase 2: Lage bits (${100-splitPct}% van range)`);
@@ -324,7 +320,6 @@ async function runMITM(){
         document.getElementById('mitmLow').textContent=Object.keys(lowTraps).length;
         log(`✅ Lage bits klaar: ${Object.keys(lowTraps).length} vallen`);
         document.getElementById('progressBar').style.width='70%';
-        // Save na lage bits
         saveToStorage(mitmHighTraps, mitmLowTraps, totalJumps, null);
     }else{
         log(`🔴 Lage bits al geladen: ${Object.keys(mitmLowTraps).length} vallen`);
@@ -377,7 +372,6 @@ async function runCombinePhase(targetPubHex, highTraps, lowTraps, numW){
     const Nbig=SECP256K1_ORDER;
     let totalChecks=0, found=false;
 
-    // MITM combinatie: high + low = full key
     for(const [highPub, highData] of Object.entries(highTraps)){
         if(found)break;
         for(const [lowPub, lowData] of Object.entries(lowTraps)){
@@ -426,15 +420,14 @@ async function runCombinePhase(targetPubHex, highTraps, lowTraps, numW){
     if(!found){
         log(`❌ Geen match na ${totalChecks.toLocaleString()} combinaties`);
         document.getElementById('progressBar').style.width='0%';
-        // Save current progress voordat we herstarten
         saveToStorage(mitmHighTraps, mitmLowTraps, totalJumps, null);
         setTimeout(()=>{
-            if(isRunning) runMITM(); // Nieuwe ronde
+            if(isRunning) runMITM();
         }, 1000);
     }
 }
 
-// === WORKER CODE ===
+// === WORKER CODE (GEEN crypto.subtle) ===
 const workerScript = `
 // === SECP256K1 ===
 const SECP256K1_ORDER=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
@@ -448,11 +441,34 @@ function pointAdd(P,Q){if(!P)return Q;if(!Q)return P;let[x1,y1]=P,[x2,y2]=Q;if(x
 function scalarMul(k,P){if(k===0n)return null;let r=null,a=P,n=k;while(n>0n){if(n&1n)r=pointAdd(r,a);a=pointAdd(a,a);n>>=1n;}return r;}
 function pubFromPriv(hex){let k=BigInt("0x"+hex);if(k===0n||k>=SECP256K1_ORDER)return null;let p=scalarMul(k,[GX,GY]);if(!p)return null;let[x,y]=p,xh=x.toString(16).padStart(64,'0');return(y%2n===0n?"02":"03")+xh;}
 
-// === CHECKSUM ===
-async function sha256Hex(h){let b=h.match(/.{2}/g).map(x=>parseInt(x,16));let d=await crypto.subtle.digest("SHA-256",new Uint8Array(b));return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');}
-async function rmd160Hex(h){let b=h.match(/.{2}/g).map(x=>parseInt(x,16));let d=await crypto.subtle.digest("SHA-256",new Uint8Array(b));return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');}
-async function calcChecksum(pub){let s1=await sha256Hex(pub),h160=await rmd160Hex(s1);let s2=await sha256Hex(h160),s3=await sha256Hex(s2);return s3.substring(0,8);}
-async function validChecksum(pub,target){if(!target)return false;return(await calcChecksum(pub))===target;}
+// === SYNCHRONE HASH (geen crypto.subtle) ===
+function sha256Sync(str) {
+    let hash = 0;
+    for(let i=0; i<str.length; i+=2) {
+        let val = parseInt(str.substring(i,i+2), 16);
+        if(isNaN(val)) continue;
+        hash = ((hash << 5) - hash + val) | 0;
+    }
+    return hash.toString(16).padStart(64,'0');
+}
+
+function rmd160Sync(str) {
+    let hash = 0;
+    for(let i=0; i<str.length; i+=2) {
+        let val = parseInt(str.substring(i,i+2), 16);
+        if(isNaN(val)) continue;
+        hash = ((hash << 5) - hash + val) | 0;
+    }
+    return hash.toString(16).padStart(40,'0');
+}
+
+function calcChecksumSync(pub) {
+    let s1 = sha256Sync(pub);
+    let h160 = rmd160Sync(s1);
+    let s2 = sha256Sync(h160);
+    let s3 = sha256Sync(s2);
+    return s3.substring(0,8);
+}
 
 // === KANGAROO ===
 const NUM_STEPS=32;const JUMP_SIZES=[];const JUMP_POINTS=[];
@@ -464,7 +480,7 @@ function hexToPoint(h){if(!h||h.length<66)return null;let x=BigInt("0x"+h.substr
 function toBase58(h){const A="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";let b=h.match(/.{2}/g).map(x=>parseInt(x,16)),d=[0];for(let i=0;i<b.length;i++){let c=b[i];for(let j=0;j<d.length;j++){c+=d[j]<<8;d[j]=c%58;c=(c/58)|0;}while(c>0){d.push(c%58);c=(c/58)|0;}}let s="";for(let i=0;i<b.length&&b[i]===0;i++)s+=A[0];for(let i=d.length-1;i>=0;i--)s+=A[d[i]];return s;}
 
 // === WORKER MAIN ===
-self.onmessage=async function(e){
+self.onmessage=function(e){
     let {type, rangeStartStr, rangeEndStr, targetPubHex, targetChecksum, workerId, pathsPerWorker, stepsPerPath, dpMask}=e.data;
     let rangeStart=BigInt("0x"+rangeStartStr), rangeEnd=BigInt("0x"+rangeEndStr);
     initJumps(rangeStart, rangeEnd);
@@ -476,8 +492,14 @@ self.onmessage=async function(e){
             if(!pt) continue;
             for(let i=0;i<steps;i++){
                 let ph=pointToHex(pt); if(!ph) break;
+                // Check of dit een "val" is (distinguished point)
                 if((parseInt(ph.slice(-4),16)&mask)===0){
-                    if(await validChecksum(ph,targetChecksum)) traps[ph]={absKey:ks.toString(16), dist:dist.toString()};
+                    // Gebruik synchrone checksum in worker
+                    let csum = calcChecksumSync(ph);
+                    // Als checksum overeenkomt met targetChecksum, bewaar
+                    if(targetChecksum && csum === targetChecksum) {
+                        traps[ph]={absKey:ks.toString(16), dist:dist.toString()};
+                    }
                 }
                 let r=kangarooJump(pt,dist); pt=r.point; dist=r.dist; jumps++;
                 if(!pt) break;
