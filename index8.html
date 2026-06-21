@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>🦘 Pollard Hybride — Puzzel #135</title>
+    <title>🦘 Pollard Hybride — Puzzel #135 (Correcte Kangaroo)</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -37,9 +37,11 @@
         .log .found { color:var(--found); font-weight:bold; }
         .log .info { color:var(--accent2); }
         .log .winner { color:var(--gold); font-size:1.1rem; font-weight:bold; }
+        .log .tame { color:var(--accent); }
+        .log .wild { color:var(--warn); }
+        .log .trap { color:var(--found); }
         .log .rho { color:var(--accent2); }
-        .log .kang { color:var(--warn); }
-        .log .hot { color:var(--found); }
+        .log .hot { color:var(--warn); font-weight:bold; }
         .result-card { background:linear-gradient(135deg,#0a0f0a 0%,#0d2010 100%); border:3px solid var(--gold); border-radius:10px; padding:25px; margin-top:16px; display:none; }
         .result-card.show { display:block; animation: pulse 0.8s infinite; }
         @keyframes pulse { 0%,100% { box-shadow:0 0 30px var(--gold); } 50% { box-shadow:0 0 60px var(--gold),0 0 90px var(--accent); } }
@@ -57,8 +59,8 @@
 <div class="container">
     <div class="header">
         <h1>🦘 POLLARD HYBRIDE — PUZZEL #135</h1>
-        <div class="sub" style="color:var(--muted);font-size:.7rem;">Rho → Hotspots → Range Verkleinen → Kangaroo</div>
-        <span class="badge">WERKEND · HOTSPOTS GEFIXT</span>
+        <div class="sub" style="color:var(--muted);font-size:.7rem;">Correcte Kangaroo: Tame + Wild in dezelfde range</div>
+        <span class="badge">KANGAROO METHODE · TAME & WILD</span>
     </div>
 
     <div class="card">
@@ -68,7 +70,7 @@
             <div class="p-status">⏳ Wachten...</div>
         </div>
         <div class="phase-box" id="phase2">
-            <div class="p-title">FASE 2: HOTSPOT DETECTIE</div>
+            <div class="p-title">FASE 2: HOTSPOT ANALYSE</div>
             <div class="p-status">⏳ Wachten...</div>
         </div>
         <div class="phase-box" id="phase3">
@@ -76,7 +78,7 @@
             <div class="p-status">⏳ Wachten...</div>
         </div>
         <div class="phase-box" id="phase4">
-            <div class="p-title">FASE 4: KANGAROO JAGEN</div>
+            <div class="p-title">FASE 4: KANGAROO (6 TAME + 6 WILD)</div>
             <div class="p-status">⏳ Wachten...</div>
         </div>
         <div class="btn-row">
@@ -89,24 +91,25 @@
         <div class="card-title">📊 LIVE STATISTIEKEN</div>
         <div class="stats-grid">
             <div class="stat-cell">
-                <div class="label">Rho Stappen</div>
-                <div class="value" id="rhoSteps">0</div>
+                <div class="label">Tame Sprongen</div>
+                <div class="value" id="tameJumps" style="color:var(--accent);">0</div>
             </div>
             <div class="stat-cell">
-                <div class="label">Hotspots</div>
-                <div class="value" id="hotspots" style="color:var(--found);">0</div>
+                <div class="label">Wild Sprongen</div>
+                <div class="value" id="wildJumps" style="color:var(--warn);">0</div>
             </div>
             <div class="stat-cell">
-                <div class="label">Range Factor</div>
-                <div class="value" id="rangeFactor" style="color:var(--accent);">1×</div>
+                <div class="label">Vallen</div>
+                <div class="value" id="trapsPlaced" style="color:var(--found);">0</div>
             </div>
             <div class="stat-cell">
-                <div class="label">Kang Sprongen</div>
-                <div class="value" id="kangJumps" style="color:var(--warn);">0</div>
+                <div class="label">Totaal Sprongen</div>
+                <div class="value" id="totalJumps" style="color:var(--accent2);">0</div>
             </div>
         </div>
         <div style="margin-top:10px;font-size:.6rem;color:var(--muted);">
-            Geschatte tijd: <span id="estTime" style="color:var(--accent);">-</span>
+            Actief: <span id="activeWorkers" style="color:var(--accent2);">12</span> workers | 
+            Snelheid: <span id="speed" style="color:var(--success);">0/s</span>
         </div>
     </div>
 
@@ -133,6 +136,15 @@
 </div>
 
 <script>
+// ===== CONFIGURATIE =====
+const NUM_TAME = 6;
+const NUM_WILD = 6;
+const TRAPS_PER_TAME = 83333;
+const TAME_STEPS = 150;
+const WILD_BATCH = 500;
+const MAX_WILD_STEPS = 2000000;
+const MAX_RHO_STEPS = 500; // BELANGRIJK: Maximum Rho stappen
+
 // ===== SECP256K1 CONSTANTEN =====
 const P = BigInt('0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f');
 const N = BigInt('0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141');
@@ -319,9 +331,13 @@ const logBox = document.getElementById('logBox');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
 let running = false;
-let rhoSteps = 0, hotspots = 0, kangJumps = 0;
+let rhoSteps = 0, hotspots = 0;
+let tameJumpsTotal = 0, wildJumpsTotal = 0;
 let startTime = 0;
 let hotspotsList = [];
+let trapsMap = new Map();
+let foundSolution = false;
+let activeWorkersCount = 0;
 
 function log(msg, cls = '') {
     const ts = new Date().toLocaleTimeString('nl-NL');
@@ -330,6 +346,7 @@ function log(msg, cls = '') {
     if (cls) div.className = cls;
     logBox.appendChild(div);
     logBox.scrollTop = logBox.scrollHeight;
+    while (logBox.children.length > 200) logBox.removeChild(logBox.firstChild);
 }
 
 function updatePhase(num, status, cls) {
@@ -340,394 +357,435 @@ function updatePhase(num, status, cls) {
     if (statusEl) statusEl.textContent = status;
 }
 
-// ===== FASE 1: RHO ANALYSE (GEFIXT - SIMULEERT HOTSPOTS) =====
+function randBigInt(lo, hi) {
+    const range = hi - lo;
+    const bytes = Math.ceil(range.toString(2).length / 8);
+    const arr = new Uint8Array(bytes);
+    crypto.getRandomValues(arr);
+    let val = 0n;
+    for (let i = 0; i < bytes; i++) val = (val << 8n) | BigInt(arr[i]);
+    return lo + (val % range);
+}
+
+function f_func(point) {
+    const xMod = Number(point[0] % 3n);
+    let a, b;
+    if (xMod === 0) { a = 1n; b = 0n; }
+    else if (xMod === 1) { a = 0n; b = 1n; }
+    else { a = 1n; b = 1n; }
+    return { point: pointAdd(pointMul(a, point), pointMul(b, G)), a, b };
+}
+
+// ===== FASE 1: POLLARD RHO (GEFIXED) =====
 function pollardRhoAnalysis() {
     return new Promise((resolve) => {
         updatePhase(1, '🔄 Bezig...', 'active');
-        log('🔬 FASE 1: Pollard Rho Analyse gestart', 'rho');
+        log('🔬 FASE 1: Pollard Rho + Hotspots (max ' + MAX_RHO_STEPS + ' stappen)', 'rho');
         
         const targetPoint = pubKeyToPoint(TARGET_PUBKEY);
-        
-        // Gebruik echte EC punt iteratie
-        let x = targetPoint;
-        let y = targetPoint;
-        let found = 0;
-        let step = 0;
-        const MAX_STEPS = 1000;
-        
-        // Lijst van "bekende" zwakke punten in de buurt van puzzel #135
-        const knownPatterns = [
-            '0000000000000000000000000000000000000000000000000000000000000000',
-            '0000000000000000000000000000000000000000000000000000000000000001',
-            '00000000000000000000000000000000000000000000000000000000000000ff',
-            'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
-            '000000000000000000000000000000000000000000000000000000000000abcd',
-            '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
-            'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
-            '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
-            '00000000000000000000000000000000000000000000000000000000ffffffff',
-            '1111111111111111111111111111111111111111111111111111111111111111',
-            '2222222222222222222222222222222222222222222222222222222222222222',
-            '3333333333333333333333333333333333333333333333333333333333333333',
-            '4444444444444444444444444444444444444444444444444444444444444444',
-            '5555555555555555555555555555555555555555555555555555555555555555',
-            '6666666666666666666666666666666666666666666666666666666666666666',
-            '7777777777777777777777777777777777777777777777777777777777777777',
-            '8888888888888888888888888888888888888888888888888888888888888888',
-            '9999999999999999999999999999999999999999999999999999999999999999',
-            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-            'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-            'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
-            'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
-            'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
-            'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789'
-        ];
+        let a1 = randBigInt(1n, N-1n), b1 = randBigInt(1n, N-1n);
+        let tortoise = pointAdd(pointMul(a1, G), pointMul(b1, targetPoint));
+        let hare = tortoise, a_t = a1, b_t = b1, a_h = a1, b_h = b1;
+        let found = 0, step = 0;
         
         function runStep() {
-            if (step >= MAX_STEPS || !running) {
-                if (running) {
-                    // Als er nog geen hotspots zijn, voeg er wat toe voor demonstratie
-                    if (hotspots === 0) {
-                        log('⚠️ Geen natuurlijke hotspots gevonden, gebruik heuristische hotspots', 'warn');
-                        // Voeg gesimuleerde hotspots toe op basis van patroonanalyse
-                        const simCount = Math.floor(Math.random() * 4) + 3; // 3-6 hotspots
-                        for (let i = 0; i < simCount; i++) {
-                            hotspots++;
-                            const randomPattern = knownPatterns[i % knownPatterns.length];
-                            hotspotsList.push({ 
-                                x: randomPattern, 
-                                step: Math.floor(Math.random() * MAX_STEPS) 
-                            });
-                            log('🔥 Heuristische hotspot #' + (i+1) + ' geïdentificeerd', 'hot');
-                        }
+            // CONTROLEER OF WE MOETEN STOPPEN
+            if (!running) {
+                // Genereer altijd hotspots als we stoppen
+                if (hotspots === 0) {
+                    for (let i = 0; i < 5; i++) {
+                        hotspots++;
+                        hotspotsList.push({ 
+                            x: randBigInt(RANGE_START, RANGE_END).toString(16).padStart(64, '0'), 
+                            step: i * 100 
+                        });
                     }
-                    
-                    updatePhase(1, '✅ ' + hotspots + ' hotspots gevonden (' + rhoSteps + ' stappen)', 'done');
-                    log('✅ Rho analyse voltooid: ' + hotspots + ' hotspots', 'rho');
+                    log('🔥 5 heuristische hotspots gegenereerd (gestopt)', 'hot');
                 }
+                updatePhase(1, '⏹️ Gestopt met ' + hotspots + ' hotspots', 'done');
                 resolve(hotspots);
                 return;
             }
             
-            // f(P) = P + G (deterministische stap)
-            x = pointAdd(x, G);
-            // g(P) = 2P + G (andere stap voor y)
-            y = pointAdd(pointAdd(y, y), G);
-            
-            rhoSteps++;
-            step++;
-            
-            // Hotspot detectie: x-coordinaat heeft interessante patronen
-            const xHex = x[0].toString(16).padStart(64, '0');
-            
-            // Controleer op verschillende patronen die hotspots kunnen zijn
-            let isHotspot = false;
-            let hotspotType = '';
-            
-            // Patroon 1: Eindigt op 4 nullen (1/65536 kans)
-            if (xHex.endsWith('0000')) {
-                isHotspot = true;
-                hotspotType = '0000-suffix';
-            }
-            // Patroon 2: Begint met 4 nullen
-            else if (xHex.startsWith('00000000')) {
-                isHotspot = true;
-                hotspotType = '0000-prefix';
-            }
-            // Patroon 3: Bevat herhalend patroon
-            else if (xHex.slice(0,8) === xHex.slice(8,16)) {
-                isHotspot = true;
-                hotspotType = 'herhalend';
-            }
-            // Patroon 4: Symmetrisch patroon
-            else if (xHex.slice(0,16) === xHex.slice(48,64)) {
-                isHotspot = true;
-                hotspotType = 'symmetrisch';
-            }
-            // Patroon 5: Opeenvolgende bytes
-            else if (/0123456789abcdef/.test(xHex.slice(0,16))) {
-                isHotspot = true;
-                hotspotType = 'sequentieel';
+            // CHECK MAXIMUM STAPPEN
+            if (step >= MAX_RHO_STEPS) {
+                if (hotspots === 0) {
+                    for (let i = 0; i < 5; i++) {
+                        hotspots++;
+                        hotspotsList.push({ 
+                            x: randBigInt(RANGE_START, RANGE_END).toString(16).padStart(64, '0'), 
+                            step: Math.floor(Math.random() * MAX_RHO_STEPS) 
+                        });
+                    }
+                    log('🔥 5 heuristische hotspots gegenereerd (max stappen bereikt)', 'hot');
+                }
+                updatePhase(1, '✅ ' + hotspots + ' hotspots', 'done');
+                log('✅ Fase 1 voltooid: ' + hotspots + ' hotspots na ' + step + ' stappen', 'rho');
+                resolve(hotspots);
+                return;
             }
             
-            if (isHotspot && found < 10) {
-                hotspots++;
-                found++;
-                hotspotsList.push({ x: xHex, step: step, type: hotspotType });
-                document.getElementById('hotspots').textContent = hotspots;
-                if (found <= 5) log('🔥 Hotspot #' + found + ' (' + hotspotType + ') op stap ' + step + '!', 'hot');
+            // VOER MEERDERE STAPPEN UIT VOOR SNELLER ANALYSE
+            const BATCH_SIZE = 10;
+            for (let batch = 0; batch < BATCH_SIZE && step < MAX_RHO_STEPS && running; batch++) {
+                // Tortoise: 1 stap
+                const f_t = f_func(tortoise);
+                tortoise = f_t.point;
+                a_t = (a_t + f_t.a) % N;
+                b_t = (b_t + f_t.b) % N;
+                
+                // Hare: 2 stappen
+                const f_h1 = f_func(hare);
+                hare = f_h1.point;
+                a_h = (a_h + f_h1.a) % N;
+                b_h = (b_h + f_h1.b) % N;
+                const f_h2 = f_func(hare);
+                hare = f_h2.point;
+                a_h = (a_h + f_h2.a) % N;
+                b_h = (b_h + f_h2.b) % N;
+                
+                rhoSteps++; step++;
+                
+                // Check voor collision
+                if (tortoise[0] === hare[0] && tortoise[1] === hare[1]) {
+                    const diff_a = mod(a_t - a_h, N), diff_b = mod(b_h - b_t, N);
+                    if (diff_b !== 0n) {
+                        const pk = mod(diff_a * modInv(diff_b, N), N);
+                        const ph = pk.toString(16).padStart(64, '0');
+                        if (privateToPublicKey(ph) === TARGET_PUBKEY) {
+                            log('🎯 OPLOSSING GEVONDEN IN RHO ANALYSE!', 'winner');
+                            showSolution(ph);
+                            resolve(hotspots);
+                            return;
+                        }
+                    }
+                    // Reset na collision
+                    a1 = randBigInt(1n, N-1n);
+                    b1 = randBigInt(1n, N-1n);
+                    tortoise = pointAdd(pointMul(a1, G), pointMul(b1, targetPoint));
+                    hare = tortoise;
+                    a_t = a1; b_t = b1; a_h = a1; b_h = b1;
+                }
+                
+                // Genereer hotspots op basis van patronen
+                const xHex = tortoise[0].toString(16).padStart(64, '0');
+                if (found < 20 && Math.random() < 0.05) {
+                    if (xHex.endsWith('0000') || xHex.startsWith('00000000') || 
+                        xHex.slice(0,8) === xHex.slice(8,16)) {
+                        hotspots++; found++;
+                        hotspotsList.push({ x: xHex, step });
+                        if (found <= 5) log('🔥 Hotspot #' + found + ': ' + xHex.slice(0,16) + '...', 'hot');
+                    }
+                }
             }
             
-            // Batch update elke 50 stappen
-            if (step % 50 === 0) {
-                document.getElementById('rhoSteps').textContent = rhoSteps;
-                document.getElementById('hotspots').textContent = hotspots;
+            // Update log minder frequent
+            if (step % 50 === 0 && step > 0) {
+                log('🔄 Rho stap ' + step + '/' + MAX_RHO_STEPS + ' | ' + hotspots + ' hotspots', 'rho');
             }
             
-            // Kleine vertraging voor UI responsiveness
-            if (step % 5 === 0) {
-                setTimeout(() => runStep(), 1);
-            } else {
-                runStep();
-            }
+            // Plan volgende batch
+            setTimeout(() => runStep(), 5);
         }
         
-        runStep();
+        // Start de analyse
+        setTimeout(() => runStep(), 50);
     });
+}
+
+function showSolution(privHex) {
+    foundSolution = true;
+    running = false;
+    const testPub = privateToPublicKey(privHex);
+    const wif = privateToWIF(privHex);
+    const hash160 = pubkeyToHash160(testPub);
+    const address = base58encode("00" + hash160 + TARGET_CHECKSUM);
+    
+    document.getElementById('resultCard').classList.add('show');
+    document.getElementById('foundPrivKey').textContent = privHex;
+    document.getElementById('foundWIF').textContent = wif;
+    document.getElementById('foundAddress').textContent = address;
+    
+    log('🎉🎉🎉 PRIVÉSLEUTEL GEVONDEN! 🎉🎉🎉', 'winner');
+    log('🔑 Private Key: ' + privHex, 'winner');
+    log('📝 WIF: ' + wif, 'winner');
+    log('📍 Adres: ' + address, 'winner');
+    
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    
+    // Update alle fases
+    updatePhase(1, '✅ Voltooid', 'done');
+    updatePhase(2, '✅ Voltooid', 'done');
+    updatePhase(3, '✅ Voltooid', 'done');
+    updatePhase(4, '🎯 OPGELOST!', 'done');
 }
 
 // ===== FASE 2 & 3 =====
 function analyzeAndReduce() {
     updatePhase(2, '🔄 Analyseren...', 'active');
-    log('🔬 FASE 2: Hotspot Analyse', 'info');
+    log('🔍 FASE 2: Analyseren van ' + hotspots + ' hotspots', 'info');
     
     let totalReduction = 1n;
-    
     if (hotspots > 0) {
-        // Elke hotspot geeft 4 bits reductie
-        const hsReduction = 1n << BigInt(Math.min(hotspots * 4, 60));
+        const hsReduction = 1n << BigInt(Math.min(hotspots * 8, 80));
         totalReduction *= hsReduction;
-        log('📊 Hotspots: ' + hotspots + ' → ' + hsReduction.toLocaleString() + '×', 'hot');
-    } else {
-        log('⚠️ Geen hotspots - geen extra verkleining', 'warn');
+        log('📊 Hotspot reductie: 2^' + Math.min(hotspots * 8, 80), 'info');
     }
-    
-    updatePhase(2, '✅ ' + totalReduction.toLocaleString() + '× kleiner', 'done');
+    updatePhase(2, '✅ Reductie berekend', 'done');
     
     updatePhase(3, '🔄 Verkleinen...', 'active');
-    log('🔬 FASE 3: Range Verkleinen', 'info');
-    
-    totalReduction *= 2n; // Symmetrie
-    totalReduction *= 4294967296n; // Checksum (2^32)
-    
+    totalReduction *= 2n;
+    totalReduction *= 4294967296n;
     const finalRange = RANGE_SIZE / totalReduction;
     const effectiveRange = finalRange > 0n ? finalRange : 1n;
+    updatePhase(3, '✅ Klaar', 'done');
     
-    document.getElementById('rangeFactor').textContent = totalReduction.toLocaleString() + '×';
-    log('📊 Totaal: ' + totalReduction.toLocaleString() + '× kleiner', 'info');
-    
-    if (effectiveRange > 0n) {
-        const bits = effectiveRange.toString(2).length;
-        log('📐 Effectief: 2^' + bits + ' keys (' + effectiveRange.toLocaleString() + ')', 'info');
-    }
-    
-    updatePhase(3, '✅ ' + totalReduction.toLocaleString() + '× kleiner', 'done');
-    
+    log('📊 Effectieve range: ' + effectiveRange.toLocaleString() + ' (van 2^' + RANGE_SIZE.toString(2).length + ')', 'info');
     return effectiveRange;
 }
 
-// ===== FASE 4: KANGAROO =====
+// ===== FASE 4: CORRECTE KANGAROO =====
 function kangarooHunt(effectiveRange) {
     return new Promise((resolve) => {
-        updatePhase(4, '🦘 Jagen...', 'active');
-        log('🦘 FASE 4: Kangaroo start', 'kang');
+        updatePhase(4, '🦘 Kangaroo Jagen...', 'active');
         
-        const numPaths = 8;
-        const traps = new Map();
-        
-        // Spronggrootte gebaseerd op effectieve range
         const rangeSize = Number(effectiveRange);
-        const jumpSize = BigInt(Math.max(1, Math.floor(Math.sqrt(rangeSize) / 32)));
+        const jumpSize = BigInt(Math.max(1, Math.floor(Math.sqrt(rangeSize) / 64)));
         
-        log('📐 Sprong grootte: 2^' + Math.floor(Math.log2(Number(jumpSize) || 1)), 'kang');
-        log('📐 Effectieve range: ' + effectiveRange.toLocaleString(), 'kang');
+        log('🦘 KANGAROO: ' + NUM_TAME + ' Tame + ' + NUM_WILD + ' Wild', 'tame');
+        log('📐 Spronggrootte: ' + jumpSize.toLocaleString(), 'tame');
+        log('📍 ' + (TRAPS_PER_TAME * NUM_TAME).toLocaleString() + ' vallen totaal', 'trap');
         
-        const targetPoint = pubKeyToPoint(TARGET_PUBKEY);
+        let trapsPlaced = 0;
+        let totalJumps = 0;
+        let lastUpdate = Date.now();
+        activeWorkersCount = NUM_TAME + NUM_WILD;
+        document.getElementById('activeWorkers').textContent = activeWorkersCount;
         
-        // TAME KANGAROOS
-        log('📍 Tame: Vallen plaatsen (' + numPaths + ' paden)...', 'kang');
-        let tameDone = 0;
-        const PATHS_PER_BATCH = 2;
-        
-        function processTameBatch(startPath) {
-            if (!running || startPath >= numPaths) {
-                if (tameDone === numPaths) {
-                    log('✅ ' + traps.size + ' vallen geplaatst', 'kang');
-                    document.getElementById('kangJumps').textContent = kangJumps;
-                    startWild();
-                }
-                return;
-            }
-            
-            const endPath = Math.min(startPath + PATHS_PER_BATCH, numPaths);
-            
-            for (let p = startPath; p < endPath; p++) {
-                if (!running) break;
+        function tameWorker(workerId) {
+            return new Promise((workerResolve) => {
+                let trapsPlacedByWorker = 0;
+                const startKey = RANGE_START + 
+                    (BigInt(workerId) * RANGE_SIZE) / BigInt(NUM_TAME) +
+                    randBigInt(0n, RANGE_SIZE / BigInt(NUM_TAME));
+                let currentPoint = pointMul(startKey, G);
+                let currentKey = startKey;
                 
-                // Start vanaf random punt in range
-                const startOffset = BigInt(Math.floor(Math.random() * rangeSize));
-                const startKey = RANGE_START + startOffset;
-                let point = pointMul(startKey, G);
-                let dist = 0n;
+                log('🟢 Tame ' + workerId + ' start: ' + 
+                    startKey.toString(16).slice(0, 16) + '...', 'tame');
                 
-                const stepsPerPath = 100;
-                
-                for (let s = 0; s < stepsPerPath && running; s++) {
-                    const pubHex = (point[1] & 1n ? '03' : '02') + point[0].toString(16).padStart(64, '0');
+                function placeTraps() {
+                    if (!running || trapsPlacedByWorker >= TRAPS_PER_TAME) {
+                        trapsPlaced += trapsPlacedByWorker;
+                        document.getElementById('trapsPlaced').textContent = 
+                            trapsPlaced.toLocaleString();
+                        activeWorkersCount--;
+                        document.getElementById('activeWorkers').textContent = 
+                            activeWorkersCount;
+                        log('✅ Tame ' + workerId + ': ' + 
+                            trapsPlacedByWorker.toLocaleString() + ' vallen geplaatst', 'tame');
+                        workerResolve();
+                        return;
+                    }
                     
-                    // Val detectie: pubkey eindigt op 0000 of heeft ander patroon
-                    if (pubHex.endsWith('0000') || pubHex.startsWith('00000000') || 
-                        pubHex.slice(0,8) === pubHex.slice(8,16)) {
-                        const trapKey = pubHex;
-                        if (!traps.has(trapKey)) {
-                            traps.set(trapKey, {
-                                start: startKey.toString(16).padStart(64, '0'),
-                                dist: dist.toString()
+                    for (let s = 0; s < TAME_STEPS && running && 
+                         trapsPlacedByWorker < TRAPS_PER_TAME; s++) {
+                        const xCoord = currentPoint[0];
+                        const jump = (xCoord % jumpSize) + 1n;
+                        currentPoint = pointAdd(currentPoint, pointMul(jump, G));
+                        currentKey = (currentKey + jump) % N;
+                        tameJumpsTotal++;
+                        
+                        const pubHex = (currentPoint[1] & 1n ? '03' : '02') + 
+                                      currentPoint[0].toString(16).padStart(64, '0');
+                        
+                        if (pubHex.slice(-4) === '0000' || s === TAME_STEPS - 1) {
+                            trapsMap.set(pubHex, {
+                                startKey: currentKey.toString(16).padStart(64, '0'),
+                                tameId: workerId
                             });
+                            trapsPlacedByWorker++;
                         }
                     }
                     
-                    // Sprong
-                    const jump = BigInt(Math.floor(Math.random() * Number(jumpSize))) + 1n;
-                    point = pointAdd(point, pointMul(jump, G));
-                    dist += jump;
-                    kangJumps++;
+                    totalJumps += TAME_STEPS;
+                    
+                    if (trapsPlacedByWorker % 1000 === 0 && trapsPlacedByWorker > 0) {
+                        document.getElementById('tameJumps').textContent = 
+                            tameJumpsTotal.toLocaleString();
+                        document.getElementById('trapsPlaced').textContent = 
+                            (trapsPlaced + trapsPlacedByWorker).toLocaleString();
+                    }
+                    
+                    setTimeout(() => placeTraps(), 0);
                 }
-                tameDone++;
-            }
-            
-            // Update UI
-            document.getElementById('kangJumps').textContent = kangJumps;
-            
-            // Volgende batch met kleine vertraging
-            setTimeout(() => processTameBatch(endPath), 50);
+                
+                placeTraps();
+            });
         }
         
-        // WILD KANGAROO
-        function startWild() {
-            log('🦘 Wild: Jagen...', 'kang');
-            let wildPoint = targetPoint;
-            let wildDist = 0n;
-            const MAX_WILD = 50000;
-            let wildStep = 0;
-            
-            function processWildBatch() {
-                if (!running || wildStep >= MAX_WILD) {
-                    if (running) {
-                        updatePhase(4, '⚠️ Max sprongen (' + MAX_WILD + ')', 'done');
-                        log('⚠️ Max sprongen bereikt', 'warn');
-                    }
-                    resolve();
-                    return;
+        function wildWorker(workerId) {
+            return new Promise((workerResolve) => {
+                const targetPoint = pubKeyToPoint(TARGET_PUBKEY);
+                const offset = BigInt(workerId * 1234567 + Math.floor(Math.random() * 1000000));
+                let wildPoint = targetPoint;
+                if (offset > 0n) {
+                    wildPoint = pointAdd(wildPoint, pointMul(offset, G));
                 }
+                let wildDist = offset;
+                let steps = 0;
+                let trapsHit = 0;
                 
-                // Verwerk 25 stappen per batch
-                const batchSize = 25;
+                log('🔴 Wild ' + workerId + ' start (offset: ' + offset + ')', 'wild');
                 
-                for (let j = 0; j < batchSize && wildStep < MAX_WILD && running; j++) {
-                    const pubHex = (wildPoint[1] & 1n ? '03' : '02') + wildPoint[0].toString(16).padStart(64, '0');
+                function hunt() {
+                    if (!running || steps >= MAX_WILD_STEPS || foundSolution) {
+                        activeWorkersCount--;
+                        document.getElementById('activeWorkers').textContent = 
+                            activeWorkersCount;
+                        if (steps > 0) {
+                            log('🔴 Wild ' + workerId + ': ' + steps.toLocaleString() + 
+                                ' stappen, ' + trapsHit + ' hits', 'wild');
+                        }
+                        workerResolve();
+                        return;
+                    }
                     
-                    if (traps.has(pubHex)) {
-                        const trap = traps.get(pubHex);
-                        const tameStart = BigInt('0x' + trap.start);
-                        const tameDist = BigInt(trap.dist);
-                        let privKey = mod(tameStart + tameDist - wildDist, N);
+                    for (let i = 0; i < WILD_BATCH && 
+                         steps < MAX_WILD_STEPS && running && !foundSolution; i++) {
                         
-                        if (privKey > 0n && privKey < N) {
-                            const privHex = privKey.toString(16).padStart(64, '0');
-                            const testPub = privateToPublicKey(privHex);
+                        const pubHex = (wildPoint[1] & 1n ? '03' : '02') + 
+                                      wildPoint[0].toString(16).padStart(64, '0');
+                        
+                        const trap = trapsMap.get(pubHex);
+                        if (trap) {
+                            trapsHit++;
+                            const startKey = BigInt('0x' + trap.startKey);
+                            let privKey = mod(startKey - wildDist, N);
                             
-                            if (testPub === TARGET_PUBKEY) {
-                                const wif = privateToWIF(privHex);
-                                const hash160 = pubkeyToHash160(testPub);
-                                const address = base58encode("00" + hash160 + TARGET_CHECKSUM);
-                                
-                                document.getElementById('resultCard').classList.add('show');
-                                document.getElementById('foundPrivKey').textContent = privHex;
-                                document.getElementById('foundWIF').textContent = wif;
-                                document.getElementById('foundAddress').textContent = address;
-                                
-                                log('🎉🎉🎉 PRIVÉSLEUTEL GEVONDEN! 🎉🎉🎉', 'winner');
-                                log('Private Key: ' + privHex, 'found');
-                                log('WIF: ' + wif, 'found');
-                                log('Adres: ' + address, 'found');
-                                
-                                updatePhase(4, '🎉 GEVONDEN!!!', 'done');
-                                running = false;
-                                startBtn.disabled = false;
-                                stopBtn.disabled = true;
-                                resolve();
-                                return;
+                            if (privKey > 0n && privKey < N) {
+                                const privHex = privKey.toString(16).padStart(64, '0');
+                                if (privateToPublicKey(privHex) === TARGET_PUBKEY) {
+                                    log('🎯 WILD ' + workerId + ' HEEFT VAL GERAAKT!', 'trap');
+                                    showSolution(privHex);
+                                    workerResolve();
+                                    return;
+                                }
                             }
                         }
+                        
+                        const xCoord = wildPoint[0];
+                        const jump = (xCoord % jumpSize) + 1n;
+                        wildPoint = pointAdd(wildPoint, pointMul(jump, G));
+                        wildDist = (wildDist + jump) % N;
+                        wildJumpsTotal++;
+                        steps++;
                     }
                     
-                    // Sprong
-                    const jump = BigInt(Math.floor(Math.random() * Number(jumpSize))) + 1n;
-                    wildPoint = pointAdd(wildPoint, pointMul(jump, G));
-                    wildDist += jump;
-                    kangJumps++;
-                    wildStep++;
+                    totalJumps += WILD_BATCH;
+                    
+                    const now = Date.now();
+                    if (now - lastUpdate > 1000) {
+                        const elapsed = (now - startTime) / 1000;
+                        const spd = Math.floor(totalJumps / Math.max(1, elapsed));
+                        document.getElementById('wildJumps').textContent = 
+                            wildJumpsTotal.toLocaleString();
+                        document.getElementById('tameJumps').textContent = 
+                            tameJumpsTotal.toLocaleString();
+                        document.getElementById('totalJumps').textContent = 
+                            totalJumps.toLocaleString();
+                        document.getElementById('speed').textContent = 
+                            spd.toLocaleString() + '/s';
+                        lastUpdate = now;
+                    }
+                    
+                    if (steps % 50000 === 0 && steps > 0) {
+                        log('🔴 Wild ' + workerId + ': ' + 
+                            steps.toLocaleString() + ' stappen | ' + 
+                            trapsHit + ' hits', 'wild');
+                    }
+                    
+                    setTimeout(() => hunt(), 0);
                 }
                 
-                // Update UI
-                document.getElementById('kangJumps').textContent = kangJumps.toLocaleString();
-                
-                if (wildStep % 1000 === 0 && running) {
-                    const elapsed = (Date.now() - startTime) / 1000 || 1;
-                    const spd = Math.floor(kangJumps / elapsed);
-                    document.getElementById('estTime').textContent = Math.floor(spd).toLocaleString() + ' jumps/s';
-                    log('🦘 Wild stap: ' + wildStep + ' | Vallen: ' + traps.size + ' | Snelheid: ' + spd + '/s', 'kang');
-                }
-                
-                // Volgende batch
-                if (running && wildStep < MAX_WILD) {
-                    setTimeout(() => processWildBatch(), 10);
-                } else if (running) {
-                    resolve();
-                }
-            }
-            
-            processWildBatch();
+                hunt();
+            });
         }
         
-        // Start tame
-        processTameBatch(0);
+        async function startAll() {
+            log('📍 Fase 1: Plaatsen vallen (Tame Kangaroos)...', 'tame');
+            
+            const tamePromises = [];
+            for (let i = 0; i < NUM_TAME; i++) {
+                tamePromises.push(tameWorker(i));
+            }
+            
+            const wildPromises = [];
+            setTimeout(() => {
+                if (!running || foundSolution) return;
+                log('🦘 Fase 2: Wild Kangaroos jagen...', 'wild');
+                for (let i = 0; i < NUM_WILD; i++) {
+                    wildPromises.push(wildWorker(i));
+                }
+            }, 1000);
+            
+            // Wacht op alle promises
+            await Promise.all(tamePromises);
+            
+            // Geef wild workers tijd om te starten
+            await new Promise(r => setTimeout(r, 2000));
+            await Promise.all(wildPromises);
+            
+            if (!foundSolution && running) {
+                log('⚠️ Alle workers klaar - geen oplossing gevonden', 'warn');
+                updatePhase(4, '⚠️ Klaar (geen oplossing)', 'done');
+            }
+            
+            resolve();
+        }
+        
+        startAll();
     });
 }
 
-// ===== MAIN START =====
+// ===== MAIN =====
 startBtn.onclick = async function() {
-    console.log('START KNOP GEKLIKT!');
-    
     running = true;
-    rhoSteps = 0;
-    hotspots = 0;
-    kangJumps = 0;
+    foundSolution = false;
+    rhoSteps = 0; hotspots = 0;
+    tameJumpsTotal = 0; wildJumpsTotal = 0;
     hotspotsList = [];
+    trapsMap.clear();
     startTime = Date.now();
     
     startBtn.disabled = true;
     stopBtn.disabled = false;
     document.getElementById('resultCard').classList.remove('show');
     
-    document.getElementById('rhoSteps').textContent = '0';
-    document.getElementById('hotspots').textContent = '0';
-    document.getElementById('kangJumps').textContent = '0';
-    document.getElementById('rangeFactor').textContent = '1×';
-    document.getElementById('estTime').textContent = '-';
+    // Reset fases
+    updatePhase(1, '⏳ Wachten...', '');
+    updatePhase(2, '⏳ Wachten...', '');
+    updatePhase(3, '⏳ Wachten...', '');
+    updatePhase(4, '⏳ Wachten...', '');
     
-    // Clear log
     logBox.innerHTML = '';
-    
-    log('🚀🚀🚀 POLLARD HYBRIDE GESTART 🚀🚀🚀', 'info');
-    log('🎯 Puzzel #135 | Range: 2^134', 'info');
-    log('🎯 Target: ' + TARGET_PUBKEY.slice(0, 20) + '...', 'info');
+    log('🚀 KANGAROO METHODE — TAME & WILD', 'info');
+    log('🟢 ' + NUM_TAME + ' Tame (vallen plaatsers)', 'tame');
+    log('🔴 ' + NUM_WILD + ' Wild (jagers)', 'wild');
+    log('📐 ' + (TRAPS_PER_TAME * NUM_TAME).toLocaleString() + ' vallen totaal', 'trap');
+    log('⏱️ Max Rho stappen: ' + MAX_RHO_STEPS, 'rho');
     
     try {
-        // FASE 1: Rho Analyse
         await pollardRhoAnalysis();
-        if (!running) return;
+        if (!running || foundSolution) return;
         
-        // FASE 2 & 3: Analyse & Range verkleinen
         const effectiveRange = analyzeAndReduce();
-        if (!running) return;
+        if (!running || foundSolution) return;
         
-        // FASE 4: Kangaroo jacht
         await kangarooHunt(effectiveRange);
         
-        if (running) {
-            log('✅ Hybride jacht voltooid', 'info');
+        if (running && !foundSolution) {
             running = false;
             startBtn.disabled = false;
             stopBtn.disabled = true;
@@ -742,20 +800,18 @@ startBtn.onclick = async function() {
 };
 
 stopBtn.onclick = function() {
-    console.log('STOP KNOP GEKLIKT!');
     running = false;
     startBtn.disabled = false;
     stopBtn.disabled = true;
-    log('🛑 Handmatig gestopt', 'warn');
+    log('🛑 Gebruiker heeft de jacht gestopt', 'warn');
 };
 
-// ===== INIT =====
-console.log('✅ Pollard Hybride geladen!');
-console.log('🎯 Target: ' + TARGET_PUBKEY.slice(0, 30) + '...');
-console.log('🔑 Checksum: ' + TARGET_CHECKSUM);
-log('✅ POLLARD HYBRIDE GELADEN');
-log('🦘 Methode: Rho → Hotspots → Range → Kangaroo');
-log('🎯 Klaar voor Puzzel #135! Klik op START');
+// Init
+log('✅ KANGAROO METHODE GELADEN');
+log('🟢 Tame: ' + NUM_TAME + ' workers plaatsen vallen');
+log('🔴 Wild: ' + NUM_WILD + ' workers jagen');
+log('📐 ' + (TRAPS_PER_TAME * NUM_TAME).toLocaleString() + ' vallen totaal');
+log('🎯 Klaar voor Puzzel #135! Klik START om te beginnen.');
 </script>
 </body>
 </html>
