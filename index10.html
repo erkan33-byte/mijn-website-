@@ -312,7 +312,7 @@ startBtn.onclick=async()=>{
     document.getElementById('progressBar').style.width='0%';
     document.getElementById('matchTable').innerHTML='<tr class="empty-row"><td colspan="3">Bezig met zoeken...</td></tr>';
     setRunning(true);
-    log('🚀 Hybride Kangaroo gestart (MITM + Kangaroo)');
+    log('🚀 Hybride Kangaroo gestart (MITM + Kangaroo + Range Reduction)');
     await runMITM();
 };
 
@@ -407,7 +407,7 @@ async function runMITM(){
         document.getElementById('progressBar').style.width='70%';
     }
 
-    // FASE 3: Echte Kangaroo
+    // FASE 3: Kangaroo (normaal)
     mitmPhase=3; setStatus('Kangaroo zoeken','running');
     log(`🦘 Fase 3: Kangaroo algoritme (Pollard's Kangaroo)`);
     document.getElementById('progressBar').style.width='80%';
@@ -419,6 +419,16 @@ async function runMITM(){
     
     kangarooLoopActive=true;
     await runKangarooPhase(targetPubHex, mitmHighTraps, mitmLowTraps, numW);
+
+    // FASE 4: Range Reduction (nieuw!)
+    if(isRunning && !kangarooLoopActive){
+        // Als Kangaroo geen match vond, verkleinen we de range
+        mitmPhase=4; setStatus('Range Reduction','running');
+        log('🔽 Fase 4: Range Reduction - Verkleinen van zoekrange');
+        document.getElementById('progressBar').style.width='90%';
+        
+        await runRangeReduction(targetPubHex, numW);
+    }
 }
 
 // === TAME FASE ===
@@ -561,6 +571,31 @@ async function runKangarooPhase(targetPubHex, highTraps, lowTraps, numW){
     }
 }
 
+// === RANGE REDUCTION FASE ===
+async function runRangeReduction(targetPubHex, numW){
+    if(!isRunning) return;
+    
+    const rangeStart=BigInt("0x"+document.getElementById('rangeStart').value.trim());
+    const rangeEnd=BigInt("0x"+document.getElementById('rangeEnd').value.trim());
+    const W=rangeEnd-rangeStart;
+    
+    // Verklein de range met 50%
+    const newRangeEnd = rangeStart + (W / 2n);
+    document.getElementById('rangeEnd').value = newRangeEnd.toString(16).padStart(64,'0');
+    
+    log(`📉 Range verkleind tot: ${document.getElementById('rangeStart').value} - ${document.getElementById('rangeEnd').value}`);
+    document.getElementById('progressBar').style.width='10%';
+    
+    // Reset traps en herstart MITM + Kangaroo
+    mitmHighTraps={};
+    mitmLowTraps={};
+    totalJumps=0;
+    kangarooLoopActive=false;
+    
+    log('🔄 Herstarten met verkleinde range...');
+    await runMITM();
+}
+
 // === FOUND HANDLER ===
 async function foundPrivateKey(privHex){
     kangarooLoopActive=false;
@@ -589,7 +624,7 @@ if(savedData){
     document.getElementById('saveStatus').textContent='Beschikbaar';
 }
 
-log('🦘 Kangaroo √N geladen - klaar voor MITM + Kangaroo');
+log('🦘 Kangaroo √N geladen - klaar voor MITM + Kangaroo + Range Reduction');
 </script>
 </body>
 </html>
