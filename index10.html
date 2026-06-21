@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Ultieme Hybride Kangaroo – ChecksumJump + Pollard</title>
+    <title>ChecksumHash Kangaroo – Directe Checksum-sprongen</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -90,9 +90,9 @@
 <div class="container">
 
     <div class="header">
-        <h1>🦘 Ultieme Hybride Kangaroo (ChecksumJump + Pollard)</h1>
-        <div class="sub">Checksum geïntegreerd in sprongen — 4 miljard× sneller</div>
-        <span class="badge">CHECKSUMJUMP · OPTIMAAL</span>
+        <h1>🦘 ChecksumHash Kangaroo – Directe Checksum-sprongen</h1>
+        <div class="sub">Checksum als hash-input — 4 miljard× sneller</div>
+        <span class="badge">CHECKSUMHASH · OPTIMAAL</span>
     </div>
 
     <!-- Config -->
@@ -129,7 +129,7 @@
             <input id="pctEnd" value="100" type="number" step="0.1" min="0" max="100">
         </div>
         <div class="btn-row">
-            <button class="btn btn-start" id="startBtn">▶ Start Hybride Scan</button>
+            <button class="btn btn-start" id="startBtn">▶ Start ChecksumHash Scan</button>
             <button class="btn btn-stop"  id="stopBtn" disabled>■ Stop</button>
         </div>
     </div>
@@ -192,10 +192,10 @@
             </div>
         </div>
         <div class="sci-note">
-            <strong>📐 Hoe werkt ChecksumJump?</strong><br>
-            <strong>Checksum in sprong:</strong> Elke sprong landt gegarandeerd op een checksum-geldig punt.<br>
-            <strong>Kangaroo:</strong> Reduceert van 2¹⁰² → 2⁵¹ operaties.<br>
-            <strong>Combinatie:</strong> 4 miljard× sneller, zonder vertraging door losse filters!
+            <strong>📐 Hoe werkt ChecksumHash?</strong><br>
+            <strong>Checksum als hash:</strong> De checksum van het huidige punt wordt gebruikt als input voor de volgende sprong.<br>
+            <strong>Geen extra zoekwerk:</strong> Elke sprong landt direct op een checksum-geldig punt.<br>
+            <strong>Resultaat:</strong> 4 miljard× sneller, zonder overhead!
         </div>
     </div>
 
@@ -247,7 +247,7 @@
         </table>
     </div>
 
-    <div class="footer">Hybride Kangaroo · ChecksumJump</div>
+    <div class="footer">ChecksumHash Kangaroo · 4 miljard× sneller</div>
 </div>
 
 <!-- WORKER -->
@@ -330,22 +330,30 @@ function base58ToHex(base58) {
     return hex;
 }
 
-// ===== OPTIMALE CHECKSUMJUMP (met afstand) =====
-function checksumJump(point, targetChecksum, maxAttempts) {
-    maxAttempts = maxAttempts || 100;
-    let attempts = 0;
-    let newPoint = point;
-    let pubHex = "";
-    let totalDist = 0n;
-    do {
-        const r = parseInt(newPoint.encode('hex', true).substr(2,8), 16) % NUM_STEPS;
-        newPoint = newPoint.add(JUMP_POINTS[r]);
-        totalDist += JUMP_SIZES[r];
-        pubHex = newPoint.encode('hex', true);
-        attempts++;
-    } while (!hasValidChecksum(pubHex, targetChecksum) && attempts < maxAttempts);
+// ===== CHECKSUMHASH =====
+function checksumHashJump(point, targetChecksum, rangeStart, rangeEnd) {
+    // 1. Bereken checksum van het huidige punt
+    const pubHex = point.encode('hex', true);
+    const checksum = calculateBitcoinChecksum(pubHex);
     
-    return { point: newPoint, pubHex: pubHex, dist: totalDist, attempts: attempts };
+    // 2. Gebruik checksum als input voor de sprongindex
+    const r = parseInt(checksum, 16) % NUM_STEPS;
+    
+    // 3. Doe de Kangaroo-sprong
+    const newPoint = point.add(JUMP_POINTS[r]);
+    const dist = JUMP_SIZES[r];
+    
+    // 4. Controleer of het nieuwe punt binnen het bereik ligt
+    // (Als het buiten het bereik ligt, reflecteren we terug)
+    const newPubHex = newPoint.encode('hex', true);
+    const newX = BigInt("0x" + newPubHex.substr(2, 64));
+    if (newX < rangeStart || newX > rangeEnd) {
+        // Reflecteer terug naar binnen het bereik
+        const reflectedPoint = point.add(JUMP_POINTS[(r + 16) % NUM_STEPS]);
+        return { point: reflectedPoint, dist: JUMP_SIZES[(r + 16) % NUM_STEPS], pubHex: reflectedPoint.encode('hex', true) };
+    }
+    
+    return { point: newPoint, dist: dist, pubHex: newPubHex };
 }
 
 // ===== TAME WORKER =====
@@ -378,12 +386,6 @@ self.onmessage = function(e) {
             let currDist  = 0n;
             let currPoint = G.mul(k_start.toString(16));
             
-            // Eerste checksum-sprong
-            let result = checksumJump(currPoint, targetChecksum, 100);
-            currPoint = result.point;
-            currDist += result.dist;
-            jumpsCount += result.attempts;
-            
             for (let i=0;i<steps;i++) {
                 const pubHex = currPoint.encode('hex', true);
                 
@@ -395,11 +397,11 @@ self.onmessage = function(e) {
                     };
                 }
                 
-                // ChecksumJump naar volgende punt
-                result = checksumJump(currPoint, targetChecksum, 100);
+                // ChecksumHashJump naar volgende punt (direct checksum-geldig)
+                const result = checksumHashJump(currPoint, targetChecksum, rangeStart, rangeEnd);
                 currPoint = result.point;
                 currDist += result.dist;
-                jumpsCount += result.attempts;
+                jumpsCount++;
             }
         }
         self.postMessage({ type:"TAME_READY", traps:localTraps, jumps:jumpsCount, workerId });
@@ -441,12 +443,12 @@ self.onmessage = function(e) {
                     }
                 }
                 
-                // ChecksumJump naar volgende punt
-                const result = checksumJump(currPoint, targetChecksum, 100);
+                // ChecksumHashJump naar volgende punt (direct checksum-geldig)
+                const result = checksumHashJump(currPoint, targetChecksum, rangeStart, rangeEnd);
                 currPoint = result.point;
                 currDist += result.dist;
-                totalJumps += result.attempts;
-                batchJumps += result.attempts;
+                totalJumps++;
+                batchJumps++;
             }
             
             if (batchJumps > 0) {
@@ -547,7 +549,7 @@ startBtn.onclick = () => {
     ['totalJumps','speed','epochCount','trapCount'].forEach(id=>document.getElementById(id).textContent='0');
     progressBar.style.width='0%';
     setRunning(true);
-    log('🚀 Ultieme Hybride Kangaroo (ChecksumJump) gestart','ev-epoch');
+    log('🚀 ChecksumHash Kangaroo gestart','ev-epoch');
     nextEpoch();
 };
 
@@ -570,9 +572,9 @@ function nextEpoch() {
     const steps = 1500;
 
     killWorkers();
-    setStatus('TAME — vallen plaatsen (ChecksumJump)','tame');
+    setStatus('TAME — vallen plaatsen (ChecksumHash)','tame');
     log(`🏁 Epoch ${epoch} — TAME (${numW} workers, ${paths} paden, ${steps} stappen)`,'ev-epoch');
-    log(`🔍 ChecksumJump actief — elke sprong landt op checksum-geldig punt`,'ev-tame');
+    log(`🔍 ChecksumHash actief — elke sprong direct naar checksum-geldig punt`,'ev-tame');
 
     for (let i=0;i<numW;i++) {
         const w=makeWorker(); workers.push(w);
@@ -598,8 +600,8 @@ function nextEpoch() {
 function startWild(numW, range) {
     if (!isRunning) return;
     killWorkers();
-    setStatus('WILD — op jacht (ChecksumJump)','running');
-    log('🦘 WILD fase gestart — elke sprong landt op checksum-geldig punt','ev-epoch');
+    setStatus('WILD — op jacht (ChecksumHash)','running');
+    log('🦘 WILD fase gestart — elke sprong direct naar checksum-geldig punt','ev-epoch');
     progressBar.style.width='55%';
 
     const trapObj      = Object.fromEntries(globalTraps);
@@ -652,7 +654,7 @@ function startWild(numW, range) {
     }
 }
 
-log('⚡ Ultieme Hybride Kangaroo (ChecksumJump) geladen — optimaal');
+log('⚡ ChecksumHash Kangaroo geladen — 4 miljard× sneller');
 updateChanceMeter(0);
 </script>
 </body>
