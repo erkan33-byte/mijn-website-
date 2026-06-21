@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>🦘 Pollard Hybride — Puzzel #135</title>
+    <title>🦘 Pollard Hybride — Puzzel #135 (FIXED)</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -37,9 +37,6 @@
         .log .found { color:var(--found); font-weight:bold; }
         .log .info { color:var(--accent2); }
         .log .winner { color:var(--gold); font-size:1.1rem; font-weight:bold; }
-        .log .rho { color:var(--accent2); }
-        .log .kang { color:var(--warn); }
-        .log .hot { color:var(--found); }
         .result-card { background:linear-gradient(135deg,#0a0f0a 0%,#0d2010 100%); border:3px solid var(--gold); border-radius:10px; padding:25px; margin-top:16px; display:none; }
         .result-card.show { display:block; animation: pulse 0.8s infinite; }
         @keyframes pulse { 0%,100% { box-shadow:0 0 30px var(--gold); } 50% { box-shadow:0 0 60px var(--gold),0 0 90px var(--accent); } }
@@ -57,8 +54,8 @@
 <div class="container">
     <div class="header">
         <h1>🦘 POLLARD HYBRIDE — PUZZEL #135</h1>
-        <div class="sub" style="color:var(--muted);font-size:.7rem;">Rho → Hotspots → Range Verkleinen → Kangaroo</div>
-        <span class="badge">WERKEND · START KNOP FIX</span>
+        <div class="sub" style="color:var(--muted);font-size:.7rem;">Rho + Kangaroo — GEÏNTEGREERD</div>
+        <span class="badge">FIXED: Hotspots & Vallen</span>
     </div>
 
     <div class="card">
@@ -68,15 +65,7 @@
             <div class="p-status">⏳ Wachten...</div>
         </div>
         <div class="phase-box" id="phase2">
-            <div class="p-title">FASE 2: HOTSPOT DETECTIE</div>
-            <div class="p-status">⏳ Wachten...</div>
-        </div>
-        <div class="phase-box" id="phase3">
-            <div class="p-title">FASE 3: RANGE VERKLEINEN</div>
-            <div class="p-status">⏳ Wachten...</div>
-        </div>
-        <div class="phase-box" id="phase4">
-            <div class="p-title">FASE 4: KANGAROO JAGEN</div>
+            <div class="p-title">FASE 2: KANGAROO JAGEN</div>
             <div class="p-status">⏳ Wachten...</div>
         </div>
         <div class="btn-row">
@@ -94,19 +83,20 @@
             </div>
             <div class="stat-cell">
                 <div class="label">Hotspots</div>
-                <div class="value" id="hotspots" style="color:var(--found);">0</div>
+                <div class="value" id="hotspotsVal" style="color:var(--found);">0</div>
             </div>
             <div class="stat-cell">
-                <div class="label">Range Factor</div>
-                <div class="value" id="rangeFactor" style="color:var(--accent);">1×</div>
+                <div class="label">Vallen</div>
+                <div class="value" id="trapsVal" style="color:var(--accent);">0</div>
             </div>
             <div class="stat-cell">
-                <div class="label">Kang Sprongen</div>
-                <div class="value" id="kangJumps" style="color:var(--warn);">0</div>
+                <div class="label">Sprongen</div>
+                <div class="value" id="jumpsVal" style="color:var(--warn);">0</div>
             </div>
         </div>
         <div style="margin-top:10px;font-size:.6rem;color:var(--muted);">
-            Geschatte tijd: <span id="estTime" style="color:var(--accent);">-</span>
+            Snelheid: <span id="speedVal" style="color:var(--accent);">0/s</span> | 
+            Tijd: <span id="timeVal" style="color:var(--warn);">0s</span>
         </div>
     </div>
 
@@ -133,20 +123,21 @@
 </div>
 
 <script>
-// ===== SECP256K1 CONSTANTEN =====
+console.log('=== SCRIPT START ===');
+
+// ===== SECP256K1 =====
 const P=BigInt('0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f');
 const N=BigInt('0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141');
 const Gx=BigInt('0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798');
 const Gy=BigInt('0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8');
-const G=[Gx,Gy];
 
 function mod(a,m){return((a%m)+m)%m;}
 function modInv(a,m){let[t,nt]=[0n,1n],[r,nr]=[m,mod(a,m)];while(nr!==0n){const q=r/nr;[t,nt]=[nt,t-q*nt];[r,nr]=[nr,r-q*nr];}return t<0n?t+m:t;}
+function modPow(b,e,m){let r=1n;b=b%m;while(e>0n){if(e&1n)r=(r*b)%m;b=(b*b)%m;e>>=1n;}return r;}
 function pointAdd(p1,p2){if(!p1)return p2;if(!p2)return p1;const[x1,y1]=p1,[x2,y2]=p2;if(x1===x2){if(y1!==y2)return null;const m=(3n*x1*x1)*modInv(2n*y1,P);const x3=mod(m*m-2n*x1,P);return[x3,mod(m*(x1-x3)-y1,P)];}const m=(y2-y1)*modInv(x2-x1,P);const x3=mod(m*m-x1-x2,P);return[x3,mod(m*(x1-x3)-y1,P)];}
 function pointMul(k,p){let res=null,addend=p;while(k>0n){if(k&1n)res=pointAdd(res,addend);addend=pointAdd(addend,addend);k>>=1n;}return res;}
-function privateToPublicKey(h){const k=BigInt('0x'+h);if(k>=N||k<=0n)return null;const pt=pointMul(k,G);if(!pt)return null;const[x,y]=pt;return(y&1n?'03':'02')+x.toString(16).padStart(64,'0');}
 function pubKeyToPoint(pubHex){const x=BigInt('0x'+pubHex.slice(2));const ySq=mod(x*x*x+7n,P);let y=modPow(ySq,(P+1n)/4n,P);if((pubHex[1]==='3'&&!(y&1n))||(pubHex[1]==='2'&&(y&1n)))y=P-y;return[x,y];}
-function modPow(b,e,m){let r=1n;b=b%m;while(e>0n){if(e&1n)r=(r*b)%m;b=(b*b)%m;e>>=1n;}return r;}
+function privateToPublicKey(h){const k=BigInt('0x'+h);if(k>=N||k<=0n)return null;const pt=pointMul(k,[Gx,Gy]);if(!pt)return null;const[x,y]=pt;return(y&1n?'03':'02')+x.toString(16).padStart(64,'0');}
 
 // ===== CRYPTO =====
 function sha256raw(msgBytes){function rotr(x,n){return(x>>>n)|(x<<(32-n));}const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];const bytes=[...msgBytes];const bitLen=bytes.length*8;bytes.push(0x80);while((bytes.length*8)%512!==448)bytes.push(0);for(let i=7;i>=0;i--)bytes.push(Number((BigInt(bitLen)>>BigInt(i*8))&0xFFn));const H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];for(let chunk=0;chunk<bytes.length;chunk+=64){const W=new Array(64);for(let i=0;i<16;i++)W[i]=(bytes[chunk+i*4]<<24)|(bytes[chunk+i*4+1]<<16)|(bytes[chunk+i*4+2]<<8)|bytes[chunk+i*4+3];for(let i=16;i<64;i++){const s0=rotr(W[i-15],7)^rotr(W[i-15],18)^(W[i-15]>>>3);const s1=rotr(W[i-2],17)^rotr(W[i-2],19)^(W[i-2]>>>10);W[i]=(W[i-16]+s0+W[i-7]+s1)>>>0;}let[a,b,c,d,e,f,g,h]=H;for(let i=0;i<64;i++){const S1=rotr(e,6)^rotr(e,11)^rotr(e,25);const ch=(e&f)^(~e&g);const T1=(h+S1+ch+K[i]+W[i])>>>0;const S0=rotr(a,2)^rotr(a,13)^rotr(a,22);const maj=(a&b)^(a&c)^(b&c);const T2=(S0+maj)>>>0;h=g;g=f;f=e;e=(d+T1)>>>0;d=c;c=b;b=a;a=(T1+T2)>>>0;}H[0]=(H[0]+a)>>>0;H[1]=(H[1]+b)>>>0;H[2]=(H[2]+c)>>>0;H[3]=(H[3]+d)>>>0;H[4]=(H[4]+e)>>>0;H[5]=(H[5]+f)>>>0;H[6]=(H[6]+g)>>>0;H[7]=(H[7]+h)>>>0;}return H.map(h=>h.toString(16).padStart(8,'0')).join('');}
@@ -158,21 +149,18 @@ function privateToWIF(h){const v="80"+h+"01";const s=sha256hex(v);const s2=sha25
 function pubkeyToHash160(p){return ripemd160hex(sha256hex(p));}
 function getChecksum(pub){const h=pubkeyToHash160(pub);return sha256hex(sha256hex("00"+h)).slice(0,8);}
 
-// ===== PUZZEL #135 DATA =====
+// ===== DATA =====
 const TARGET_PUBKEY='02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16';
 const TARGET_CHECKSUM=getChecksum(TARGET_PUBKEY);
 const RANGE_START=BigInt('0x4000000000000000000000000000000000');
 const RANGE_END=BigInt('0x7fffffffffffffffffffffffffffffffff');
 const RANGE_SIZE=RANGE_END-RANGE_START;
 
-// ===== GLOBALS =====
+// ===== DOM =====
 const logBox=document.getElementById('logBox');
 const startBtn=document.getElementById('startBtn');
 const stopBtn=document.getElementById('stopBtn');
-let running=false;
-let rhoSteps=0,hotspots=0,kangJumps=0;
-let startTime=0;
-let hotspotsList=[];
+let running=false,rhoSteps=0,hotspots=0,totalJumps=0,trapCount=0,startTime=0;
 
 function log(msg,cls=''){
     const ts=new Date().toLocaleTimeString('nl-NL');
@@ -180,6 +168,7 @@ function log(msg,cls=''){
     div.innerHTML=`<span class="ts">[${ts}]</span> ${msg}`;
     if(cls)div.className=cls;
     logBox.appendChild(div);logBox.scrollTop=logBox.scrollHeight;
+    console.log(`[${ts}] ${msg}`);
 }
 
 function updatePhase(num,status,cls){
@@ -190,132 +179,125 @@ function updatePhase(num,status,cls){
     if(statusEl)statusEl.textContent=status;
 }
 
-// ===== FASE 1: RHO ANALYSE =====
+// ===== FASE 1: RHO ANALYSE (GEFIXED!) =====
 function pollardRhoAnalysis(){
     return new Promise((resolve)=>{
-        updatePhase(1,'🔄 Bezig...','active');
-        log('🔬 FASE 1: Pollard Rho Analyse gestart','rho');
+        updatePhase(1,'🔄 Rho analyse bezig...','active');
+        log('🔬 FASE 1: Pollard Rho Analyse','rho');
         
         const targetX=BigInt('0x'+TARGET_PUBKEY.slice(2));
         let x=targetX;
-        let y=x;
-        let found=0;
+        let y=targetX;
+        let steps=0;
+        let foundHotspots=0;
         
-        function runStep(i){
-            if(i>=1000 || !running){
-                updatePhase(1,'✅ '+hotspots+' hotspots gevonden ('+rhoSteps+' stappen)','done');
-                log('✅ Rho analyse voltooid: '+hotspots+' hotspots','rho');
+        function step(){
+            if(steps>=2000 || !running){
+                hotspots=foundHotspots;
+                document.getElementById('hotspotsVal').textContent=hotspots;
+                document.getElementById('rhoSteps').textContent=rhoSteps;
+                updatePhase(1,'✅ '+hotspots+' hotspots ('+rhoSteps+' stappen)','done');
+                log('✅ Rho klaar: '+hotspots+' hotspots','rho');
                 resolve(hotspots);
                 return;
             }
             
+            // Rho: x = f(x), y = f(f(y))
             x=mod(x*x+7n,P);
-            y=mod(mod(y*y+7n,P)*mod(y*y+7n,P)+7n,P);
-            rhoSteps++;
-            document.getElementById('rhoSteps').textContent=rhoSteps;
+            y=mod(y*y+7n,P);
+            y=mod(y*y+7n,P);
             
-            if(x===y && i>0){
-                hotspots++;
-                found++;
-                hotspotsList.push({x:x.toString(16),step:i});
-                document.getElementById('hotspots').textContent=hotspots;
-                if(found<=5) log('🔥 Hotspot #'+found+' gevonden op stap '+i+'!','hot');
+            steps++;
+            rhoSteps++;
+            
+            // Check collision
+            if(x===y && steps>1){
+                foundHotspots++;
+                hotspots=foundHotspots;
+                document.getElementById('hotspotsVal').textContent=hotspots;
+                document.getElementById('rhoSteps').textContent=rhoSteps;
+                log('🔥 Hotspot #'+foundHotspots+' bij stap '+steps,'hot');
             }
             
-            setTimeout(()=>runStep(i+1),1);
+            if(steps%200===0){
+                document.getElementById('rhoSteps').textContent=rhoSteps;
+            }
+            
+            setTimeout(step,1);
         }
         
-        runStep(0);
+        step();
     });
 }
 
-// ===== FASE 2 & 3 =====
-function analyzeAndReduce(){
-    updatePhase(2,'🔄 Analyseren...','active');
-    log('🔬 FASE 2: Hotspot Analyse','info');
-    
-    let totalReduction=1;
-    
-    if(hotspots>0){
-        const hsReduction=Math.pow(2,Math.min(hotspots*4,60));
-        totalReduction*=hsReduction;
-        log('📊 Hotspots: '+hotspots+' → '+Math.floor(hsReduction).toLocaleString()+'×','hot');
-    } else {
-        log('⚠️ Geen hotspots - geen extra verkleining','warn');
-    }
-    
-    updatePhase(2,'✅ '+Math.floor(totalReduction).toLocaleString()+'× kleiner','done');
-    
-    updatePhase(3,'🔄 Verkleinen...','active');
-    log('🔬 FASE 3: Range Verkleinen','info');
-    
-    totalReduction*=2; // Symmetrie
-    totalReduction*=4294967296; // Checksum
-    
-    const finalRange=Math.max(2**48,Number(RANGE_SIZE)/totalReduction);
-    
-    document.getElementById('rangeFactor').textContent=Math.floor(totalReduction).toLocaleString()+'×';
-    log('📊 Totaal: '+Math.floor(totalReduction).toLocaleString()+'× kleiner','info');
-    log('📐 Effectief: 2^'+Math.floor(Math.log2(finalRange))+' keys','info');
-    
-    updatePhase(3,'✅ '+Math.floor(totalReduction).toLocaleString()+'× kleiner','done');
-    
-    return BigInt(Math.floor(finalRange));
-}
-
-// ===== FASE 4: KANGAROO =====
-function kangarooHunt(effectiveRange){
+// ===== FASE 2: KANGAROO (GEFIXED!) =====
+function kangarooHunt(){
     return new Promise((resolve)=>{
-        updatePhase(4,'🦘 Jagen...','active');
-        log('🦘 FASE 4: Kangaroo start','kang');
+        updatePhase(2,'🦘 Kangaroo jagen...','active');
+        log('🦘 FASE 2: Kangaroo start','kang');
         
-        const numPaths=4;
         const traps=new Map();
-        const jumpSize=BigInt(Math.floor(Math.sqrt(Number(effectiveRange))/32));
-        if(jumpSize<1n)jumpSize=1n;
+        const numTame=3;
+        const stepsPerTame=200;
+        const jumpBase=BigInt('0x10000000000000000000000000000000'); // 2^128
         
-        log('📐 Sprong grootte: 2^'+Math.floor(Math.log2(Number(jumpSize))),'kang');
+        let tameCompleted=0;
+        let wildRunning=false;
         
-        // TAME
-        log('📍 Tame: Vallen plaatsen...','kang');
-        let tameDone=0;
-        for(let p=0;p<numPaths;p++){
-            setTimeout(()=>{
-                if(!running)return;
-                const startKey=RANGE_START+BigInt(Math.floor(Math.random()*Number(effectiveRange)));
-                let point=pointMul(startKey,G);
-                let dist=0n;
-                
-                for(let s=0;s<300 && running;s++){
-                    const pubHex=(point[1]&1n?'03':'02')+point[0].toString(16).padStart(64,'0');
-                    if(pubHex.slice(-4)==='0000'){
-                        traps.set(pubHex,{start:startKey.toString(16).padStart(64,'0'),dist:dist.toString()});
+        // TAME: Plaats vallen
+        log('📍 Tame: '+numTame+' workers plaatsen vallen...','kang');
+        
+        for(let w=0;w<numTame;w++){
+            const startKey=RANGE_START+BigInt(Math.floor(Math.random()*Number(RANGE_SIZE/BigInt(2))));
+            let point=pointMul(startKey,[Gx,Gy]);
+            let dist=0n;
+            
+            function tameStep(s){
+                if(s>=stepsPerTame || !running){
+                    tameCompleted++;
+                    if(tameCompleted>=numTame && !wildRunning){
+                        wildRunning=true;
+                        trapCount=traps.size;
+                        document.getElementById('trapsVal').textContent=trapCount;
+                        log('✅ '+trapCount+' vallen geplaatst! Start Wild...','kang');
+                        startWild();
                     }
-                    const jump=BigInt(Math.floor(Math.random()*Number(jumpSize)))+1n;
-                    point=pointAdd(point,pointMul(jump,G));
-                    dist+=jump;
-                    kangJumps++;
+                    return;
                 }
-                tameDone++;
                 
-                if(tameDone===numPaths){
-                    log('✅ '+traps.size+' vallen geplaatst','kang');
-                    startWild();
+                const pubHex=(point[1]&1n?'03':'02')+point[0].toString(16).padStart(64,'0');
+                
+                // Distinguished point: eindigt op '000'
+                if(pubHex.slice(-3)==='000'){
+                    traps.set(pubHex,{start:startKey.toString(16).padStart(64,'0'),dist:dist.toString()});
                 }
-            },p*100);
+                
+                const jump=BigInt(Math.floor(Math.random()*Number(jumpBase/16n)))+1n;
+                point=pointAdd(point,pointMul(jump,[Gx,Gy]));
+                dist+=jump;
+                totalJumps++;
+                
+                document.getElementById('jumpsVal').textContent=totalJumps;
+                document.getElementById('trapsVal').textContent=traps.size;
+                
+                setTimeout(()=>tameStep(s+1),1);
+            }
+            
+            setTimeout(()=>tameStep(0),w*50);
         }
         
+        // WILD: Jagen
         function startWild(){
-            log('🦘 Wild: Jagen...','kang');
+            log('🦘 Wild: Jagen vanaf target...','kang');
             const targetPoint=pubKeyToPoint(TARGET_PUBKEY);
             let wildPoint=targetPoint;
             let wildDist=0n;
-            const maxWild=500000;
+            const maxWild=100000;
             
             function wildStep(j){
                 if(j>=maxWild || !running){
-                    updatePhase(4,'⚠️ Max sprongen','done');
-                    log('⚠️ Max sprongen bereikt','warn');
+                    updatePhase(2,'⚠️ Max '+maxWild.toLocaleString()+' sprongen','done');
+                    log('⚠️ Wild: max sprongen bereikt','warn');
                     resolve();
                     return;
                 }
@@ -347,7 +329,7 @@ function kangarooHunt(effectiveRange){
                             log('WIF: '+wif,'found');
                             log('Adres: '+address,'found');
                             
-                            updatePhase(4,'🎉 GEVONDEN!!!','done');
+                            updatePhase(2,'🎉 GEVONDEN!!!','done');
                             running=false;
                             startBtn.disabled=false;
                             stopBtn.disabled=true;
@@ -357,16 +339,18 @@ function kangarooHunt(effectiveRange){
                     }
                 }
                 
-                const jump=BigInt(Math.floor(Math.random()*Number(jumpSize)))+1n;
-                wildPoint=pointAdd(wildPoint,pointMul(jump,G));
+                const jump=BigInt(Math.floor(Math.random()*Number(jumpBase/32n)))+1n;
+                wildPoint=pointAdd(wildPoint,pointMul(jump,[Gx,Gy]));
                 wildDist+=jump;
-                kangJumps++;
+                totalJumps++;
                 
-                if(j%5000===0){
-                    document.getElementById('kangJumps').textContent=kangJumps.toLocaleString();
+                document.getElementById('jumpsVal').textContent=totalJumps;
+                
+                if(j%2000===0){
                     const elapsed=(Date.now()-startTime)/1000||1;
-                    const spd=Math.floor(kangJumps/elapsed);
-                    document.getElementById('estTime').textContent=Math.floor(spd).toLocaleString()+'/s';
+                    const spd=Math.floor(totalJumps/elapsed);
+                    document.getElementById('speedVal').textContent=spd.toLocaleString()+'/s';
+                    document.getElementById('timeVal').textContent=Math.floor(elapsed)+'s';
                 }
                 
                 setTimeout(()=>wildStep(j+1),1);
@@ -377,15 +361,15 @@ function kangarooHunt(effectiveRange){
     });
 }
 
-// ===== MAIN START =====
+// ===== START KNOP =====
 startBtn.onclick=async function(){
-    console.log('START KNOP GEKLIKT!');
+    console.log('START GEKLIKT!');
     
     running=true;
     rhoSteps=0;
     hotspots=0;
-    kangJumps=0;
-    hotspotsList=[];
+    totalJumps=0;
+    trapCount=0;
     startTime=Date.now();
     
     startBtn.disabled=true;
@@ -393,35 +377,25 @@ startBtn.onclick=async function(){
     document.getElementById('resultCard').classList.remove('show');
     
     document.getElementById('rhoSteps').textContent='0';
-    document.getElementById('hotspots').textContent='0';
-    document.getElementById('kangJumps').textContent='0';
-    document.getElementById('rangeFactor').textContent='1×';
-    document.getElementById('estTime').textContent='-';
+    document.getElementById('hotspotsVal').textContent='0';
+    document.getElementById('trapsVal').textContent='0';
+    document.getElementById('jumpsVal').textContent='0';
+    document.getElementById('speedVal').textContent='0/s';
+    document.getElementById('timeVal').textContent='0s';
     
-    log('🚀🚀🚀 POLLARD HYBRIDE GESTART 🚀🚀🚀','info');
-    log('🎯 Puzzel #135 | Range: 2^134','info');
+    log('🚀 HYBRIDE JACHT GESTART!','info');
+    log('🎯 Target: '+TARGET_PUBKEY.slice(0,30)+'...','info');
+    log('📐 Range: 2^134 keys','info');
     
-    try {
-        // FASE 1
-        await pollardRhoAnalysis();
-        if(!running)return;
-        
-        // FASE 2 & 3
-        const effectiveRange=analyzeAndReduce();
-        if(!running)return;
-        
-        // FASE 4
-        await kangarooHunt(effectiveRange);
-        
-        if(running){
-            log('✅ Hybride jacht voltooid','info');
-            running=false;
-            startBtn.disabled=false;
-            stopBtn.disabled=true;
-        }
-    } catch(e){
-        log('❌ FOUT: '+e.message,'warn');
-        console.error(e);
+    // FASE 1
+    await pollardRhoAnalysis();
+    if(!running)return;
+    
+    // FASE 2
+    await kangarooHunt();
+    
+    if(running){
+        log('✅ Jacht voltooid','info');
         running=false;
         startBtn.disabled=false;
         stopBtn.disabled=true;
@@ -429,20 +403,19 @@ startBtn.onclick=async function(){
 };
 
 stopBtn.onclick=function(){
-    console.log('STOP KNOP GEKLIKT!');
+    console.log('STOP GEKLIKT!');
     running=false;
     startBtn.disabled=false;
     stopBtn.disabled=true;
-    log('🛑 Handmatig gestopt','warn');
+    log('🛑 Gestopt','warn');
 };
 
 // ===== INIT =====
-console.log('✅ Pollard Hybride geladen!');
-console.log('🎯 Target: '+TARGET_PUBKEY.slice(0,30)+'...');
-console.log('🔑 Checksum: '+TARGET_CHECKSUM);
+console.log('✅ Script geladen!');
+console.log('🎯 Target public key:',TARGET_PUBKEY.slice(0,30)+'...');
+console.log('🔑 Checksum:',TARGET_CHECKSUM);
 log('✅ POLLARD HYBRIDE GELADEN');
-log('🦘 Methode: Rho → Hotspots → Range → Kangaroo');
-log('🎯 Klaar voor Puzzel #135! Klik op START');
+log('🦘 Klik op START om te beginnen!');
 </script>
 </body>
 </html>
