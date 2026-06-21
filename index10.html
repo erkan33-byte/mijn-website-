@@ -2,776 +2,505 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Kangaroo met Checksum Validatie – √N Optimaal</title>
+    <title>Kangaroo √N – MITM + localStorage</title>
     <style>
-        /* (zelfde CSS als voorheen) */
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        :root {
-            --bg:#07090f; --surface:#0d1117; --panel:#111827; --border:#1f2937;
-            --accent:#00ff99; --accent2:#00c3ff; --dim:#374151; --muted:#6b7280;
-            --text:#e2e8f0; --warn:#f59e0b; --danger:#ef4444; --success:#10b981; --found:#f59e0b;
-        }
-        body { font-family:'Courier New',Courier,monospace; background:var(--bg); color:var(--text); min-height:100vh; padding:24px 16px 48px; }
-        .container { max-width:760px; margin:0 auto; }
-        .header { text-align:center; margin-bottom:28px; }
-        .header h1 { font-size:1.6rem; letter-spacing:.2em; color:var(--accent); text-shadow:0 0 18px var(--accent),0 0 40px rgba(0,255,153,.3); text-transform:uppercase; }
-        .header .sub { font-size:.72rem; color:var(--muted); letter-spacing:.12em; margin-top:6px; }
-        .badge { display:inline-block; background:linear-gradient(90deg,#1a2a1a,#0d2010); border:1px solid var(--accent); color:var(--accent); font-size:.62rem; letter-spacing:.15em; padding:3px 10px; border-radius:2px; margin-top:10px; }
-        .card { background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:20px; margin-bottom:16px; }
-        .card-title { font-size:.65rem; letter-spacing:.18em; color:var(--accent2); text-transform:uppercase; border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:16px; }
-        .field { display:grid; grid-template-columns:210px 1fr; align-items:center; gap:10px; margin-bottom:12px; }
-        .field label { font-size:.72rem; color:var(--muted); letter-spacing:.06em; }
-        .field input { background:var(--surface); color:var(--accent); border:1px solid var(--dim); border-radius:3px; padding:7px 10px; font-family:inherit; font-size:.78rem; width:100%; outline:none; transition:border-color .2s,box-shadow .2s; }
-        .field input:focus { border-color:var(--accent); box-shadow:0 0 0 2px rgba(0,255,153,.12); }
-        .field input[type="number"] { max-width:120px; }
-        .divider { border:none; border-top:1px dashed var(--dim); margin:14px 0; }
-        .btn-row { display:flex; gap:10px; margin-top:4px; }
-        .btn { flex:1; padding:11px 16px; font-family:inherit; font-size:.8rem; font-weight:bold; letter-spacing:.1em; cursor:pointer; border:none; border-radius:4px; transition:opacity .15s,transform .1s; }
-        .btn:active:not(:disabled) { transform:scale(.97); }
-        .btn:disabled { opacity:.35; cursor:not-allowed; }
-        .btn-start { background:var(--success); color:#000; }
-        .btn-stop  { background:var(--danger);  color:#fff; }
-        .stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-        .stat-cell { background:var(--surface); border:1px solid var(--border); border-radius:4px; padding:10px 14px; }
-        .stat-cell .label { font-size:.6rem; letter-spacing:.14em; color:var(--muted); text-transform:uppercase; margin-bottom:4px; }
-        .stat-cell .value { font-size:1.05rem; font-weight:bold; color:var(--accent); }
-        #statusVal { color:var(--danger); }
-        #statusVal.running { color:var(--success); }
-        #statusVal.tame { color:var(--warn); }
-        .progress-wrap { height:4px; background:var(--border); border-radius:2px; margin-top:14px; overflow:hidden; }
-        .progress-bar { height:100%; width:0%; background:linear-gradient(90deg,var(--accent2),var(--accent)); border-radius:2px; transition:width .4s; }
-
-        /* KANS METER */
-        .chance-card { background:linear-gradient(135deg,#0a0f1a 0%,#0d1520 100%); border:1px solid #1a3a5c; border-radius:6px; padding:20px; margin-bottom:16px; position:relative; overflow:hidden; }
-        .chance-card::before { content:''; position:absolute; top:-50%; left:-50%; width:200%; height:200%; background:radial-gradient(ellipse at center,rgba(0,195,255,.04) 0%,transparent 60%); pointer-events:none; }
-        .chance-title { font-size:.65rem; letter-spacing:.18em; color:var(--accent2); text-transform:uppercase; border-bottom:1px solid #1a3a5c; padding-bottom:8px; margin-bottom:16px; }
-        .chance-main { display:flex; align-items:center; gap:20px; margin-bottom:18px; }
-        .chance-gauge { position:relative; width:100px; height:100px; flex-shrink:0; }
-        .chance-gauge svg { width:100%; height:100%; }
-        .gauge-bg   { fill:none; stroke:#1a2a3a; stroke-width:8; }
-        .gauge-fill { fill:none; stroke:var(--accent2); stroke-width:8; stroke-linecap:round; transition:stroke-dashoffset 1s ease; transform:rotate(-90deg); transform-origin:50% 50%; }
-        .gauge-label { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:.62rem; color:var(--muted); text-align:center; line-height:1.3; }
-        .gauge-label span { font-size:1rem; color:var(--accent2); font-weight:bold; }
-        .chance-info { flex:1; }
-        .chance-info .big-number { font-size:1.1rem; color:var(--accent2); font-weight:bold; letter-spacing:.05em; word-break:break-all; margin-bottom:4px; }
-        .chance-info .label-small { font-size:.62rem; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; margin-bottom:10px; }
-        .chance-info .kans-uitleg { font-size:.68rem; color:var(--text); line-height:1.6; }
-        .comparison-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:14px; }
-        .cmp-cell { background:rgba(0,0,0,.4); border:1px solid #1a3a5c; border-radius:4px; padding:9px 12px; }
-        .cmp-cell .cmp-label { font-size:.58rem; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; margin-bottom:3px; }
-        .cmp-cell .cmp-val { font-size:.78rem; color:var(--accent2); font-weight:bold; }
-        .cmp-cell .cmp-desc { font-size:.62rem; color:var(--muted); margin-top:2px; }
-        .kans-progress { margin-top:14px; }
-        .kans-progress .kp-label { display:flex; justify-content:space-between; font-size:.62rem; color:var(--muted); margin-bottom:5px; }
-        .kans-track { height:18px; background:#0a1520; border:1px solid #1a3a5c; border-radius:3px; overflow:hidden; position:relative; }
-        .kans-fill { height:100%; background:linear-gradient(90deg,#003366,var(--accent2)); border-radius:3px; transition:width 1s ease; position:relative; }
-        .kans-fill::after { content:''; position:absolute; top:0; right:0; bottom:0; width:20px; background:rgba(255,255,255,.15); filter:blur(4px); }
-        .kans-pct-label { font-size:.62rem; color:var(--muted); text-align:right; margin-top:4px; }
-        .sci-note { background:rgba(0,195,255,.05); border:1px solid rgba(0,195,255,.15); border-radius:4px; padding:10px 14px; margin-top:14px; font-size:.67rem; color:var(--muted); line-height:1.7; }
-        .sci-note strong { color:var(--accent2); }
-
-        .log { background:#000; color:var(--accent); height:150px; overflow-y:scroll; padding:10px 12px; font-size:.72rem; line-height:1.6; border-radius:4px; border:1px solid var(--border); }
-        .log .ts { color:var(--muted); }
-        .log .ev-found { color:var(--found); font-weight:bold; }
-        .log .ev-epoch { color:var(--accent2); }
-        .log .ev-stop  { color:var(--danger); }
-        .log .ev-tame  { color:var(--warn); }
-        .result-table { width:100%; border-collapse:collapse; font-size:.72rem; }
-        .result-table th { background:var(--surface); color:var(--accent2); letter-spacing:.1em; font-size:.62rem; text-transform:uppercase; padding:10px 12px; border:1px solid var(--border); text-align:left; }
-        .result-table td { border:1px solid var(--border); padding:9px 12px; color:var(--text); word-break:break-all; }
-        .result-table .empty-row td { text-align:center; color:var(--muted); font-style:italic; }
-        .result-table .found-row td { color:var(--found); }
-        .footer { text-align:center; font-size:.6rem; color:var(--muted); letter-spacing:.1em; margin-top:24px; }
-        ::-webkit-scrollbar { width:6px; }
-        ::-webkit-scrollbar-track { background:var(--surface); }
-        ::-webkit-scrollbar-thumb { background:var(--dim); border-radius:3px; }
+        *{box-sizing:border-box;margin:0;padding:0}
+        :root{--bg:#07090f;--surface:#0d1117;--panel:#111827;--border:#1f2937;--accent:#00ff99;--accent2:#00c3ff;--text:#e2e8f0;--muted:#6b7280;--warn:#f59e0b}
+        body{font-family:'Courier New',monospace;background:var(--bg);color:var(--text);padding:20px}
+        .container{max-width:750px;margin:0 auto}
+        .card{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:12px}
+        .card-title{font-size:.6rem;color:var(--accent2);text-transform:uppercase;border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:10px}
+        .field{display:grid;grid-template-columns:160px 1fr;align-items:center;gap:6px;margin-bottom:8px}
+        .field label{font-size:.65rem;color:var(--muted)}
+        .field input{background:var(--surface);color:var(--accent);border:1px solid var(--border);border-radius:3px;padding:5px 8px;font-family:inherit;font-size:.7rem;width:100%}
+        .field input[type="number"]{max-width:80px}
+        .btn-row{display:flex;gap:6px;margin-top:6px}
+        .btn{flex:1;padding:8px 12px;font-family:inherit;font-size:.7rem;font-weight:bold;cursor:pointer;border:none;border-radius:4px}
+        .btn-start{background:var(--accent);color:#000}
+        .btn-stop{background:#ef4444;color:#fff}
+        .btn-save{background:var(--accent2);color:#000}
+        .btn-load{background:var(--warn);color:#000}
+        .btn:disabled{opacity:.3;cursor:not-allowed}
+        .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+        .stat-cell{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px 10px}
+        .stat-cell .label{font-size:.5rem;color:var(--muted);text-transform:uppercase}
+        .stat-cell .value{font-size:.85rem;font-weight:bold;color:var(--accent)}
+        #statusVal{color:#ef4444}
+        #statusVal.running{color:var(--accent)}
+        .progress-wrap{height:3px;background:var(--border);border-radius:2px;margin-top:10px;overflow:hidden}
+        .progress-bar{height:100%;width:0%;background:linear-gradient(90deg,var(--accent2),var(--accent));transition:width .3s}
+        .log{background:#000;height:100px;overflow-y:scroll;padding:6px 8px;font-size:.6rem;line-height:1.4;border:1px solid var(--border);border-radius:4px}
+        .log .ts{color:var(--muted)}
+        .result-table{width:100%;border-collapse:collapse;font-size:.6rem}
+        .result-table th{background:var(--surface);color:var(--accent2);padding:6px 8px;border:1px solid var(--border);text-align:left}
+        .result-table td{padding:5px 8px;border:1px solid var(--border);word-break:break-all}
+        .empty-row td{text-align:center;color:var(--muted);font-style:italic}
+        .found-row td{color:#f59e0b;font-weight:bold}
+        .mitm-status{display:flex;gap:10px;margin-top:8px;font-size:.6rem}
+        .mitm-status .half{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px 10px;text-align:center}
+        .mitm-status .half .label{color:var(--accent2);font-weight:bold}
+        .mitm-status .half .val{color:var(--text)}
+        .memory-bar{background:var(--surface);border:1px solid var(--border);border-radius:3px;height:8px;margin-top:6px;overflow:hidden}
+        .memory-fill{height:100%;background:var(--warn);transition:width .5s}
     </style>
 </head>
 <body>
 <div class="container">
-
-    <div class="header">
-        <h1>🦘 Kangaroo √N – Checksum als Validatie</h1>
-        <div class="sub">Checksum filtering voor snellere verificatie</div>
-        <span class="badge">√N OPTIMAAL · CHECKSUM VALIDATIE</span>
+    <div style="text-align:center;margin-bottom:16px;">
+        <h1 style="font-size:1.1rem;color:var(--accent);letter-spacing:.15em;">🦘 Kangaroo √N</h1>
+        <div style="font-size:.5rem;color:var(--muted);">MITM + localStorage · Volledig persistent</div>
     </div>
 
-    <!-- Config -->
     <div class="card">
         <div class="card-title">⚙ Configuratie</div>
-        <div class="field">
-            <label>Workers (CPU Cores)</label>
-            <input id="numW" value="4" type="number" min="1" max="32">
-        </div>
-        <div class="field">
-            <label>Target Public Key</label>
-            <input id="pubKey" value="02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16" type="text">
-        </div>
-        <div class="field">
-            <label>Target BTC Adres</label>
-            <input id="btcAddr" value="16RGFo6hjq9ym6Pj7N5H7L1NR1rVPJyw2v" type="text">
-        </div>
-        <hr class="divider">
-        <div class="field">
-            <label>Absoluut Start (HEX)</label>
-            <input id="rangeStart" value="4000000000000000000000000000000000" type="text">
-        </div>
-        <div class="field">
-            <label>Absoluut Eind (HEX)</label>
-            <input id="rangeEnd" value="7fffffffffffffffffffffffffffffffff" type="text">
-        </div>
-        <hr class="divider">
-        <div class="field">
-            <label>Zoekbereik Start (%)</label>
-            <input id="pctStart" value="0" type="number" step="0.1" min="0" max="100">
-        </div>
-        <div class="field">
-            <label>Zoekbereik Eind (%)</label>
-            <input id="pctEnd" value="100" type="number" step="0.1" min="0" max="100">
-        </div>
+        <div class="field"><label>Workers</label><input id="numW" value="4" type="number" min="1" max="32"></div>
+        <div class="field"><label>Target PubKey</label><input id="pubKey" value="02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16" type="text"></div>
+        <div class="field"><label>Start (HEX)</label><input id="rangeStart" value="4000000000000000000000000000000000" type="text"></div>
+        <div class="field"><label>Eind (HEX)</label><input id="rangeEnd" value="7fffffffffffffffffffffffffffffffff" type="text"></div>
+        <div class="field"><label>Start %</label><input id="pctStart" value="0" type="number" step="0.1" min="0" max="100"></div>
+        <div class="field"><label>Eind %</label><input id="pctEnd" value="100" type="number" step="0.1" min="0" max="100"></div>
+        <div class="field"><label>MITM Splitsing</label><input id="mitmSplit" value="50" type="number" step="5" min="10" max="90"></div>
         <div class="btn-row">
-            <button class="btn btn-start" id="startBtn">▶ Start Kangaroo Scan</button>
-            <button class="btn btn-stop"  id="stopBtn" disabled>■ Stop</button>
+            <button class="btn btn-start" id="startBtn">▶ Start</button>
+            <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
+            <button class="btn btn-save" id="saveBtn" disabled>💾 Save</button>
+            <button class="btn btn-load" id="loadBtn">📂 Load</button>
         </div>
     </div>
 
-    <!-- KANS METER -->
-    <div class="chance-card">
-        <div class="chance-title">🎲 Kans op Succes — Live Berekening</div>
-        <div class="chance-main">
-            <div class="chance-gauge">
-                <svg viewBox="0 0 100 100">
-                    <circle class="gauge-bg"   cx="50" cy="50" r="38"/>
-                    <circle class="gauge-fill" cx="50" cy="50" r="38"
-                            id="gaugeFill"
-                            stroke-dasharray="238.76"
-                            stroke-dashoffset="238.76"/>
-                </svg>
-                <div class="gauge-label">
-                    <span id="gaugePct">~0%</span>
-                    log-schaal<br>meter
-                </div>
-            </div>
-            <div class="chance-info">
-                <div class="big-number" id="chanceScientific">1 op ~2<sup>102</sup></div>
-                <div class="label-small">benodigde operaties (Kangaroo)</div>
-                <div class="kans-uitleg" id="chanceUitleg">
-                    Nog niet gestart. Klik Start om de berekening te zien.
-                </div>
-            </div>
-        </div>
-        <div class="kans-progress">
-            <div class="kp-label">
-                <span>Gedekte zoekruimte (logaritmisch, cumulatief)</span>
-                <span id="coveragePct">0.000000%</span>
-            </div>
-            <div class="kans-track">
-                <div class="kans-fill" id="kansBar" style="width:0%"></div>
-            </div>
-            <div class="kans-pct-label" id="jumpsCoverage">0 sprongen van ~2⁵¹,⁵ benodigde</div>
-        </div>
-        <div class="comparison-grid">
-            <div class="cmp-cell">
-                <div class="cmp-label">🌌 Zoekruimte grootte</div>
-                <div class="cmp-val" id="cmpUniverse">—</div>
-                <div class="cmp-desc">mogelijke sleutelwaarden</div>
-            </div>
-            <div class="cmp-cell">
-                <div class="cmp-label">⏱ Tijdschatting (browser)</div>
-                <div class="cmp-val" id="cmpTime">—</div>
-                <div class="cmp-desc">bij huidige snelheid</div>
-            </div>
-            <div class="cmp-cell">
-                <div class="cmp-label">🎰 Loterij vergelijking</div>
-                <div class="cmp-val" id="cmpLottery">—</div>
-                <div class="cmp-desc">× moeilijker dan staatsloterij</div>
-            </div>
-            <div class="cmp-cell">
-                <div class="cmp-label">📡 Epochs voltooid</div>
-                <div class="cmp-val" id="cmpEpochs">0</div>
-                <div class="cmp-desc">kangaroo-rondes uitgevoerd</div>
-            </div>
-        </div>
-        <div class="sci-note">
-            <strong>📐 Hoe werkt Checksum Validatie?</strong><br>
-            <strong>Kangaroo:</strong> Gebruikt variabele sprongen (√N optimaal) om de zoekruimte te dekken.<br>
-            <strong>Checksum:</strong> Wordt alleen gebruikt als <em>validatie-filter</em> bij gevonden kandidaten.<br>
-            <strong>Voordeel:</strong> 90% snellere verificatie omdat checksum-berekening veel sneller is dan EC-verificatie.
-        </div>
-    </div>
-
-    <!-- Stats -->
     <div class="card">
-        <div class="card-title">📊 Live Statistieken</div>
+        <div class="card-title">📊 Statistieken</div>
         <div class="stats-grid">
-            <div class="stat-cell">
-                <div class="label">Status</div>
-                <div class="value" id="statusVal">Gestopt</div>
-            </div>
-            <div class="stat-cell">
-                <div class="label">Epoch (ronde)</div>
-                <div class="value" style="color:var(--warn)" id="epochCount">0</div>
-            </div>
-            <div class="stat-cell">
-                <div class="label">Actieve vallen</div>
-                <div class="value" style="color:var(--text)" id="trapCount">0</div>
-            </div>
-            <div class="stat-cell">
-                <div class="label">Snelheid</div>
-                <div class="value" style="color:var(--accent2)" id="speed">0 /s</div>
-            </div>
+            <div class="stat-cell"><div class="label">Status</div><div class="value" id="statusVal">Gestopt</div></div>
+            <div class="stat-cell"><div class="label">Snelheid</div><div class="value" id="speed">0 /s</div></div>
+            <div class="stat-cell"><div class="label">Sprongen</div><div class="value" id="totalJumps">0</div></div>
+            <div class="stat-cell"><div class="label">Vallen</div><div class="value" id="trapCount">0</div></div>
         </div>
-        <div style="margin-top:10px;font-size:.7rem;color:var(--muted);">
-            Totaal sprongen: <span id="totalJumps" style="color:var(--text)">0</span>
+        <div class="mitm-status">
+            <div class="half"><div class="label">🔵 Hoge bits</div><div class="val" id="mitmHigh">0</div></div>
+            <div class="half"><div class="label">🔴 Lage bits</div><div class="val" id="mitmLow">0</div></div>
+            <div class="half"><div class="label">💾 Opgeslagen</div><div class="val" id="saveStatus">Geen</div></div>
         </div>
-        <div class="progress-wrap">
-            <div class="progress-bar" id="progressBar"></div>
-        </div>
+        <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
+        <div class="memory-bar"><div class="memory-fill" id="memoryBar" style="width:0%"></div></div>
+        <div style="font-size:.5rem;color:var(--muted);margin-top:4px;">Geheugengebruik: <span id="memUsage">0</span> KB / 5 MB</div>
     </div>
 
-    <!-- Log -->
     <div class="card">
-        <div class="card-title">📋 Activiteitenlog</div>
+        <div class="card-title">📋 Log</div>
         <div class="log" id="logBox"></div>
     </div>
 
-    <!-- Results -->
     <div class="card">
         <div class="card-title">🎯 Resultaten</div>
         <table class="result-table">
-            <thead>
-                <tr><th>Type</th><th>WIF (Compressed)</th><th>Privésleutel (HEX)</th></tr>
-            </thead>
-            <tbody id="matchTable">
-                <tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr>
-            </tbody>
+            <thead><tr><th>Type</th><th>WIF</th><th>Privé (HEX)</th></tr></thead>
+            <tbody id="matchTable"><tr class="empty-row"><td colspan="3">Wacht op start...</td></tr></tbody>
         </table>
     </div>
-
-    <div class="footer">Kangaroo √N · Checksum als Validatie</div>
 </div>
 
-<!-- WORKER -->
-<script id="workerCode" type="javascript/worker">
-// Geen importScripts! Alles wordt via eval of ingebouwde functies gedaan
-// We gebruiken ingebouwde Web Crypto API en handmatige elliptic curve implementatie
+<script>
+// === SECP256K1 ===
+const SECP256K1_ORDER=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+const SECP256K1_P=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
+const GX=0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
+const GY=0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n;
 
-// === EIGEN SECP256K1 IMPLEMENTATIE (lichtgewicht) ===
-// Gebruik makend van BigInt voor alle berekeningen
+function modPow(a,e,m){let r=1n;a%=m;while(e>0n){if(e&1n)r=(r*a)%m;a=(a*a)%m;e>>=1n;}return r;}
+function modInv(a,m){if(m===1n)return 0n;let m0=m,y=0n,x=1n;while(a>1n){let q=a/m,t=m;m=a%m;a=t;t=y;y=x-q*y;x=t;}if(x<0n)x+=m0;return x;}
+function pointAdd(P,Q){if(!P)return Q;if(!Q)return P;let[x1,y1]=P,[x2,y2]=Q;if(x1===x2&&y1===y2){if(y1===0n)return null;let s=(3n*x1*x1*modInv(2n*y1,SECP256K1_P))%SECP256K1_P;let x3=(s*s-2n*x1)%SECP256K1_P;let y3=(s*(x1-x3)-y1)%SECP256K1_P;return[x3<0n?x3+SECP256K1_P:x3,y3<0n?y3+SECP256K1_P:y3];}else{if(x1===x2)return null;let s=((y2-y1)*modInv(x2-x1,SECP256K1_P))%SECP256K1_P;let x3=(s*s-x1-x2)%SECP256K1_P;let y3=(s*(x1-x3)-y1)%SECP256K1_P;return[x3<0n?x3+SECP256K1_P:x3,y3<0n?y3+SECP256K1_P:y3];}}
+function scalarMul(k,P){if(k===0n)return null;let r=null,a=P,n=k;while(n>0n){if(n&1n)r=pointAdd(r,a);a=pointAdd(a,a);n>>=1n;}return r;}
+function pubFromPriv(hex){let k=BigInt("0x"+hex);if(k===0n||k>=SECP256K1_ORDER)return null;let p=scalarMul(k,[GX,GY]);if(!p)return null;let[x,y]=p,xh=x.toString(16).padStart(64,'0');return(y%2n===0n?"02":"03")+xh;}
 
-const SECP256K1_ORDER = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
-const SECP256K1_P     = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
-const SECP256K1_A     = 0n;
-const SECP256K1_B     = 7n;
-const GX              = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
-const GY              = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n;
+// === CHECKSUM ===
+async function sha256Hex(h){let b=h.match(/.{2}/g).map(x=>parseInt(x,16));let d=await crypto.subtle.digest("SHA-256",new Uint8Array(b));return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');}
+async function rmd160Hex(h){let b=h.match(/.{2}/g).map(x=>parseInt(x,16));let d=await crypto.subtle.digest("SHA-256",new Uint8Array(b));return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');}
+async function calcChecksum(pub){let s1=await sha256Hex(pub),h160=await rmd160Hex(s1);let s2=await sha256Hex(h160),s3=await sha256Hex(s2);return s3.substring(0,8);}
+async function validChecksum(pub,target){if(!target)return false;return(await calcChecksum(pub))===target;}
 
-function modPow(base, exponent, modulus) {
-    let result = 1n;
-    base = base % modulus;
-    while (exponent > 0n) {
-        if (exponent % 2n === 1n) result = (result * base) % modulus;
-        base = (base * base) % modulus;
-        exponent = exponent >> 1n;
+// === KANGAROO ===
+const NUM_STEPS=32;const JUMP_SIZES=[];const JUMP_POINTS=[];
+function initJumps(rs,re){if(JUMP_SIZES.length>0)return;let W=re-rs,x0=W/2n,sw=1n;if(x0>0n){let x1=(x0+W/x0)/2n;while(x1<x0){x0=x1;x1=(x0+W/x0)/2n;}sw=x0;}for(let i=0;i<NUM_STEPS;i++){let s=(sw*BigInt(i+1))/BigInt(NUM_STEPS);if(s===0n)s=1n;JUMP_SIZES.push(s);JUMP_POINTS.push(scalarMul(s,[GX,GY]));}}
+function randBigInt(lo,hi){let r=hi-lo,bits=r.toString(2).length,bytes=Math.ceil(bits/8);let a=new Uint8Array(bytes);crypto.getRandomValues(a);let h=Array.from(a,b=>b.toString(16).padStart(2,'0')).join('');return lo+(BigInt("0x"+h)%r);}
+function kangarooJump(pt,dist){let idx=Number(dist%BigInt(NUM_STEPS));let np=pointAdd(pt,JUMP_POINTS[idx]);return{point:np,dist:dist+JUMP_SIZES[idx]};}
+function pointToHex(P){if(!P)return null;let[x,y]=P;let xh=x.toString(16).padStart(64,'0');return(y%2n===0n?"02":"03")+xh;}
+function hexToPoint(h){if(!h||h.length<66)return null;let x=BigInt("0x"+h.substring(2,66)),pref=h.substring(0,2);let ys=(x*x*x+7n)%SECP256K1_P;let y=modPow(ys,(SECP256K1_P+1n)/4n,SECP256K1_P);if((y%2n===0n&&pref==="03")||(y%2n===1n&&pref==="02"))y=(SECP256K1_P-y)%SECP256K1_P;return[x,y];}
+function toBase58(h){const A="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";let b=h.match(/.{2}/g).map(x=>parseInt(x,16)),d=[0];for(let i=0;i<b.length;i++){let c=b[i];for(let j=0;j<d.length;j++){c+=d[j]<<8;d[j]=c%58;c=(c/58)|0;}while(c>0){d.push(c%58);c=(c/58)|0;}}let s="";for(let i=0;i<b.length&&b[i]===0;i++)s+=A[0];for(let i=d.length-1;i>=0;i--)s+=A[d[i]];return s;}
+
+// === LOCALSTORAGE ===
+const STORAGE_KEY='kangaroo_mitm_data';
+const MAX_STORAGE=5*1024*1024; // 5MB limiet
+
+function saveToStorage(highTraps, lowTraps, totalJumps, metadata){
+    try{
+        const data={
+            highTraps,
+            lowTraps,
+            totalJumps,
+            timestamp:Date.now(),
+            metadata
+        };
+        const serialized=JSON.stringify(data);
+        const size=new Blob([serialized]).size;
+        if(size>MAX_STORAGE){
+            // Te groot: compressie door alleen belangrijkste vallen te bewaren
+            const compressed=compressTraps(highTraps, lowTraps);
+            const compData={...data, highTraps:compressed.high, lowTraps:compressed.low};
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(compData));
+            log(`💾 Opgeslagen (gecomprimeerd: ${(size/1024).toFixed(1)}KB)`);
+        }else{
+            localStorage.setItem(STORAGE_KEY, serialized);
+            log(`💾 Opgeslagen (${(size/1024).toFixed(1)}KB)`);
+        }
+        document.getElementById('saveStatus').textContent=`${(size/1024).toFixed(1)}KB`;
+        updateMemoryBar(size);
+        return true;
+    }catch(e){
+        log(`❌ Save mislukt: ${e.message}`);
+        return false;
     }
-    return result;
 }
 
-function modInverse(a, m) {
-    if (m === 1n) return 0n;
-    let m0 = m, y = 0n, x = 1n;
-    if (m === 1n) return 0n;
-    while (a > 1n) {
-        let q = a / m;
-        let t = m;
-        m = a % m;
-        a = t;
-        t = y;
-        y = x - q * y;
-        x = t;
+function loadFromStorage(){
+    try{
+        const raw=localStorage.getItem(STORAGE_KEY);
+        if(!raw)return null;
+        const data=JSON.parse(raw);
+        log(`📂 Geladen: ${Object.keys(data.highTraps).length} high, ${Object.keys(data.lowTraps).length} low traps`);
+        return data;
+    }catch(e){
+        log(`❌ Load mislukt: ${e.message}`);
+        return null;
     }
-    if (x < 0n) x += m0;
-    return x;
 }
 
-function pointAdd(P, Q) {
-    if (P === null) return Q;
-    if (Q === null) return P;
-    const [x1, y1] = P;
-    const [x2, y2] = Q;
+function compressTraps(high, low){
+    // Beperk tot 1000 beste vallen per helft (op basis van checksum)
+    const sortTraps=(obj)=>{
+        return Object.fromEntries(
+            Object.entries(obj)
+            .sort((a,b)=>parseInt(a[1].dist,16)-parseInt(b[1].dist,16))
+            .slice(0,1000)
+        );
+    };
+    return { high:sortTraps(high), low:sortTraps(low) };
+}
+
+function updateMemoryBar(size){
+    const pct=Math.min(100,(size/MAX_STORAGE)*100);
+    document.getElementById('memoryBar').style.width=pct+'%';
+    document.getElementById('memUsage').textContent=(size/1024).toFixed(1);
+}
+
+// === MAIN LOGICA ===
+let workers=[], globalTraps={}, totalJumps=0, startTime=0, isRunning=false;
+let mitmHighTraps={}, mitmLowTraps={}, mitmPhase=0;
+const logBox=document.getElementById('logBox');
+const startBtn=document.getElementById('startBtn');
+const stopBtn=document.getElementById('stopBtn');
+const saveBtn=document.getElementById('saveBtn');
+const loadBtn=document.getElementById('loadBtn');
+
+function log(msg,cls=''){const ts=new Date().toLocaleTimeString();const div=document.createElement('div');div.innerHTML=`<span class="ts">[${ts}]</span> ${msg}`;if(cls)div.className=cls;logBox.appendChild(div);logBox.scrollTop=logBox.scrollHeight;}
+function setStatus(txt,cls=''){document.getElementById('statusVal').textContent=txt;document.getElementById('statusVal').className=cls;}
+function killWorkers(){workers.forEach(w=>{try{w.terminate();}catch(_){}});workers=[];}
+
+function makeWorker(){const code=document.getElementById('workerCode').textContent;return new Worker(URL.createObjectURL(new Blob([code],{type:'text/javascript'})));}
+
+// === MITM SPLITSING ===
+function splitRange(rangeStart, rangeEnd, splitPct){
+    const A=BigInt("0x"+rangeStart), B=BigInt("0x"+rangeEnd);
+    const W=B-A, mid=A+(W*BigInt(splitPct))/100n;
+    return { high:{start:rangeStart, end:mid.toString(16)}, low:{start:mid.toString(16), end:rangeEnd} };
+}
+
+function calculateSubRange(){
+    const A=BigInt("0x"+document.getElementById('rangeStart').value.trim());
+    const B=BigInt("0x"+document.getElementById('rangeEnd').value.trim());
+    const W=B-A, SCALE=1_000_000n;
+    const s=BigInt(Math.floor(parseFloat(document.getElementById('pctStart').value)*10000));
+    const e=BigInt(Math.floor(parseFloat(document.getElementById('pctEnd').value)*10000));
+    return { start:(A+(W*s)/SCALE).toString(16), end:(A+(W*e)/SCALE).toString(16) };
+}
+
+// === START ===
+startBtn.onclick=async()=>{
+    if(isRunning)return;
+    totalJumps=0; startTime=Date.now(); globalTraps={}; 
+    mitmHighTraps={}; mitmLowTraps={}; mitmPhase=0;
+    document.getElementById('totalJumps').textContent='0';
+    document.getElementById('speed').textContent='0 /s';
+    document.getElementById('trapCount').textContent='0';
+    document.getElementById('mitmHigh').textContent='0';
+    document.getElementById('mitmLow').textContent='0';
+    document.getElementById('progressBar').style.width='0%';
+    document.getElementById('matchTable').innerHTML='<tr class="empty-row"><td colspan="3">Bezig met zoeken...</td></tr>';
+    setRunning(true);
+    log('🚀 Hybride Kangaroo gestart (MITM + localStorage)');
+    await runMITM();
+};
+
+stopBtn.onclick=()=>{
+    setRunning(false); killWorkers(); setStatus('Gestopt');
+    document.getElementById('progressBar').style.width='0%';
+    log('🛑 Gestopt door gebruiker');
+};
+
+saveBtn.onclick=()=>{
+    if(isRunning){
+        saveToStorage(mitmHighTraps, mitmLowTraps, totalJumps, {
+            pubKey:document.getElementById('pubKey').value,
+            rangeStart:document.getElementById('rangeStart').value,
+            rangeEnd:document.getElementById('rangeEnd').value,
+            pctStart:document.getElementById('pctStart').value,
+            pctEnd:document.getElementById('pctEnd').value,
+            mitmSplit:document.getElementById('mitmSplit').value
+        });
+    }
+};
+
+loadBtn.onclick=()=>{
+    const data=loadFromStorage();
+    if(data){
+        // Herstel configuratie
+        if(data.metadata){
+            document.getElementById('pubKey').value=data.metadata.pubKey||'';
+            document.getElementById('rangeStart').value=data.metadata.rangeStart||'';
+            document.getElementById('rangeEnd').value=data.metadata.rangeEnd||'';
+            document.getElementById('pctStart').value=data.metadata.pctStart||'0';
+            document.getElementById('pctEnd').value=data.metadata.pctEnd||'100';
+            document.getElementById('mitmSplit').value=data.metadata.mitmSplit||'50';
+        }
+        mitmHighTraps=data.highTraps||{};
+        mitmLowTraps=data.lowTraps||{};
+        totalJumps=data.totalJumps||0;
+        document.getElementById('mitmHigh').textContent=Object.keys(mitmHighTraps).length;
+        document.getElementById('mitmLow').textContent=Object.keys(mitmLowTraps).length;
+        document.getElementById('totalJumps').textContent=totalJumps.toLocaleString();
+        log(`📂 Geladen: ${Object.keys(mitmHighTraps).length} high + ${Object.keys(mitmLowTraps).length} low traps`);
+        setStatus('Geladen','');
+    }
+};
+
+function setRunning(v){isRunning=v;startBtn.disabled=v;stopBtn.disabled=!v;saveBtn.disabled=!v;}
+
+// === MITM LOOP ===
+async function runMITM(){
+    if(!isRunning)return;
+    const range=calculateSubRange();
+    const splitPct=parseInt(document.getElementById('mitmSplit').value)||50;
+    const split=splitRange(range.start, range.end, splitPct);
+    const targetPubHex=document.getElementById('pubKey').value.trim();
+    const numW=Math.max(1,parseInt(document.getElementById('numW').value)||4);
+    const paths=400, steps=1000;
+
+    // FASE 1: Hoge bits (als nog niet gedaan)
+    if(Object.keys(mitmHighTraps).length===0){
+        mitmPhase=1; setStatus('MITM Hoge bits','running');
+        log(`🔵 Fase 1: Hoge bits (${splitPct}% van range)`);
+        document.getElementById('progressBar').style.width='15%';
+        
+        const highTraps=await runTamePhase(split.high.start, split.high.end, targetPubHex, numW, paths, steps);
+        mitmHighTraps=highTraps;
+        document.getElementById('mitmHigh').textContent=Object.keys(highTraps).length;
+        log(`✅ Hoge bits klaar: ${Object.keys(highTraps).length} vallen`);
+        document.getElementById('progressBar').style.width='40%';
+        // Save na hoge bits
+        saveToStorage(mitmHighTraps, mitmLowTraps, totalJumps, null);
+    }else{
+        log(`🔵 Hoge bits al geladen: ${Object.keys(mitmHighTraps).length} vallen`);
+        document.getElementById('progressBar').style.width='40%';
+    }
+
+    // FASE 2: Lage bits (als nog niet gedaan)
+    if(Object.keys(mitmLowTraps).length===0){
+        mitmPhase=2; setStatus('MITM Lage bits','running');
+        log(`🔴 Fase 2: Lage bits (${100-splitPct}% van range)`);
+        document.getElementById('progressBar').style.width='50%';
+        
+        const lowTraps=await runTamePhase(split.low.start, split.low.end, targetPubHex, numW, paths, steps);
+        mitmLowTraps=lowTraps;
+        document.getElementById('mitmLow').textContent=Object.keys(lowTraps).length;
+        log(`✅ Lage bits klaar: ${Object.keys(lowTraps).length} vallen`);
+        document.getElementById('progressBar').style.width='70%';
+        // Save na lage bits
+        saveToStorage(mitmHighTraps, mitmLowTraps, totalJumps, null);
+    }else{
+        log(`🔴 Lage bits al geladen: ${Object.keys(mitmLowTraps).length} vallen`);
+        document.getElementById('progressBar').style.width='70%';
+    }
+
+    // FASE 3: Combineer en zoek wild
+    mitmPhase=3; setStatus('MITM Combineren','running');
+    log(`🔄 Fase 3: Combineren en wild zoeken`);
+    document.getElementById('progressBar').style.width='80%';
     
-    if (x1 === x2 && y1 === y2) {
-        // Point doubling
-        if (y1 === 0n) return null;
-        const s = (3n * x1 * x1 * modInverse(2n * y1, SECP256K1_P)) % SECP256K1_P;
-        const x3 = (s * s - 2n * x1) % SECP256K1_P;
-        const y3 = (s * (x1 - x3) - y1) % SECP256K1_P;
-        return [x3 < 0n ? x3 + SECP256K1_P : x3, y3 < 0n ? y3 + SECP256K1_P : y3];
-    } else {
-        if (x1 === x2) return null;
-        const s = ((y2 - y1) * modInverse(x2 - x1, SECP256K1_P)) % SECP256K1_P;
-        const x3 = (s * s - x1 - x2) % SECP256K1_P;
-        const y3 = (s * (x1 - x3) - y1) % SECP256K1_P;
-        return [x3 < 0n ? x3 + SECP256K1_P : x3, y3 < 0n ? y3 + SECP256K1_P : y3];
+    await runCombinePhase(targetPubHex, mitmHighTraps, mitmLowTraps, numW);
+}
+
+// === TAME FASE ===
+function runTamePhase(rangeStart, rangeEnd, targetPubHex, numW, paths, steps){
+    return new Promise((resolve)=>{
+        let allTraps={}, done=0;
+        killWorkers();
+        
+        for(let i=0;i<numW;i++){
+            const w=makeWorker(); workers.push(w);
+            w.onmessage=(ev)=>{
+                if(ev.data.type==="TAME_READY"){
+                    Object.assign(allTraps, ev.data.traps);
+                    totalJumps+=ev.data.jumps;
+                    document.getElementById('totalJumps').textContent=totalJumps.toLocaleString();
+                    done++;
+                    if(done===numW) resolve(allTraps);
+                }
+            };
+            w.postMessage({
+                type:"TAME",
+                rangeStartStr:rangeStart,
+                rangeEndStr:rangeEnd,
+                targetPubHex:targetPubHex,
+                targetChecksum:null,
+                workerId:i,
+                pathsPerWorker:paths,
+                stepsPerPath:steps,
+                dpMask:0x3FF
+            });
+        }
+    });
+}
+
+// === COMBINE FASE ===
+async function runCombinePhase(targetPubHex, highTraps, lowTraps, numW){
+    const targetChecksum=await calcChecksum(targetPubHex);
+    const Nbig=SECP256K1_ORDER;
+    let totalChecks=0, found=false;
+
+    // MITM combinatie: high + low = full key
+    for(const [highPub, highData] of Object.entries(highTraps)){
+        if(found)break;
+        for(const [lowPub, lowData] of Object.entries(lowTraps)){
+            if(found)break;
+            totalChecks++;
+            if(totalChecks%10000===0){
+                document.getElementById('speed').textContent=`${Math.floor(totalChecks/((Date.now()-startTime)/1000))}/s`;
+                log(`🔄 ${totalChecks.toLocaleString()} combinaties getest...`);
+            }
+
+            const kHigh=BigInt("0x"+highData.absKey);
+            const kLow=BigInt("0x"+lowData.absKey);
+            const distHigh=BigInt(highData.dist);
+            const distLow=BigInt(lowData.dist);
+            
+            let fullKey=(kHigh+kLow)%Nbig;
+            if(fullKey===0n) continue;
+            
+            const privHex=fullKey.toString(16).padStart(64,'0');
+            const pubHex=pubFromPriv(privHex);
+            
+            if(pubHex && await validChecksum(pubHex, targetChecksum)){
+                if(pubHex===targetPubHex){
+                    found=true;
+                    const wifPayload="80"+privHex+"01";
+                    const s1=await sha256Hex(wifPayload);
+                    const s2=await sha256Hex(s1);
+                    const wif=toBase58(wifPayload+s2.slice(0,8));
+                    
+                    setRunning(false); killWorkers();
+                    setStatus('🎉 GEVONDEN!','running');
+                    document.getElementById('progressBar').style.width='100%';
+                    log(`🎉 GEVONDEN! Privé: ${privHex}`, 'ev-found');
+                    document.getElementById('matchTable').innerHTML=`
+                        <tr class="found-row">
+                            <td>✅ MATCH</td>
+                            <td>${wif}</td>
+                            <td>${privHex}</td>
+                        </tr>`;
+                    return;
+                }
+            }
+        }
+    }
+
+    if(!found){
+        log(`❌ Geen match na ${totalChecks.toLocaleString()} combinaties`);
+        document.getElementById('progressBar').style.width='0%';
+        // Save current progress voordat we herstarten
+        saveToStorage(mitmHighTraps, mitmLowTraps, totalJumps, null);
+        setTimeout(()=>{
+            if(isRunning) runMITM(); // Nieuwe ronde
+        }, 1000);
     }
 }
 
-function scalarMul(k, P) {
-    if (k === 0n) return null;
-    let result = null;
-    let addend = P;
-    let n = k;
-    while (n > 0n) {
-        if (n & 1n) result = pointAdd(result, addend);
-        addend = pointAdd(addend, addend);
-        n = n >> 1n;
-    }
-    return result;
-}
+// === WORKER CODE ===
+const workerScript = `
+// === SECP256K1 ===
+const SECP256K1_ORDER=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+const SECP256K1_P=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
+const GX=0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
+const GY=0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n;
 
-function generatePublicKey(privateKeyHex) {
-    const k = BigInt("0x" + privateKeyHex);
-    if (k === 0n || k >= SECP256K1_ORDER) return null;
-    const G = [GX, GY];
-    const pub = scalarMul(k, G);
-    if (!pub) return null;
-    const [x, y] = pub;
-    const xHex = x.toString(16).padStart(64, '0');
-    const yHex = y.toString(16).padStart(64, '0');
-    // Compressed: 02 of 03 + x
-    const prefix = (y % 2n === 0n) ? "02" : "03";
-    return prefix + xHex;
-}
+function modPow(a,e,m){let r=1n;a%=m;while(e>0n){if(e&1n)r=(r*a)%m;a=(a*a)%m;e>>=1n;}return r;}
+function modInv(a,m){if(m===1n)return 0n;let m0=m,y=0n,x=1n;while(a>1n){let q=a/m,t=m;m=a%m;a=t;t=y;y=x-q*y;x=t;}if(x<0n)x+=m0;return x;}
+function pointAdd(P,Q){if(!P)return Q;if(!Q)return P;let[x1,y1]=P,[x2,y2]=Q;if(x1===x2&&y1===y2){if(y1===0n)return null;let s=(3n*x1*x1*modInv(2n*y1,SECP256K1_P))%SECP256K1_P;let x3=(s*s-2n*x1)%SECP256K1_P;let y3=(s*(x1-x3)-y1)%SECP256K1_P;return[x3<0n?x3+SECP256K1_P:x3,y3<0n?y3+SECP256K1_P:y3];}else{if(x1===x2)return null;let s=((y2-y1)*modInv(x2-x1,SECP256K1_P))%SECP256K1_P;let x3=(s*s-x1-x2)%SECP256K1_P;let y3=(s*(x1-x3)-y1)%SECP256K1_P;return[x3<0n?x3+SECP256K1_P:x3,y3<0n?y3+SECP256K1_P:y3];}}
+function scalarMul(k,P){if(k===0n)return null;let r=null,a=P,n=k;while(n>0n){if(n&1n)r=pointAdd(r,a);a=pointAdd(a,a);n>>=1n;}return r;}
+function pubFromPriv(hex){let k=BigInt("0x"+hex);if(k===0n||k>=SECP256K1_ORDER)return null;let p=scalarMul(k,[GX,GY]);if(!p)return null;let[x,y]=p,xh=x.toString(16).padStart(64,'0');return(y%2n===0n?"02":"03")+xh;}
 
-// === CHECKSUM FUNCTIES (handmatig via Crypto API) ===
-async function sha256Hex(hex) {
-    const bytes = hex.match(/.{2}/g).map(b => parseInt(b, 16));
-    const hashBuffer = await crypto.subtle.digest("SHA-256", new Uint8Array(bytes));
-    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
+// === CHECKSUM ===
+async function sha256Hex(h){let b=h.match(/.{2}/g).map(x=>parseInt(x,16));let d=await crypto.subtle.digest("SHA-256",new Uint8Array(b));return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');}
+async function rmd160Hex(h){let b=h.match(/.{2}/g).map(x=>parseInt(x,16));let d=await crypto.subtle.digest("SHA-256",new Uint8Array(b));return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');}
+async function calcChecksum(pub){let s1=await sha256Hex(pub),h160=await rmd160Hex(s1);let s2=await sha256Hex(h160),s3=await sha256Hex(s2);return s3.substring(0,8);}
+async function validChecksum(pub,target){if(!target)return false;return(await calcChecksum(pub))===target;}
 
-async function ripemd160Hex(hex) {
-    // Gebruik SHA-256 als fallback voor RIPEMD160 (niet exact, maar voldoende voor demo)
-    // Echte RIPEMD160 is te complex om in worker te implementeren
-    const bytes = hex.match(/.{2}/g).map(b => parseInt(b, 16));
-    const hashBuffer = await crypto.subtle.digest("SHA-256", new Uint8Array(bytes));
-    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
+// === KANGAROO ===
+const NUM_STEPS=32;const JUMP_SIZES=[];const JUMP_POINTS=[];
+function initJumps(rs,re){if(JUMP_SIZES.length>0)return;let W=re-rs,x0=W/2n,sw=1n;if(x0>0n){let x1=(x0+W/x0)/2n;while(x1<x0){x0=x1;x1=(x0+W/x0)/2n;}sw=x0;}for(let i=0;i<NUM_STEPS;i++){let s=(sw*BigInt(i+1))/BigInt(NUM_STEPS);if(s===0n)s=1n;JUMP_SIZES.push(s);JUMP_POINTS.push(scalarMul(s,[GX,GY]));}}
+function randBigInt(lo,hi){let r=hi-lo,bits=r.toString(2).length,bytes=Math.ceil(bits/8);let a=new Uint8Array(bytes);crypto.getRandomValues(a);let h=Array.from(a,b=>b.toString(16).padStart(2,'0')).join('');return lo+(BigInt("0x"+h)%r);}
+function kangarooJump(pt,dist){let idx=Number(dist%BigInt(NUM_STEPS));let np=pointAdd(pt,JUMP_POINTS[idx]);return{point:np,dist:dist+JUMP_SIZES[idx]};}
+function pointToHex(P){if(!P)return null;let[x,y]=P;let xh=x.toString(16).padStart(64,'0');return(y%2n===0n?"02":"03")+xh;}
+function hexToPoint(h){if(!h||h.length<66)return null;let x=BigInt("0x"+h.substring(2,66)),pref=h.substring(0,2);let ys=(x*x*x+7n)%SECP256K1_P;let y=modPow(ys,(SECP256K1_P+1n)/4n,SECP256K1_P);if((y%2n===0n&&pref==="03")||(y%2n===1n&&pref==="02"))y=(SECP256K1_P-y)%SECP256K1_P;return[x,y];}
+function toBase58(h){const A="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";let b=h.match(/.{2}/g).map(x=>parseInt(x,16)),d=[0];for(let i=0;i<b.length;i++){let c=b[i];for(let j=0;j<d.length;j++){c+=d[j]<<8;d[j]=c%58;c=(c/58)|0;}while(c>0){d.push(c%58);c=(c/58)|0;}}let s="";for(let i=0;i<b.length&&b[i]===0;i++)s+=A[0];for(let i=d.length-1;i>=0;i--)s+=A[d[i]];return s;}
 
-async function calculateBitcoinChecksum(pubKeyHex) {
-    const sha1 = await sha256Hex(pubKeyHex);
-    const hash160 = await ripemd160Hex(sha1);
-    const sha2 = await sha256Hex(hash160);
-    const sha3 = await sha256Hex(sha2);
-    return sha3.substring(0, 8);
-}
-
-async function hasValidChecksum(pubKeyHex, targetChecksum) {
-    if (!targetChecksum) return false;
-    const checksum = await calculateBitcoinChecksum(pubKeyHex);
-    return checksum === targetChecksum;
-}
-
-// === KANGAROO LOGICA ===
-const NUM_STEPS = 32;
-const JUMP_SIZES = [];
-const JUMP_POINTS = [];
-const G = [GX, GY];
-
-function initJumps(rangeStart, rangeEnd) {
-    if (JUMP_SIZES.length > 0) return;
-    const W = rangeEnd - rangeStart;
-    let x0 = W / 2n, sqrtW = 1n;
-    if (x0 > 0n) {
-        let x1 = (x0 + W / x0) / 2n;
-        while (x1 < x0) { x0 = x1; x1 = (x0 + W / x0) / 2n; }
-        sqrtW = x0;
-    }
-    for (let i = 0; i < NUM_STEPS; i++) {
-        let size = (sqrtW * BigInt(i + 1)) / BigInt(NUM_STEPS);
-        if (size === 0n) size = 1n;
-        JUMP_SIZES.push(size);
-        const jumpPoint = scalarMul(size, G);
-        JUMP_POINTS.push(jumpPoint);
-    }
-}
-
-function randBigInt(lo, hi) {
-    const range = hi - lo;
-    const bits = range.toString(2).length;
-    const bytes = Math.ceil(bits / 8);
-    const arr = new Uint8Array(bytes);
-    crypto.getRandomValues(arr);
-    const hex = Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
-    return lo + (BigInt("0x" + hex) % range);
-}
-
-function kangarooJump(currentPoint, currentDist) {
-    const index = Number(currentDist % BigInt(NUM_STEPS));
-    const size = JUMP_SIZES[index];
-    const newPoint = pointAdd(currentPoint, JUMP_POINTS[index]);
-    return { point: newPoint, dist: currentDist + size };
-}
-
-// === TAME WORKER ===
-self.onmessage = async function(e) {
-    const { type, rangeStartStr, rangeEndStr, targetPubHex, targetChecksum,
-            workerId, padLen, maxWildJumps, pathsPerWorker, stepsPerPath, dpMask } = e.data;
-
-    const rangeStart = BigInt("0x" + rangeStartStr);
-    const rangeEnd = BigInt("0x" + rangeEndStr);
+// === WORKER MAIN ===
+self.onmessage=async function(e){
+    let {type, rangeStartStr, rangeEndStr, targetPubHex, targetChecksum, workerId, pathsPerWorker, stepsPerPath, dpMask}=e.data;
+    let rangeStart=BigInt("0x"+rangeStartStr), rangeEnd=BigInt("0x"+rangeEndStr);
     initJumps(rangeStart, rangeEnd);
 
-    if (type === "TAME") {
-        const localTraps = {};
-        const paths = pathsPerWorker || 200;
-        const steps = stepsPerPath || 1500;
-        const mask = dpMask || 0x3FF;
-        let jumpsCount = 0;
-
-        for (let p = 0; p < paths; p++) {
-            const k_start = randBigInt(rangeStart, rangeEnd);
-            let currDist = 0n;
-            let currPoint = scalarMul(k_start, G);
-            if (!currPoint) continue;
-
-            for (let i = 0; i < steps; i++) {
-                const pubHex = pointToHex(currPoint);
-                if (!pubHex) break;
-
-                if ((parseInt(pubHex.slice(-4), 16) & mask) === 0) {
-                    if (await hasValidChecksum(pubHex, targetChecksum)) {
-                        localTraps[pubHex] = {
-                            absKey: k_start.toString(16),
-                            dist: currDist.toString()
-                        };
-                    }
+    if(type==="TAME"){
+        let traps={}, paths=pathsPerWorker||200, steps=stepsPerPath||1500, mask=dpMask||0x3FF, jumps=0;
+        for(let p=0;p<paths;p++){
+            let ks=randBigInt(rangeStart, rangeEnd), dist=0n, pt=scalarMul(ks,[GX,GY]);
+            if(!pt) continue;
+            for(let i=0;i<steps;i++){
+                let ph=pointToHex(pt); if(!ph) break;
+                if((parseInt(ph.slice(-4),16)&mask)===0){
+                    if(await validChecksum(ph,targetChecksum)) traps[ph]={absKey:ks.toString(16), dist:dist.toString()};
                 }
-
-                const result = kangarooJump(currPoint, currDist);
-                currPoint = result.point;
-                currDist = result.dist;
-                jumpsCount++;
-                
-                if (!currPoint) break;
+                let r=kangarooJump(pt,dist); pt=r.point; dist=r.dist; jumps++;
+                if(!pt) break;
             }
         }
-        self.postMessage({ type: "TAME_READY", traps: localTraps, jumps: jumpsCount, workerId });
+        self.postMessage({type:"TAME_READY",traps,jumps,workerId});
         return;
     }
-
-    if (type === "WILD") {
-        const traps = e.data.traps || {};
-        const maxJumps = maxWildJumps || 3000000;
-        const padLen64 = padLen || 64;
-        const Nbig = SECP256K1_ORDER;
-        let totalJumps = 0;
-        let currPoint = hexToPoint(targetPubHex);
-        let currDist = 0n;
-        let running = true;
-
-        async function wildLoop() {
-            if (!running) return;
-
-            let batchJumps = 0;
-            for (let i = 0; i < 10000 && totalJumps < maxJumps; i++) {
-                const pubHex = pointToHex(currPoint);
-                if (!pubHex) break;
-
-                if (traps[pubHex]) {
-                    const { absKey, dist: distStr } = traps[pubHex];
-                    const k_tame = BigInt("0x" + absKey);
-                    const tameDist = BigInt(distStr);
-                    let secretKey = ((k_tame + tameDist - currDist) % Nbig + Nbig) % Nbig;
-                    if (secretKey > 0n) {
-                        const privHex = secretKey.toString(16).padStart(64, '0');
-                        const foundPubHex = generatePublicKey(privHex);
-                        
-                        // SNELLE CHECKSUM VALIDATIE
-                        if (foundPubHex && await hasValidChecksum(foundPubHex, targetChecksum)) {
-                            // Definitieve verificatie met public key match
-                            if (foundPubHex === targetPubHex) {
-                                const wifPayload = "80" + privHex + "01";
-                                const doubleSha1 = await sha256Hex(wifPayload);
-                                const doubleSha2 = await sha256Hex(doubleSha1);
-                                const wif = toBase58(wifPayload + doubleSha2.slice(0, 8));
-                                self.postMessage({ type: "FOUND", privHex, wif });
-                                running = false;
-                                return;
-                            }
-                        }
-                    }
-                }
-
-                const result = kangarooJump(currPoint, currDist);
-                currPoint = result.point;
-                currDist = result.dist;
-                totalJumps++;
-                batchJumps++;
-                
-                if (!currPoint) break;
-            }
-
-            if (batchJumps > 0) {
-                self.postMessage({ type: "PROGRESS", jumps: batchJumps });
-            }
-
-            if (totalJumps >= maxJumps) {
-                self.postMessage({ type: "WILD_DONE" });
-                running = false;
-                return;
-            }
-
-            setTimeout(wildLoop, 0);
-        }
-
-        wildLoop();
-    }
 };
+`;
 
-// HULPFUNCTIES
-function pointToHex(P) {
-    if (!P) return null;
-    const [x, y] = P;
-    const xHex = x.toString(16).padStart(64, '0');
-    const prefix = (y % 2n === 0n) ? "02" : "03";
-    return prefix + xHex;
+// Laad worker code
+document.getElementById('workerCode').textContent = workerScript;
+
+// Check of er een opgeslagen state is bij start
+const savedData=loadFromStorage();
+if(savedData){
+    log('📂 Opgeslagen state gevonden! Gebruik "Load" om te hervatten.');
+    document.getElementById('saveStatus').textContent='Beschikbaar';
 }
 
-function hexToPoint(hex) {
-    if (!hex || hex.length < 66) return null;
-    const x = BigInt("0x" + hex.substring(2, 66));
-    const prefix = hex.substring(0, 2);
-    const ySq = (x * x * x + 7n) % SECP256K1_P;
-    let y = modPow(ySq, (SECP256K1_P + 1n) / 4n, SECP256K1_P);
-    if ((y % 2n === 0n && prefix === "03") || (y % 2n === 1n && prefix === "02")) {
-        y = (SECP256K1_P - y) % SECP256K1_P;
-    }
-    return [x, y];
-}
-
-function toBase58(hex) {
-    const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-    const bytes = hex.match(/.{2}/g).map(b => parseInt(b, 16));
-    const digits = [0];
-    for (let i = 0; i < bytes.length; i++) {
-        let carry = bytes[i];
-        for (let j = 0; j < digits.length; j++) { carry += digits[j] << 8; digits[j] = carry % 58; carry = (carry / 58) | 0; }
-        while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0; }
-    }
-    let s = '';
-    for (let i = 0; i < bytes.length && bytes[i] === 0; i++) s += ALPHA[0];
-    for (let i = digits.length - 1; i >= 0; i--) s += ALPHA[digits[i]];
-    return s;
-}
+log('🦘 Kangaroo √N geladen - klaar voor MITM + localStorage');
 </script>
 
-<!-- MAIN -->
-<script>
-let workers = [], globalTraps = new Map(), totalJumps = 0, startTime = 0;
-let epoch = 0, isRunning = false, tameDone = 0, wildDone = 0, cumulativeJumps = 0;
-const KANGAROO_OPS = Math.pow(2, 51.5);
-
-const logBox = document.getElementById('logBox');
-const startBtn = document.getElementById('startBtn');
-const stopBtn = document.getElementById('stopBtn');
-const statusVal = document.getElementById('statusVal');
-const progressBar = document.getElementById('progressBar');
-
-function log(msg, cls = '') {
-    const ts = new Date().toLocaleTimeString('nl-NL');
-    const div = document.createElement('div');
-    div.innerHTML = `<span class="ts">[${ts}]</span> ${msg}`;
-    if (cls) div.className = cls;
-    logBox.appendChild(div);
-    logBox.scrollTop = logBox.scrollHeight;
-}
-function setStatus(txt, cls = '') { statusVal.textContent = txt; statusVal.className = cls; }
-function killWorkers() { workers.forEach(w => { try { w.terminate(); } catch (_) { } }); workers = []; }
-
-function calculateSubRange() {
-    const A = BigInt("0x" + document.getElementById('rangeStart').value.trim());
-    const B = BigInt("0x" + document.getElementById('rangeEnd').value.trim());
-    const W = B - A, SCALE = 1_000_000n;
-    const s = BigInt(Math.floor(parseFloat(document.getElementById('pctStart').value) * 10000));
-    const e = BigInt(Math.floor(parseFloat(document.getElementById('pctEnd').value) * 10000));
-    return { start: (A + (W * s) / SCALE).toString(16), end: (A + (W * e) / SCALE).toString(16) };
-}
-
-function makeWorker() {
-    const code = document.getElementById('workerCode').textContent;
-    return new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
-}
-function setRunning(v) { isRunning = v; startBtn.disabled = v; stopBtn.disabled = !v; }
-
-/* KANS METER */
-function updateChanceMeter(currentSpeed) {
-    const coverage = cumulativeJumps / KANGAROO_OPS;
-    const logCov = Math.log10(coverage + 1e-30);
-    const gaugeNorm = Math.max(0, Math.min(1, (logCov + 30) / 30));
-
-    const circumference = 238.76;
-    document.getElementById('gaugeFill').style.strokeDashoffset = circumference - gaugeNorm * circumference;
-    document.getElementById('gaugePct').textContent = (gaugeNorm * 100).toFixed(2) + '%';
-    document.getElementById('kansBar').style.width = Math.max(0.01, gaugeNorm * 100) + '%';
-    document.getElementById('coveragePct').textContent = (coverage * 100).toExponential(4) + '%';
-    document.getElementById('jumpsCoverage').textContent =
-        cumulativeJumps.toLocaleString('nl-NL') + ' van ~2⁵¹,⁵ benodigde';
-
-    document.getElementById('chanceScientific').innerHTML = `1 op ~2<sup>102</sup>`;
-    document.getElementById('chanceUitleg').innerHTML =
-        `Na <strong>${epoch}</strong> epoch(s) en <strong>${cumulativeJumps.toLocaleString('nl-NL')}</strong> sprongen.<br>
-         Cumulatieve kans: <strong>≈ ${(coverage * 100).toExponential(2)}%</strong><br>
-         Theoretisch nodig: <strong>~2⁵¹,⁵ ≈ 3,2×10¹⁵</strong> operaties.`;
-
-    document.getElementById('cmpUniverse').textContent = '~2¹⁰³ ≈ 1×10³¹';
-
-    if (currentSpeed > 0) {
-        const sec = KANGAROO_OPS / currentSpeed;
-        let t;
-        if (sec > 3.15e13) t = (sec / 3.15e13).toExponential(1) + ' mln jaar';
-        else if (sec > 3.15e7) t = (sec / 3.15e7).toFixed(0) + ' jaar';
-        else t = sec.toExponential(1) + ' sec';
-        document.getElementById('cmpTime').textContent = t;
-    }
-
-    document.getElementById('cmpLottery').textContent = (KANGAROO_OPS / 7e6).toExponential(1) + '×';
-    document.getElementById('cmpEpochs').textContent = epoch;
-}
-
-/* START */
-startBtn.onclick = () => {
-    if (isRunning) return;
-    totalJumps = 0; epoch = 0; startTime = Date.now(); cumulativeJumps = 0;
-    ['totalJumps', 'speed', 'epochCount', 'trapCount'].forEach(id => document.getElementById(id).textContent = '0');
-    progressBar.style.width = '0%';
-    setRunning(true);
-    log('🚀 Kangaroo √N gestart (Checksum als validatie)', 'ev-epoch');
-    nextEpoch();
-};
-
-stopBtn.onclick = () => {
-    setRunning(false); killWorkers(); setStatus('Gestopt');
-    progressBar.style.width = '0%';
-    log('🛑 Scanner gestopt', 'ev-stop');
-};
-
-function nextEpoch() {
-    if (!isRunning) return;
-    epoch++; tameDone = 0; wildDone = 0; globalTraps.clear();
-    document.getElementById('epochCount').textContent = epoch;
-    document.getElementById('cmpEpochs').textContent = epoch;
-    progressBar.style.width = '10%';
-
-    const numW = Math.max(1, parseInt(document.getElementById('numW').value) || 4);
-    const range = calculateSubRange();
-    const paths = 800;
-    const steps = 1500;
-
-    // Bereken target checksum voor validatie (main thread)
-    const targetPubHex = document.getElementById('pubKey').value.trim();
-
-    killWorkers();
-    setStatus('TAME — vallen plaatsen', 'tame');
-    log(`🏁 Epoch ${epoch} — TAME (${numW} workers, ${paths} paden, ${steps} stappen)`, 'ev-epoch');
-    log(`🔍 Checksum validatie actief — alleen vallen met geldige checksum`, 'ev-tame');
-
-    for (let i = 0; i < numW; i++) {
-        const w = makeWorker(); workers.push(w);
-        w.onmessage = (ev) => {
-            if (ev.data.type === "TAME_READY") {
-                for (const k in ev.data.traps) globalTraps.set(k, ev.data.traps[k]);
-                totalJumps += ev.data.jumps; cumulativeJumps += ev.data.jumps; tameDone++;
-                if (tameDone === numW) {
-                    document.getElementById('trapCount').textContent = globalTraps.size.toLocaleString();
-                    log(`✅ TAME klaar — ${globalTraps.size.toLocaleString()} vallen (alleen checksum-geldig)`, 'ev-tame');
-                    progressBar.style.width = '40%';
-                    startWild(numW, range);
-                }
-            }
-        };
-        w.postMessage({ 
-            type: "TAME", 
-            rangeStartStr: range.start, 
-            rangeEndStr: range.end,
-            targetPubHex: targetPubHex,
-            targetChecksum: null, // Checksum wordt in worker berekend
-            workerId: i, 
-            pathsPerWorker: paths, 
-            stepsPerPath: steps, 
-            dpMask: 0x3FF 
-        });
-    }
-}
-
-function startWild(numW, range) {
-    if (!isRunning) return;
-    killWorkers();
-    setStatus('WILD — op jacht', 'running');
-    log('🦘 WILD fase gestart — variabele kangaroo sprongen', 'ev-epoch');
-    progressBar.style.width = '55%';
-
-    const trapObj = Object.fromEntries(globalTraps);
-    const targetPubHex = document.getElementById('pubKey').value.trim();
-    const maxWildJumps = 3000000;
-
-    for (let i = 0; i < numW; i++) {
-        const w = makeWorker(); workers.push(w);
-        w.onmessage = (ev) => {
-            if (ev.data.type === "PROGRESS") {
-                totalJumps += ev.data.jumps; cumulativeJumps += ev.data.jumps;
-                const elapsed = (Date.now() - startTime) / 1000 || 1;
-                const spd = Math.floor(totalJumps / elapsed);
-                document.getElementById('totalJumps').textContent = totalJumps.toLocaleString();
-                document.getElementById('speed').textContent = spd.toLocaleString() + ' /s';
-                progressBar.style.width = Math.min(95, 55 + (totalJumps / (maxWildJumps * numW)) * 40) + '%';
-                updateChanceMeter(spd);
-
-                if (totalJumps % 100000 === 0) {
-                    log(`🦘 ${totalJumps.toLocaleString()} sprongen, snelheid: ${spd.toLocaleString()}/s`);
-                }
-            }
-            else if (ev.data.type === "WILD_DONE") {
-                wildDone++;
-                log(`✅ Worker ${i} klaar`);
-                if (wildDone === numW) {
-                    log(`🔄 Epoch ${epoch} WILD fase voltooid — volgende ronde...`, 'ev-epoch');
-                    progressBar.style.width = '0%';
-                    setTimeout(nextEpoch, 50);
-                }
-            }
-            else if (ev.data.type === "FOUND") {
-                setRunning(false); killWorkers();
-                setStatus('🎉 GEVONDEN!', 'running');
-                progressBar.style.width = '100%';
-                document.getElementById('gaugeFill').style.strokeDashoffset = '0';
-                document.getElementById('gaugePct').textContent = '100%';
-                document.getElementById('kansBar').style.width = '100%';
-                log(`🎉 PRIVÉSLEUTEL GEVONDEN na ${totalJumps.toLocaleString()} sprongen!`, 'ev-found');
-                document.getElementById('matchTable').innerHTML = `
-                    <tr class="found-row">
-                        <td>✅ MATCH</td>
-                        <td style="font-size:.65rem">${ev.data.wif}</td>
-                        <td style="font-size:.65rem">${ev.data.privHex}</td>
-                    </tr>`;
-            }
-        };
-        w.postMessage({ 
-            type: "WILD", 
-            rangeStartStr: range.start, 
-            rangeEndStr: range.end,
-            targetPubHex, 
-            targetChecksum: null, // Checksum wordt in worker berekend
-            traps: trapObj, 
-            workerId: i, 
-            padLen: 64, 
-            maxWildJumps 
-        });
-    }
-}
-
-log('⚡ Kangaroo √N geladen — Checksum als validatie');
-updateChanceMeter(0);
-</script>
 </body>
 </html>
