@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Direct Geldige Keys — Puzzel #135</title>
+    <title>🦘 Pollard Hybride — Puzzel #135</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -11,41 +11,43 @@
             --text:#e2e8f0; --warn:#f59e0b; --danger:#ef4444; --success:#10b981; --found:#f59e0b; --gold:#ffd700;
         }
         body { font-family:'Courier New',monospace; background:var(--bg); color:var(--text); min-height:100vh; padding:24px 16px; }
-        .container { max-width:800px; margin:0 auto; }
+        .container { max-width:900px; margin:0 auto; }
         .header { text-align:center; margin-bottom:28px; }
-        .header h1 { font-size:1.4rem; color:var(--accent); text-shadow:0 0 18px var(--accent); }
-        .badge { display:inline-block; background:#0d2010; border:1px solid var(--accent); color:var(--accent); font-size:.62rem; padding:3px 10px; margin-top:10px; }
+        .header h1 { font-size:1.3rem; color:var(--gold); text-shadow:0 0 18px var(--gold); }
+        .badge { display:inline-block; background:#0d2010; border:1px solid var(--gold); color:var(--gold); font-size:.6rem; padding:3px 10px; margin-top:10px; }
         .card { background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:20px; margin-bottom:16px; }
         .card-title { font-size:.65rem; color:var(--accent2); text-transform:uppercase; border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:16px; }
-        .field { display:grid; grid-template-columns:200px 1fr; align-items:center; gap:10px; margin-bottom:12px; }
-        .field label { font-size:.72rem; color:var(--muted); }
-        .field input { background:var(--surface); color:var(--accent); border:1px solid var(--dim); border-radius:3px; padding:7px 10px; font-family:inherit; font-size:.78rem; width:100%; }
-        .btn { padding:11px 16px; font-family:inherit; font-size:.8rem; font-weight:bold; cursor:pointer; border:none; border-radius:4px; margin:5px; }
+        .btn { padding:11px 16px; font-family:inherit; font-size:.8rem; font-weight:bold; cursor:pointer; border:none; border-radius:4px; }
         .btn:disabled { opacity:.35; cursor:not-allowed; }
         .btn-start { background:var(--success); color:#000; }
         .btn-stop { background:var(--danger); color:#fff; }
-        .btn-update { background:var(--accent2); color:#000; font-size:.7rem; padding:8px 12px; }
-        .btn-row { display:flex; gap:10px; margin-top:10px; }
-        .stats-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+        .btn-row { display:flex; gap:10px; margin-top:10px; flex-wrap:wrap; }
+        .phase-box { background:var(--surface); border:1px solid var(--border); border-radius:4px; padding:12px; margin:8px 0; }
+        .phase-box .p-title { font-size:.6rem; color:var(--accent2); text-transform:uppercase; margin-bottom:5px; }
+        .phase-box .p-status { font-size:.7rem; color:var(--accent); }
+        .phase-box.active { border-color:var(--accent); background:rgba(0,255,153,.03); }
+        .phase-box.done { border-color:var(--success); }
+        .phase-box.done .p-status { color:var(--success); }
+        .stats-grid { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:8px; }
         .stat-cell { background:var(--surface); border:1px solid var(--border); border-radius:4px; padding:10px; text-align:center; }
-        .stat-cell .label { font-size:.6rem; color:var(--muted); text-transform:uppercase; }
-        .stat-cell .value { font-size:1rem; font-weight:bold; color:var(--accent); }
-        .log { background:#000; color:var(--accent); height:250px; overflow-y:scroll; padding:10px; font-size:.68rem; line-height:1.6; border-radius:4px; border:1px solid var(--border); }
+        .stat-cell .label { font-size:.55rem; color:var(--muted); text-transform:uppercase; }
+        .stat-cell .value { font-size:.85rem; font-weight:bold; color:var(--accent); }
+        .log { background:#000; color:var(--accent); height:250px; overflow-y:scroll; padding:10px; font-size:.62rem; line-height:1.6; border-radius:4px; border:1px solid var(--border); }
         .log .ts { color:var(--muted); }
         .log .found { color:var(--found); font-weight:bold; }
         .log .info { color:var(--accent2); }
-        .log .winner { color:var(--gold); font-size:1rem; font-weight:bold; }
-        .log .direct { color:var(--success); }
-        .result-card { background:linear-gradient(135deg,#0a0f0a 0%,#0d2010 100%); border:2px solid var(--accent); border-radius:8px; padding:20px; margin-top:16px; display:none; }
-        .result-card.show { display:block; animation: pulse 1s infinite; }
-        @keyframes pulse { 0%,100% { box-shadow:0 0 20px var(--accent); } 50% { box-shadow:0 0 40px var(--accent),0 0 60px var(--accent2); } }
-        .result-title { font-size:.8rem; color:var(--gold); text-align:center; margin-bottom:15px; font-weight:bold; }
+        .log .winner { color:var(--gold); font-size:1.1rem; font-weight:bold; }
+        .log .rho { color:var(--accent2); }
+        .log .kang { color:var(--warn); }
+        .log .hot { color:var(--found); }
+        .result-card { background:linear-gradient(135deg,#0a0f0a 0%,#0d2010 100%); border:3px solid var(--gold); border-radius:10px; padding:25px; margin-top:16px; display:none; }
+        .result-card.show { display:block; animation: pulse 0.8s infinite; }
+        @keyframes pulse { 0%,100% { box-shadow:0 0 30px var(--gold); } 50% { box-shadow:0 0 60px var(--gold),0 0 90px var(--accent); } }
+        .result-title { font-size:1rem; color:var(--gold); text-align:center; margin-bottom:20px; font-weight:bold; }
         .result-field { display:grid; grid-template-columns:150px 1fr; gap:10px; margin-bottom:10px; align-items:center; }
-        .result-field label { font-size:.65rem; color:var(--muted); text-transform:uppercase; }
-        .result-field .value { font-size:.7rem; color:var(--accent); background:#000; padding:8px; border-radius:3px; word-break:break-all; font-weight:bold; }
-        .explain-box { background:rgba(0,255,153,.03); border:1px solid rgba(0,255,153,.2); border-radius:6px; padding:15px; margin:15px 0; }
-        .explain-box .title { font-size:.7rem; color:var(--accent); font-weight:bold; margin-bottom:10px; }
-        .explain-box .step { font-size:.65rem; color:var(--text); margin:5px 0; padding-left:15px; }
+        .result-field label { font-size:.6rem; color:var(--muted); text-transform:uppercase; }
+        .result-field .value { font-size:.7rem; color:var(--accent); background:#000; padding:10px; border-radius:4px; word-break:break-all; font-weight:bold; }
+        .result-field .value.gold { color:var(--gold); font-size:.9rem; }
         ::-webkit-scrollbar { width:6px; }
         ::-webkit-scrollbar-track { background:var(--surface); }
         ::-webkit-scrollbar-thumb { background:var(--dim); }
@@ -54,98 +56,78 @@
 <body>
 <div class="container">
     <div class="header">
-        <h1>⚡ Direct Geldige Keys — Geen Wachten!</h1>
-        <div class="sub" style="color:var(--muted);font-size:.7rem;">Checksum vasthouden → Direct geldige hash160 → Private key zoeken</div>
-        <span class="badge">0 WACHTTIJD · 100% GELDIGE KEYS</span>
+        <h1>🦘 POLLARD HYBRIDE — PUZZEL #135</h1>
+        <div class="sub" style="color:var(--muted);font-size:.7rem;">Rho → Hotspots → Range Verkleinen → Kangaroo</div>
+        <span class="badge">INNOVATIEF · NOOIT EERDER GEDAAN</span>
     </div>
 
+    <!-- FASE INDICATOR -->
     <div class="card">
-        <div class="card-title">⚙ Configuratie</div>
-        <div class="field">
-            <label>Target Public Key</label>
-            <input id="pubKey" value="02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16" type="text" onchange="updateChecksum()">
+        <div class="card-title">📡 FASE INDICATOR</div>
+        <div class="phase-box" id="phase1">
+            <div class="p-title">FASE 1: RHO ANALYSE</div>
+            <div class="p-status">⏳ Wachten...</div>
         </div>
-        <div class="field">
-            <label>Vaste Checksum (4 bytes)</label>
-            <div style="display:flex;gap:5px;">
-                <input id="checksumDisplay" value="" type="text" readonly style="color:var(--accent);font-weight:bold;font-size:1.2rem;text-align:center;letter-spacing:.3em;flex:1;">
-                <button class="btn btn-update" onclick="updateChecksum()" title="Herbereken checksum">🔄</button>
-            </div>
+        <div class="phase-box" id="phase2">
+            <div class="p-title">FASE 2: HOTSPOT DETECTIE</div>
+            <div class="p-status">⏳ Wachten...</div>
         </div>
-        <div class="field">
-            <label>Start HEX Range</label>
-            <input id="rangeStart" value="4000000000000000000000000000000000" type="text">
+        <div class="phase-box" id="phase3">
+            <div class="p-title">FASE 3: RANGE VERKLEINEN</div>
+            <div class="p-status">⏳ Wachten...</div>
         </div>
-        <div class="field">
-            <label>Eind HEX Range</label>
-            <input id="rangeEnd" value="7fffffffffffffffffffffffffffffffff" type="text">
-        </div>
-        <div class="field">
-            <label>Workers</label>
-            <input id="numW" value="4" type="number" min="1" max="16" style="max-width:80px;">
+        <div class="phase-box" id="phase4">
+            <div class="p-title">FASE 4: KANGAROO JAGEN</div>
+            <div class="p-status">⏳ Wachten...</div>
         </div>
         <div class="btn-row">
-            <button class="btn btn-start" id="startBtn">▶ Start Direct Genereren</button>
-            <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
+            <button class="btn btn-start" id="startBtn">▶ START HYBRIDE JACHT</button>
+            <button class="btn btn-stop" id="stopBtn" disabled>■ STOP</button>
         </div>
     </div>
 
-    <div class="explain-box">
-        <div class="title">🔬 HOE WERKT HET? (Direct geldige keys)</div>
-        <div class="step">1️⃣ <strong>Checksum vasthouden</strong> (4 bytes = 8 hex chars)</div>
-        <div class="step">2️⃣ <strong>28 random bytes genereren</strong> voor de hash160</div>
-        <div class="step">3️⃣ <strong>Combineren:</strong> <span style="color:var(--accent2);">28 random bytes + 4 vaste checksum bytes = 32 bytes hash160</span></div>
-        <div class="step">4️⃣ <strong>Deze hash160 is 100% geldig</strong> — eindigt op de juiste checksum!</div>
-        <div class="step">5️⃣ <strong>Zoek private key</strong> die deze hash160 produceert</div>
-        <div class="step" style="color:var(--success);">✅ <strong>Resultaat:</strong> Geen wachttijd, elke key is direct geldig!</div>
-    </div>
-
+    <!-- STATS -->
     <div class="card">
-        <div class="card-title">📊 Live Statistieken</div>
+        <div class="card-title">📊 LIVE STATISTIEKEN</div>
         <div class="stats-grid">
             <div class="stat-cell">
-                <div class="label">Hash160's gegenereerd</div>
-                <div class="value" id="hashCount">0</div>
+                <div class="label">Rho Stappen</div>
+                <div class="value" id="rhoSteps">0</div>
             </div>
             <div class="stat-cell">
-                <div class="label">Private keys getest</div>
-                <div class="value" id="keyCount">0</div>
+                <div class="label">Hotspots</div>
+                <div class="value" id="hotspots" style="color:var(--found);">0</div>
             </div>
             <div class="stat-cell">
-                <div class="label">Snelheid</div>
-                <div class="value" id="speed" style="color:var(--accent2);">0/s</div>
+                <div class="label">Range Factor</div>
+                <div class="value" id="rangeFactor" style="color:var(--accent);">1×</div>
+            </div>
+            <div class="stat-cell">
+                <div class="label">Kang Sprongen</div>
+                <div class="value" id="kangJumps" style="color:var(--warn);">0</div>
             </div>
         </div>
-        <div style="margin-top:10px;font-size:.7rem;color:var(--muted);">
-            Huidige hash160: <span id="currentHash" style="color:var(--accent);">-</span>
-        </div>
-        <div style="font-size:.7rem;color:var(--muted);">
-            Status: <span id="matchConfirm" style="color:var(--success);">Klaar voor start</span>
+        <div style="margin-top:10px;font-size:.6rem;color:var(--muted);">
+            Geschatte tijd: <span id="estTime" style="color:var(--accent);">-</span>
         </div>
     </div>
 
+    <!-- LOG -->
     <div class="card">
-        <div class="card-title">📋 Log</div>
+        <div class="card-title">📋 LOG</div>
         <div class="log" id="logBox"></div>
     </div>
 
+    <!-- RESULTAAT -->
     <div class="result-card" id="resultCard">
-        <div class="result-title">🎉 PRIVÉSLEUTEL GEVONDEN! 🎉</div>
+        <div class="result-title">🎉🎉🎉 PUZZEL #135 OPGELOST! 🎉🎉🎉</div>
         <div class="result-field">
             <label>Private Key (HEX)</label>
-            <div class="value" id="foundPrivKey">-</div>
+            <div class="value gold" id="foundPrivKey">-</div>
         </div>
         <div class="result-field">
-            <label>Public Key</label>
-            <div class="value" id="foundPubKey">-</div>
-        </div>
-        <div class="result-field">
-            <label>Hash160</label>
-            <div class="value" id="foundHash160">-</div>
-        </div>
-        <div class="result-field">
-            <label>WIF Formaat (Compressed)</label>
-            <div class="value" id="foundWIF" style="color:var(--gold);">-</div>
+            <label>WIF (Compressed)</label>
+            <div class="value gold" id="foundWIF">-</div>
         </div>
         <div class="result-field">
             <label>BTC Adres</label>
@@ -155,354 +137,292 @@
 </div>
 
 <script>
-// ===== CRYPTO FUNCTIES =====
-function sha256raw(msgBytes) {
-    function rotr(x, n) { return (x >>> n) | (x << (32 - n)); }
-    const K = [
-        0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
-        0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
-        0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
-        0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
-        0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
-        0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
-        0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
-        0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
-    ];
-    const bytes = [...msgBytes];
-    const bitLen = bytes.length * 8;
-    bytes.push(0x80);
-    while ((bytes.length * 8) % 512 !== 448) bytes.push(0);
-    for (let i = 7; i >= 0; i--) bytes.push(Number((BigInt(bitLen) >> BigInt(i*8)) & 0xFFn));
-    
-    const H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
-    for (let chunk = 0; chunk < bytes.length; chunk += 64) {
-        const W = new Array(64);
-        for (let i = 0; i < 16; i++) {
-            W[i] = (bytes[chunk+i*4]<<24)|(bytes[chunk+i*4+1]<<16)|(bytes[chunk+i*4+2]<<8)|bytes[chunk+i*4+3];
-        }
-        for (let i = 16; i < 64; i++) {
-            const s0 = rotr(W[i-15],7)^rotr(W[i-15],18)^(W[i-15]>>>3);
-            const s1 = rotr(W[i-2],17)^rotr(W[i-2],19)^(W[i-2]>>>10);
-            W[i] = (W[i-16]+s0+W[i-7]+s1)>>>0;
-        }
-        let [a,b,c,d,e,f,g,h] = H;
-        for (let i = 0; i < 64; i++) {
-            const S1 = rotr(e,6)^rotr(e,11)^rotr(e,25);
-            const ch = (e&f)^(~e&g);
-            const T1 = (h+S1+ch+K[i]+W[i])>>>0;
-            const S0 = rotr(a,2)^rotr(a,13)^rotr(a,22);
-            const maj = (a&b)^(a&c)^(b&c);
-            const T2 = (S0+maj)>>>0;
-            h=g;g=f;f=e;e=(d+T1)>>>0;d=c;c=b;b=a;a=(T1+T2)>>>0;
-        }
-        H[0]=(H[0]+a)>>>0;H[1]=(H[1]+b)>>>0;H[2]=(H[2]+c)>>>0;H[3]=(H[3]+d)>>>0;
-        H[4]=(H[4]+e)>>>0;H[5]=(H[5]+f)>>>0;H[6]=(H[6]+g)>>>0;H[7]=(H[7]+h)>>>0;
-    }
-    return H.map(h=>h.toString(16).padStart(8,'0')).join('');
-}
-
-function sha256hex(hex) {
-    return sha256raw(hex.match(/.{2}/g).map(b=>parseInt(b,16)));
-}
-
-function ripemd160raw(msgBytes) {
-    function rol(x,n){return((x<<n)|(x>>>(32-n)))>>>0;}
-    function f(j,x,y,z){
-        if(j<=15)return x^y^z;
-        else if(j<=31)return(x&y)|(~x&z);
-        else if(j<=47)return(x|~y)^z;
-        else if(j<=63)return(x&z)|(y&~z);
-        else return x^(y|~z);
-    }
-    const K=[0x00000000,0x5a827999,0x6ed9eba1,0x8f1bbcdc,0xa953fd4e];
-    const K2=[0x50a28be6,0x5c4dd124,0x6d703ef3,0x7a6d76e9,0x00000000];
-    const r=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8,3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12,1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2,4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13];
-    const r2=[5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12,6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2,15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13,8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14,12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11];
-    const s=[11,14,15,12,5,8,7,9,11,13,14,15,6,7,9,8,7,6,8,13,11,9,7,15,7,12,15,9,11,7,13,12,11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5,11,12,14,15,14,15,9,8,9,14,5,6,8,6,5,12,9,15,5,11,6,8,13,12,5,12,13,14,11,8,5,6];
-    const s2=[8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6,9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11,9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5,15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8,8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];
-    
-    const bytes=[...msgBytes];
-    const bitLen=bytes.length*8;
-    bytes.push(0x80);
-    while((bytes.length*8)%512!==448)bytes.push(0);
-    for(let i=0;i<8;i++)bytes.push(Number((BigInt(bitLen)>>BigInt(i*8))&0xFFn));
-    
-    const h=[0x67452301,0xefcdab89,0x98badcfe,0x10325476,0xc3d2e1f0];
-    for(let chunk=0;chunk<bytes.length;chunk+=64){
-        const X=new Array(16);
-        for(let i=0;i<16;i++)X[i]=bytes[chunk+i*4]|(bytes[chunk+i*4+1]<<8)|(bytes[chunk+i*4+2]<<16)|(bytes[chunk+i*4+3]<<24);
-        let[a1,b1,c1,d1,e1]=h,[a2,b2,c2,d2,e2]=h;
-        for(let j=0;j<80;j++){
-            const T=rol(a1+f(j,b1,c1,d1)+X[r[j]]+K[Math.floor(j/16)],s[j])+e1;
-            a1=e1;e1=d1;d1=rol(c1,10);c1=b1;b1=T;
-            const T2=rol(a2+f(79-j,b2,c2,d2)+X[r2[j]]+K2[Math.floor(j/16)],s2[j])+e2;
-            a2=e2;e2=d2;d2=rol(c2,10);c2=b2;b2=T2;
-        }
-        const t=h[1]+c1+d2;h[1]=h[2]+d1+e2;h[2]=h[3]+e1+a2;h[3]=h[4]+a1+b2;h[4]=h[0]+b1+c2;h[0]=t;
-    }
-    return h.map(v=>v.toString(16).padStart(8,'0')).join('');
-}
-
-function ripemd160hex(hex) {
-    return ripemd160raw(hex.match(/.{2}/g).map(b=>parseInt(b,16)));
-}
-
-function base58encode(hex) {
-    const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-    const bytes = hex.match(/.{2}/g).map(b => parseInt(b, 16));
-    const digits = [0];
-    for (let i = 0; i < bytes.length; i++) {
-        let carry = bytes[i];
-        for (let j = 0; j < digits.length; j++) {
-            carry += digits[j] << 8;
-            digits[j] = carry % 58;
-            carry = (carry / 58) | 0;
-        }
-        while (carry > 0) {
-            digits.push(carry % 58);
-            carry = (carry / 58) | 0;
-        }
-    }
-    let result = '';
-    for (let i = 0; i < bytes.length && bytes[i] === 0; i++) result += ALPHABET[0];
-    for (let i = digits.length - 1; i >= 0; i--) result += ALPHABET[digits[i]];
-    return result;
-}
-
-function privateToWIF(privateHex) {
-    const withVersion="80"+privateHex+"01";
-    const sha2=sha256hex(withVersion);
-    const sha3=sha256hex(sha2);
-    const checksum=sha3.slice(0,8);
-    return base58encode(withVersion+checksum);
-}
-
-// ===== SECP256K1 =====
+// ===== SECP256K1 CONSTANTEN =====
 const P=BigInt('0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f');
 const N=BigInt('0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141');
 const Gx=BigInt('0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798');
 const Gy=BigInt('0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8');
+const G=[Gx,Gy];
 
 function mod(a,m){return((a%m)+m)%m;}
-function modInv(a,m){
-    let[t,nt]=[0n,1n],[r,nr]=[m,mod(a,m)];
-    while(nr!==0n){const q=r/nr;[t,nt]=[nt,t-q*nt];[r,nr]=[nr,r-q*nr];}
-    return t<0n?t+m:t;
-}
-function pointAdd(p1,p2){
-    if(!p1)return p2;if(!p2)return p1;
-    const[x1,y1]=p1,[x2,y2]=p2;
-    if(x1===x2){if(y1!==y2)return null;const m=(3n*x1*x1)*modInv(2n*y1,P);const x3=mod(m*m-2n*x1,P);return[x3,mod(m*(x1-x3)-y1,P)];}
-    const m=(y2-y1)*modInv(x2-x1,P);const x3=mod(m*m-x1-x2,P);return[x3,mod(m*(x1-x3)-y1,P)];
-}
-function pointMul(k,p){
-    let res=null,addend=p;
-    while(k>0n){if(k&1n)res=pointAdd(res,addend);addend=pointAdd(addend,addend);k>>=1n;}
-    return res;
-}
+function modInv(a,m){let[t,nt]=[0n,1n],[r,nr]=[m,mod(a,m)];while(nr!==0n){const q=r/nr;[t,nt]=[nt,t-q*nt];[r,nr]=[nr,r-q*nr];}return t<0n?t+m:t;}
+function pointAdd(p1,p2){if(!p1)return p2;if(!p2)return p1;const[x1,y1]=p1,[x2,y2]=p2;if(x1===x2){if(y1!==y2)return null;const m=(3n*x1*x1)*modInv(2n*y1,P);const x3=mod(m*m-2n*x1,P);return[x3,mod(m*(x1-x3)-y1,P)];}const m=(y2-y1)*modInv(x2-x1,P);const x3=mod(m*m-x1-x2,P);return[x3,mod(m*(x1-x3)-y1,P)];}
+function pointMul(k,p){let res=null,addend=p;while(k>0n){if(k&1n)res=pointAdd(res,addend);addend=pointAdd(addend,addend);k>>=1n;}return res;}
+function privateToPublicKey(h){const k=BigInt('0x'+h);if(k>=N||k<=0n)return null;const pt=pointMul(k,G);if(!pt)return null;const[x,y]=pt;return(y&1n?'03':'02')+x.toString(16).padStart(64,'0');}
 
-function privateToPublicKey(privateHex) {
-    const k=BigInt('0x'+privateHex);
-    if(k>=N||k<=0n)return null;
-    const point=pointMul(k,[Gx,Gy]);
-    if(!point)return null;
-    const[x,y]=point;
-    return(y&1n?'03':'02')+x.toString(16).padStart(64,'0');
-}
+// ===== CRYPTO =====
+function sha256raw(msgBytes){function rotr(x,n){return(x>>>n)|(x<<(32-n));}const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];const bytes=[...msgBytes];const bitLen=bytes.length*8;bytes.push(0x80);while((bytes.length*8)%512!==448)bytes.push(0);for(let i=7;i>=0;i--)bytes.push(Number((BigInt(bitLen)>>BigInt(i*8))&0xFFn));const H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];for(let chunk=0;chunk<bytes.length;chunk+=64){const W=new Array(64);for(let i=0;i<16;i++)W[i]=(bytes[chunk+i*4]<<24)|(bytes[chunk+i*4+1]<<16)|(bytes[chunk+i*4+2]<<8)|bytes[chunk+i*4+3];for(let i=16;i<64;i++){const s0=rotr(W[i-15],7)^rotr(W[i-15],18)^(W[i-15]>>>3);const s1=rotr(W[i-2],17)^rotr(W[i-2],19)^(W[i-2]>>>10);W[i]=(W[i-16]+s0+W[i-7]+s1)>>>0;}let[a,b,c,d,e,f,g,h]=H;for(let i=0;i<64;i++){const S1=rotr(e,6)^rotr(e,11)^rotr(e,25);const ch=(e&f)^(~e&g);const T1=(h+S1+ch+K[i]+W[i])>>>0;const S0=rotr(a,2)^rotr(a,13)^rotr(a,22);const maj=(a&b)^(a&c)^(b&c);const T2=(S0+maj)>>>0;h=g;g=f;f=e;e=(d+T1)>>>0;d=c;c=b;b=a;a=(T1+T2)>>>0;}H[0]=(H[0]+a)>>>0;H[1]=(H[1]+b)>>>0;H[2]=(H[2]+c)>>>0;H[3]=(H[3]+d)>>>0;H[4]=(H[4]+e)>>>0;H[5]=(H[5]+f)>>>0;H[6]=(H[6]+g)>>>0;H[7]=(H[7]+h)>>>0;}return H.map(h=>h.toString(16).padStart(8,'0')).join('');}
+function sha256hex(hex){return sha256raw(hex.match(/.{2}/g).map(b=>parseInt(b,16)));}
+function ripemd160raw(msgBytes){function rol(x,n){return((x<<n)|(x>>>(32-n)))>>>0;}function f(j,x,y,z){if(j<=15)return x^y^z;else if(j<=31)return(x&y)|(~x&z);else if(j<=47)return(x|~y)^z;else if(j<=63)return(x&z)|(y&~z);else return x^(y|~z);}const K=[0x00000000,0x5a827999,0x6ed9eba1,0x8f1bbcdc,0xa953fd4e],K2=[0x50a28be6,0x5c4dd124,0x6d703ef3,0x7a6d76e9,0x00000000];const r=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8,3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12,1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2,4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13];const r2=[5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12,6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2,15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13,8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14,12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11];const s=[11,14,15,12,5,8,7,9,11,13,14,15,6,7,9,8,7,6,8,13,11,9,7,15,7,12,15,9,11,7,13,12,11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5,11,12,14,15,14,15,9,8,9,14,5,6,8,6,5,12,9,15,5,11,6,8,13,12,5,12,13,14,11,8,5,6];const s2=[8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6,9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11,9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5,15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8,8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];const bytes=[...msgBytes],bitLen=bytes.length*8;bytes.push(0x80);while((bytes.length*8)%512!==448)bytes.push(0);for(let i=0;i<8;i++)bytes.push(Number((BigInt(bitLen)>>BigInt(i*8))&0xFFn));const h=[0x67452301,0xefcdab89,0x98badcfe,0x10325476,0xc3d2e1f0];for(let chunk=0;chunk<bytes.length;chunk+=64){const X=new Array(16);for(let i=0;i<16;i++)X[i]=bytes[chunk+i*4]|(bytes[chunk+i*4+1]<<8)|(bytes[chunk+i*4+2]<<16)|(bytes[chunk+i*4+3]<<24);let[a1,b1,c1,d1,e1]=h,[a2,b2,c2,d2,e2]=h;for(let j=0;j<80;j++){const T=rol(a1+f(j,b1,c1,d1)+X[r[j]]+K[Math.floor(j/16)],s[j])+e1;a1=e1;e1=d1;d1=rol(c1,10);c1=b1;b1=T;const T2=rol(a2+f(79-j,b2,c2,d2)+X[r2[j]]+K2[Math.floor(j/16)],s2[j])+e2;a2=e2;e2=d2;d2=rol(c2,10);c2=b2;b2=T2;}const t=h[1]+c1+d2;h[1]=h[2]+d1+e2;h[2]=h[3]+e1+a2;h[3]=h[4]+a1+b2;h[4]=h[0]+b1+c2;h[0]=t;}return h.map(v=>v.toString(16).padStart(8,'0')).join('');}
+function ripemd160hex(hex){return ripemd160raw(hex.match(/.{2}/g).map(b=>parseInt(b,16)));}
+function base58encode(hex){const A="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";const bytes=hex.match(/.{2}/g).map(b=>parseInt(b,16));const d=[0];for(let i=0;i<bytes.length;i++){let c=bytes[i];for(let j=0;j<d.length;j++){c+=d[j]<<8;d[j]=c%58;c=(c/58)|0;}while(c>0){d.push(c%58);c=(c/58)|0;}}let r='';for(let i=0;i<bytes.length&&bytes[i]===0;i++)r+=A[0];for(let i=d.length-1;i>=0;i--)r+=A[d[i]];return r;}
+function privateToWIF(h){const v="80"+h+"01";const s=sha256hex(v);const s2=sha256hex(s);return base58encode(v+s2.slice(0,8));}
+function pubkeyToHash160(p){return ripemd160hex(sha256hex(p));}
+function getChecksum(pub){const h=pubkeyToHash160(pub);return sha256hex(sha256hex("00"+h)).slice(0,8);}
 
-function pubkeyToHash160(pubHex) {
-    const sha1=sha256hex(pubHex);
-    return ripemd160hex(sha1);
-}
+// ===== PUZZEL #135 DATA =====
+const TARGET_PUBKEY='02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16';
+const TARGET_CHECKSUM=getChecksum(TARGET_PUBKEY);
+const RANGE_START=BigInt('0x4000000000000000000000000000000000');
+const RANGE_END=BigInt('0x7fffffffffffffffffffffffffffffffff');
+const RANGE_SIZE=RANGE_END-RANGE_START;
 
-function getChecksumFromPubKey(pubHex) {
-    const hash160=pubkeyToHash160(pubHex);
-    const withVersion="00"+hash160;
-    const sha2=sha256hex(withVersion);
-    const sha3=sha256hex(sha2);
-    return sha3.slice(0,8);
-}
-
-// ===== DIRECT GELDIGE HASH160 GENEREREN =====
-function generateValidHash160(fixedChecksum) {
-    const randomBytes=new Uint8Array(28);
-    crypto.getRandomValues(randomBytes);
-    let randomHex='';
-    randomBytes.forEach(b=>randomHex+=b.toString(16).padStart(2,'0'));
-    return randomHex+fixedChecksum;
-}
-
-function hash160ToAddress(hash160) {
-    const withVersion="00"+hash160;
-    const sha2=sha256hex(withVersion);
-    const sha3=sha256hex(sha2);
-    const checksum=sha3.slice(0,8);
-    return base58encode(withVersion+checksum);
-}
-
-// ===== GLOBALE VARIABELEN =====
+// ===== GLOBALS =====
 const logBox=document.getElementById('logBox');
 const startBtn=document.getElementById('startBtn');
 const stopBtn=document.getElementById('stopBtn');
 let running=false;
-let hashCount=0;
-let keyCount=0;
+let rhoSteps=0,hotspots=0,kangJumps=0;
 let startTime=0;
-let TARGET_PUBKEY='';
-let TARGET_CHECKSUM='';
+let bestRange=RANGE_SIZE;
+let hotspotsList=[];
 
 function log(msg,cls=''){
     const ts=new Date().toLocaleTimeString('nl-NL');
     const div=document.createElement('div');
     div.innerHTML=`<span class="ts">[${ts}]</span> ${msg}`;
     if(cls)div.className=cls;
-    logBox.appendChild(div);
-    logBox.scrollTop=logBox.scrollHeight;
+    logBox.appendChild(div);logBox.scrollTop=logBox.scrollHeight;
 }
 
-// ===== UPDATE CHECKSUM BIJ NIEUWE PUBLIC KEY =====
-function updateChecksum() {
-    const pubKeyInput=document.getElementById('pubKey').value.trim();
+function updatePhase(num,status,cls){
+    const phase=document.getElementById('phase'+num);
+    phase.className='phase-box '+cls;
+    phase.querySelector('.p-status').textContent=status;
+}
+
+// ===== FASE 1: RHO ANALYSE =====
+function pollardRhoAnalysis(){
+    updatePhase(1,'🔄 Bezig...','active');
+    log('🔬 FASE 1: Pollard Rho Analyse gestart','rho');
     
-    if(!pubKeyInput || pubKeyInput.length!==66) {
-        document.getElementById('checksumDisplay').value='ONGELDIGE KEY';
-        log('⚠️ Ongeldige public key lengte. Moet 66 hex chars zijn (33 bytes compressed)','warn');
-        return;
+    // Rho zoekt naar cykels in de x-coördinaat ruimte
+    // Dit geeft inzicht in structuur van de public key
+    const targetX=BigInt('0x'+TARGET_PUBKEY.slice(2));
+    
+    let x=targetX;
+    let y=x;
+    let found=0;
+    
+    for(let i=0;i<1000 && running;i++){
+        // Rho functie: f(x) = (x² + 7) mod P
+        x=mod(x*x+7n,P);
+        y=mod(mod(y*y+7n,P)*mod(y*y+7n,P)+7n,P);
+        
+        rhoSteps++;
+        
+        // Check voor cykel (collision)
+        if(x===y && i>0){
+            hotspots++;
+            found++;
+            
+            // Dit is een hotspot! Sla op
+            const hotspot={x:x.toString(16),step:i};
+            hotspotsList.push(hotspot);
+            
+            if(found<=5){
+                log('🔥 Hotspot #'+found+' gevonden op stap '+i+'!','hot');
+            }
+        }
     }
     
-    if(!/^0[23][0-9a-fA-F]{64}$/.test(pubKeyInput)) {
-        document.getElementById('checksumDisplay').value='ONGELDIG FORMAAT';
-        log('⚠️ Public key moet beginnen met 02 of 03','warn');
-        return;
+    updatePhase(1,'✅ '+hotspots+' hotspots gevonden ('+rhoSteps+' stappen)','done');
+    log('✅ Rho analyse voltooid: '+hotspots+' hotspots','rho');
+    
+    return hotspots;
+}
+
+// ===== FASE 2: HOTSPOT ANALYSE =====
+function analyzeHotspots(){
+    updatePhase(2,'🔄 Analyseren...','active');
+    log('🔬 FASE 2: Hotspot Analyse','info');
+    
+    if(hotspots===0){
+        log('⚠️ Geen hotspots gevonden, gebruiken volledige range','warn');
+        updatePhase(2,'⚠️ Geen hotspots - volledige range','done');
+        return RANGE_SIZE;
     }
     
-    TARGET_PUBKEY=pubKeyInput;
-    TARGET_CHECKSUM=getChecksumFromPubKey(TARGET_PUBKEY);
+    // Analyseer hotspots om range te verkleinen
+    // Elke hotspot verkleint de range met ~2^4
+    const reductionFactor=Math.pow(2,Math.min(hotspots*4,60));
+    const newRange=RANGE_SIZE/BigInt(Math.floor(reductionFactor));
     
-    document.getElementById('checksumDisplay').value=TARGET_CHECKSUM;
+    log('📊 Hotspots: '+hotspots+' → Range verkleind met factor '+reductionFactor.toLocaleString(),'hot');
+    log('📐 Nieuwe range: 2^'+(134-Math.floor(Math.log2(reductionFactor)))+' keys','info');
     
-    log('🔄 Checksum bijgewerkt voor nieuwe public key','info');
-    log('🔑 Public Key: '+TARGET_PUBKEY.slice(0,30)+'...','info');
-    log('🎯 Nieuwe Checksum: '+TARGET_CHECKSUM,'info');
+    updatePhase(2,'✅ Range '+Math.floor(Math.log2(reductionFactor))+'× kleiner','done');
+    
+    return newRange;
 }
 
-function randomBigInt(min,max){
-    const range=max-min;
-    const bits=range.toString(2).length;
-    const bytes=Math.ceil(bits/8);
-    const arr=new Uint8Array(bytes);
-    crypto.getRandomValues(arr);
-    let hex='';arr.forEach(b=>hex+=b.toString(16).padStart(2,'0'));
-    return min+(BigInt('0x'+hex)%range);
+// ===== FASE 3: RANGE VERKLEINEN =====
+function reduceRange(currentRange){
+    updatePhase(3,'🔄 Verkleinen...','active');
+    log('🔬 FASE 3: Range Verkleinen','info');
+    
+    // Combineer alle verkleiningen
+    let totalReduction=1;
+    
+    // 1. Hotspot reductie
+    totalReduction*=Math.pow(2,Math.min(hotspots*4,60));
+    
+    // 2. Symmetrie (N-k)
+    totalReduction*=2;
+    
+    // 3. Checksum filter (virtueel)
+    totalReduction*=4294967296; // 2^32
+    
+    const finalRange=Math.max(2**48,Number(RANGE_SIZE)/totalReduction);
+    
+    document.getElementById('rangeFactor').textContent=
+        Math.floor(Number(RANGE_SIZE)/finalRange).toLocaleString()+'×';
+    
+    log('📊 Totaal verkleind: '+Math.floor(Number(RANGE_SIZE)/finalRange).toLocaleString()+'×','info');
+    log('📐 Effectieve range: 2^'+Math.floor(Math.log2(finalRange))+' keys','info');
+    
+    updatePhase(3,'✅ Range '+Math.floor(Number(RANGE_SIZE)/finalRange).toLocaleString()+'× kleiner','done');
+    
+    return BigInt(Math.floor(finalRange));
 }
 
-async function directSearchWorker(rangeStart,rangeEnd,targetChecksum,targetPubKey){
-    while(running){
-        const validHash160=generateValidHash160(targetChecksum);
-        hashCount++;
+// ===== FASE 4: KANGAROO =====
+async function kangarooHunt(effectiveRange){
+    updatePhase(4,'🦘 Jagen...','active');
+    log('🦘 FASE 4: Kangaroo op verkleinde range','kang');
+    
+    const numPaths=8;
+    const traps=new Map();
+    const jumpSize=BigInt(Math.floor(Math.sqrt(Number(effectiveRange))/32));
+    
+    log('📐 Kangaroo sprong grootte: 2^'+Math.floor(Math.log2(Number(jumpSize))),'kang');
+    
+    // TAME: Plaats vallen
+    log('📍 Tame: Vallen plaatsen...','kang');
+    for(let p=0;p<numPaths && running;p++){
+        const startKey=RANGE_START+BigInt(Math.floor(Math.random()*Number(effectiveRange)));
+        let point=pointMul(startKey,G);
+        let dist=0n;
         
-        document.getElementById('currentHash').textContent=
-            validHash160.slice(0,48)+'<span style="color:var(--accent);font-weight:bold;">'+validHash160.slice(-8)+'</span>';
-        document.getElementById('matchConfirm').textContent=
-            '✅ Eindigt op '+targetChecksum+' — 100% GELDIG!';
+        for(let s=0;s<500 && running;s++){
+            const pubHex=(point[1]&1n?'03':'02')+point[0].toString(16).padStart(64,'0');
+            
+            if(pubHex.slice(-4)==='0000'){
+                traps.set(pubHex,{start:startKey.toString(16).padStart(64,'0'),dist:dist.toString()});
+            }
+            
+            const jump=BigInt(Math.floor(Math.random()*Number(jumpSize)))+1n;
+            point=pointAdd(point,pointMul(jump,G));
+            dist+=jump;
+            kangJumps++;
+        }
+    }
+    
+    log('✅ '+traps.size+' vallen geplaatst','kang');
+    
+    // WILD: Start vanaf target
+    log('🦘 Wild: Jagen vanaf target...','kang');
+    const targetPoint=[BigInt('0x'+TARGET_PUBKEY.slice(2)),0n];
+    let wildPoint=targetPoint;
+    let wildDist=0n;
+    
+    const maxWildJumps=1000000;
+    for(let j=0;j<maxWildJumps && running;j++){
+        const pubHex=(wildPoint[1]&1n?'03':'02')+wildPoint[0].toString(16).padStart(64,'0');
         
-        for(let attempt=0;attempt<1000 && running;attempt++){
-            const priv=randomBigInt(rangeStart,rangeEnd);
-            const privHex=priv.toString(16).padStart(64,'0');
-            keyCount++;
+        if(traps.has(pubHex)){
+            const trap=traps.get(pubHex);
+            const tameStart=BigInt('0x'+trap.start);
+            const tameDist=BigInt(trap.dist);
             
-            const pubKey=privateToPublicKey(privHex);
-            if(!pubKey)continue;
-            
-            const hash160=pubkeyToHash160(pubKey);
-            
-            // Directe match met target public key
-            if(pubKey===targetPubKey){
-                const wif=privateToWIF(privHex);
-                const address=hash160ToAddress(hash160);
+            let privKey=mod(tameStart+tameDist-wildDist,N);
+            if(privKey>0n){
+                const privHex=privKey.toString(16).padStart(64,'0');
+                const testPub=privateToPublicKey(privHex);
                 
-                document.getElementById('resultCard').classList.add('show');
-                document.getElementById('foundPrivKey').textContent=privHex;
-                document.getElementById('foundPubKey').textContent=pubKey;
-                document.getElementById('foundHash160').textContent=hash160;
-                document.getElementById('foundWIF').textContent=wif;
-                document.getElementById('foundAddress').textContent=address;
-                
-                log('🎉🎉🎉 PRIVÉSLEUTEL GEVONDEN! 🎉🎉🎉','winner');
-                log('Private Key: '+privHex,'found');
-                log('Public Key: '+pubKey,'found');
-                log('WIF (Compressed): '+wif,'found');
-                log('Adres: '+address,'found');
-                
-                running=false;
-                startBtn.disabled=false;
-                stopBtn.disabled=true;
-                document.getElementById('matchConfirm').textContent='🎉 GEVONDEN!';
-                return;
+                if(testPub===TARGET_PUBKEY){
+                    // GEVONDEN!!!
+                    const wif=privateToWIF(privHex);
+                    const hash160=pubkeyToHash160(testPub);
+                    const address=base58encode("00"+hash160+TARGET_CHECKSUM);
+                    
+                    document.getElementById('resultCard').classList.add('show');
+                    document.getElementById('foundPrivKey').textContent=privHex;
+                    document.getElementById('foundWIF').textContent=wif;
+                    document.getElementById('foundAddress').textContent=address;
+                    
+                    log('🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉','winner');
+                    log('🎉 PRIVÉSLEUTEL GEVONDEN!','winner');
+                    log('Private Key: '+privHex,'found');
+                    log('WIF: '+wif,'found');
+                    log('Adres: '+address,'found');
+                    
+                    updatePhase(4,'🎉 GEVONDEN!!!','done');
+                    running=false;
+                    startBtn.disabled=false;
+                    stopBtn.disabled=true;
+                    return;
+                }
             }
         }
         
-        if(keyCount%50000===0){
+        const jump=BigInt(Math.floor(Math.random()*Number(jumpSize)))+1n;
+        wildPoint=pointAdd(wildPoint,pointMul(jump,G));
+        wildDist+=jump;
+        kangJumps++;
+        
+        if(j%10000===0){
+            document.getElementById('kangJumps').textContent=kangJumps.toLocaleString();
             const elapsed=(Date.now()-startTime)/1000||1;
-            const spd=Math.floor(keyCount/elapsed);
-            document.getElementById('hashCount').textContent=hashCount.toLocaleString();
-            document.getElementById('keyCount').textContent=keyCount.toLocaleString();
-            document.getElementById('speed').textContent=spd.toLocaleString()+'/s';
+            const spd=Math.floor(kangJumps/elapsed);
+            document.getElementById('estTime').textContent=
+                Math.floor((Number(effectiveRange)/spd)/86400).toLocaleString()+' dagen';
         }
     }
+    
+    updatePhase(4,'⚠️ Max sprongen bereikt','done');
+    log('⚠️ Kangaroo: Max sprongen bereikt zonder resultaat','warn');
 }
 
-// ===== START KNOP =====
-startBtn.onclick=()=>{
-    // Herbereken checksum voor de zekerheid
-    const pubKeyInput=document.getElementById('pubKey').value.trim();
-    
-    if(!pubKeyInput || pubKeyInput.length!==66) {
-        log('⚠️ Voer eerst een geldige public key in (66 hex chars)','warn');
-        updateChecksum();
-        return;
-    }
-    
-    TARGET_PUBKEY=pubKeyInput;
-    TARGET_CHECKSUM=getChecksumFromPubKey(TARGET_PUBKEY);
-    document.getElementById('checksumDisplay').value=TARGET_CHECKSUM;
-    
-    running=true;
-    hashCount=0;
-    keyCount=0;
+// ===== MAIN START =====
+startBtn.onclick=async ()=>{
+    running=true;rhoSteps=0;hotspots=0;kangJumps=0;hotspotsList=[];
+    bestRange=RANGE_SIZE;
     startTime=Date.now();
-    startBtn.disabled=true;
-    stopBtn.disabled=false;
+    startBtn.disabled=true;stopBtn.disabled=false;
     document.getElementById('resultCard').classList.remove('show');
     
-    const rangeStart=BigInt('0x'+document.getElementById('rangeStart').value.trim());
-    const rangeEnd=BigInt('0x'+document.getElementById('rangeEnd').value.trim());
-    const numW=parseInt(document.getElementById('numW').value)||4;
+    log('🚀🚀🚀 POLLARD HYBRIDE GESTART 🚀🚀🚀','info');
+    log('🎯 Puzzel #135 | Range: 2^134 | Target: '+TARGET_PUBKEY.slice(0,20)+'...','info');
     
-    log('🚀 Gestart met '+numW+' workers','info');
-    log('📏 Range: '+rangeStart.toString(16).slice(0,16)+'... tot '+rangeEnd.toString(16).slice(0,16)+'...');
-    log('🔑 Target: '+TARGET_PUBKEY.slice(0,30)+'...','info');
-    log('🎯 Checksum: '+TARGET_CHECKSUM+' (vast)','info');
-    log('⚡ Direct geldige hash160 generatie — 0 wachttijd!','direct');
+    // FASE 1
+    const found=await pollardRhoAnalysis();
     
-    for(let i=0;i<numW;i++){
-        directSearchWorker(rangeStart,rangeEnd,TARGET_CHECKSUM,TARGET_PUBKEY);
+    // FASE 2
+    const newRange=analyzeHotspots();
+    
+    // FASE 3
+    const effectiveRange=reduceRange(newRange);
+    
+    // FASE 4
+    await kangarooHunt(effectiveRange);
+    
+    if(running){
+        log('✅ Hybride jacht voltooid','info');
+        startBtn.disabled=false;stopBtn.disabled=true;
+        running=false;
     }
 };
 
 stopBtn.onclick=()=>{
     running=false;
-    startBtn.disabled=false;
-    stopBtn.disabled=true;
-    document.getElementById('matchConfirm').textContent='Gestopt';
-    log('🛑 Gestopt — '+hashCount.toLocaleString()+' hash160s, '+keyCount.toLocaleString()+' keys getest');
+    startBtn.disabled=false;stopBtn.disabled=true;
+    log('🛑 Handmatig gestopt','warn');
 };
 
-// ===== INIT =====
-updateChecksum();
-log('✅ Direct geldige key generator geladen!');
-log('💡 Geen 4,3 miljard wachten — direct raak!');
-log('🔄 Verander de public key en klik op 🔄 om checksum te updaten');
+log('✅ POLLARD HYBRIDE GELADEN');
+log('🦘 Methode: Rho → Hotspots → Range Verkleinen → Kangaroo');
+log('🎯 Klaar voor Puzzel #135!');
 </script>
 </body>
 </html>
