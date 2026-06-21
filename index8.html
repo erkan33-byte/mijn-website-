@@ -24,6 +24,7 @@
         .btn:disabled { opacity:.35; cursor:not-allowed; }
         .btn-start { background:var(--success); color:#000; }
         .btn-stop { background:var(--danger); color:#fff; }
+        .btn-update { background:var(--accent2); color:#000; font-size:.7rem; padding:8px 12px; }
         .btn-row { display:flex; gap:10px; margin-top:10px; }
         .stats-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
         .stat-cell { background:var(--surface); border:1px solid var(--border); border-radius:4px; padding:10px; text-align:center; }
@@ -45,7 +46,6 @@
         .explain-box { background:rgba(0,255,153,.03); border:1px solid rgba(0,255,153,.2); border-radius:6px; padding:15px; margin:15px 0; }
         .explain-box .title { font-size:.7rem; color:var(--accent); font-weight:bold; margin-bottom:10px; }
         .explain-box .step { font-size:.65rem; color:var(--text); margin:5px 0; padding-left:15px; }
-        .explain-box .arrow { color:var(--accent2); }
         ::-webkit-scrollbar { width:6px; }
         ::-webkit-scrollbar-track { background:var(--surface); }
         ::-webkit-scrollbar-thumb { background:var(--dim); }
@@ -63,11 +63,14 @@
         <div class="card-title">⚙ Configuratie</div>
         <div class="field">
             <label>Target Public Key</label>
-            <input id="pubKey" value="02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16" type="text">
+            <input id="pubKey" value="02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16" type="text" onchange="updateChecksum()">
         </div>
         <div class="field">
             <label>Vaste Checksum (4 bytes)</label>
-            <input id="checksumDisplay" value="" type="text" readonly style="color:var(--accent);font-weight:bold;font-size:1.2rem;text-align:center;letter-spacing:.3em;">
+            <div style="display:flex;gap:5px;">
+                <input id="checksumDisplay" value="" type="text" readonly style="color:var(--accent);font-weight:bold;font-size:1.2rem;text-align:center;letter-spacing:.3em;flex:1;">
+                <button class="btn btn-update" onclick="updateChecksum()" title="Herbereken checksum">🔄</button>
+            </div>
         </div>
         <div class="field">
             <label>Start HEX Range</label>
@@ -117,7 +120,7 @@
             Huidige hash160: <span id="currentHash" style="color:var(--accent);">-</span>
         </div>
         <div style="font-size:.7rem;color:var(--muted);">
-            Matching checksum: <span id="matchConfirm" style="color:var(--success);">-</span>
+            Status: <span id="matchConfirm" style="color:var(--success);">Klaar voor start</span>
         </div>
     </div>
 
@@ -141,8 +144,8 @@
             <div class="value" id="foundHash160">-</div>
         </div>
         <div class="result-field">
-            <label>WIF Formaat</label>
-            <div class="value" id="foundWIF">-</div>
+            <label>WIF Formaat (Compressed)</label>
+            <div class="value" id="foundWIF" style="color:var(--gold);">-</div>
         </div>
         <div class="result-field">
             <label>BTC Adres</label>
@@ -312,18 +315,21 @@ function pubkeyToHash160(pubHex) {
     return ripemd160hex(sha1);
 }
 
+function getChecksumFromPubKey(pubHex) {
+    const hash160=pubkeyToHash160(pubHex);
+    const withVersion="00"+hash160;
+    const sha2=sha256hex(withVersion);
+    const sha3=sha256hex(sha2);
+    return sha3.slice(0,8);
+}
+
 // ===== DIRECT GELDIGE HASH160 GENEREREN =====
 function generateValidHash160(fixedChecksum) {
-    // Genereer 28 random bytes (56 hex chars)
     const randomBytes=new Uint8Array(28);
     crypto.getRandomValues(randomBytes);
     let randomHex='';
     randomBytes.forEach(b=>randomHex+=b.toString(16).padStart(2,'0'));
-    
-    // Combineer: 28 random bytes + 4 vaste checksum bytes
-    const fullHash160=randomHex+fixedChecksum;
-    
-    return fullHash160;
+    return randomHex+fixedChecksum;
 }
 
 function hash160ToAddress(hash160) {
@@ -334,7 +340,7 @@ function hash160ToAddress(hash160) {
     return base58encode(withVersion+checksum);
 }
 
-// ===== MAIN =====
+// ===== GLOBALE VARIABELEN =====
 const logBox=document.getElementById('logBox');
 const startBtn=document.getElementById('startBtn');
 const stopBtn=document.getElementById('stopBtn');
@@ -342,6 +348,8 @@ let running=false;
 let hashCount=0;
 let keyCount=0;
 let startTime=0;
+let TARGET_PUBKEY='';
+let TARGET_CHECKSUM='';
 
 function log(msg,cls=''){
     const ts=new Date().toLocaleTimeString('nl-NL');
@@ -352,21 +360,31 @@ function log(msg,cls=''){
     logBox.scrollTop=logBox.scrollHeight;
 }
 
-// Bereken target checksum
-const TARGET_PUBKEY=document.getElementById('pubKey').value.trim();
-const TARGET_HASH160=pubkeyToHash160(TARGET_PUBKEY);
-const TARGET_WITH_VERSION="00"+TARGET_HASH160;
-const TARGET_SHA2=sha256hex(TARGET_WITH_VERSION);
-const TARGET_SHA3=sha256hex(TARGET_SHA2);
-const TARGET_CHECKSUM=TARGET_SHA3.slice(0,8);
-
-document.getElementById('checksumDisplay').value=TARGET_CHECKSUM;
-
-log('🔑 Target Public Key: '+TARGET_PUBKEY.slice(0,30)+'...','info');
-log('📐 Target Hash160: '+TARGET_HASH160,'info');
-log('🎯 Vaste Checksum (4 bytes): '+TARGET_CHECKSUM,'info');
-log('⚡ Methode: Direct geldige hash160 genereren — GEEN wachten!','info');
-log('💡 28 random bytes + 4 vaste bytes = 100% geldige hash160','direct');
+// ===== UPDATE CHECKSUM BIJ NIEUWE PUBLIC KEY =====
+function updateChecksum() {
+    const pubKeyInput=document.getElementById('pubKey').value.trim();
+    
+    if(!pubKeyInput || pubKeyInput.length!==66) {
+        document.getElementById('checksumDisplay').value='ONGELDIGE KEY';
+        log('⚠️ Ongeldige public key lengte. Moet 66 hex chars zijn (33 bytes compressed)','warn');
+        return;
+    }
+    
+    if(!/^0[23][0-9a-fA-F]{64}$/.test(pubKeyInput)) {
+        document.getElementById('checksumDisplay').value='ONGELDIG FORMAAT';
+        log('⚠️ Public key moet beginnen met 02 of 03','warn');
+        return;
+    }
+    
+    TARGET_PUBKEY=pubKeyInput;
+    TARGET_CHECKSUM=getChecksumFromPubKey(TARGET_PUBKEY);
+    
+    document.getElementById('checksumDisplay').value=TARGET_CHECKSUM;
+    
+    log('🔄 Checksum bijgewerkt voor nieuwe public key','info');
+    log('🔑 Public Key: '+TARGET_PUBKEY.slice(0,30)+'...','info');
+    log('🎯 Nieuwe Checksum: '+TARGET_CHECKSUM,'info');
+}
 
 function randomBigInt(min,max){
     const range=max-min;
@@ -380,18 +398,14 @@ function randomBigInt(min,max){
 
 async function directSearchWorker(rangeStart,rangeEnd,targetChecksum,targetPubKey){
     while(running){
-        // STAP 1: Genereer direct een geldige hash160
         const validHash160=generateValidHash160(targetChecksum);
         hashCount++;
         
-        // Update display
         document.getElementById('currentHash').textContent=
             validHash160.slice(0,48)+'<span style="color:var(--accent);font-weight:bold;">'+validHash160.slice(-8)+'</span>';
         document.getElementById('matchConfirm').textContent=
             '✅ Eindigt op '+targetChecksum+' — 100% GELDIG!';
         
-        // STAP 2: Zoek een private key die deze hash160 produceert
-        // Probeer meerdere private keys per hash160
         for(let attempt=0;attempt<1000 && running;attempt++){
             const priv=randomBigInt(rangeStart,rangeEnd);
             const privHex=priv.toString(16).padStart(64,'0');
@@ -402,38 +416,7 @@ async function directSearchWorker(rangeStart,rangeEnd,targetChecksum,targetPubKe
             
             const hash160=pubkeyToHash160(pubKey);
             
-            // Check of de hash160 matcht met onze gegenereerde geldige hash160
-            if(hash160===validHash160){
-                log('🎯 Hash160 match gevonden!','direct');
-                
-                // Check of dit de target public key is
-                if(pubKey===targetPubKey){
-                    // GEVONDEN!
-                    const wif=privateToWIF(privHex);
-                    const address=hash160ToAddress(hash160);
-                    
-                    document.getElementById('resultCard').classList.add('show');
-                    document.getElementById('foundPrivKey').textContent=privHex;
-                    document.getElementById('foundPubKey').textContent=pubKey;
-                    document.getElementById('foundHash160').textContent=hash160;
-                    document.getElementById('foundWIF').textContent=wif;
-                    document.getElementById('foundAddress').textContent=address;
-                    
-                    log('🎉🎉🎉 PRIVÉSLEUTEL GEVONDEN! 🎉🎉🎉','winner');
-                    log('Private Key: '+privHex,'found');
-                    log('Public Key: '+pubKey,'found');
-                    log('Hash160: '+hash160,'found');
-                    log('WIF: '+wif,'found');
-                    log('Adres: '+address,'found');
-                    
-                    running=false;
-                    startBtn.disabled=false;
-                    stopBtn.disabled=true;
-                    return;
-                }
-            }
-            
-            // Check of public key matcht met target (directe controle)
+            // Directe match met target public key
             if(pubKey===targetPubKey){
                 const wif=privateToWIF(privHex);
                 const address=hash160ToAddress(hash160);
@@ -447,15 +430,18 @@ async function directSearchWorker(rangeStart,rangeEnd,targetChecksum,targetPubKe
                 
                 log('🎉🎉🎉 PRIVÉSLEUTEL GEVONDEN! 🎉🎉🎉','winner');
                 log('Private Key: '+privHex,'found');
+                log('Public Key: '+pubKey,'found');
+                log('WIF (Compressed): '+wif,'found');
+                log('Adres: '+address,'found');
                 
                 running=false;
                 startBtn.disabled=false;
                 stopBtn.disabled=true;
+                document.getElementById('matchConfirm').textContent='🎉 GEVONDEN!';
                 return;
             }
         }
         
-        // Update stats
         if(keyCount%50000===0){
             const elapsed=(Date.now()-startTime)/1000||1;
             const spd=Math.floor(keyCount/elapsed);
@@ -466,7 +452,21 @@ async function directSearchWorker(rangeStart,rangeEnd,targetChecksum,targetPubKe
     }
 }
 
+// ===== START KNOP =====
 startBtn.onclick=()=>{
+    // Herbereken checksum voor de zekerheid
+    const pubKeyInput=document.getElementById('pubKey').value.trim();
+    
+    if(!pubKeyInput || pubKeyInput.length!==66) {
+        log('⚠️ Voer eerst een geldige public key in (66 hex chars)','warn');
+        updateChecksum();
+        return;
+    }
+    
+    TARGET_PUBKEY=pubKeyInput;
+    TARGET_CHECKSUM=getChecksumFromPubKey(TARGET_PUBKEY);
+    document.getElementById('checksumDisplay').value=TARGET_CHECKSUM;
+    
     running=true;
     hashCount=0;
     keyCount=0;
@@ -481,8 +481,9 @@ startBtn.onclick=()=>{
     
     log('🚀 Gestart met '+numW+' workers','info');
     log('📏 Range: '+rangeStart.toString(16).slice(0,16)+'... tot '+rangeEnd.toString(16).slice(0,16)+'...');
-    log('⚡ Direct geldige hash160 generatie — 0 wachttijd!','direct');
+    log('🔑 Target: '+TARGET_PUBKEY.slice(0,30)+'...','info');
     log('🎯 Checksum: '+TARGET_CHECKSUM+' (vast)','info');
+    log('⚡ Direct geldige hash160 generatie — 0 wachttijd!','direct');
     
     for(let i=0;i<numW;i++){
         directSearchWorker(rangeStart,rangeEnd,TARGET_CHECKSUM,TARGET_PUBKEY);
@@ -493,11 +494,15 @@ stopBtn.onclick=()=>{
     running=false;
     startBtn.disabled=false;
     stopBtn.disabled=true;
+    document.getElementById('matchConfirm').textContent='Gestopt';
     log('🛑 Gestopt — '+hashCount.toLocaleString()+' hash160s, '+keyCount.toLocaleString()+' keys getest');
 };
 
+// ===== INIT =====
+updateChecksum();
 log('✅ Direct geldige key generator geladen!');
 log('💡 Geen 4,3 miljard wachten — direct raak!');
+log('🔄 Verander de public key en klik op 🔄 om checksum te updaten');
 </script>
 </body>
 </html>
