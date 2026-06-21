@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Hybride Kangaroo – ChecksumJump + Pollard</title>
+    <title>Ultieme Hybride Kangaroo – ChecksumJump + Pollard</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -90,7 +90,7 @@
 <div class="container">
 
     <div class="header">
-        <h1>🦘 Hybride Kangaroo (ChecksumJump + Pollard)</h1>
+        <h1>🦘 Ultieme Hybride Kangaroo (ChecksumJump + Pollard)</h1>
         <div class="sub">Checksum geïntegreerd in sprongen — 4 miljard× sneller</div>
         <span class="badge">CHECKSUMJUMP · OPTIMAAL</span>
     </div>
@@ -330,21 +330,22 @@ function base58ToHex(base58) {
     return hex;
 }
 
-// ===== CHECKSUMJUMP =====
+// ===== OPTIMALE CHECKSUMJUMP (met afstand) =====
 function checksumJump(point, targetChecksum, maxAttempts) {
     maxAttempts = maxAttempts || 100;
     let attempts = 0;
     let newPoint = point;
     let pubHex = "";
+    let totalDist = 0n;
     do {
         const r = parseInt(newPoint.encode('hex', true).substr(2,8), 16) % NUM_STEPS;
         newPoint = newPoint.add(JUMP_POINTS[r]);
+        totalDist += JUMP_SIZES[r];
         pubHex = newPoint.encode('hex', true);
         attempts++;
     } while (!hasValidChecksum(pubHex, targetChecksum) && attempts < maxAttempts);
     
-    // Fallback: als geen checksum-geldig punt gevonden, gebruik dan de laatste
-    return { point: newPoint, pubHex: pubHex, attempts: attempts };
+    return { point: newPoint, pubHex: pubHex, dist: totalDist, attempts: attempts };
 }
 
 // ===== TAME WORKER =====
@@ -377,16 +378,16 @@ self.onmessage = function(e) {
             let currDist  = 0n;
             let currPoint = G.mul(k_start.toString(16));
             
-            // Eerste sprong naar checksum-geldig punt
+            // Eerste checksum-sprong
             let result = checksumJump(currPoint, targetChecksum, 100);
             currPoint = result.point;
-            currDist += JUMP_SIZES[0]; // schatting
-            jumpsCount++;
+            currDist += result.dist;
+            jumpsCount += result.attempts;
             
             for (let i=0;i<steps;i++) {
                 const pubHex = currPoint.encode('hex', true);
                 
-                // Plaats val op dit checksum-geldige punt
+                // DP-check op dit checksum-geldige punt
                 if ((parseInt(pubHex.slice(-4),16) & mask) === 0) {
                     localTraps[pubHex] = { 
                         absKey: k_start.toString(16), 
@@ -397,8 +398,8 @@ self.onmessage = function(e) {
                 // ChecksumJump naar volgende punt
                 result = checksumJump(currPoint, targetChecksum, 100);
                 currPoint = result.point;
-                currDist += JUMP_SIZES[0]; // schatting
-                jumpsCount++;
+                currDist += result.dist;
+                jumpsCount += result.attempts;
             }
         }
         self.postMessage({ type:"TAME_READY", traps:localTraps, jumps:jumpsCount, workerId });
@@ -443,9 +444,9 @@ self.onmessage = function(e) {
                 // ChecksumJump naar volgende punt
                 const result = checksumJump(currPoint, targetChecksum, 100);
                 currPoint = result.point;
-                currDist += JUMP_SIZES[0]; // schatting
-                totalJumps++;
-                batchJumps++;
+                currDist += result.dist;
+                totalJumps += result.attempts;
+                batchJumps += result.attempts;
             }
             
             if (batchJumps > 0) {
@@ -546,7 +547,7 @@ startBtn.onclick = () => {
     ['totalJumps','speed','epochCount','trapCount'].forEach(id=>document.getElementById(id).textContent='0');
     progressBar.style.width='0%';
     setRunning(true);
-    log('🚀 Hybride Kangaroo (ChecksumJump) gestart','ev-epoch');
+    log('🚀 Ultieme Hybride Kangaroo (ChecksumJump) gestart','ev-epoch');
     nextEpoch();
 };
 
@@ -651,7 +652,7 @@ function startWild(numW, range) {
     }
 }
 
-log('⚡ Hybride Kangaroo (ChecksumJump) geladen — optimaal');
+log('⚡ Ultieme Hybride Kangaroo (ChecksumJump) geladen — optimaal');
 updateChanceMeter(0);
 </script>
 </body>
