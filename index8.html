@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>🎯 Adaptive Kangaroo – Feedback-gestuurd zoeken (volledig)</title>
+    <title>🎯 Adaptive Kangaroo – Feedback-gestuurd zoeken (aanpasbare range)</title>
     <style>
         :root {
             --bg:#07090f; --surface:#0d1117; --panel:#111827; --border:#1f2937;
@@ -29,16 +29,27 @@
 </head>
 <body>
 <div class="container">
-    <h1>🎯 Adaptive Kangaroo – Feedback-gestuurd zoeken (experimenteel)</h1>
+    <h1>🎯 Adaptive Kangaroo – Aanpasbare range</h1>
     <p style="font-size:.8rem;">
         ⚠️ <strong>Nieuw concept:</strong> De spronggrootte past zich aan op basis van de afstand tot het target (x‑coördinaat).<br>
-        Theoretisch kansrijker dan blinde Rho‑wandelingen, maar nog steeds onmogelijk voor volledige 256‑bit ruimte.
+        Stel zelf target, adres, range, workers en batch in. De zoektocht loopt binnen de opgegeven range.
     </p>
     <div class="card">
         <label>🎯 Target Public Key (compressed 02/03 of uncompressed 04)</label><br>
         <input type="text" id="targetPubKey" size="80" value="040b8a0382802e12fc345e9bace8b99f6aed6b90fbfd796e8027ca9bb5f472778db863952bdb6e9e399e34f941cab2fa6c244e65af2d15244fee2d795b3f6e222d"><br><br>
         <label>✅ Verwacht BTC‑adres (ter verificatie)</label><br>
         <input type="text" id="expectedAddr" value="1FvUkW8thcqG6HP7gAvAjcR52fR7CYodBx"><br><br>
+        <div class="param-row">
+            <div>
+                <label>📍 Range Start (HEX)</label>
+                <input type="text" id="rangeStart" value="1">
+            </div>
+            <div>
+                <label>📍 Range End (HEX)</label>
+                <input type="text" id="rangeEnd" value="fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140">
+            </div>
+        </div>
+        <small style="color:var(--muted);">(Standaard de volledige privésleutel‑ruimte. Pas aan voor een kleinere range.)</small><br><br>
         <div class="param-row">
             <div>
                 <label>⚙️ Aantal workers</label>
@@ -50,11 +61,6 @@
             </div>
         </div>
         <small style="color:var(--muted);">Adaptieve sprong: hoe dichter bij target, hoe kleiner de stappen.</small><br><br>
-        <label>📍 Range Start (HEX)</label><br>
-        <input type="text" id="rangeStart" value="1" readonly><br>
-        <label>📍 Range End (HEX)</label><br>
-        <input type="text" id="rangeEnd" value="fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140" readonly><br>
-        <small style="color:var(--muted);">(Volledige geldige privésleutel‑ruimte, van 1 tot N‑1)</small><br><br>
         <button class="btn btn-start" id="startBtn">▶ START ADAPTIVE KANGAROO</button>
         <button class="btn btn-stop" id="stopBtn" disabled>■ STOP</button>
         <button class="btn" onclick="resetAll()" style="background:#374151;color:#fff;">↺ RESET</button>
@@ -215,10 +221,10 @@ function privateToWIF(privHex, compressed) {
 // ========== ADAPTIEVE SPRONGFUNCTIE ==========
 function adaptiveJump(currentX, targetX) {
     const diff = (currentX > targetX) ? currentX - targetX : targetX - currentX;
-    const maxJump = 0x10000000000000000000000000000000000000000000000000000000000000000n; // 2^252
+    const maxJump = 0x10000000000000000000000000000000000000000000000000000000000000000n;
     const minJump = 1n;
     if (diff === 0n) return minJump;
-    const logDiff = BigInt(diff.toString(2).length - 1); // ruwe log2
+    const logDiff = BigInt(diff.toString(2).length - 1);
     const jump = 1n << (logDiff > 8n ? logDiff - 8n : 0n);
     return jump < minJump ? minJump : (jump > maxJump ? maxJump : jump);
 }
@@ -228,6 +234,7 @@ let running = false, found = false;
 let targetPoint = null, expectedAddr = '';
 let totalSteps = 0;
 let workers = [];
+let rangeStart, rangeEnd; // BigInts
 
 const log = (msg, cls='') => {
     const el = document.getElementById('logBox');
@@ -263,7 +270,7 @@ function showSolution(privHex) {
 }
 
 function createWorker(targetX) {
-    let a = 1n + BigInt(Math.floor(Math.random() * Number(N - 2n)));
+    let a = rangeStart + BigInt(Math.floor(Math.random() * Number(rangeEnd - rangeStart)));
     let b = a;
     let pointA = pointMul(a, G);
     let pointB = pointMul(b, G);
@@ -272,12 +279,10 @@ function createWorker(targetX) {
     return {
         stepBatch(batchSize) {
             for (let i = 0; i < batchSize && !found; i++) {
-                // Schildpad: één adaptieve stap
                 let jump = adaptiveJump(pointA[0], targetX);
                 pointA = pointAdd(pointA, pointMul(jump, G));
                 a = mod(a + jump, N);
 
-                // Haas: twee adaptieve stappen
                 jump = adaptiveJump(pointB[0], targetX);
                 pointB = pointAdd(pointB, pointMul(jump, G));
                 b = mod(b + jump, N);
@@ -296,9 +301,8 @@ function createWorker(targetX) {
                     return true;
                 }
 
-                // Cyclusdetectie
                 if (pointA[0] === pointB[0] && pointA[1] === pointB[1]) {
-                    a = 1n + BigInt(Math.floor(Math.random() * Number(N - 2n)));
+                    a = rangeStart + BigInt(Math.floor(Math.random() * Number(rangeEnd - rangeStart)));
                     b = a;
                     pointA = pointMul(a, G);
                     pointB = pointMul(b, G);
@@ -318,6 +322,7 @@ async function runAdaptive(numWorkers, batchSize) {
     }
     totalSteps = 0;
     log(`🚀 ${numWorkers} adaptieve workers gestart, batchgrootte ${batchSize}`, 'info');
+    log(`📍 Range: [${rangeStart.toString(16)} - ${rangeEnd.toString(16)}]`, 'info');
     document.getElementById('activeWorkers').textContent = numWorkers;
 
     while (running && !found) {
@@ -346,6 +351,19 @@ document.getElementById('startBtn').onclick = async () => {
     expectedAddr = document.getElementById('expectedAddr').value.trim();
     if (!/^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(expectedAddr)) {
         alert('Ongeldig Bitcoin‑adres formaat.');
+        return;
+    }
+
+    const rs = document.getElementById('rangeStart').value.trim();
+    const re = document.getElementById('rangeEnd').value.trim();
+    if (!/^[0-9a-fA-F]+$/.test(rs) || !/^[0-9a-fA-F]+$/.test(re)) {
+        alert('Range start en end moeten geldige HEX zijn.');
+        return;
+    }
+    rangeStart = BigInt('0x' + rs);
+    rangeEnd = BigInt('0x' + re);
+    if (rangeStart < 1n || rangeEnd > N-1n || rangeStart >= rangeEnd) {
+        alert('Ongeldige range (1 <= start < end <= N-1).');
         return;
     }
 
@@ -385,7 +403,7 @@ function resetAll() {
     log('✅ Reset');
 }
 
-log('✅ Klaar. Stel workers/batch in en klik Start.');
+log('✅ Klaar. Vul alle velden in en klik Start.');
 </script>
 </body>
 </html>
