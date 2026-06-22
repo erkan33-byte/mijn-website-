@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>🔄 Pollard's Rho – Volledige Bitcoin Keyspace (multi‑worker)</title>
+    <title>🎯 Adaptive Kangaroo – Feedback-gestuurd zoeken (volledig)</title>
     <style>
         :root {
             --bg:#07090f; --surface:#0d1117; --panel:#111827; --border:#1f2937;
@@ -29,11 +29,10 @@
 </head>
 <body>
 <div class="container">
-    <h1>🔄 Pollard's Rho – Volledige Bitcoin Keyspace (multi‑worker)</h1>
+    <h1>🎯 Adaptive Kangaroo – Feedback-gestuurd zoeken (experimenteel)</h1>
     <p style="font-size:.8rem;">
-        ⚠️ <strong>Theoretisch exact – praktisch onmogelijk.</strong><br>
-        Doorzoekt de volledige 256‑bit ruimte met meerdere parallelle Rho‑wandelingen.<br>
-        Bij een match worden alle sleutelformaten getoond en gecontroleerd met het opgegeven adres.
+        ⚠️ <strong>Nieuw concept:</strong> De spronggrootte past zich aan op basis van de afstand tot het target (x‑coördinaat).<br>
+        Theoretisch kansrijker dan blinde Rho‑wandelingen, maar nog steeds onmogelijk voor volledige 256‑bit ruimte.
     </p>
     <div class="card">
         <label>🎯 Target Public Key (compressed 02/03 of uncompressed 04)</label><br>
@@ -46,17 +45,17 @@
                 <input type="number" id="numWorkers" value="4" min="1" max="32" style="width:100%;">
             </div>
             <div>
-                <label>📦 Batchgrootte (stappen per worker per ronde)</label>
+                <label>📦 Batchgrootte (stappen per ronde)</label>
                 <input type="number" id="batchSize" value="500" min="100" max="2000" style="width:100%;">
             </div>
         </div>
-        <small style="color:var(--muted);">Meer workers = hogere belasting. Batchgrootte beïnvloedt de responsiviteit.</small><br><br>
+        <small style="color:var(--muted);">Adaptieve sprong: hoe dichter bij target, hoe kleiner de stappen.</small><br><br>
         <label>📍 Range Start (HEX)</label><br>
         <input type="text" id="rangeStart" value="1" readonly><br>
         <label>📍 Range End (HEX)</label><br>
         <input type="text" id="rangeEnd" value="fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140" readonly><br>
         <small style="color:var(--muted);">(Volledige geldige privésleutel‑ruimte, van 1 tot N‑1)</small><br><br>
-        <button class="btn btn-start" id="startBtn">▶ START RHO (multi‑worker ∞ lus)</button>
+        <button class="btn btn-start" id="startBtn">▶ START ADAPTIVE KANGAROO</button>
         <button class="btn btn-stop" id="stopBtn" disabled>■ STOP</button>
         <button class="btn" onclick="resetAll()" style="background:#374151;color:#fff;">↺ RESET</button>
         <div style="margin-top:8px;font-size:.7rem;">
@@ -213,7 +212,18 @@ function privateToWIF(privHex, compressed) {
     return base58encode(ext + s2.slice(0,8));
 }
 
-// ========== MULTI-WORKER POLLARD'S RHO ==========
+// ========== ADAPTIEVE SPRONGFUNCTIE ==========
+function adaptiveJump(currentX, targetX) {
+    const diff = (currentX > targetX) ? currentX - targetX : targetX - currentX;
+    const maxJump = 0x10000000000000000000000000000000000000000000000000000000000000000n; // 2^252
+    const minJump = 1n;
+    if (diff === 0n) return minJump;
+    const logDiff = BigInt(diff.toString(2).length - 1); // ruwe log2
+    const jump = 1n << (logDiff > 8n ? logDiff - 8n : 0n);
+    return jump < minJump ? minJump : (jump > maxJump ? maxJump : jump);
+}
+
+// ========== MULTI-WORKER ADAPTIVE KANGAROO ==========
 let running = false, found = false;
 let targetPoint = null, expectedAddr = '';
 let totalSteps = 0;
@@ -252,8 +262,7 @@ function showSolution(privHex) {
     document.getElementById('stopBtn').disabled = true;
 }
 
-function createWorker() {
-    const getJump = (x) => (x % 3n) + 1n;
+function createWorker(targetX) {
     let a = 1n + BigInt(Math.floor(Math.random() * Number(N - 2n)));
     let b = a;
     let pointA = pointMul(a, G);
@@ -263,22 +272,21 @@ function createWorker() {
     return {
         stepBatch(batchSize) {
             for (let i = 0; i < batchSize && !found; i++) {
-                // Schildpad: één stap
-                let jump = getJump(pointA[0]);
+                // Schildpad: één adaptieve stap
+                let jump = adaptiveJump(pointA[0], targetX);
                 pointA = pointAdd(pointA, pointMul(jump, G));
                 a = mod(a + jump, N);
 
-                // Haas: twee stappen
-                jump = getJump(pointB[0]);
+                // Haas: twee adaptieve stappen
+                jump = adaptiveJump(pointB[0], targetX);
                 pointB = pointAdd(pointB, pointMul(jump, G));
                 b = mod(b + jump, N);
-                jump = getJump(pointB[0]);
+                jump = adaptiveJump(pointB[0], targetX);
                 pointB = pointAdd(pointB, pointMul(jump, G));
                 b = mod(b + jump, N);
 
                 steps++;
 
-                // Check op target
                 if (pointA[0] === targetPoint[0] && pointA[1] === targetPoint[1]) {
                     showSolution(a.toString(16).padStart(64,'0'));
                     return true;
@@ -290,12 +298,10 @@ function createWorker() {
 
                 // Cyclusdetectie
                 if (pointA[0] === pointB[0] && pointA[1] === pointB[1]) {
-                    // Herstart deze worker
                     a = 1n + BigInt(Math.floor(Math.random() * Number(N - 2n)));
                     b = a;
                     pointA = pointMul(a, G);
                     pointB = pointMul(b, G);
-                    // cyclus tellen we wel als gevonden? Nee, gewoon doorgaan.
                 }
             }
             return false;
@@ -304,23 +310,21 @@ function createWorker() {
     };
 }
 
-async function runMultiRho(numWorkers, batchSize) {
+async function runAdaptive(numWorkers, batchSize) {
     workers = [];
+    const targetX = targetPoint[0];
     for (let i = 0; i < numWorkers; i++) {
-        workers.push(createWorker());
+        workers.push(createWorker(targetX));
     }
     totalSteps = 0;
-    log(`🚀 ${numWorkers} workers gestart, batchgrootte ${batchSize}`, 'info');
+    log(`🚀 ${numWorkers} adaptieve workers gestart, batchgrootte ${batchSize}`, 'info');
     document.getElementById('activeWorkers').textContent = numWorkers;
 
     while (running && !found) {
-        let roundSteps = 0;
         for (let w of workers) {
             if (found) break;
-            const hit = w.stepBatch(batchSize);
-            if (hit) return;
+            w.stepBatch(batchSize);
         }
-        // update UI
         totalSteps = workers.reduce((sum, w) => sum + w.getSteps(), 0);
         document.getElementById('stepCount').textContent = totalSteps;
         await sleep(1);
@@ -356,11 +360,10 @@ document.getElementById('startBtn').onclick = async () => {
     document.getElementById('startBtn').disabled = true;
     document.getElementById('stopBtn').disabled = false;
 
-    log('🚀 Start multi‑worker Pollard\'s Rho over de volledige keyspace.', 'info');
+    log('🚀 Start Adaptive Kangaroo met terugkoppeling.', 'info');
     log('🎯 Target public key: ' + pointToPubComp(targetPoint), 'info');
     log('✅ Verwacht adres: ' + expectedAddr, 'info');
-    log('⏳ Oneindige lus – klik Stop om te onderbreken.', 'warn');
-    runMultiRho(numWorkers, batchSize);
+    runAdaptive(numWorkers, batchSize);
 };
 
 document.getElementById('stopBtn').onclick = () => {
@@ -382,7 +385,7 @@ function resetAll() {
     log('✅ Reset');
 }
 
-log('✅ Klaar. Stel workers/batch in en klik Start (oneindige loop).');
+log('✅ Klaar. Stel workers/batch in en klik Start.');
 </script>
 </body>
 </html>
