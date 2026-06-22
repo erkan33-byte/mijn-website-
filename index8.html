@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>🎯 Adaptive Kangaroo – Feedback-gestuurd zoeken (aanpasbare range)</title>
+    <title>🎯 Adaptive Kangaroo – Snelheidsoptimalisatie (compleet)</title>
     <style>
         :root {
             --bg:#07090f; --surface:#0d1117; --panel:#111827; --border:#1f2937;
@@ -29,10 +29,10 @@
 </head>
 <body>
 <div class="container">
-    <h1>🎯 Adaptive Kangaroo – Aanpasbare range</h1>
+    <h1>🎯 Adaptive Kangaroo – Snelheidsoptimalisatie (compleet)</h1>
     <p style="font-size:.8rem;">
         ⚠️ <strong>Nieuw concept:</strong> De spronggrootte past zich aan op basis van de afstand tot het target (x‑coördinaat).<br>
-        Stel zelf target, adres, range, workers en batch in. De zoektocht loopt binnen de opgegeven range.
+        Nu met een snellere log‑berekening en minder UI‑overhead. De snelheid (stappen/seconde) wordt live getoond.
     </p>
     <div class="card">
         <label>🎯 Target Public Key (compressed 02/03 of uncompressed 04)</label><br>
@@ -57,16 +57,17 @@
             </div>
             <div>
                 <label>📦 Batchgrootte (stappen per ronde)</label>
-                <input type="number" id="batchSize" value="500" min="100" max="2000" style="width:100%;">
+                <input type="number" id="batchSize" value="2000" min="500" max="10000" style="width:100%;">
             </div>
         </div>
-        <small style="color:var(--muted);">Adaptieve sprong: hoe dichter bij target, hoe kleiner de stappen.</small><br><br>
+        <small style="color:var(--muted);">Hogere batchgrootte = meer stappen per seconde, maar UI reageert iets trager.</small><br><br>
         <button class="btn btn-start" id="startBtn">▶ START ADAPTIVE KANGAROO</button>
         <button class="btn btn-stop" id="stopBtn" disabled>■ STOP</button>
         <button class="btn" onclick="resetAll()" style="background:#374151;color:#fff;">↺ RESET</button>
         <div style="margin-top:8px;font-size:.7rem;">
             🔄 Totaal stappen: <span id="stepCount">0</span> |
-            🧵 Actieve workers: <span id="activeWorkers">0</span>
+            🧵 Actieve workers: <span id="activeWorkers">0</span> |
+            ⚡ Snelheid: <span id="speed">0</span> stappen/s
         </div>
     </div>
     <div class="log" id="logBox"></div>
@@ -218,14 +219,27 @@ function privateToWIF(privHex, compressed) {
     return base58encode(ext + s2.slice(0,8));
 }
 
-// ========== ADAPTIEVE SPRONGFUNCTIE ==========
+// ========== SNELLE BIT-LENGTE ZONDER STRING ==========
+function bitLength(n) {
+    if (n === 0n) return 0n;
+    let len = 0n;
+    let val = n;
+    while (val > 0n) {
+        val >>= 1n;
+        len++;
+    }
+    return len;
+}
+
+// ========== ADAPTIEVE SPRONG (geoptimaliseerd) ==========
 function adaptiveJump(currentX, targetX) {
     const diff = (currentX > targetX) ? currentX - targetX : targetX - currentX;
     const maxJump = 0x10000000000000000000000000000000000000000000000000000000000000000n;
     const minJump = 1n;
     if (diff === 0n) return minJump;
-    const logDiff = BigInt(diff.toString(2).length - 1);
-    const jump = 1n << (logDiff > 8n ? logDiff - 8n : 0n);
+    const logDiff = bitLength(diff);
+    const shift = logDiff > 8n ? logDiff - 8n : 0n;
+    const jump = 1n << shift;
     return jump < minJump ? minJump : (jump > maxJump ? maxJump : jump);
 }
 
@@ -234,7 +248,8 @@ let running = false, found = false;
 let targetPoint = null, expectedAddr = '';
 let totalSteps = 0;
 let workers = [];
-let rangeStart, rangeEnd; // BigInts
+let rangeStart, rangeEnd;
+let lastStepCount = 0, lastTime = 0;
 
 const log = (msg, cls='') => {
     const el = document.getElementById('logBox');
@@ -321,19 +336,37 @@ async function runAdaptive(numWorkers, batchSize) {
         workers.push(createWorker(targetX));
     }
     totalSteps = 0;
-    log(`🚀 ${numWorkers} adaptieve workers gestart, batchgrootte ${batchSize}`, 'info');
+    lastStepCount = 0;
+    lastTime = performance.now();
+    log(`🚀 ${numWorkers} workers gestart, batchgrootte ${batchSize}`, 'info');
     log(`📍 Range: [${rangeStart.toString(16)} - ${rangeEnd.toString(16)}]`, 'info');
     document.getElementById('activeWorkers').textContent = numWorkers;
+
+    const UPDATE_INTERVAL = 100; // ms tussen UI-updates
 
     while (running && !found) {
         for (let w of workers) {
             if (found) break;
             w.stepBatch(batchSize);
         }
+
+        const now = performance.now();
         totalSteps = workers.reduce((sum, w) => sum + w.getSteps(), 0);
-        document.getElementById('stepCount').textContent = totalSteps;
-        await sleep(1);
+        const elapsed = now - lastTime;
+        if (elapsed >= UPDATE_INTERVAL) {
+            const delta = totalSteps - lastStepCount;
+            const speed = delta / (elapsed / 1000);
+            document.getElementById('stepCount').textContent = totalSteps;
+            document.getElementById('speed').textContent = Math.round(speed).toLocaleString();
+            lastStepCount = totalSteps;
+            lastTime = now;
+            await sleep(1);
+        }
     }
+
+    totalSteps = workers.reduce((sum, w) => sum + w.getSteps(), 0);
+    document.getElementById('stepCount').textContent = totalSteps;
+    document.getElementById('speed').textContent = '0';
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -368,17 +401,18 @@ document.getElementById('startBtn').onclick = async () => {
     }
 
     const numWorkers = parseInt(document.getElementById('numWorkers').value, 10) || 4;
-    const batchSize = parseInt(document.getElementById('batchSize').value, 10) || 500;
+    const batchSize = parseInt(document.getElementById('batchSize').value, 10) || 2000;
 
     running = true; found = false; totalSteps = 0;
     document.getElementById('resultCard').classList.remove('show');
     document.getElementById('stepCount').textContent = '0';
+    document.getElementById('speed').textContent = '0';
     document.getElementById('activeWorkers').textContent = numWorkers;
     document.getElementById('logBox').innerHTML = '';
     document.getElementById('startBtn').disabled = true;
     document.getElementById('stopBtn').disabled = false;
 
-    log('🚀 Start Adaptive Kangaroo met terugkoppeling.', 'info');
+    log('🚀 Start Adaptive Kangaroo (geoptimaliseerd).', 'info');
     log('🎯 Target public key: ' + pointToPubComp(targetPoint), 'info');
     log('✅ Verwacht adres: ' + expectedAddr, 'info');
     runAdaptive(numWorkers, batchSize);
@@ -398,6 +432,7 @@ function resetAll() {
     document.getElementById('stopBtn').disabled = true;
     document.getElementById('resultCard').classList.remove('show');
     document.getElementById('stepCount').textContent = '0';
+    document.getElementById('speed').textContent = '0';
     document.getElementById('activeWorkers').textContent = '0';
     document.getElementById('logBox').innerHTML = '';
     log('✅ Reset');
