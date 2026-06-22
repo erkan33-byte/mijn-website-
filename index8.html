@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>⚛️ Einstein‑Kangaroo Hybride – Tam & Wild</title>
+    <title>⚛️ Einstein‑Kangaroo – Puzzle #135 (demonstratie)</title>
     <style>
         :root {
             --bg:#07090f; --surface:#0d1117; --panel:#111827; --border:#1f2937;
@@ -29,46 +29,47 @@
 </head>
 <body>
 <div class="container">
-    <h1>⚛️ Einstein‑Kangaroo Hybride</h1>
-    <p style="font-size:.8rem;">
-        🟢 <strong>Tame atomen</strong> starten in de range. 🔴 <strong>Wilde atomen</strong> starten op de target public key.<br>
-        Bij een ontmoeting berekenen we de private key exact. Temperatuur en fusie optimaliseren de zoektocht.
+    <h1>⚛️ Einstein‑Kangaroo – Puzzle #135</h1>
+    <p style="font-size:.8rem; color:var(--warn);">
+        ⚠️ <strong>Let op:</strong> De echte range (2<sup>134</sup>) is onmogelijk voor een browser. Dit is een demonstratie van het algoritme.<br>
+        🟢 Tame atomen starten in de range. 🔴 Wilde atomen starten op de target public key.<br>
+        Bij een ontmoeting wordt de private key exact berekend.
     </p>
     <div class="card">
-        <label>🎯 Target Public Key (compressed 02/03 of uncompressed 04)</label><br>
-        <input type="text" id="targetPubKey" size="80" value="040b8a0382802e12fc345e9bace8b99f6aed6b90fbfd796e8027ca9bb5f472778db863952bdb6e9e399e34f941cab2fa6c244e65af2d15244fee2d795b3f6e222d" style="width:100%;"><br><br>
+        <label>🎯 Target Public Key</label><br>
+        <input type="text" id="targetPubKey" value="02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16" style="width:100%;"><br><br>
         <label>✅ Verwacht BTC‑adres (ter verificatie)</label><br>
-        <input type="text" id="expectedAddr" value="1FvUkW8thcqG6HP7gAvAjcR52fR7CYodBx" style="width:100%;"><br><br>
+        <input type="text" id="expectedAddr" value="16RGFo6hjq9ym6Pj7N5H7L1NR1rVPJyw2v" style="width:100%;"><br><br>
         <div class="param-row">
             <div>
                 <label>📍 Range Start (HEX)</label>
-                <input type="text" id="rangeStart" value="1" style="width:100%;">
+                <input type="text" id="rangeStart" value="4000000000000000000000000000000000" style="width:100%;">
             </div>
             <div>
                 <label>📍 Range End (HEX)</label>
-                <input type="text" id="rangeEnd" value="100000" style="width:100%;">
+                <input type="text" id="rangeEnd" value="7fffffffffffffffffffffffffffffffff" style="width:100%;">
             </div>
         </div>
-        <small style="color:var(--muted);">Gebruik een kleine range om het concept te testen (bijv. 1 … FFFFF).</small><br><br>
+        <small style="color:var(--muted);">Dit is de echte range van Puzzle #135. Vervang door een kleine range (bijv. 1 ... FFFFF) om het algoritme te zien werken.</small><br><br>
         <div class="param-row">
             <div>
                 <label>🟢 Tame atomen</label>
-                <input type="number" id="numTame" value="3" min="1" max="32" style="width:100%;">
+                <input type="number" id="numTame" value="32" min="1" max="32" style="width:100%;">
             </div>
             <div>
                 <label>🔴 Wilde atomen</label>
-                <input type="number" id="numWild" value="1" min="1" max="16" style="width:100%;">
+                <input type="number" id="numWild" value="8" min="1" max="16" style="width:100%;">
             </div>
             <div>
                 <label>🔥 Begintemperatuur (0-1)</label>
-                <input type="number" id="temperature" value="0.8" min="0.1" max="1.0" step="0.1" style="width:100%;">
+                <input type="number" id="temperature" value="1.0" min="0.1" max="1.0" step="0.1" style="width:100%;">
             </div>
             <div>
                 <label>❄️ Afkoelsnelheid (per stap)</label>
-                <input type="number" id="cooling" value="0.9999" min="0.999" max="0.99999" step="0.0001" style="width:100%;">
+                <input type="number" id="cooling" value="0.99999" min="0.999" max="0.99999" step="0.0001" style="width:100%;">
             </div>
         </div>
-        <small style="color:var(--muted);">Hoe hoger de temperatuur, hoe groter de sprongen. Afkoeling verfijnt de zoektocht.</small><br><br>
+        <small style="color:var(--muted);">Maximale instellingen voor theoretische kans. In de praktijk onhaalbaar.</small><br><br>
         <button class="btn btn-start" id="startBtn">▶ START HYBRIDE JACHT</button>
         <button class="btn btn-stop" id="stopBtn" disabled>■ STOP</button>
         <button class="btn" onclick="resetAll()" style="background:#374151;color:#fff;">↺ RESET</button>
@@ -113,6 +114,7 @@ const pointAdd=(p1,p2)=>{
     const m=(y2-y1)*modInv(x2-x1,P)%P;const x3=mod(m*m-x1-x2,P);return [x3,mod(m*(x1-x3)-y1,P)];
 };
 const pointMul=(k,p)=>{let r=null,a=p;while(k>0n){if(k&1n)r=pointAdd(r,a);a=pointAdd(a,a);k>>=1n;}return r;};
+const pointNeg=([x,y])=>[x,mod(-y,P)];
 const modPow=(b,e,m)=>{let r=1n;while(e>0n){if(e&1n)r=(r*b)%m;b=(b*b)%m;e>>=1n;}return r;};
 
 function pubToPoint(pub){
@@ -186,16 +188,11 @@ function base58encode(hex){
 function pubkeyToAddress(pub){const h160=ripemd160hex(sha256hex(pub));const cs=sha256hex(sha256hex('00'+h160)).slice(0,8);return base58encode('00'+h160+cs);}
 function privateToWIF(privHex,compressed){const ext='80'+privHex.toLowerCase()+(compressed?'01':'');const s1=sha256hex(ext),s2=sha256hex(s1);return base58encode(ext+s2.slice(0,8));}
 
-// ========== HYBRIDE EINSTEIN-KANGAROO ==========
+// ========== HYBRIDE EINSTEIN-KANGAROO (gecorrigeerd) ==========
 let running=false, found=false, targetPoint=null, expectedAddr='';
-let tameAtoms = [];          // { key: BigInt, point: [x,y] }
-let wildAtoms = [];          // { dist: BigInt, point: [x,y] }
-let tameMap = new Map();     // pubHex -> key
-let wildMap = new Map();     // pubHex -> dist
-let totalSteps = 0, fusions = 0;
-let temperature = 0.8, coolingRate = 0.9999;
-let rangeStart, rangeEnd;
-let lastStepCount=0, lastTime=0;
+let tameAtoms=[], wildAtoms=[], tameMap=new Map(), wildMap=new Map();
+let totalSteps=0, fusions=0, temperature=0.8, coolingRate=0.9999;
+let rangeStart, rangeEnd, lastStepCount=0, lastTime=0;
 
 const log=(msg,cls='')=>{
     const el=document.getElementById('logBox');
@@ -235,230 +232,171 @@ function randomBigInt(lo, hi) {
 }
 
 async function hybridHunt(numTame, numWild, initTemp, cool) {
-    tameAtoms = [];
-    wildAtoms = [];
-    tameMap.clear();
-    wildMap.clear();
-    // Tame atomen initialiseren
-    for(let i=0; i<numTame; i++) {
-        const key = randomBigInt(rangeStart, rangeEnd);
-        const point = pointMul(key, G);
-        tameAtoms.push({ key, point });
+    tameAtoms=[]; wildAtoms=[]; tameMap.clear(); wildMap.clear();
+    for(let i=0;i<numTame;i++){
+        const key=randomBigInt(rangeStart, rangeEnd);
+        const point=pointMul(key, G);
+        tameAtoms.push({key,point});
         tameMap.set(pointToPubComp(point), key);
     }
-    // Wilde atomen initialiseren (starten op target)
-    for(let i=0; i<numWild; i++) {
-        wildAtoms.push({ dist: 0n, point: targetPoint.slice() });
+    for(let i=0;i<numWild;i++){
+        wildAtoms.push({dist:0n, point:targetPoint.slice()});
         wildMap.set(pointToPubComp(targetPoint), 0n);
     }
-    temperature = initTemp;
-    coolingRate = cool;
-    fusions = 0;
-    totalSteps = 0;
-    lastStepCount = 0;
-    lastTime = performance.now();
+    temperature=initTemp; coolingRate=cool; fusions=0; totalSteps=0;
+    lastStepCount=0; lastTime=performance.now();
+    log(`🟢 ${numTame} tame, 🔴 ${numWild} wild | range [${rangeStart.toString(16)} ... ${rangeEnd.toString(16)}]`,'info');
+    document.getElementById('tameCount').textContent=tameAtoms.length;
+    document.getElementById('wildCount').textContent=wildAtoms.length;
+    document.getElementById('fusionCount').textContent='0';
 
-    log(`🟢 ${numTame} tame, 🔴 ${numWild} wild | range [${rangeStart.toString(16)} ... ${rangeEnd.toString(16)}]`, 'info');
-    document.getElementById('tameCount').textContent = tameAtoms.length;
-    document.getElementById('wildCount').textContent = wildAtoms.length;
-    document.getElementById('fusionCount').textContent = '0';
-
-    const UPDATE_INTERVAL = 100;
-
-    while(running && !found && (tameAtoms.length + wildAtoms.length) > 0) {
-        // --- TAME STAP ---
-        for(let i=0; i<tameAtoms.length; i++) {
-            if(found) break;
-            const atom = tameAtoms[i];
-            const maxJump = BigInt(Math.max(1, Math.floor(Math.sqrt(Number(rangeEnd - rangeStart)) * temperature)));
-            const direction = Math.random() < 0.5 ? 1n : -1n;
-            const jump = BigInt(Math.floor(Math.random() * Number(maxJump))) + 1n;
-            const actualJump = jump * direction;
-
-            let newKey = mod(atom.key + actualJump, N);
-            if(newKey < rangeStart) newKey = rangeStart + (rangeStart - newKey);
-            if(newKey >= rangeEnd) newKey = rangeEnd - (newKey - rangeEnd) - 1n;
-            if(newKey < rangeStart) newKey = rangeStart;
-            if(newKey >= rangeEnd) newKey = rangeEnd - 1n;
-
-            const newPoint = pointMul(newKey, G);
-            const pub = pointToPubComp(newPoint);
-            // Verwijder oude positie uit tameMap
+    const UPDATE_INTERVAL=100;
+    while(running&&!found&&(tameAtoms.length+wildAtoms.length)>0){
+        // TAME STAP
+        for(let i=0;i<tameAtoms.length;i++){
+            if(found)break;
+            const atom=tameAtoms[i];
+            const maxJump=BigInt(Math.max(1,Math.floor(Math.sqrt(Number(rangeEnd-rangeStart))*temperature)));
+            const jump=BigInt(Math.floor(Math.random()*Number(maxJump)))+1n;
+            const direction=Math.random()<0.5?1n:-1n;
+            let pointIncrement=pointMul(jump,G);
+            if(direction===-1n)pointIncrement=pointNeg(pointIncrement);
+            const newPoint=pointAdd(atom.point,pointIncrement);
+            const actualJump=jump*direction;
+            let newKey=mod(atom.key+actualJump,N);
+            if(newKey<rangeStart)newKey=rangeStart+(rangeStart-newKey);
+            if(newKey>=rangeEnd)newKey=rangeEnd-(newKey-rangeEnd)-1n;
+            if(newKey<rangeStart)newKey=rangeStart;
+            if(newKey>=rangeEnd)newKey=rangeEnd-1n;
+            const pub=pointToPubComp(newPoint);
             tameMap.delete(pointToPubComp(atom.point));
-            // Update atoom
-            atom.key = newKey;
-            atom.point = newPoint;
-            tameMap.set(pub, newKey);
+            atom.key=newKey;atom.point=newPoint;
+            tameMap.set(pub,newKey);
             totalSteps++;
-
-            // Check of we op een wild atoom staan
-            if(wildMap.has(pub)) {
-                const wildDist = wildMap.get(pub);
-                const targetKey = mod(newKey - wildDist, N);
-                const privHex = targetKey.toString(16).padStart(64,'0');
-                if(pointToPubComp(pointMul(targetKey, G)) === pointToPubComp(targetPoint)) {
-                    showSolution(privHex);
-                    return;
+            if(wildMap.has(pub)){
+                const wildDist=wildMap.get(pub);
+                const targetKey=mod(newKey-wildDist,N);
+                const privHex=targetKey.toString(16).padStart(64,'0');
+                if(pointToPubComp(pointMul(targetKey,G))===pointToPubComp(targetPoint)){
+                    showSolution(privHex);return;
                 }
             }
         }
-
-        // --- WILD STAP ---
-        for(let i=0; i<wildAtoms.length; i++) {
-            if(found) break;
-            const atom = wildAtoms[i];
-            const maxJump = BigInt(Math.max(1, Math.floor(Math.sqrt(Number(rangeEnd - rangeStart)) * temperature)));
-            const direction = Math.random() < 0.5 ? 1n : -1n;
-            const jump = BigInt(Math.floor(Math.random() * Number(maxJump))) + 1n;
-            const actualJump = jump * direction;
-
-            const newPoint = pointAdd(atom.point, pointMul(actualJump, G));
-            const newDist = mod(atom.dist + actualJump, N);
-            const pub = pointToPubComp(newPoint);
-            // Verwijder oude positie uit wildMap
+        // WILD STAP
+        for(let i=0;i<wildAtoms.length;i++){
+            if(found)break;
+            const atom=wildAtoms[i];
+            const maxJump=BigInt(Math.max(1,Math.floor(Math.sqrt(Number(rangeEnd-rangeStart))*temperature)));
+            const jump=BigInt(Math.floor(Math.random()*Number(maxJump)))+1n;
+            const direction=Math.random()<0.5?1n:-1n;
+            let pointIncrement=pointMul(jump,G);
+            if(direction===-1n)pointIncrement=pointNeg(pointIncrement);
+            const newPoint=pointAdd(atom.point,pointIncrement);
+            const actualJump=jump*direction;
+            const newDist=mod(atom.dist+actualJump,N);
+            const pub=pointToPubComp(newPoint);
             wildMap.delete(pointToPubComp(atom.point));
-            // Update atoom
-            atom.point = newPoint;
-            atom.dist = newDist;
-            wildMap.set(pub, newDist);
+            atom.point=newPoint;atom.dist=newDist;
+            wildMap.set(pub,newDist);
             totalSteps++;
-
-            // Check of we op een tame atoom staan
-            if(tameMap.has(pub)) {
-                const tameKey = tameMap.get(pub);
-                const targetKey = mod(tameKey - newDist, N);
-                const privHex = targetKey.toString(16).padStart(64,'0');
-                if(pointToPubComp(pointMul(targetKey, G)) === pointToPubComp(targetPoint)) {
-                    showSolution(privHex);
-                    return;
+            if(tameMap.has(pub)){
+                const tameKey=tameMap.get(pub);
+                const targetKey=mod(tameKey-newDist,N);
+                const privHex=targetKey.toString(16).padStart(64,'0');
+                if(pointToPubComp(pointMul(targetKey,G))===pointToPubComp(targetPoint)){
+                    showSolution(privHex);return;
                 }
             }
         }
-
-        // --- FUSIE BINNEN GROEPEN ---
-        // Tame fusie (zelfde punt)
-        const tamePoints = new Map(); // pub -> index
-        for(let i=0; i<tameAtoms.length; i++) {
-            const pub = pointToPubComp(tameAtoms[i].point);
-            if(tamePoints.has(pub)) {
-                const other = tamePoints.get(pub);
-                const newKey = (tameAtoms[i].key + tameAtoms[other].key) / 2n;
-                // Verwijder beide, voeg nieuwe toe
+        // FUSIE TAME
+        const tamePoints=new Map();
+        for(let i=0;i<tameAtoms.length;i++){
+            const pub=pointToPubComp(tameAtoms[i].point);
+            if(tamePoints.has(pub)){
+                const other=tamePoints.get(pub);
+                const newKey=(tameAtoms[i].key+tameAtoms[other].key)/2n;
                 tameMap.delete(pub);
-                tameAtoms.splice(i,1);
-                tameAtoms.splice(other,1);
-                const fused = { key: newKey, point: pointMul(newKey, G) };
+                tameAtoms.splice(i,1);tameAtoms.splice(other,1);
+                const fused={key:newKey,point:pointMul(newKey,G)};
                 tameAtoms.push(fused);
-                tameMap.set(pointToPubComp(fused.point), newKey);
+                tameMap.set(pointToPubComp(fused.point),newKey);
                 fusions++;
-                log(`💥 Tame fusie!`, 'fusion');
-                i = -1; // herstart loop
-                break;
-            } else {
-                tamePoints.set(pub, i);
-            }
+                log(`💥 Tame fusie!`,'fusion');
+                i=-1;break;
+            }else tamePoints.set(pub,i);
         }
-        // Wild fusie (zelfde punt)
-        const wildPoints = new Map();
-        for(let i=0; i<wildAtoms.length; i++) {
-            const pub = pointToPubComp(wildAtoms[i].point);
-            if(wildPoints.has(pub)) {
-                // dist moet gelijk zijn, anders fout
+        // FUSIE WILD
+        const wildPoints=new Map();
+        for(let i=0;i<wildAtoms.length;i++){
+            const pub=pointToPubComp(wildAtoms[i].point);
+            if(wildPoints.has(pub)){
                 wildMap.delete(pub);
                 wildAtoms.splice(i,1);
                 fusions++;
-                log(`💥 Wild fusie!`, 'fusion');
-                i = -1;
-                break;
-            } else {
-                wildPoints.set(pub, i);
-            }
+                log(`💥 Wild fusie!`,'fusion');
+                i=-1;break;
+            }else wildPoints.set(pub,i);
         }
-
-        // Temperatuur update
-        temperature *= coolingRate;
-        if(temperature < 0.001) temperature = 0.001;
-
-        // UI
-        const now = performance.now();
-        const elapsed = now - lastTime;
-        if(elapsed >= UPDATE_INTERVAL) {
-            const delta = totalSteps - lastStepCount;
-            const speed = delta / (elapsed / 1000);
-            document.getElementById('stepCount').textContent = totalSteps;
-            document.getElementById('speed').textContent = Math.round(speed).toLocaleString();
-            document.getElementById('tameCount').textContent = tameAtoms.length;
-            document.getElementById('wildCount').textContent = wildAtoms.length;
-            document.getElementById('fusionCount').textContent = fusions;
-            lastStepCount = totalSteps;
-            lastTime = now;
+        temperature*=coolingRate;
+        if(temperature<0.001)temperature=0.001;
+        const now=performance.now();
+        const elapsed=now-lastTime;
+        if(elapsed>=UPDATE_INTERVAL){
+            const delta=totalSteps-lastStepCount;
+            const speed=delta/(elapsed/1000);
+            document.getElementById('stepCount').textContent=totalSteps;
+            document.getElementById('speed').textContent=Math.round(speed).toLocaleString();
+            document.getElementById('tameCount').textContent=tameAtoms.length;
+            document.getElementById('wildCount').textContent=wildAtoms.length;
+            document.getElementById('fusionCount').textContent=fusions;
+            lastStepCount=totalSteps;lastTime=now;
             await sleep(1);
         }
     }
-
-    if(!found) {
-        log('⚠️ Geen ontmoeting gevonden.', 'warn');
-    }
-    document.getElementById('startBtn').disabled = false;
-    document.getElementById('stopBtn').disabled = true;
+    if(!found)log('⚠️ Geen ontmoeting gevonden.','warn');
+    document.getElementById('startBtn').disabled=false;
+    document.getElementById('stopBtn').disabled=true;
 }
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 
 // ========== UI ==========
-document.getElementById('startBtn').onclick = async () => {
-    const rawPub = document.getElementById('targetPubKey').value.trim();
-    if(!/^0[234][0-9a-fA-F]+$/.test(rawPub)||(rawPub.length!==66&&rawPub.length!==130)){alert('Ongeldige publieke sleutel.');return;}
-    targetPoint = pubToPoint(rawPub);
+document.getElementById('startBtn').onclick=async()=>{
+    const rawPub=document.getElementById('targetPubKey').value.trim();
+    if(!/^0[23][0-9a-fA-F]{64}$/.test(rawPub)){alert('Ongeldige publieke sleutel (compressed 02/03).');return;}
+    targetPoint=pubToPoint(rawPub);
     if(!targetPoint){alert('Kon punt niet extraheren.');return;}
-    expectedAddr = document.getElementById('expectedAddr').value.trim();
-
-    const rs = document.getElementById('rangeStart').value.trim();
-    const re = document.getElementById('rangeEnd').value.trim();
+    expectedAddr=document.getElementById('expectedAddr').value.trim();
+    const rs=document.getElementById('rangeStart').value.trim();
+    const re=document.getElementById('rangeEnd').value.trim();
     if(!/^[0-9a-fA-F]+$/.test(rs)||!/^[0-9a-fA-F]+$/.test(re)){alert('Range start/end moeten HEX zijn.');return;}
-    rangeStart = BigInt('0x'+rs); rangeEnd = BigInt('0x'+re);
+    rangeStart=BigInt('0x'+rs);rangeEnd=BigInt('0x'+re);
     if(rangeStart<1n||rangeEnd>N-1n||rangeStart>=rangeEnd){alert('Ongeldige range.');return;}
-
-    const numTame = parseInt(document.getElementById('numTame').value,10) || 3;
-    const numWild = parseInt(document.getElementById('numWild').value,10) || 1;
-    const initTemp = parseFloat(document.getElementById('temperature').value) || 0.8;
-    const cool = parseFloat(document.getElementById('cooling').value) || 0.9999;
-
-    running = true; found = false; totalSteps = 0;
+    const numTame=parseInt(document.getElementById('numTame').value,10)||32;
+    const numWild=parseInt(document.getElementById('numWild').value,10)||8;
+    const initTemp=parseFloat(document.getElementById('temperature').value)||1.0;
+    const cool=parseFloat(document.getElementById('cooling').value)||0.99999;
+    running=true;found=false;totalSteps=0;
     document.getElementById('resultCard').classList.remove('show');
-    document.getElementById('stepCount').textContent = '0';
-    document.getElementById('speed').textContent = '0';
-    document.getElementById('tameCount').textContent = numTame;
-    document.getElementById('wildCount').textContent = numWild;
-    document.getElementById('fusionCount').textContent = '0';
-    document.getElementById('logBox').innerHTML = '';
-    document.getElementById('startBtn').disabled = true;
-    document.getElementById('stopBtn').disabled = false;
-
-    log('🚀 Hybride jacht gestart.', 'info');
-    hybridHunt(numTame, numWild, initTemp, cool);
+    document.getElementById('stepCount').textContent='0';document.getElementById('speed').textContent='0';
+    document.getElementById('tameCount').textContent=numTame;document.getElementById('wildCount').textContent=numWild;
+    document.getElementById('fusionCount').textContent='0';document.getElementById('logBox').innerHTML='';
+    document.getElementById('startBtn').disabled=true;document.getElementById('stopBtn').disabled=false;
+    log('🚀 Hybride jacht gestart.','info');
+    hybridHunt(numTame,numWild,initTemp,cool);
 };
-
-document.getElementById('stopBtn').onclick = () => {
-    running = false;
-    document.getElementById('startBtn').disabled = false;
-    document.getElementById('stopBtn').disabled = true;
-    log('🛑 Gestopt door gebruiker.', 'warn');
+document.getElementById('stopBtn').onclick=()=>{
+    running=false;document.getElementById('startBtn').disabled=false;document.getElementById('stopBtn').disabled=true;
+    log('🛑 Gestopt door gebruiker.','warn');
 };
-
-function resetAll() {
-    running = false; found = false;
-    document.getElementById('startBtn').disabled = false;
-    document.getElementById('stopBtn').disabled = true;
+function resetAll(){
+    running=false;found=false;
+    document.getElementById('startBtn').disabled=false;document.getElementById('stopBtn').disabled=true;
     document.getElementById('resultCard').classList.remove('show');
-    document.getElementById('stepCount').textContent = '0';
-    document.getElementById('speed').textContent = '0';
-    document.getElementById('tameCount').textContent = '0';
-    document.getElementById('wildCount').textContent = '0';
-    document.getElementById('fusionCount').textContent = '0';
-    document.getElementById('logBox').innerHTML = '';
+    document.getElementById('stepCount').textContent='0';document.getElementById('speed').textContent='0';
+    document.getElementById('tameCount').textContent='0';document.getElementById('wildCount').textContent='0';
+    document.getElementById('fusionCount').textContent='0';document.getElementById('logBox').innerHTML='';
     log('✅ Reset voltooid.');
 }
-
 log('⚛️ Einstein‑Kangaroo Hybride geladen. Stel parameters in en klik Start.');
 </script>
 </body>
