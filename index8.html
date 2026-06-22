@@ -2,13 +2,12 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>🎯 Adaptive Kangaroo – Snelheidsoptimalisatie (compleet)</title>
+    <title>🎯 High-Speed Range Searcher</title>
     <style>
         :root {
             --bg:#07090f; --surface:#0d1117; --panel:#111827; --border:#1f2937;
             --accent:#00ff99; --muted:#6b7280; --text:#e2e8f0;
             --warn:#f59e0b; --danger:#ef4444; --success:#10b981; --gold:#ffd700;
-            --rho:#ff6b6b;
         }
         body { font-family:'Courier New',monospace; background:var(--bg); color:var(--text); padding:20px; }
         .container { max-width:1000px; margin:auto; }
@@ -21,35 +20,34 @@
         .result-card.show { display:block; animation:pulse 0.8s infinite; }
         @keyframes pulse { 0%,100% { box-shadow:0 0 30px var(--gold); } 50% { box-shadow:0 0 60px var(--gold); } }
         table { width:100%; border-collapse:collapse; margin-top:10px; }
-        th, td { padding:8px; border:1px solid var(--border); font-size:.7rem; text-align:left; }
-        th { color:var(--gold); }
+        th, td { padding:8px; border:1px solid var(--border); font-size:.7rem; text-align:left; word-break: break-all; }
+        th { color:var(--gold); width: 30%; }
         .param-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
         .param-row > div { flex:1; min-width:150px; }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>🎯 Adaptive Kangaroo – Snelheidsoptimalisatie (compleet)</h1>
+    <h1>🎯 High-Speed Range Searcher</h1>
     <p style="font-size:.8rem;">
-        ⚠️ <strong>Nieuw concept:</strong> De spronggrootte past zich aan op basis van de afstand tot het target (x‑coördinaat).<br>
-        Nu met een snellere log‑berekening en minder UI‑overhead. De snelheid (stappen/seconde) wordt live getoond.
+        ⚡ <strong>Geoptimaliseerd:</strong> Verdeelt de zoek-range eerlijk over workers en gebruikt supersnelle iteratieve <em>Point Addition</em> (+G) in plaats van losse berekeningen. Garandeert dat de sleutel gevonden wordt als deze in de range ligt!
     </p>
     <div class="card">
         <label>🎯 Target Public Key (compressed 02/03 of uncompressed 04)</label><br>
-        <input type="text" id="targetPubKey" size="80" value="040b8a0382802e12fc345e9bace8b99f6aed6b90fbfd796e8027ca9bb5f472778db863952bdb6e9e399e34f941cab2fa6c244e65af2d15244fee2d795b3f6e222d"><br><br>
+        <input type="text" id="targetPubKey" size="80" value="040b8a0382802e12fc345e9bace8b99f6aed6b90fbfd796e8027ca9bb5f472778db863952bdb6e9e399e34f941cab2fa6c244e65af2d15244fee2d795b3f6e222d" style="width:100%;"><br><br>
         <label>✅ Verwacht BTC‑adres (ter verificatie)</label><br>
-        <input type="text" id="expectedAddr" value="1FvUkW8thcqG6HP7gAvAjcR52fR7CYodBx"><br><br>
+        <input type="text" id="expectedAddr" value="1FvUkW8thcqG6HP7gAvAjcR52fR7CYodBx" style="width:100%;"><br><br>
         <div class="param-row">
             <div>
                 <label>📍 Range Start (HEX)</label>
-                <input type="text" id="rangeStart" value="1">
+                <input type="text" id="rangeStart" value="1" style="width:100%;">
             </div>
             <div>
                 <label>📍 Range End (HEX)</label>
-                <input type="text" id="rangeEnd" value="fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140">
+                <input type="text" id="rangeEnd" value="100000" style="width:100%;">
             </div>
         </div>
-        <small style="color:var(--muted);">(Standaard de volledige privésleutel‑ruimte. Pas aan voor een kleinere range.)</small><br><br>
+        <small style="color:var(--muted);">Tip: Zet de range op een klein gebied om de functionaliteit en snelheid te testen (bijv. Start: 1, End: 100000).</small><br><br>
         <div class="param-row">
             <div>
                 <label>⚙️ Aantal workers</label>
@@ -61,7 +59,7 @@
             </div>
         </div>
         <small style="color:var(--muted);">Hogere batchgrootte = meer stappen per seconde, maar UI reageert iets trager.</small><br><br>
-        <button class="btn btn-start" id="startBtn">▶ START ADAPTIVE KANGAROO</button>
+        <button class="btn btn-start" id="startBtn">▶ START SEARCH</button>
         <button class="btn btn-stop" id="stopBtn" disabled>■ STOP</button>
         <button class="btn" onclick="resetAll()" style="background:#374151;color:#fff;">↺ RESET</button>
         <div style="margin-top:8px;font-size:.7rem;">
@@ -87,335 +85,269 @@
 </div>
 
 <script>
-// ========== SECP256K1 CONSTANTEN ==========
+// ========== SECP256K1 ==========
 const P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
 const N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
 const Gx = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
 const Gy = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n;
 const G = [Gx, Gy];
 
-const mod = (a, m) => ((a % m) + m) % m;
-const modInv = (a, m) => { let [t,nt]=[0n,1n],[r,nr]=[m,mod(a,m)]; while(nr!==0n){ const q=r/nr; [t,nt]=[nt,t-q*nt]; [r,nr]=[nr,r-q*nr]; } return t<0n?t+m:t; };
-const pointAdd = (p1, p2) => {
-    if (!p1) return p2; if (!p2) return p1;
-    const [x1,y1]=p1,[x2,y2]=p2;
-    if (x1===x2){ if(y1!==y2) return null; const m=(3n*x1*x1)*modInv(2n*y1,P)%P; const x3=mod(m*m-2n*x1,P); return [x3,mod(m*(x1-x3)-y1,P)]; }
-    const m=(y2-y1)*modInv(x2-x1,P)%P; const x3=mod(m*m-x1-x2,P); return [x3,mod(m*(x1-x3)-y1,P)];
+const mod = (a,m)=>((a%m)+m)%m;
+const modInv=(a,m)=>{
+    let [t,nt]=[0n,1n],[r,nr]=[m,mod(a,m)];
+    while(nr!==0n){const q=r/nr;[t,nt]=[nt,t-q*nt];[r,nr]=[nr,r-q*nr];}
+    return t<0n?t+m:t;
 };
-const pointMul = (k, p) => { let res=null, add=p; while(k>0n){ if(k&1n) res=pointAdd(res,add); add=pointAdd(add,add); k>>=1n; } return res; };
-const modPow = (b,e,m) => { let r=1n; while(e>0n){ if(e&1n) r=(r*b)%m; b=(b*b)%m; e>>=1n; } return r; };
 
-function pubToPoint(pubHex) {
-    if (pubHex.startsWith('04')) {
-        const x = BigInt('0x' + pubHex.slice(2, 66));
-        const y = BigInt('0x' + pubHex.slice(66, 130));
-        return [x, y];
-    } else if (pubHex.startsWith('02') || pubHex.startsWith('03')) {
-        const x = BigInt('0x' + pubHex.slice(2));
-        const ySq = mod(x*x*x+7n, P);
-        const y = modPow(ySq, (P+1n)/4n, P);
-        const even = (y & 1n) === 0n;
-        return (pubHex[1] === '2') === even ? [x, y] : [x, mod(P - y, P)];
+const pointAdd=(p1,p2)=>{
+    if(!p1)return p2;if(!p2)return p1;
+    const [x1,y1]=p1,[x2,y2]=p2;
+    if(x1===x2){
+        if(y1!==y2)return null;
+        const m=(3n*x1*x1)*modInv(2n*y1,P)%P;
+        const x3=mod(m*m-2n*x1,P);
+        return [x3,mod(m*(x1-x3)-y1,P)];
+    }
+    const m=(y2-y1)*modInv(x2-x1,P)%P;
+    const x3=mod(m*m-x1-x2,P);
+    return [x3,mod(m*(x1-x3)-y1,P)];
+};
+
+const pointMul=(k,p)=>{
+    let r=null,a=p;
+    while(k>0n){if(k&1n)r=pointAdd(r,a);a=pointAdd(a,a);k>>=1n;}
+    return r;
+};
+
+const modPow=(b,e,m)=>{let r=1n;while(e>0n){if(e&1n)r=(r*b)%m;b=(b*b)%m;e>>=1n;}return r;};
+
+function pubToPoint(pub){
+    if(pub.startsWith('04')){
+        return [BigInt('0x'+pub.slice(2,66)),BigInt('0x'+pub.slice(66,130))];
+    }else if(pub.startsWith('02')||pub.startsWith('03')){
+        const x=BigInt('0x'+pub.slice(2)),ySq=mod(x*x*x+7n,P),y=modPow(ySq,(P+1n)/4n,P);
+        return (pub[1]==='2')===((y&1n)===0n)?[x,y]:[x,mod(P-y,P)];
     }
     return null;
 }
+const pointToPubComp=([x,y])=>(y&1n?'03':'02')+x.toString(16).padStart(64,'0');
+const pointToPubUncomp=([x,y])=>'04'+x.toString(16).padStart(64,'0')+y.toString(16).padStart(64,'0');
 
-function pointToPubComp([x, y]) { return (y & 1n ? '03' : '02') + x.toString(16).padStart(64,'0'); }
-function pointToPubUncomp([x, y]) { return '04' + x.toString(16).padStart(64,'0') + y.toString(16).padStart(64,'0'); }
-
-// ========== SHA256 + RIPEMD160 + BASE58 ==========
-function sha256hex(hex) {
-    const bytes = hex.match(/.{2}/g).map(b => parseInt(b, 16));
-    function rotr(x,n){ return (x>>>n)|(x<<(32-n)); }
-    const K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
-    const msg = [...bytes];
-    const bitLen = msg.length * 8;
-    msg.push(0x80);
-    while ((msg.length * 8) % 512 !== 448) msg.push(0);
-    const bitLenBytes = new Array(8).fill(0).map((_, i) => Number((BigInt(bitLen) >> BigInt(56 - i*8)) & 0xFFn));
-    msg.push(...bitLenBytes);
-    const H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
-    for (let chunk = 0; chunk < msg.length; chunk += 64) {
-        const W = new Array(64);
-        for (let i = 0; i < 16; i++) W[i] = (msg[chunk + i*4]<<24)|(msg[chunk + i*4 + 1]<<16)|(msg[chunk + i*4 + 2]<<8)|msg[chunk + i*4 + 3];
-        for (let i = 16; i < 64; i++) {
-            const s0 = rotr(W[i-15],7)^rotr(W[i-15],18)^(W[i-15]>>>3);
-            const s1 = rotr(W[i-2],17)^rotr(W[i-2],19)^(W[i-2]>>>10);
-            W[i] = (W[i-16] + s0 + W[i-7] + s1)>>>0;
+// ========== CRYPTO (compact) ==========
+function sha256hex(hex){
+    const bytes=hex.match(/.{2}/g).map(b=>parseInt(b,16));
+    const rotr=(x,n)=>(x>>>n)|(x<<(32-n));
+    const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+    const msg=[...bytes];const bitLen=msg.length*8;msg.push(0x80);
+    while((msg.length*8)%512!==448)msg.push(0);
+    const bl=new Array(8).fill(0).map((_,i)=>Number((BigInt(bitLen)>>BigInt(56-i*8))&0xFFn));
+    msg.push(...bl);
+    const H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+    for(let c=0;c<msg.length;c+=64){
+        const W=new Array(64);
+        for(let i=0;i<16;i++)W[i]=(msg[c+i*4]<<24)|(msg[c+i*4+1]<<16)|(msg[c+i*4+2]<<8)|msg[c+i*4+3];
+        for(let i=16;i<64;i++){const s0=rotr(W[i-15],7)^rotr(W[i-15],18)^(W[i-15]>>>3),s1=rotr(W[i-2],17)^rotr(W[i-2],19)^(W[i-2]>>>10);W[i]=(W[i-16]+s0+W[i-7]+s1)>>>0;}
+        let [a,b,cC,d,e,f,g,h]=H;
+        for(let i=0;i<64;i++){
+            const S1=rotr(e,6)^rotr(e,11)^rotr(e,25),ch=(e&f)^(~e&g),T1=(h+S1+ch+K[i]+W[i])>>>0,S0=rotr(a,2)^rotr(a,13)^rotr(a,22),maj=(a&b)^(a&cC)^(b&cC),T2=(S0+maj)>>>0;
+            h=g;g=f;f=e;e=(d+T1)>>>0;d=cC;cC=b;b=a;a=(T1+T2)>>>0;
         }
-        let [a,b,c,d,e,f,g,h] = H;
-        for (let i = 0; i < 64; i++) {
-            const S1 = rotr(e,6)^rotr(e,11)^rotr(e,25);
-            const ch = (e&f)^(~e&g);
-            const T1 = (h + S1 + ch + K[i] + W[i])>>>0;
-            const S0 = rotr(a,2)^rotr(a,13)^rotr(a,22);
-            const maj = (a&b)^(a&c)^(b&c);
-            const T2 = (S0 + maj)>>>0;
-            h = g; g = f; f = e; e = (d + T1)>>>0;
-            d = c; c = b; b = a; a = (T1 + T2)>>>0;
+        H[0]=(H[0]+a)>>>0;H[1]=(H[1]+b)>>>0;H[2]=(H[2]+cC)>>>0;H[3]=(H[3]+d)>>>0;H[4]=(H[4]+e)>>>0;H[5]=(H[5]+f)>>>0;H[6]=(H[6]+g)>>>0;H[7]=(H[7]+h)>>>0;
+    }
+    return H.map(h=>h.toString(16).padStart(8,'0')).join('');
+}
+function ripemd160hex(hex){
+    const bytes=hex.match(/.{2}/g).map(b=>parseInt(b,16));
+    const rol=(x,n)=>((x<<n)|(x>>>(32-n)))>>>0;
+    const K=[0x00000000,0x5a827999,0x6ed9eba1,0x8f1bbcdc,0xa953fd4e],K2=[0x50a28be6,0x5c4dd124,0x6d703ef3,0x7a6d76e9,0x00000000];
+    const r=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8,3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12,1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2,4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13];
+    const r2=[5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12,6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2,15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13,8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14,12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11];
+    const s=[11,14,15,12,5,8,7,9,11,13,14,15,6,7,9,8,7,6,8,13,11,9,7,15,7,12,15,9,11,7,13,12,11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5,11,12,14,15,14,15,9,8,9,14,5,6,8,6,5,12,9,15,5,11,6,8,13,12,5,12,13,14,11,8,5,6];
+    const s2=[8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6,9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11,9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5,15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8,8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];
+    const msg=[...bytes];const bitLen=msg.length*8;msg.push(0x80);
+    while((msg.length*8)%512!==448)msg.push(0);
+    for(let i=0;i<8;i++)msg.push(Number((BigInt(bitLen)>>BigInt(i*8))&0xFFn));
+    const h=[0x67452301,0xefcdab89,0x98badcfe,0x10325476,0xc3d2e1f0];
+    for(let c=0;c<msg.length;c+=64){
+        const X=new Array(16);
+        for(let i=0;i<16;i++)X[i]=msg[c+i*4]|(msg[c+i*4+1]<<8)|(msg[c+i*4+2]<<16)|(msg[c+i*4+3]<<24);
+        let [a1,b1,c1,d1,e1]=h,[a2,b2,c2,d2,e2]=h;
+        for(let j=0;j<80;j++){
+            const T=rol(a1+((j<16)?(b1^c1^d1):(j<32)?((b1&c1)|(~b1&d1)):(j<48)?((b1|~c1)^d1):(j<64)?((b1&d1)|(c1&~d1)):(b1^(c1|~d1)))+X[r[j]]+K[Math.floor(j/16)],s[j])+e1;
+            a1=e1;e1=d1;d1=rol(c1,10);c1=b1;b1=T;
+            const T2=rol(a2+((79-j<16)?(b2^c2^d2):(79-j<32)?((b2&c2)|(~b2&d2)):(79-j<48)?((b2|~c2)^d2):(79-j<64)?((b2&d2)|(c2&~d2)):(b2^(c2|~d2)))+X[r2[j]]+K2[Math.floor(j/16)],s2[j])+e2;
+            a2=e2;e2=d2;d2=rol(c2,10);c2=b2;b2=T2;
         }
-        H[0] = (H[0] + a)>>>0; H[1] = (H[1] + b)>>>0; H[2] = (H[2] + c)>>>0; H[3] = (H[3] + d)>>>0;
-        H[4] = (H[4] + e)>>>0; H[5] = (H[5] + f)>>>0; H[6] = (H[6] + g)>>>0; H[7] = (H[7] + h)>>>0;
+        const t=h[1]+c1+d2;h[1]=h[2]+d1+e2;h[2]=h[3]+e1+a2;h[3]=h[4]+a1+b2;h[4]=h[0]+b1+c2;h[0]=t;
     }
-    return H.map(h => h.toString(16).padStart(8,'0')).join('');
+    return h.map(v=>v.toString(16).padStart(8,'0')).join('');
 }
-
-function ripemd160hex(hex) {
-    const bytes = hex.match(/.{2}/g).map(b => parseInt(b, 16));
-    function rol(x,n){ return ((x<<n)|(x>>>(32-n)))>>>0; }
-    const K = [0x00000000,0x5a827999,0x6ed9eba1,0x8f1bbcdc,0xa953fd4e];
-    const K2= [0x50a28be6,0x5c4dd124,0x6d703ef3,0x7a6d76e9,0x00000000];
-    const r = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8,3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12,1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2,4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13];
-    const r2= [5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12,6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2,15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13,8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14,12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11];
-    const s = [11,14,15,12,5,8,7,9,11,13,14,15,6,7,9,8,7,6,8,13,11,9,7,15,7,12,15,9,11,7,13,12,11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5,11,12,14,15,14,15,9,8,9,14,5,6,8,6,5,12,9,15,5,11,6,8,13,12,5,12,13,14,11,8,5,6];
-    const s2= [8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6,9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11,9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5,15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8,8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];
-    const msg = [...bytes];
-    const bitLen = msg.length * 8;
-    msg.push(0x80);
-    while ((msg.length * 8) % 512 !== 448) msg.push(0);
-    for (let i = 0; i < 8; i++) msg.push(Number((BigInt(bitLen) >> BigInt(i*8)) & 0xFFn));
-    const h = [0x67452301,0xefcdab89,0x98badcfe,0x10325476,0xc3d2e1f0];
-    for (let chunk = 0; chunk < msg.length; chunk += 64) {
-        const X = new Array(16);
-        for (let i = 0; i < 16; i++) X[i] = msg[chunk + i*4] | (msg[chunk + i*4 + 1]<<8) | (msg[chunk + i*4 + 2]<<16) | (msg[chunk + i*4 + 3]<<24);
-        let [a1,b1,c1,d1,e1] = h, [a2,b2,c2,d2,e2] = h;
-        for (let j = 0; j < 80; j++) {
-            const T = rol(a1 + ((j<16)?(b1^c1^d1):(j<32)?((b1&c1)|(~b1&d1)):(j<48)?((b1|~c1)^d1):(j<64)?((b1&d1)|(c1&~d1)):(b1^(c1|~d1))) + X[r[j]] + K[Math.floor(j/16)], s[j]) + e1;
-            a1 = e1; e1 = d1; d1 = rol(c1,10); c1 = b1; b1 = T;
-            const T2 = rol(a2 + ((79-j<16)?(b2^c2^d2):(79-j<32)?((b2&c2)|(~b2&d2)):(79-j<48)?((b2|~c2)^d2):(79-j<64)?((b2&d2)|(c2&~d2)):(b2^(c2|~d2))) + X[r2[j]] + K2[Math.floor(j/16)], s2[j]) + e2;
-            a2 = e2; e2 = d2; d2 = rol(c2,10); c2 = b2; b2 = T2;
-        }
-        const t = h[1] + c1 + d2; h[1] = h[2] + d1 + e2; h[2] = h[3] + e1 + a2;
-        h[3] = h[4] + a1 + b2; h[4] = h[0] + b1 + c2; h[0] = t;
-    }
-    return h.map(v => v.toString(16).padStart(8,'0')).join('');
+function base58encode(hex){
+    const A='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    const bytes=hex.match(/.{2}/g).map(b=>parseInt(b,16));
+    const d=[0];
+    for(let i=0;i<bytes.length;i++){let c=bytes[i];for(let j=0;j<d.length;j++){c+=d[j]<<8;d[j]=c%58;c=(c/58)|0;}while(c>0){d.push(c%58);c=(c/58)|0;}}
+    let r='';for(let i=0;i<bytes.length&&bytes[i]===0;i++)r+=A[0];
+    for(let i=d.length-1;i>=0;i--)r+=A[d[i]];return r;
 }
+function pubkeyToAddress(pub){const h160=ripemd160hex(sha256hex(pub));const cs=sha256hex(sha256hex('00'+h160)).slice(0,8);return base58encode('00'+h160+cs);}
+function privateToWIF(privHex,compressed){const ext='80'+privHex.toLowerCase()+(compressed?'01':'');const s1=sha256hex(ext),s2=sha256hex(s1);return base58encode(ext+s2.slice(0,8));}
 
-function base58encode(hex) {
-    const A = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-    const bytes = hex.match(/.{2}/g).map(b => parseInt(b, 16));
-    const d = [0];
-    for (let i = 0; i < bytes.length; i++) {
-        let c = bytes[i];
-        for (let j = 0; j < d.length; j++) { c += d[j] << 8; d[j] = c % 58; c = (c / 58) | 0; }
-        while (c > 0) { d.push(c % 58); c = (c / 58) | 0; }
-    }
-    let r = '';
-    for (let i = 0; i < bytes.length && bytes[i] === 0; i++) r += A[0];
-    for (let i = d.length - 1; i >= 0; i--) r += A[d[i]];
-    return r;
-}
+// ========== WORKER & SEARCH LOGIC ==========
+let running=false,found=false,targetPoint=null,expectedAddr='',totalSteps=0,workers=[],rangeStart,rangeEnd,lastStepCount=0,lastTime=0;
 
-function pubkeyToAddress(pubHex) {
-    const h160 = ripemd160hex(sha256hex(pubHex));
-    const cs = sha256hex(sha256hex('00' + h160)).slice(0,8);
-    return base58encode('00' + h160 + cs);
-}
-
-function privateToWIF(privHex, compressed) {
-    const ext = '80' + privHex.toLowerCase() + (compressed ? '01' : '');
-    const s1 = sha256hex(ext);
-    const s2 = sha256hex(s1);
-    return base58encode(ext + s2.slice(0,8));
-}
-
-// ========== SNELLE BIT-LENGTE ZONDER STRING ==========
-function bitLength(n) {
-    if (n === 0n) return 0n;
-    let len = 0n;
-    let val = n;
-    while (val > 0n) {
-        val >>= 1n;
-        len++;
-    }
-    return len;
-}
-
-// ========== ADAPTIEVE SPRONG (geoptimaliseerd) ==========
-function adaptiveJump(currentX, targetX) {
-    const diff = (currentX > targetX) ? currentX - targetX : targetX - currentX;
-    const maxJump = 0x10000000000000000000000000000000000000000000000000000000000000000n;
-    const minJump = 1n;
-    if (diff === 0n) return minJump;
-    const logDiff = bitLength(diff);
-    const shift = logDiff > 8n ? logDiff - 8n : 0n;
-    const jump = 1n << shift;
-    return jump < minJump ? minJump : (jump > maxJump ? maxJump : jump);
-}
-
-// ========== MULTI-WORKER ADAPTIVE KANGAROO ==========
-let running = false, found = false;
-let targetPoint = null, expectedAddr = '';
-let totalSteps = 0;
-let workers = [];
-let rangeStart, rangeEnd;
-let lastStepCount = 0, lastTime = 0;
-
-const log = (msg, cls='') => {
-    const el = document.getElementById('logBox');
-    el.innerHTML += `<div class="${cls}">[${new Date().toLocaleTimeString()}] ${msg}</div>`;
-    el.scrollTop = el.scrollHeight;
+const log=(msg,cls='')=>{
+    const el=document.getElementById('logBox');
+    el.innerHTML+=`<div class="${cls}">[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+    el.scrollTop=el.scrollHeight;
 };
 
-function showSolution(privHex) {
-    found = true; running = false;
-    const pt = pointMul(BigInt('0x'+privHex), G);
-    const pubComp = pointToPubComp(pt);
-    const pubUncomp = pointToPubUncomp(pt);
-    const wifComp = privateToWIF(privHex, true);
-    const wifUncomp = privateToWIF(privHex, false);
-    const addrComp = pubkeyToAddress(pubComp);
-    const addrUncomp = pubkeyToAddress(pubUncomp);
-    const correct = (pt[0] === targetPoint[0] && pt[1] === targetPoint[1]);
-    const addrMatch = (addrComp === expectedAddr || addrUncomp === expectedAddr);
+function showSolution(privHex){
+    found=true;running=false;
+    const pt=pointMul(BigInt('0x'+privHex),G),pubComp=pointToPubComp(pt),pubUncomp=pointToPubUncomp(pt);
+    const wifComp=privateToWIF(privHex,true),wifUncomp=privateToWIF(privHex,false);
+    const addrComp=pubkeyToAddress(pubComp),addrUncomp=pubkeyToAddress(pubUncomp);
+    const correct=(pt[0]===targetPoint[0]&&pt[1]===targetPoint[1]);
+    const addrMatch=(addrComp===expectedAddr||addrUncomp===expectedAddr);
+    
     document.getElementById('resultCard').classList.add('show');
-    document.getElementById('foundPrivHex').textContent = privHex;
-    document.getElementById('foundWIFcomp').textContent = wifComp;
-    document.getElementById('foundWIFuncomp').textContent = wifUncomp;
-    document.getElementById('foundPubComp').textContent = pubComp;
-    document.getElementById('foundPubUncomp').textContent = pubUncomp;
-    document.getElementById('foundAddrComp').textContent = addrComp;
-    document.getElementById('foundAddrUncomp').textContent = addrUncomp;
-    document.getElementById('verification').textContent = 
-        correct ? (addrMatch ? '✅ Sleutel matcht target én verwacht adres' : '⚠️ Sleutel matcht target, maar adres komt niet overeen') :
-        '❌ Sleutel matcht target niet (interne fout)';
-    log('🎉 PRIVATE KEY GEVONDEN: ' + privHex, 'winner');
-    document.getElementById('startBtn').disabled = false;
-    document.getElementById('stopBtn').disabled = true;
+    document.getElementById('foundPrivHex').textContent=privHex;
+    document.getElementById('foundWIFcomp').textContent=wifComp;
+    document.getElementById('foundWIFuncomp').textContent=wifUncomp;
+    document.getElementById('foundPubComp').textContent=pubComp;
+    document.getElementById('foundPubUncomp').textContent=pubUncomp;
+    document.getElementById('foundAddrComp').textContent=addrComp;
+    document.getElementById('foundAddrUncomp').textContent=addrUncomp;
+    document.getElementById('verification').textContent=correct?(addrMatch?'✅ Sleutel matcht target én verwacht adres':'⚠️ Sleutel matcht target, maar adres komt niet overeen'):'❌ Sleutel matcht target niet (interne fout)';
+    
+    log('🎉 PRIVATE KEY GEVONDEN: '+privHex,'winner');
+    document.getElementById('startBtn').disabled=false;
+    document.getElementById('stopBtn').disabled=true;
 }
 
-function createWorker(targetX) {
-    let a = rangeStart + BigInt(Math.floor(Math.random() * Number(rangeEnd - rangeStart)));
-    let b = a;
-    let pointA = pointMul(a, G);
-    let pointB = pointMul(b, G);
+function createWorker(startKey, endKey, id) {
+    let currentPriv = startKey;
+    let currentPoint = pointMul(currentPriv, G);
     let steps = 0;
+    let finished = false;
+
+    log(`Worker ${id} start op: ${startKey.toString(16)}`, 'info');
 
     return {
         stepBatch(batchSize) {
-            for (let i = 0; i < batchSize && !found; i++) {
-                let jump = adaptiveJump(pointA[0], targetX);
-                pointA = pointAdd(pointA, pointMul(jump, G));
-                a = mod(a + jump, N);
-
-                jump = adaptiveJump(pointB[0], targetX);
-                pointB = pointAdd(pointB, pointMul(jump, G));
-                b = mod(b + jump, N);
-                jump = adaptiveJump(pointB[0], targetX);
-                pointB = pointAdd(pointB, pointMul(jump, G));
-                b = mod(b + jump, N);
-
+            if(finished) return false;
+            
+            for(let i=0; i<batchSize && !found; i++) {
+                // Check if current point is the target
+                if(currentPoint[0] === targetPoint[0] && currentPoint[1] === targetPoint[1]) {
+                    showSolution(currentPriv.toString(16).padStart(64, '0'));
+                    return true;
+                }
+                
+                // ITERATIVE POINT ADDITION (+G)
+                // This is extremely fast compared to pointMul
+                currentPoint = pointAdd(currentPoint, G);
+                currentPriv = mod(currentPriv + 1n, N);
                 steps++;
-
-                if (pointA[0] === targetPoint[0] && pointA[1] === targetPoint[1]) {
-                    showSolution(a.toString(16).padStart(64,'0'));
-                    return true;
-                }
-                if (pointB[0] === targetPoint[0] && pointB[1] === targetPoint[1]) {
-                    showSolution(b.toString(16).padStart(64,'0'));
-                    return true;
-                }
-
-                if (pointA[0] === pointB[0] && pointA[1] === pointB[1]) {
-                    a = rangeStart + BigInt(Math.floor(Math.random() * Number(rangeEnd - rangeStart)));
-                    b = a;
-                    pointA = pointMul(a, G);
-                    pointB = pointMul(b, G);
+                
+                // Stop if range is exhausted
+                if (currentPriv > endKey) {
+                    finished = true;
+                    log(`✅ Worker ${id} heeft zijn range voltooid.`, 'success');
+                    return false;
                 }
             }
             return false;
         },
-        getSteps() { return steps; }
+        getSteps() { return steps; },
+        isFinished() { return finished; }
     };
 }
 
-async function runAdaptive(numWorkers, batchSize) {
+async function runSearch(numWorkers, batchSize) {
     workers = [];
-    const targetX = targetPoint[0];
-    for (let i = 0; i < numWorkers; i++) {
-        workers.push(createWorker(targetX));
+    const rangeSize = rangeEnd - rangeStart;
+    const chunkSize = rangeSize / BigInt(numWorkers);
+    
+    for(let i=0; i<numWorkers; i++) {
+        let wStart = rangeStart + BigInt(i) * chunkSize;
+        let wEnd = (i === numWorkers - 1) ? rangeEnd : wStart + chunkSize - 1n;
+        workers.push(createWorker(wStart, wEnd, i+1));
     }
-    totalSteps = 0;
-    lastStepCount = 0;
-    lastTime = performance.now();
-    log(`🚀 ${numWorkers} workers gestart, batchgrootte ${batchSize}`, 'info');
-    log(`📍 Range: [${rangeStart.toString(16)} - ${rangeEnd.toString(16)}]`, 'info');
+    
+    totalSteps = 0; lastStepCount = 0; lastTime = performance.now();
+    log(`🚀 ${numWorkers} workers gestart, batch ${batchSize}`, 'info');
     document.getElementById('activeWorkers').textContent = numWorkers;
-
-    const UPDATE_INTERVAL = 100; // ms tussen UI-updates
-
-    while (running && !found) {
-        for (let w of workers) {
-            if (found) break;
-            w.stepBatch(batchSize);
+    
+    const UPDATE_INTERVAL = 100;
+    
+    while(running && !found) {
+        let allFinished = true;
+        
+        for(let w of workers) {
+            if(found) break;
+            if(!w.isFinished()) {
+                w.stepBatch(batchSize);
+                allFinished = false;
+            }
         }
-
+        
         const now = performance.now();
-        totalSteps = workers.reduce((sum, w) => sum + w.getSteps(), 0);
+        totalSteps = workers.reduce((s, w) => s + w.getSteps(), 0);
         const elapsed = now - lastTime;
-        if (elapsed >= UPDATE_INTERVAL) {
+        
+        if(elapsed >= UPDATE_INTERVAL) {
             const delta = totalSteps - lastStepCount;
             const speed = delta / (elapsed / 1000);
             document.getElementById('stepCount').textContent = totalSteps;
             document.getElementById('speed').textContent = Math.round(speed).toLocaleString();
-            lastStepCount = totalSteps;
-            lastTime = now;
-            await sleep(1);
+            lastStepCount = totalSteps; lastTime = now;
+            await sleep(1); // Give UI time to update
+        }
+        
+        if(allFinished && !found) {
+            log('🛑 Hele range is afgezocht, sleutel niet gevonden.', 'warn');
+            running = false;
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            break;
         }
     }
-
-    totalSteps = workers.reduce((sum, w) => sum + w.getSteps(), 0);
+    
+    totalSteps = workers.reduce((s, w) => s + w.getSteps(), 0);
     document.getElementById('stepCount').textContent = totalSteps;
     document.getElementById('speed').textContent = '0';
 }
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 
 // ========== UI ==========
 document.getElementById('startBtn').onclick = async () => {
     const rawPub = document.getElementById('targetPubKey').value.trim();
-    if (!/^0[234][0-9a-fA-F]+$/.test(rawPub) || (rawPub.length !== 66 && rawPub.length !== 130)) {
-        alert('Ongeldige publieke sleutel.');
-        return;
-    }
+    if(!/^0[234][0-9a-fA-F]+$/.test(rawPub)||(rawPub.length!==66&&rawPub.length!==130)){alert('Ongeldige publieke sleutel.');return;}
     targetPoint = pubToPoint(rawPub);
-    if (!targetPoint) { alert('Kon punt niet extraheren.'); return; }
-
+    if(!targetPoint){alert('Kon punt niet extraheren.');return;}
     expectedAddr = document.getElementById('expectedAddr').value.trim();
-    if (!/^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(expectedAddr)) {
-        alert('Ongeldig Bitcoin‑adres formaat.');
-        return;
-    }
-
+    
     const rs = document.getElementById('rangeStart').value.trim();
     const re = document.getElementById('rangeEnd').value.trim();
-    if (!/^[0-9a-fA-F]+$/.test(rs) || !/^[0-9a-fA-F]+$/.test(re)) {
-        alert('Range start en end moeten geldige HEX zijn.');
-        return;
-    }
-    rangeStart = BigInt('0x' + rs);
-    rangeEnd = BigInt('0x' + re);
-    if (rangeStart < 1n || rangeEnd > N-1n || rangeStart >= rangeEnd) {
-        alert('Ongeldige range (1 <= start < end <= N-1).');
-        return;
-    }
-
-    const numWorkers = parseInt(document.getElementById('numWorkers').value, 10) || 4;
-    const batchSize = parseInt(document.getElementById('batchSize').value, 10) || 2000;
-
+    if(!/^[0-9a-fA-F]+$/.test(rs)||!/^[0-9a-fA-F]+$/.test(re)){alert('Range start/end moeten HEX zijn.');return;}
+    
+    rangeStart = BigInt('0x'+rs); rangeEnd = BigInt('0x'+re);
+    if(rangeStart < 1n || rangeEnd > N - 1n || rangeStart >= rangeEnd){alert('Ongeldige range.');return;}
+    
+    const numWorkers = parseInt(document.getElementById('numWorkers').value,10) || 4;
+    const batchSize = parseInt(document.getElementById('batchSize').value,10) || 2000;
+    
     running = true; found = false; totalSteps = 0;
     document.getElementById('resultCard').classList.remove('show');
-    document.getElementById('stepCount').textContent = '0';
+    document.getElementById('stepCount').textContent = '0'; 
     document.getElementById('speed').textContent = '0';
-    document.getElementById('activeWorkers').textContent = numWorkers;
     document.getElementById('logBox').innerHTML = '';
-    document.getElementById('startBtn').disabled = true;
+    document.getElementById('startBtn').disabled = true; 
     document.getElementById('stopBtn').disabled = false;
-
-    log('🚀 Start Adaptive Kangaroo (geoptimaliseerd).', 'info');
-    log('🎯 Target public key: ' + pointToPubComp(targetPoint), 'info');
-    log('✅ Verwacht adres: ' + expectedAddr, 'info');
-    runAdaptive(numWorkers, batchSize);
+    
+    log('🚀 Start Range Brute-Forcer.', 'info');
+    runSearch(numWorkers, batchSize);
 };
 
 document.getElementById('stopBtn').onclick = () => {
@@ -423,7 +355,7 @@ document.getElementById('stopBtn').onclick = () => {
     document.getElementById('startBtn').disabled = false;
     document.getElementById('stopBtn').disabled = true;
     document.getElementById('activeWorkers').textContent = '0';
-    log('🛑 Gestopt door gebruiker na ' + totalSteps + ' stappen.', 'warn');
+    log('🛑 Handmatig gestopt na ' + totalSteps + ' stappen.', 'warn');
 };
 
 function resetAll() {
@@ -435,10 +367,10 @@ function resetAll() {
     document.getElementById('speed').textContent = '0';
     document.getElementById('activeWorkers').textContent = '0';
     document.getElementById('logBox').innerHTML = '';
-    log('✅ Reset');
+    log('✅ Reset voltooid.');
 }
 
-log('✅ Klaar. Vul alle velden in en klik Start.');
+log('✅ Systeem geladen. Klaar voor gebruik!');
 </script>
 </body>
 </html>
