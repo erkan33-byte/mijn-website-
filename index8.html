@@ -690,7 +690,7 @@ function analyzeAndReduce() {
     return rangeNum;
 }
 
-// ===== FASE 4: KANGAROO MET VALLEN =====
+// ===== FASE 4: KANGAROO MET VALLEN - GEFIXT =====
 function kangarooHunt(effectiveRange) {
     return new Promise((resolve) => {
         updatePhase(4, '🦘 Tame plaatst vallen...', 'active');
@@ -710,6 +710,7 @@ function kangarooHunt(effectiveRange) {
         let totalJumps = 0;
         let wildJumpsTotal = 0;
         let lastUpdate = Date.now();
+        let lastTrapLogCount = 0;
         
         // ===== TAME KANGAROO — PLAATST VALLEN =====
         function tameWorker(workerId) {
@@ -725,14 +726,18 @@ function kangarooHunt(effectiveRange) {
                 
                 function placeTraps() {
                     if (!running || trapsPlacedByWorker >= TRAPS_PER_TAME) {
+                        // Update totale teller
                         trapsPlacedTotal += trapsPlacedByWorker;
                         document.getElementById('trapsPlaced').textContent = trapsPlacedTotal.toLocaleString();
+                        
                         activeWorkersCount--;
                         document.getElementById('activeWorkers').textContent = activeWorkersCount;
-                        log('✅ Tame ' + workerId + ' klaar: ' + trapsPlacedByWorker.toLocaleString() + ' vallen geplaatst', 'tame');
+                        log('✅ Tame ' + workerId + ' klaar: ' + trapsPlacedByWorker.toLocaleString() + ' vallen geplaatst (TOTAAL: ' + trapsPlacedTotal.toLocaleString() + ')', 'tame');
                         workerResolve();
                         return;
                     }
+                    
+                    let newTrapsInBatch = 0;
                     
                     for (let s = 0; s < TAME_STEPS && running && trapsPlacedByWorker < TRAPS_PER_TAME; s++) {
                         const jump = (currentPoint[0] % jumpSize) + 1n;
@@ -748,18 +753,23 @@ function kangarooHunt(effectiveRange) {
                             tameId: workerId
                         });
                         trapsPlacedByWorker++;
+                        newTrapsInBatch++;
                     }
                     
-                    // Update UI
-                    trapsPlacedTotal += trapsPlacedByWorker;
+                    // Direct update na elke batch
+                    trapsPlacedTotal += newTrapsInBatch;
                     document.getElementById('trapsPlaced').textContent = trapsPlacedTotal.toLocaleString();
-                    trapsPlacedByWorker = 0;
+                    document.getElementById('totalJumps').textContent = (trapsPlacedTotal + wildJumpsTotal).toLocaleString();
                     
-                    if (trapsPlacedTotal % 1000 === 0) {
-                        log('📍 ' + trapsPlacedTotal.toLocaleString() + ' vallen geplaatst...', 'trap');
+                    // Log elke 500 vallen
+                    if (Math.floor(trapsPlacedTotal / 500) > lastTrapLogCount) {
+                        lastTrapLogCount = Math.floor(trapsPlacedTotal / 500);
+                        log('📍 ' + trapsPlacedTotal.toLocaleString() + ' vallen geplaatst... (Tame ' + workerId + ')', 'trap');
                     }
                     
-                    setTimeout(() => placeTraps(), 0);
+                    newTrapsInBatch = 0;
+                    
+                    setTimeout(() => placeTraps(), 10);
                 }
                 
                 placeTraps();
@@ -774,13 +784,13 @@ function kangarooHunt(effectiveRange) {
                 let steps = 0;
                 let trapsChecked = 0;
                 
-                log('🔴 Wild ' + workerId + ' start VANAF TARGET — checkt vallen', 'wild');
+                log('🔴 Wild ' + workerId + ' start VANAF TARGET — checkt vallen (beschikbaar: ' + trapsPlacedTotal.toLocaleString() + ')', 'wild');
                 
                 function hunt() {
                     if (!running || steps >= MAX_WILD_STEPS || foundSolution) {
                         activeWorkersCount--;
                         document.getElementById('activeWorkers').textContent = activeWorkersCount;
-                        log('🔴 Wild ' + workerId + ': ' + steps.toLocaleString() + ' stappen, ' + trapsChecked + ' vallen gecheckt', 'wild');
+                        log('🔴 Wild ' + workerId + ': ' + steps.toLocaleString() + ' stappen, ' + trapsChecked + ' vallen gecheckt (totaal beschikbaar: ' + trapsPlacedTotal.toLocaleString() + ')', 'wild');
                         workerResolve();
                         return;
                     }
@@ -823,17 +833,18 @@ function kangarooHunt(effectiveRange) {
                     totalJumps += WILD_BATCH;
                     
                     const now = Date.now();
-                    if (now - lastUpdate > 1000) {
+                    if (now - lastUpdate > 500) {
                         document.getElementById('wildJumps').textContent = wildJumpsTotal.toLocaleString();
-                        document.getElementById('totalJumps').textContent = (totalJumps + trapsPlacedTotal).toLocaleString();
+                        document.getElementById('totalJumps').textContent = (trapsPlacedTotal + wildJumpsTotal).toLocaleString();
+                        document.getElementById('trapsPlaced').textContent = trapsPlacedTotal.toLocaleString();
                         lastUpdate = now;
                     }
                     
-                    if (steps % 50000 === 0 && steps > 0) {
-                        log('🔴 Wild ' + workerId + ': ' + steps.toLocaleString() + ' stappen | ' + trapsChecked + ' vallen gecheckt', 'wild');
+                    if (steps % 10000 === 0 && steps > 0) {
+                        log('🔴 Wild ' + workerId + ': ' + steps.toLocaleString() + ' stappen | ' + trapsChecked + ' vallen gecheckt | Beschikbaar: ' + trapsPlacedTotal.toLocaleString(), 'wild');
                     }
                     
-                    setTimeout(() => hunt(), 0);
+                    setTimeout(() => hunt(), 10);
                 }
                 
                 hunt();
@@ -846,10 +857,11 @@ function kangarooHunt(effectiveRange) {
             const tamePromises = [];
             for (let i = 0; i < NUM_TAME; i++) tamePromises.push(tameWorker(i));
             
+            // Start wild workers met vertraging zodat er al vallen zijn
             setTimeout(() => {
                 if (!running || foundSolution) return;
-                log('🦘 Start Wild Kangaroos — VALLEN CHECKEN...', 'wild');
-                updatePhase(4, '🦘 Wild jaagt — checkt vallen...', 'active');
+                log('🦘 Start Wild Kangaroos — VALLEN CHECKEN (' + trapsPlacedTotal.toLocaleString() + ' beschikbaar)...', 'wild');
+                updatePhase(4, '🦘 Wild jaagt — checkt vallen (' + trapsPlacedTotal.toLocaleString() + ' beschikbaar)...', 'active');
                 
                 const wildPromises = [];
                 for (let i = 0; i < NUM_WILD; i++) wildPromises.push(wildWorker(i));
@@ -860,9 +872,10 @@ function kangarooHunt(effectiveRange) {
                     }
                     resolve();
                 });
-            }, 2000);
+            }, 1000);
             
             await Promise.all(tamePromises);
+            log('✅ Alle tame workers klaar — TOTAAL VALLEN: ' + trapsPlacedTotal.toLocaleString(), 'tame');
         }
         
         startAll();
@@ -1001,7 +1014,7 @@ function loadPreset(name) {
 // Init
 log('✅ CUSTOM PUZZLE SOLVER GELADEN', 'info');
 log('🟢 Tame plaatst vallen | 🔴 Wild jaagt en checkt vallen', 'info');
-log('📊 Vallen worden live getoond in statistieken', 'info');
+log('📊 Vallen worden live getoond in statistieken en log', 'info');
 log('🚀 Klik START om de hybride jacht te beginnen', 'info');
 </script>
 </body>
