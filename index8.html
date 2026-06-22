@@ -2,12 +2,13 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>🎯 High-Speed Range Searcher</title>
+    <title>⚛️ Einstein Machine – Brownse diffusie & atoomfusie</title>
     <style>
         :root {
             --bg:#07090f; --surface:#0d1117; --panel:#111827; --border:#1f2937;
             --accent:#00ff99; --muted:#6b7280; --text:#e2e8f0;
             --warn:#f59e0b; --danger:#ef4444; --success:#10b981; --gold:#ffd700;
+            --fusion:#ff00ff;
         }
         body { font-family:'Courier New',monospace; background:var(--bg); color:var(--text); padding:20px; }
         .container { max-width:1000px; margin:auto; }
@@ -20,17 +21,17 @@
         .result-card.show { display:block; animation:pulse 0.8s infinite; }
         @keyframes pulse { 0%,100% { box-shadow:0 0 30px var(--gold); } 50% { box-shadow:0 0 60px var(--gold); } }
         table { width:100%; border-collapse:collapse; margin-top:10px; }
-        th, td { padding:8px; border:1px solid var(--border); font-size:.7rem; text-align:left; word-break: break-all; }
-        th { color:var(--gold); width: 30%; }
+        th, td { padding:8px; border:1px solid var(--border); font-size:.7rem; text-align:left; }
+        th { color:var(--gold); width:30%; }
         .param-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
         .param-row > div { flex:1; min-width:150px; }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>🎯 High-Speed Range Searcher</h1>
+    <h1>⚛️ Einstein Machine – Brownse diffusie & fusie</h1>
     <p style="font-size:.8rem;">
-        ⚡ <strong>Geoptimaliseerd:</strong> Verdeelt de zoek-range eerlijk over workers en gebruikt supersnelle iteratieve <em>Point Addition</em> (+G) in plaats van losse berekeningen. Garandeert dat de sleutel gevonden wordt als deze in de range ligt!
+        🔬 <strong>Einsteiniaanse aanval:</strong> Atomen bewegen door de range met temperatuurafhankelijke sprongen. Botsende atomen fuseren tot één zwaarder atoom (halvering zoekruimte). Target geraakt = private key gevonden!
     </p>
     <div class="card">
         <label>🎯 Target Public Key (compressed 02/03 of uncompressed 04)</label><br>
@@ -47,24 +48,29 @@
                 <input type="text" id="rangeEnd" value="100000" style="width:100%;">
             </div>
         </div>
-        <small style="color:var(--muted);">Tip: Zet de range op een klein gebied om de functionaliteit en snelheid te testen (bijv. Start: 1, End: 100000).</small><br><br>
+        <small style="color:var(--muted);">Tip: Gebruik een kleine range (bijv. 1 … FFFFF) om het algoritme te testen.</small><br><br>
         <div class="param-row">
             <div>
-                <label>⚙️ Aantal workers</label>
-                <input type="number" id="numWorkers" value="4" min="1" max="32" style="width:100%;">
+                <label>⚛️ Aantal atomen</label>
+                <input type="number" id="numAtoms" value="8" min="2" max="64" style="width:100%;">
             </div>
             <div>
-                <label>📦 Batchgrootte (stappen per ronde)</label>
-                <input type="number" id="batchSize" value="2000" min="500" max="10000" style="width:100%;">
+                <label>🔥 Begintemperatuur (0-1)</label>
+                <input type="number" id="temperature" value="0.8" min="0.1" max="1.0" step="0.1" style="width:100%;">
+            </div>
+            <div>
+                <label>❄️ Afkoelsnelheid (per stap)</label>
+                <input type="number" id="cooling" value="0.9999" min="0.999" max="0.99999" step="0.0001" style="width:100%;">
             </div>
         </div>
-        <small style="color:var(--muted);">Hogere batchgrootte = meer stappen per seconde, maar UI reageert iets trager.</small><br><br>
-        <button class="btn btn-start" id="startBtn">▶ START SEARCH</button>
+        <small style="color:var(--muted);">Hogere temperatuur = grotere sprongen. Afkoeling maakt stappen steeds kleiner.</small><br><br>
+        <button class="btn btn-start" id="startBtn">▶ START EINSTEIN MACHINE</button>
         <button class="btn btn-stop" id="stopBtn" disabled>■ STOP</button>
         <button class="btn" onclick="resetAll()" style="background:#374151;color:#fff;">↺ RESET</button>
         <div style="margin-top:8px;font-size:.7rem;">
             🔄 Totaal stappen: <span id="stepCount">0</span> |
-            🧵 Actieve workers: <span id="activeWorkers">0</span> |
+            ⚛️ Levende atomen: <span id="atomCount">0</span> |
+            💥 Fusies: <span id="fusionCount">0</span> |
             ⚡ Snelheid: <span id="speed">0</span> stappen/s
         </div>
     </div>
@@ -93,38 +99,19 @@ const Gy = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n;
 const G = [Gx, Gy];
 
 const mod = (a,m)=>((a%m)+m)%m;
-const modInv=(a,m)=>{
-    let [t,nt]=[0n,1n],[r,nr]=[m,mod(a,m)];
-    while(nr!==0n){const q=r/nr;[t,nt]=[nt,t-q*nt];[r,nr]=[nr,r-q*nr];}
-    return t<0n?t+m:t;
-};
-
+const modInv=(a,m)=>{let [t,nt]=[0n,1n],[r,nr]=[m,mod(a,m)];while(nr!==0n){const q=r/nr;[t,nt]=[nt,t-q*nt];[r,nr]=[nr,r-q*nr];}return t<0n?t+m:t;};
 const pointAdd=(p1,p2)=>{
     if(!p1)return p2;if(!p2)return p1;
     const [x1,y1]=p1,[x2,y2]=p2;
-    if(x1===x2){
-        if(y1!==y2)return null;
-        const m=(3n*x1*x1)*modInv(2n*y1,P)%P;
-        const x3=mod(m*m-2n*x1,P);
-        return [x3,mod(m*(x1-x3)-y1,P)];
-    }
-    const m=(y2-y1)*modInv(x2-x1,P)%P;
-    const x3=mod(m*m-x1-x2,P);
-    return [x3,mod(m*(x1-x3)-y1,P)];
+    if(x1===x2){if(y1!==y2)return null;const m=(3n*x1*x1)*modInv(2n*y1,P)%P;const x3=mod(m*m-2n*x1,P);return [x3,mod(m*(x1-x3)-y1,P)];}
+    const m=(y2-y1)*modInv(x2-x1,P)%P;const x3=mod(m*m-x1-x2,P);return [x3,mod(m*(x1-x3)-y1,P)];
 };
-
-const pointMul=(k,p)=>{
-    let r=null,a=p;
-    while(k>0n){if(k&1n)r=pointAdd(r,a);a=pointAdd(a,a);k>>=1n;}
-    return r;
-};
-
+const pointMul=(k,p)=>{let r=null,a=p;while(k>0n){if(k&1n)r=pointAdd(r,a);a=pointAdd(a,a);k>>=1n;}return r;};
 const modPow=(b,e,m)=>{let r=1n;while(e>0n){if(e&1n)r=(r*b)%m;b=(b*b)%m;e>>=1n;}return r;};
 
 function pubToPoint(pub){
-    if(pub.startsWith('04')){
-        return [BigInt('0x'+pub.slice(2,66)),BigInt('0x'+pub.slice(66,130))];
-    }else if(pub.startsWith('02')||pub.startsWith('03')){
+    if(pub.startsWith('04')) return [BigInt('0x'+pub.slice(2,66)),BigInt('0x'+pub.slice(66,130))];
+    if(pub.startsWith('02')||pub.startsWith('03')){
         const x=BigInt('0x'+pub.slice(2)),ySq=mod(x*x*x+7n,P),y=modPow(ySq,(P+1n)/4n,P);
         return (pub[1]==='2')===((y&1n)===0n)?[x,y]:[x,mod(P-y,P)];
     }
@@ -133,7 +120,7 @@ function pubToPoint(pub){
 const pointToPubComp=([x,y])=>(y&1n?'03':'02')+x.toString(16).padStart(64,'0');
 const pointToPubUncomp=([x,y])=>'04'+x.toString(16).padStart(64,'0')+y.toString(16).padStart(64,'0');
 
-// ========== CRYPTO (compact) ==========
+// ========== CRYPTO (COMPLEET) ==========
 function sha256hex(hex){
     const bytes=hex.match(/.{2}/g).map(b=>parseInt(b,16));
     const rotr=(x,n)=>(x>>>n)|(x<<(32-n));
@@ -193,8 +180,15 @@ function base58encode(hex){
 function pubkeyToAddress(pub){const h160=ripemd160hex(sha256hex(pub));const cs=sha256hex(sha256hex('00'+h160)).slice(0,8);return base58encode('00'+h160+cs);}
 function privateToWIF(privHex,compressed){const ext='80'+privHex.toLowerCase()+(compressed?'01':'');const s1=sha256hex(ext),s2=sha256hex(s1);return base58encode(ext+s2.slice(0,8));}
 
-// ========== WORKER & SEARCH LOGIC ==========
-let running=false,found=false,targetPoint=null,expectedAddr='',totalSteps=0,workers=[],rangeStart,rangeEnd,lastStepCount=0,lastTime=0;
+// ========== EINSTEIN MACHINE ==========
+let running=false, found=false, targetPoint=null, expectedAddr='';
+let atoms = [];
+let totalSteps = 0;
+let fusions = 0;
+let temperature = 0.8;
+let coolingRate = 0.9999;
+let rangeStart, rangeEnd;
+let lastStepCount=0, lastTime=0;
 
 const log=(msg,cls='')=>{
     const el=document.getElementById('logBox');
@@ -209,7 +203,6 @@ function showSolution(privHex){
     const addrComp=pubkeyToAddress(pubComp),addrUncomp=pubkeyToAddress(pubUncomp);
     const correct=(pt[0]===targetPoint[0]&&pt[1]===targetPoint[1]);
     const addrMatch=(addrComp===expectedAddr||addrUncomp===expectedAddr);
-    
     document.getElementById('resultCard').classList.add('show');
     document.getElementById('foundPrivHex').textContent=privHex;
     document.getElementById('foundWIFcomp').textContent=wifComp;
@@ -219,104 +212,111 @@ function showSolution(privHex){
     document.getElementById('foundAddrComp').textContent=addrComp;
     document.getElementById('foundAddrUncomp').textContent=addrUncomp;
     document.getElementById('verification').textContent=correct?(addrMatch?'✅ Sleutel matcht target én verwacht adres':'⚠️ Sleutel matcht target, maar adres komt niet overeen'):'❌ Sleutel matcht target niet (interne fout)';
-    
     log('🎉 PRIVATE KEY GEVONDEN: '+privHex,'winner');
     document.getElementById('startBtn').disabled=false;
     document.getElementById('stopBtn').disabled=true;
 }
 
-function createWorker(startKey, endKey, id) {
-    let currentPriv = startKey;
-    let currentPoint = pointMul(currentPriv, G);
-    let steps = 0;
-    let finished = false;
-
-    log(`Worker ${id} start op: ${startKey.toString(16)}`, 'info');
-
-    return {
-        stepBatch(batchSize) {
-            if(finished) return false;
-            
-            for(let i=0; i<batchSize && !found; i++) {
-                // Check if current point is the target
-                if(currentPoint[0] === targetPoint[0] && currentPoint[1] === targetPoint[1]) {
-                    showSolution(currentPriv.toString(16).padStart(64, '0'));
-                    return true;
-                }
-                
-                // ITERATIVE POINT ADDITION (+G)
-                // This is extremely fast compared to pointMul
-                currentPoint = pointAdd(currentPoint, G);
-                currentPriv = mod(currentPriv + 1n, N);
-                steps++;
-                
-                // Stop if range is exhausted
-                if (currentPriv > endKey) {
-                    finished = true;
-                    log(`✅ Worker ${id} heeft zijn range voltooid.`, 'success');
-                    return false;
-                }
-            }
-            return false;
-        },
-        getSteps() { return steps; },
-        isFinished() { return finished; }
-    };
+function randomBigInt(lo, hi) {
+    const range = hi - lo;
+    const bytes = Math.ceil(range.toString(2).length / 8);
+    const arr = new Uint8Array(bytes);
+    crypto.getRandomValues(arr);
+    let val = 0n;
+    for (let i = 0; i < bytes; i++) val = (val << 8n) | BigInt(arr[i]);
+    return lo + (val % range);
 }
 
-async function runSearch(numWorkers, batchSize) {
-    workers = [];
-    const rangeSize = rangeEnd - rangeStart;
-    const chunkSize = rangeSize / BigInt(numWorkers);
-    
-    for(let i=0; i<numWorkers; i++) {
-        let wStart = rangeStart + BigInt(i) * chunkSize;
-        let wEnd = (i === numWorkers - 1) ? rangeEnd : wStart + chunkSize - 1n;
-        workers.push(createWorker(wStart, wEnd, i+1));
+async function einsteinMachine(numAtoms, initTemp, cool) {
+    atoms = [];
+    for(let i=0; i<numAtoms; i++) {
+        const key = randomBigInt(rangeStart, rangeEnd);
+        atoms.push({ key: key, point: pointMul(key, G) });
     }
-    
-    totalSteps = 0; lastStepCount = 0; lastTime = performance.now();
-    log(`🚀 ${numWorkers} workers gestart, batch ${batchSize}`, 'info');
-    document.getElementById('activeWorkers').textContent = numWorkers;
-    
+    temperature = initTemp;
+    coolingRate = cool;
+    fusions = 0;
+    totalSteps = 0;
+    lastStepCount = 0;
+    lastTime = performance.now();
+
+    log(`⚛️ ${numAtoms} atomen losgelaten in range [${rangeStart.toString(16)} ... ${rangeEnd.toString(16)}]`, 'info');
+    log(`🔥 Begintemperatuur: ${temperature.toFixed(2)}, koeling: ${coolingRate}`, 'info');
+    document.getElementById('atomCount').textContent = atoms.length;
+    document.getElementById('fusionCount').textContent = '0';
+
     const UPDATE_INTERVAL = 100;
-    
-    while(running && !found) {
-        let allFinished = true;
-        
-        for(let w of workers) {
+
+    while(running && !found && atoms.length > 0) {
+        for(let i=0; i<atoms.length; i++) {
             if(found) break;
-            if(!w.isFinished()) {
-                w.stepBatch(batchSize);
-                allFinished = false;
+            const atom = atoms[i];
+            const rangeSize = rangeEnd - rangeStart;
+            const maxJump = BigInt(Math.max(1, Math.floor(Math.sqrt(Number(rangeSize)) * temperature)));
+            const direction = Math.random() < 0.5 ? 1n : -1n;
+            const jump = BigInt(Math.floor(Math.random() * Number(maxJump))) + 1n;
+            const actualJump = jump * direction;
+
+            let newKey = mod(atom.key + actualJump, N);
+            // Reflecterende grenzen
+            if(newKey < rangeStart) {
+                newKey = rangeStart + (rangeStart - newKey);
+            }
+            if(newKey >= rangeEnd) {
+                newKey = rangeEnd - (newKey - rangeEnd) - 1n;
+            }
+            if(newKey < rangeStart) newKey = rangeStart;
+            if(newKey >= rangeEnd) newKey = rangeEnd - 1n;
+
+            const newPoint = pointMul(newKey, G);
+            atom.key = newKey;
+            atom.point = newPoint;
+            totalSteps++;
+
+            if(newPoint[0] === targetPoint[0] && newPoint[1] === targetPoint[1]) {
+                showSolution(newKey.toString(16).padStart(64, '0'));
+                return;
             }
         }
-        
+
+        // Fusiecontrole
+        for(let i=0; i<atoms.length; i++) {
+            for(let j=i+1; j<atoms.length; j++) {
+                if(atoms[i].point[0] === atoms[j].point[0] && atoms[i].point[1] === atoms[j].point[1]) {
+                    const newKey = (atoms[i].key + atoms[j].key) / 2n;
+                    atoms.splice(j, 1);
+                    atoms[i] = { key: newKey, point: pointMul(newKey, G) };
+                    fusions++;
+                    log(`💥 Fusie! Nog ${atoms.length} atomen over.`, 'fusion');
+                    document.getElementById('fusionCount').textContent = fusions;
+                    document.getElementById('atomCount').textContent = atoms.length;
+                    break;
+                }
+            }
+        }
+
+        temperature *= coolingRate;
+        if(temperature < 0.001) temperature = 0.001;
+
         const now = performance.now();
-        totalSteps = workers.reduce((s, w) => s + w.getSteps(), 0);
         const elapsed = now - lastTime;
-        
         if(elapsed >= UPDATE_INTERVAL) {
             const delta = totalSteps - lastStepCount;
             const speed = delta / (elapsed / 1000);
             document.getElementById('stepCount').textContent = totalSteps;
             document.getElementById('speed').textContent = Math.round(speed).toLocaleString();
-            lastStepCount = totalSteps; lastTime = now;
-            await sleep(1); // Give UI time to update
-        }
-        
-        if(allFinished && !found) {
-            log('🛑 Hele range is afgezocht, sleutel niet gevonden.', 'warn');
-            running = false;
-            document.getElementById('startBtn').disabled = false;
-            document.getElementById('stopBtn').disabled = true;
-            break;
+            document.getElementById('atomCount').textContent = atoms.length;
+            lastStepCount = totalSteps;
+            lastTime = now;
+            await sleep(1);
         }
     }
-    
-    totalSteps = workers.reduce((s, w) => s + w.getSteps(), 0);
-    document.getElementById('stepCount').textContent = totalSteps;
-    document.getElementById('speed').textContent = '0';
+
+    if(!found && atoms.length === 0) {
+        log('⚠️ Alle atomen gefuseerd tot één, maar target niet geraakt.', 'warn');
+    }
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('stopBtn').disabled = true;
 }
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 
@@ -327,35 +327,36 @@ document.getElementById('startBtn').onclick = async () => {
     targetPoint = pubToPoint(rawPub);
     if(!targetPoint){alert('Kon punt niet extraheren.');return;}
     expectedAddr = document.getElementById('expectedAddr').value.trim();
-    
+
     const rs = document.getElementById('rangeStart').value.trim();
     const re = document.getElementById('rangeEnd').value.trim();
     if(!/^[0-9a-fA-F]+$/.test(rs)||!/^[0-9a-fA-F]+$/.test(re)){alert('Range start/end moeten HEX zijn.');return;}
-    
     rangeStart = BigInt('0x'+rs); rangeEnd = BigInt('0x'+re);
-    if(rangeStart < 1n || rangeEnd > N - 1n || rangeStart >= rangeEnd){alert('Ongeldige range.');return;}
-    
-    const numWorkers = parseInt(document.getElementById('numWorkers').value,10) || 4;
-    const batchSize = parseInt(document.getElementById('batchSize').value,10) || 2000;
-    
+    if(rangeStart<1n||rangeEnd>N-1n||rangeStart>=rangeEnd){alert('Ongeldige range.');return;}
+
+    const numAtoms = parseInt(document.getElementById('numAtoms').value,10) || 8;
+    const initTemp = parseFloat(document.getElementById('temperature').value) || 0.8;
+    const cool = parseFloat(document.getElementById('cooling').value) || 0.9999;
+
     running = true; found = false; totalSteps = 0;
     document.getElementById('resultCard').classList.remove('show');
-    document.getElementById('stepCount').textContent = '0'; 
+    document.getElementById('stepCount').textContent = '0';
     document.getElementById('speed').textContent = '0';
+    document.getElementById('atomCount').textContent = numAtoms;
+    document.getElementById('fusionCount').textContent = '0';
     document.getElementById('logBox').innerHTML = '';
-    document.getElementById('startBtn').disabled = true; 
+    document.getElementById('startBtn').disabled = true;
     document.getElementById('stopBtn').disabled = false;
-    
-    log('🚀 Start Range Brute-Forcer.', 'info');
-    runSearch(numWorkers, batchSize);
+
+    log('🚀 Einstein Machine gestart.', 'info');
+    einsteinMachine(numAtoms, initTemp, cool);
 };
 
 document.getElementById('stopBtn').onclick = () => {
     running = false;
     document.getElementById('startBtn').disabled = false;
     document.getElementById('stopBtn').disabled = true;
-    document.getElementById('activeWorkers').textContent = '0';
-    log('🛑 Handmatig gestopt na ' + totalSteps + ' stappen.', 'warn');
+    log('🛑 Gestopt door gebruiker.', 'warn');
 };
 
 function resetAll() {
@@ -365,12 +366,13 @@ function resetAll() {
     document.getElementById('resultCard').classList.remove('show');
     document.getElementById('stepCount').textContent = '0';
     document.getElementById('speed').textContent = '0';
-    document.getElementById('activeWorkers').textContent = '0';
+    document.getElementById('atomCount').textContent = '0';
+    document.getElementById('fusionCount').textContent = '0';
     document.getElementById('logBox').innerHTML = '';
     log('✅ Reset voltooid.');
 }
 
-log('✅ Systeem geladen. Klaar voor gebruik!');
+log('⚛️ Einstein Machine geladen. Stel parameters in en klik Start.');
 </script>
 </body>
 </html>
