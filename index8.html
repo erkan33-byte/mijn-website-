@@ -481,7 +481,6 @@
                 let effectiveN = rangeEnd - rangeStart;
                 if (useNeg) effectiveN = effectiveN / 2n;
                 
-                // expectedJumps = 2 * sqrt(effectiveN)
                 const log2N = bigIntLog2(effectiveN);
                 const expectedJumps = 2 * Math.pow(2, log2N / 2);
                 const seconds = expectedJumps / (lastSpeed * speedFactor * maskFactor * negBoost);
@@ -503,15 +502,13 @@
             const useNeg=document.getElementById('useNegation').value === "true";
             let effectiveN = useNeg ? rangeSize / 2n : rangeSize;
 
-            // log10(effectieve zoekruimte)
             const log10N = bigIntLog10(effectiveN);
             const log10TW = Math.log10(Math.max(T, 1) * Math.max(W, 1) * 0.8);
             const log10Lambda = log10TW - log10N;
             const lambda = Math.pow(10, log10Lambda);
-            const kans = lambda; // benadering: 1 - exp(-lambda) ≈ lambda voor kleine lambda
+            const kans = lambda;
             const log10Kans = log10Lambda;
 
-            // Gauge normalisatie: log10(kans) van -38 (1/N) tot 0 (100%)
             const gaugeNorm = Math.max(0, Math.min(1, (log10Kans + 38) / 38));
             document.getElementById('gaugeFill').style.strokeDashoffset = 238.76 - gaugeNorm * 238.76;
             document.getElementById('gaugePct').textContent = (gaugeNorm * 100).toFixed(2) + '%';
@@ -519,12 +516,10 @@
             document.getElementById('coveragePct').textContent = (kans * 100).toExponential(2) + '%';
             document.getElementById('jumpsCoverage').textContent = W.toLocaleString() + ' wild sprongen';
 
-            // Kans als 1 op 2^bits
             const log2InvKans = Math.log2(1 / (kans + 1e-300));
             document.getElementById('chanceScientific').innerHTML = `1 op ~2<sup>${log2InvKans.toFixed(0)}</sup>`;
             document.getElementById('chanceUitleg').innerHTML = `Accumulatie actief. Totaal <strong>${epoch}</strong> rondes, <strong>${T.toLocaleString()}</strong> vallen.`;
 
-            // Vergelijkingskaarten
             document.getElementById('cmpUniverse').textContent = effectiveN > 1n<<128n ? '~2¹³⁴' : '2^' + bigIntLog2(effectiveN).toFixed(0);
             const lotteryFactor = 1 / (kans + 1e-300) / 7e6;
             document.getElementById('cmpLottery').textContent = lotteryFactor.toExponential(1) + '×';
@@ -542,10 +537,9 @@
                 document.getElementById('cmpTime').textContent = formatSeconds(seconds);
             }
 
-            // Calculus gradient & Poisson parameter
             if(currentSpeed>0 && T>0){
                 const wildSpeed = currentSpeed * (cumulativeWildJumps / (totalJumps || 1));
-                const log10Gradient = Math.log10(T * wildSpeed) - log10N; // dP/dt ≈ T*v_wild / N
+                const log10Gradient = Math.log10(T * wildSpeed) - log10N;
                 const gradient = Math.pow(10, log10Gradient);
                 document.getElementById('calcGradient').textContent = gradient.toExponential(3) + ' /s';
                 document.getElementById('calcPoisson').textContent = (kans * 100).toExponential(4) + ' %';
