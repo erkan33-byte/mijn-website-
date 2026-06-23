@@ -2,650 +2,649 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Kangaroo √N – MITM + Kangaroo</title>
+    <title>Hybride Kangaroo — Volledige Calculus Integratie</title>
     <style>
-        *{box-sizing:border-box;margin:0;padding:0}
-        :root{--bg:#07090f;--surface:#0d1117;--panel:#111827;--border:#1f2937;--accent:#00ff99;--accent2:#00c3ff;--text:#e2e8f0;--muted:#6b7280;--warn:#f59e0b}
-        body{font-family:'Courier New',monospace;background:var(--bg);color:var(--text);padding:20px}
-        .container{max-width:750px;margin:0 auto}
-        .card{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:12px}
-        .card-title{font-size:.6rem;color:var(--accent2);text-transform:uppercase;border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:10px}
-        .field{display:grid;grid-template-columns:160px 1fr;align-items:center;gap:6px;margin-bottom:8px}
-        .field label{font-size:.65rem;color:var(--muted)}
-        .field input{background:var(--surface);color:var(--accent);border:1px solid var(--border);border-radius:3px;padding:5px 8px;font-family:inherit;font-size:.7rem;width:100%}
-        .field input[type="number"]{max-width:80px}
-        .btn-row{display:flex;gap:6px;margin-top:6px}
-        .btn{flex:1;padding:8px 12px;font-family:inherit;font-size:.7rem;font-weight:bold;cursor:pointer;border:none;border-radius:4px}
-        .btn-start{background:var(--accent);color:#000}
-        .btn-stop{background:#ef4444;color:#fff}
-        .btn-save{background:var(--accent2);color:#000}
-        .btn-load{background:var(--warn);color:#000}
-        .btn:disabled{opacity:.3;cursor:not-allowed}
-        .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-        .stat-cell{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px 10px}
-        .stat-cell .label{font-size:.5rem;color:var(--muted);text-transform:uppercase}
-        .stat-cell .value{font-size:.85rem;font-weight:bold;color:var(--accent)}
-        #statusVal{color:#ef4444}
-        #statusVal.running{color:var(--accent)}
-        .progress-wrap{height:3px;background:var(--border);border-radius:2px;margin-top:10px;overflow:hidden}
-        .progress-bar{height:100%;width:0%;background:linear-gradient(90deg,var(--accent2),var(--accent));transition:width .3s}
-        .log{background:#000;height:100px;overflow-y:scroll;padding:6px 8px;font-size:.6rem;line-height:1.4;border:1px solid var(--border);border-radius:4px}
-        .log .ts{color:var(--muted)}
-        .result-table{width:100%;border-collapse:collapse;font-size:.6rem}
-        .result-table th{background:var(--surface);color:var(--accent2);padding:6px 8px;border:1px solid var(--border);text-align:left}
-        .result-table td{padding:5px 8px;border:1px solid var(--border);word-break:break-all}
-        .empty-row td{text-align:center;color:var(--muted);font-style:italic}
-        .found-row td{color:#f59e0b;font-weight:bold}
-        .mitm-status{display:flex;gap:10px;margin-top:8px;font-size:.6rem}
-        .mitm-status .half{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px 10px;text-align:center}
-        .mitm-status .half .label{color:var(--accent2);font-weight:bold}
-        .mitm-status .half .val{color:var(--text)}
-        .memory-bar{background:var(--surface);border:1px solid var(--border);border-radius:3px;height:8px;margin-top:6px;overflow:hidden}
-        .memory-fill{height:100%;background:var(--warn);transition:width .5s}
+        :root {
+            --bg: #07090f;
+            --surface: #0d1117;
+            --panel: #111827;
+            --border: #1f2937;
+            --accent: #00ff99;
+            --accent2: #00c3ff;
+            --calculus: #d633ff;
+            --warn: #f59e0b;
+            --danger: #ef4444;
+            --success: #10b981;
+            --dim: #374151;
+            --muted: #6b7280;
+            --text: #e2e8f0;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Courier New', monospace;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 24px 16px 48px;
+        }
+        body::before {
+            content: '';
+            position: fixed; inset: 0;
+            background: repeating-linear-gradient(transparent 0px, transparent 3px, rgba(0,255,153,.015) 3px, rgba(0,255,153,.015) 4px);
+            pointer-events: none; z-index: 999;
+        }
+        .container { max-width: 760px; margin: 0 auto; }
+        .header { text-align: center; margin-bottom: 28px; }
+        .header h1 { font-size: 1.6rem; letter-spacing: .2em; color: var(--accent); text-shadow: 0 0 18px var(--accent); text-transform: uppercase; }
+        .header .sub { font-size: .72rem; color: var(--muted); letter-spacing: .12em; margin-top: 6px; }
+        .badge {
+            display: inline-block; background: linear-gradient(90deg, #1a2a1a, #0d2010);
+            border: 1px solid var(--accent); color: var(--accent); font-size: .62rem; letter-spacing: .15em;
+            padding: 3px 10px; border-radius: 2px; margin-top: 10px;
+        }
+        .card, .calc-card, .opt-card, .chance-card {
+            background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 20px; margin-bottom: 16px;
+        }
+        .calc-card { background: linear-gradient(135deg, #14051a 0%, #0d0514 100%); border-color: #4a156d; }
+        .opt-card { background: linear-gradient(135deg, #0f1a0a 0%, #0d1f10 100%); border-color: #1a5c2a; }
+        .chance-card {
+            background: linear-gradient(135deg, #0a0f1a 0%, #0d1520 100%); border-color: #1a3a5c;
+            position: relative; overflow: hidden;
+        }
+        .chance-card::before {
+            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+            background: radial-gradient(ellipse at center, rgba(0,195,255,.04) 0%, transparent 60%);
+            pointer-events: none;
+        }
+        .card-title, .calc-title, .opt-title, .chance-title {
+            font-size: .65rem; letter-spacing: .18em; text-transform: uppercase;
+            border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px;
+        }
+        .calc-title { color: var(--calculus); border-color: #4a156d; }
+        .opt-title { color: var(--accent); border-color: #1a5c2a; }
+        .chance-title { color: var(--accent2); border-color: #1a3a5c; }
+        .field { display: grid; grid-template-columns: 210px 1fr; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .field label { font-size: .72rem; color: var(--muted); letter-spacing: .06em; }
+        .field input, select {
+            background: var(--surface); color: var(--accent); border: 1px solid var(--dim); border-radius: 3px;
+            padding: 7px 10px; font-family: inherit; font-size: .78rem; outline: none; width: 100%;
+        }
+        .field input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,255,153,.12); }
+        .field input[type="number"] { max-width: 120px; }
+        .divider { border: none; border-top: 1px dashed var(--dim); margin: 14px 0; }
+        .btn-row { display: flex; gap: 10px; margin-top: 4px; }
+        .btn {
+            flex: 1; padding: 11px 16px; font-family: inherit; font-size: .8rem; font-weight: bold; letter-spacing: .1em;
+            cursor: pointer; border: none; border-radius: 4px; transition: opacity .15s, transform .1s;
+        }
+        .btn:active:not(:disabled) { transform: scale(.97); }
+        .btn:disabled { opacity: .35; cursor: not-allowed; }
+        .btn-start { background: var(--success); color: #000; }
+        .btn-stop { background: var(--danger); color: #fff; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .stat-cell {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 10px 14px;
+        }
+        .stat-cell .label { font-size: .6rem; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+        .stat-cell .value { font-size: 1.05rem; font-weight: bold; color: var(--accent); }
+        #statusVal { color: var(--danger); }
+        #statusVal.running { color: var(--success); }
+        .progress-wrap { height: 4px; background: var(--border); border-radius: 2px; margin-top: 14px; overflow: hidden; }
+        .progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent2), var(--accent)); border-radius: 2px; transition: width .4s; }
+
+        .chance-main { display: flex; align-items: center; gap: 20px; margin-bottom: 18px; }
+        .chance-gauge { position: relative; width: 100px; height: 100px; flex-shrink: 0; }
+        .chance-gauge svg { width: 100%; height: 100%; }
+        .gauge-bg { fill: none; stroke: #1a2a3a; stroke-width: 8; }
+        .gauge-fill {
+            fill: none; stroke: var(--accent2); stroke-width: 8; stroke-linecap: round;
+            transition: stroke-dashoffset 1s ease; transform: rotate(-90deg); transform-origin: 50% 50%;
+        }
+        .gauge-label {
+            position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            font-size: .62rem; color: var(--muted); text-align: center; line-height: 1.3;
+        }
+        .gauge-label span { font-size: 1rem; color: var(--accent2); font-weight: bold; }
+        .chance-info { flex: 1; }
+        .chance-info .big-number { font-size: 1.1rem; color: var(--accent2); font-weight: bold; letter-spacing: .05em; word-break: break-all; margin-bottom: 4px; }
+        .chance-info .label-small { font-size: .62rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px; }
+        .chance-info .kans-uitleg { font-size: .68rem; color: var(--text); line-height: 1.6; }
+        .comparison-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+        .cmp-cell { background: rgba(0,0,0,.4); border: 1px solid #1a3a5c; border-radius: 4px; padding: 9px 12px; }
+        .cmp-cell .cmp-label { font-size: .58rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 3px; }
+        .cmp-cell .cmp-val { font-size: .78rem; color: var(--accent2); font-weight: bold; }
+        .cmp-cell .cmp-desc { font-size: .62rem; color: var(--muted); margin-top: 2px; }
+        .kans-progress { margin-top: 14px; }
+        .kans-progress .kp-label { display: flex; justify-content: space-between; font-size: .62rem; color: var(--muted); margin-bottom: 5px; }
+        .kans-track { height: 18px; background: #0a1520; border: 1px solid #1a3a5c; border-radius: 3px; overflow: hidden; position: relative; }
+        .kans-fill { height: 100%; background: linear-gradient(90deg, #003366, var(--accent2)); border-radius: 3px; transition: width 1s ease; position: relative; }
+        .kans-fill::after { content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 20px; background: rgba(255,255,255,.15); filter: blur(4px); }
+        .kans-pct-label { font-size: .62rem; color: var(--muted); text-align: right; margin-top: 4px; }
+        .sci-note { background: rgba(0,195,255,.05); border: 1px solid rgba(0,195,255,.15); border-radius: 4px; padding: 10px 14px; margin-top: 14px; font-size: .67rem; color: var(--muted); line-height: 1.7; }
+        .sci-note strong { color: var(--accent2); }
+        .opt-boost { display: flex; align-items: center; justify-content: space-between; background: rgba(0,255,153,.06); border: 1px solid rgba(0,255,153,.2); border-radius: 4px; padding: 10px 14px; margin-bottom: 10px; }
+        .opt-boost-label { font-size: .7rem; color: var(--accent); }
+        .opt-boost-val { font-size: 1.1rem; font-weight: bold; color: var(--accent); }
+        .range-val { font-size: .75rem; color: var(--accent); margin-top: 4px; }
+        .log { background: #000; color: var(--accent); height: 150px; overflow-y: scroll; padding: 10px 12px; font-size: .72rem; line-height: 1.6; border-radius: 4px; border: 1px solid var(--border); }
+        .log .ts { color: var(--muted); }
+        .log .ev-found { color: var(--warn); font-weight: bold; }
+        .log .ev-epoch { color: var(--accent2); }
+        .log .ev-stop { color: var(--danger); }
+        .result-table { width: 100%; border-collapse: collapse; font-size: .72rem; }
+        .result-table th { background: var(--surface); color: var(--accent2); letter-spacing: .1em; font-size: .62rem; text-transform: uppercase; padding: 10px 12px; border: 1px solid var(--border); text-align: left; }
+        .result-table td { border: 1px solid var(--border); padding: 9px 12px; color: var(--text); word-break: break-all; }
+        .footer { text-align: center; font-size: .6rem; color: var(--muted); letter-spacing: .1em; margin-top: 24px; }
+        ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: var(--surface); } ::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 3px; }
     </style>
 </head>
 <body>
 <div class="container">
-    <div style="text-align:center;margin-bottom:16px;">
-        <h1 style="font-size:1.1rem;color:var(--accent);letter-spacing:.15em;">🦘 Kangaroo √N</h1>
-        <div style="font-size:.5rem;color:var(--muted);">MITM + Kangaroo · Volledig persistent</div>
+    <div class="header">
+        <h1>🦘 Hybride Kangaroo (Calculus)</h1>
+        <div class="sub">Live Kans &amp; Gradiënt · Accumulerende RAM</div>
+        <span class="badge">POLLARD'S KANGAROO · INTEGRATED MATH</span>
     </div>
 
     <div class="card">
         <div class="card-title">⚙ Configuratie</div>
-        <div class="field"><label>Workers</label><input id="numW" value="4" type="number" min="1" max="32"></div>
-        <div class="field"><label>Target PubKey</label><input id="pubKey" value="02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16" type="text"></div>
-        <div class="field"><label>Start (HEX)</label><input id="rangeStart" value="4000000000000000000000000000000000" type="text"></div>
-        <div class="field"><label>Eind (HEX)</label><input id="rangeEnd" value="7fffffffffffffffffffffffffffffffff" type="text"></div>
-        <div class="field"><label>Start %</label><input id="pctStart" value="0" type="number" step="0.1" min="0" max="100"></div>
-        <div class="field"><label>Eind %</label><input id="pctEnd" value="100" type="number" step="0.1" min="0" max="100"></div>
-        <div class="field"><label>MITM Splitsing</label><input id="mitmSplit" value="50" type="number" step="5" min="10" max="90"></div>
-        <div class="field"><label>Kangaroo Sprongen</label><input id="kangarooSteps" value="100000" type="number" min="1000" step="1000"></div>
+        <div class="field"><label>Workers (CPU Cores)</label><input id="numW" value="4" type="number" min="1" max="32"></div>
+        <div class="field"><label>Target Public Key</label><input id="pubKey" value="02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16" type="text"></div>
+        <div class="field"><label>Target BTC Adres</label><input id="btcAddr" value="16RGFo6hjq9ym6Pj7N5H7L1NR1rVPJyw2v" type="text" disabled style="opacity:0.5;"></div>
+        <hr class="divider">
+        <div class="field"><label>Absoluut Start (HEX)</label><input id="rangeStart" value="4000000000000000000000000000000000" type="text"></div>
+        <div class="field"><label>Absoluut Eind (HEX)</label><input id="rangeEnd" value="7fffffffffffffffffffffffffffffffff" type="text"></div>
+        <hr class="divider">
+        <div class="field"><label>Zoekbereik Start (%)</label><input id="pctStart" value="0" type="number" step="0.1" min="0" max="100"></div>
+        <div class="field"><label>Zoekbereik Eind (%)</label><input id="pctEnd" value="100" type="number" step="0.1" min="0" max="100"></div>
         <div class="btn-row">
-            <button class="btn btn-start" id="startBtn">▶ Start</button>
+            <button class="btn btn-start" id="startBtn">▶ Start Accumulerende Scan</button>
             <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
-            <button class="btn btn-save" id="saveBtn" disabled>💾 Save</button>
-            <button class="btn btn-load" id="loadBtn">📂 Load</button>
+        </div>
+    </div>
+
+    <div class="calc-card">
+        <div class="calc-title">📐 Calculus Validatie &amp; Live Gradiënt</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+            <div class="stat-cell" style="background:rgba(0,0,0,0.3); border-color:#4a156d;">
+                <div class="label" style="color:var(--calculus)">Gradiënt dP/dt</div>
+                <div class="value" id="calcGradient" style="color:#f0b5ff">0.00e+0 /s</div>
+            </div>
+            <div class="stat-cell" style="background:rgba(0,0,0,0.3); border-color:#4a156d;">
+                <div class="label" style="color:var(--calculus)">Continue kans (λ)</div>
+                <div class="value" id="calcPoisson" style="color:#f0b5ff">0.0000 %</div>
+            </div>
+        </div>
+        <div class="formula-box" style="background:rgba(0,0,0,0.5); border-left:3px solid var(--calculus); padding:10px; font-size:.75rem; color:#eabfff; line-height:1.5;">
+            λ = (T · W<sub>wild</sub>) / N<sub>effectief</sub> · 0.8<br>
+            P(kans) = 1 − e<sup>−λ</sup> &nbsp; | &nbsp; dP/dt = (T · v<sub>wild</sub> / N) · e<sup>−λ</sup>
+        </div>
+    </div>
+
+    <div class="opt-card">
+        <div class="opt-title">⚡ Kans Optimizer — Impact op doorlooptijd</div>
+        <div class="opt-boost">
+            <div class="opt-boost-label">📈 Relatieve snelheid t.o.v. standaard</div>
+            <div class="opt-boost-val" id="boostVal">+0%</div>
+        </div>
+        <div class="field" style="margin-bottom: 15px;">
+            <label style="color:var(--calculus); font-weight:bold;">Negation Optimization</label>
+            <select id="useNegation" onchange="updateOptimizer()" style="border-color:var(--calculus); background:rgba(214, 51, 255, 0.05);">
+                <option value="false">Uitgeschakeld (Standaard Interval Kangaroo)</option>
+                <option value="true">Ingeschakeld (Halveert zoekruimte, waarschuwing: breekt bounds!)</option>
+            </select>
+        </div>
+        <div class="opt-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+            <div class="opt-item"><div class="opt-label">Traps per worker</div><input type="range" id="pathsSlider" min="100" max="800" step="100" value="800" oninput="updateOptimizer()"><div class="range-val" id="pathsVal">800 × 1500 stappen</div></div>
+            <div class="opt-item"><div class="opt-label">DP Filter</div><select id="dpFilter" onchange="updateOptimizer()"><option value="1023">10-bit (snel)</option><option value="4095">12-bit (meer vallen)</option><option value="255">8-bit (minder)</option></select></div>
+            <div class="opt-item"><div class="opt-label">Wild Jumps/Epoch</div><select id="wildJumps" onchange="updateOptimizer()"><option value="1000000">1M</option><option value="3000000" selected>3M</option><option value="6000000">6M</option><option value="10000000">10M</option></select></div>
+            <div class="opt-item"><div class="opt-label">Stappen/pad (TAME)</div><select id="stepsPerPath" onchange="updateOptimizer()"><option value="1000">1000</option><option value="1500" selected>1500</option><option value="2500">2500</option><option value="4000">4000</option></select></div>
+        </div>
+        <div class="sci-note" id="optTimeEstimate"><strong>⏱ Verwachte tijd:</strong> —</div>
+    </div>
+
+    <div class="chance-card">
+        <div class="chance-title">🎲 Kans op Succes — Live Berekening</div>
+        <div class="chance-main">
+            <div class="chance-gauge">
+                <svg viewBox="0 0 100 100">
+                    <circle class="gauge-bg" cx="50" cy="50" r="38"/>
+                    <circle class="gauge-fill" cx="50" cy="50" r="38" id="gaugeFill" stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
+                </svg>
+                <div class="gauge-label"><span id="gaugePct">~0%</span>log-schaal</div>
+            </div>
+            <div class="chance-info">
+                <div class="big-number" id="chanceScientific">1 op ~2<sup>?</sup></div>
+                <div class="label-small">benodigde operaties (Kangaroo algebraïsch)</div>
+                <div class="kans-uitleg" id="chanceUitleg">Nog niet gestart.</div>
+            </div>
+        </div>
+        <div class="kans-progress">
+            <div class="kp-label"><span>Gedekte zoekruimte (cumulatief)</span><span id="coveragePct">0.000000%</span></div>
+            <div class="kans-track"><div class="kans-fill" id="kansBar" style="width:0%"></div></div>
+            <div class="kans-pct-label" id="jumpsCoverage">0 wild sprongen</div>
+        </div>
+        <div class="comparison-grid">
+            <div class="cmp-cell"><div class="cmp-label">🌌 Zoekruimte</div><div class="cmp-val" id="cmpUniverse">—</div><div class="cmp-desc">mogelijke sleutels</div></div>
+            <div class="cmp-cell"><div class="cmp-label">⏱ Geschatte tijd</div><div class="cmp-val" id="cmpTime">—</div><div class="cmp-desc">bij huidige snelheid</div></div>
+            <div class="cmp-cell"><div class="cmp-label">🎰 Loterij factor</div><div class="cmp-val" id="cmpLottery">—</div><div class="cmp-desc">× staatsloterij</div></div>
+            <div class="cmp-cell"><div class="cmp-label">📡 Epochs voltooid</div><div class="cmp-val" id="cmpEpochs">0</div></div>
         </div>
     </div>
 
     <div class="card">
-        <div class="card-title">📊 Statistieken</div>
-        <div class="stats-grid">
+        <div class="card-title">📊 Live Statistieken</div>
+        <div class="stats-grid" id="statsGrid">
             <div class="stat-cell"><div class="label">Status</div><div class="value" id="statusVal">Gestopt</div></div>
+            <div class="stat-cell"><div class="label">Epoch</div><div class="value" id="epochCount">0</div></div>
+            <div class="stat-cell"><div class="label">Vallen (RAM)</div><div class="value" id="trapCount">0</div></div>
             <div class="stat-cell"><div class="label">Snelheid</div><div class="value" id="speed">0 /s</div></div>
-            <div class="stat-cell"><div class="label">Sprongen</div><div class="value" id="totalJumps">0</div></div>
-            <div class="stat-cell"><div class="label">Vallen</div><div class="value" id="trapCount">0</div></div>
-            <div class="stat-cell"><div class="label">Kangoeroes</div><div class="value" id="kangarooCount">0</div></div>
+            <div class="stat-cell"><div class="label">Wild sprongen</div><div class="value" id="wildJumpsTotal">0</div></div>
+            <div class="stat-cell"><div class="label">RAM schatting</div><div class="value" id="ramUsage">0 MB</div></div>
         </div>
-        <div class="mitm-status">
-            <div class="half"><div class="label">🔵 Hoge bits</div><div class="val" id="mitmHigh">0</div></div>
-            <div class="half"><div class="label">🔴 Lage bits</div><div class="val" id="mitmLow">0</div></div>
-            <div class="half"><div class="label">💾 Opgeslagen</div><div class="val" id="saveStatus">Geen</div></div>
-        </div>
+        <div style="margin-top:10px;font-size:.7rem;color:var(--muted);">Totaal sprongen: <span id="totalJumps">0</span></div>
         <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
-        <div class="memory-bar"><div class="memory-fill" id="memoryBar" style="width:0%"></div></div>
-        <div style="font-size:.5rem;color:var(--muted);margin-top:4px;">Geheugengebruik: <span id="memUsage">0</span> KB / 5 MB</div>
     </div>
 
-    <div class="card">
-        <div class="card-title">📋 Log</div>
-        <div class="log" id="logBox"></div>
-    </div>
-
+    <div class="card"><div class="card-title">📋 Activiteitenlog</div><div class="log" id="logBox"></div></div>
     <div class="card">
         <div class="card-title">🎯 Resultaten</div>
-        <table class="result-table">
-            <thead><tr><th>Type</th><th>WIF</th><th>Privé (HEX)</th></tr></thead>
-            <tbody id="matchTable"><tr class="empty-row"><td colspan="3">Wacht op start...</td></tr></tbody>
-        </table>
+        <table class="result-table"><thead><tr><th>Type</th><th>WIF</th><th>Privésleutel (HEX)</th></tr></thead><tbody id="matchTable"><tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr></tbody></table>
     </div>
+    <div class="footer">Hybride Kangaroo · Oneindige Accumulatie · Calculus Integratie</div>
 </div>
 
-<script>
-// === SECP256K1 ===
-const SECP256K1_ORDER=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
-const SECP256K1_P=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
-const GX=0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
-const GY=0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n;
+<script id="workerCode" type="javascript/worker">
+    importScripts('https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js');
+    const ec = new elliptic.ec("secp256k1");
+    const G = ec.g;
+    const N_BIG = BigInt(ec.n.toString());
+    const NUM_STEPS = 32;
+    const JUMP_SIZES = [];
+    const JUMP_POINTS = [];
 
-function modPow(a,e,m){let r=1n;a%=m;while(e>0n){if(e&1n)r=(r*a)%m;a=(a*a)%m;e>>=1n;}return r;}
-function modInv(a,m){if(m===1n)return 0n;let m0=m,y=0n,x=1n;while(a>1n){let q=a/m,t=m;m=a%m;a=t;t=y;y=x-q*y;x=t;}if(x<0n)x+=m0;return x;}
-function pointAdd(P,Q){if(!P)return Q;if(!Q)return P;let[x1,y1]=P,[x2,y2]=Q;if(x1===x2&&y1===y2){if(y1===0n)return null;let s=(3n*x1*x1*modInv(2n*y1,SECP256K1_P))%SECP256K1_P;let x3=(s*s-2n*x1)%SECP256K1_P;let y3=(s*(x1-x3)-y1)%SECP256K1_P;return[x3<0n?x3+SECP256K1_P:x3,y3<0n?y3+SECP256K1_P:y3];}else{if(x1===x2)return null;let s=((y2-y1)*modInv(x2-x1,SECP256K1_P))%SECP256K1_P;let x3=(s*s-x1-x2)%SECP256K1_P;let y3=(s*(x1-x3)-y1)%SECP256K1_P;return[x3<0n?x3+SECP256K1_P:x3,y3<0n?y3+SECP256K1_P:y3];}}
-function scalarMul(k,P){if(k===0n)return null;let r=null,a=P,n=k;while(n>0n){if(n&1n)r=pointAdd(r,a);a=pointAdd(a,a);n>>=1n;}return r;}
-function pubFromPriv(hex){let k=BigInt("0x"+hex);if(k===0n||k>=SECP256K1_ORDER)return null;let p=scalarMul(k,[GX,GY]);if(!p)return null;let[x,y]=p,xh=x.toString(16).padStart(64,'0');return(y%2n===0n?"02":"03")+xh;}
-
-// === CHECKSUM ===
-async function sha256Hex(h){let b=h.match(/.{2}/g).map(x=>parseInt(x,16));let d=await crypto.subtle.digest("SHA-256",new Uint8Array(b));return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');}
-async function rmd160Hex(h){let b=h.match(/.{2}/g).map(x=>parseInt(x,16));let d=await crypto.subtle.digest("SHA-256",new Uint8Array(b));return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');}
-async function calcChecksum(pub){let s1=await sha256Hex(pub),h160=await rmd160Hex(s1);let s2=await sha256Hex(h160),s3=await sha256Hex(s2);return s3.substring(0,8);}
-
-// === KANGAROO ===
-const NUM_STEPS=32;
-let JUMP_SIZES=[];
-let JUMP_POINTS=[];
-
-function initJumps(rs,re){
-    JUMP_SIZES=[];
-    JUMP_POINTS=[];
-    let W=re-rs;
-    let x0=W/2n,sw=1n;
-    if(x0>0n){
-        let x1=(x0+W/x0)/2n;
-        while(x1<x0){x0=x1;x1=(x0+W/x0)/2n;}
-        sw=x0;
-    }
-    for(let i=0;i<NUM_STEPS;i++){
-        let s=(sw*BigInt(i+1))/BigInt(NUM_STEPS);
-        if(s===0n)s=1n;
-        JUMP_SIZES.push(s);
-        JUMP_POINTS.push(scalarMul(s,[GX,GY]));
-    }
-}
-
-function randBigInt(lo,hi){let r=hi-lo,bits=r.toString(2).length,bytes=Math.ceil(bits/8);let a=new Uint8Array(bytes);crypto.getRandomValues(a);let h=Array.from(a,b=>b.toString(16).padStart(2,'0')).join('');return lo+(BigInt("0x"+h)%r);}
-function kangarooJump(pt,dist){let idx=Number(dist%BigInt(NUM_STEPS));let np=pointAdd(pt,JUMP_POINTS[idx]);return{point:np,dist:dist+JUMP_SIZES[idx]};}
-function pointToHex(P){if(!P)return null;let[x,y]=P;let xh=x.toString(16).padStart(64,'0');return(y%2n===0n?"02":"03")+xh;}
-function hexToPoint(h){if(!h||h.length<66)return null;let x=BigInt("0x"+h.substring(2,66)),pref=h.substring(0,2);let ys=(x*x*x+7n)%SECP256K1_P;let y=modPow(ys,(SECP256K1_P+1n)/4n,SECP256K1_P);if((y%2n===0n&&pref==="03")||(y%2n===1n&&pref==="02"))y=(SECP256K1_P-y)%SECP256K1_P;return[x,y];}
-function toBase58(h){const A="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";let b=h.match(/.{2}/g).map(x=>parseInt(x,16)),d=[0];for(let i=0;i<b.length;i++){let c=b[i];for(let j=0;j<d.length;j++){c+=d[j]<<8;d[j]=c%58;c=(c/58)|0;}while(c>0){d.push(c%58);c=(c/58)|0;}}let s="";for(let i=0;i<b.length&&b[i]===0;i++)s+=A[0];for(let i=d.length-1;i>=0;i--)s+=A[d[i]];return s;}
-
-// === LOCALSTORAGE ===
-const STORAGE_KEY='kangaroo_mitm_data';
-const MAX_STORAGE=5*1024*1024;
-
-function saveToStorage(highTraps, lowTraps, totalJumps, metadata){
-    try{
-        const data={highTraps,lowTraps,totalJumps,timestamp:Date.now(),metadata};
-        const serialized=JSON.stringify(data);
-        const size=new Blob([serialized]).size;
-        if(size>MAX_STORAGE){
-            const compressed=compressTraps(highTraps, lowTraps);
-            const compData={...data, highTraps:compressed.high, lowTraps:compressed.low};
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(compData));
-            log(`💾 Opgeslagen (gecomprimeerd: ${(size/1024).toFixed(1)}KB)`);
-        }else{
-            localStorage.setItem(STORAGE_KEY, serialized);
-            log(`💾 Opgeslagen (${(size/1024).toFixed(1)}KB)`);
+    function sha256(hex){ return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+    function toBase58(hex){
+        const ALPHA="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+        const bytes=hex.match(/.{2}/g).map(b=>parseInt(b,16));
+        const digits=[0];
+        for(let i=0;i<bytes.length;i++){
+            let carry=bytes[i];
+            for(let j=0;j<digits.length;j++){carry+=digits[j]<<8; digits[j]=carry%58; carry=(carry/58)|0;}
+            while(carry>0){digits.push(carry%58); carry=(carry/58)|0;}
         }
-        document.getElementById('saveStatus').textContent=`${(size/1024).toFixed(1)}KB`;
-        updateMemoryBar(size);
-        return true;
-    }catch(e){
-        log(`❌ Save mislukt: ${e.message}`);
-        return false;
+        let s='';
+        for(let i=0;i<bytes.length&&bytes[i]===0;i++) s+=ALPHA[0];
+        for(let i=digits.length-1;i>=0;i--) s+=ALPHA[digits[i]];
+        return s;
     }
-}
 
-function loadFromStorage(){
-    try{
-        const raw=localStorage.getItem(STORAGE_KEY);
-        if(!raw)return null;
-        const data=JSON.parse(raw);
-        log(`📂 Geladen: ${Object.keys(data.highTraps||{}).length} high, ${Object.keys(data.lowTraps||{}).length} low traps`);
-        return data;
-    }catch(e){
-        log(`❌ Load mislukt: ${e.message}`);
-        return null;
+    function initJumps(rangeStart, rangeEnd){
+        if(JUMP_SIZES.length>0) return;
+        const W = rangeEnd - rangeStart;
+        let sqrtW = 1n;
+        if(W>0n){ let x0=W/2n, x1=(x0+W/x0)/2n; while(x1<x0){x0=x1; x1=(x0+W/x0)/2n;} sqrtW=x0; }
+        for(let i=0;i<NUM_STEPS;i++){
+            let size = (sqrtW * BigInt(i+1)) / BigInt(NUM_STEPS);
+            if(size===0n) size=1n;
+            JUMP_SIZES.push(size);
+            JUMP_POINTS.push(G.mul(size.toString(16)));
+        }
     }
-}
 
-function compressTraps(high, low){
-    const sortTraps=(obj)=>{
-        return Object.fromEntries(
-            Object.entries(obj)
-            .sort((a,b)=>parseInt(a[1].dist,16)-parseInt(b[1].dist,16))
-            .slice(0,1000)
-        );
-    };
-    return { high:sortTraps(high), low:sortTraps(low) };
-}
-
-function updateMemoryBar(size){
-    const pct=Math.min(100,(size/MAX_STORAGE)*100);
-    document.getElementById('memoryBar').style.width=pct+'%';
-    document.getElementById('memUsage').textContent=(size/1024).toFixed(1);
-}
-
-// === MAIN LOGICA ===
-let workers=[], globalTraps={}, totalJumps=0, startTime=0, isRunning=false;
-let mitmHighTraps={}, mitmLowTraps={}, mitmPhase=0;
-let kangarooLoopActive=false;
-const logBox=document.getElementById('logBox');
-const startBtn=document.getElementById('startBtn');
-const stopBtn=document.getElementById('stopBtn');
-const saveBtn=document.getElementById('saveBtn');
-const loadBtn=document.getElementById('loadBtn');
-
-function log(msg,cls=''){const ts=new Date().toLocaleTimeString();const div=document.createElement('div');div.innerHTML=`<span class="ts">[${ts}]</span> ${msg}`;if(cls)div.className=cls;logBox.appendChild(div);logBox.scrollTop=logBox.scrollHeight;}
-function setStatus(txt,cls=''){document.getElementById('statusVal').textContent=txt;document.getElementById('statusVal').className=cls;}
-function killWorkers(){workers.forEach(w=>{try{w.terminate();}catch(_){}});workers=[];}
-
-// === WORKER FUNCTIE (GEFIXT) ===
-function makeWorker(){
-    const workerCode = `
-const SECP256K1_ORDER=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
-const SECP256K1_P=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
-const GX=0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
-const GY=0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n;
-
-function modPow(a,e,m){let r=1n;a%=m;while(e>0n){if(e&1n)r=(r*a)%m;a=(a*a)%m;e>>=1n;}return r;}
-function modInv(a,m){if(m===1n)return 0n;let m0=m,y=0n,x=1n;while(a>1n){let q=a/m,t=m;m=a%m;a=t;t=y;y=x-q*y;x=t;}if(x<0n)x+=m0;return x;}
-function pointAdd(P,Q){if(!P)return Q;if(!Q)return P;let[x1,y1]=P,[x2,y2]=Q;if(x1===x2&&y1===y2){if(y1===0n)return null;let s=(3n*x1*x1*modInv(2n*y1,SECP256K1_P))%SECP256K1_P;let x3=(s*s-2n*x1)%SECP256K1_P;let y3=(s*(x1-x3)-y1)%SECP256K1_P;return[x3<0n?x3+SECP256K1_P:x3,y3<0n?y3+SECP256K1_P:y3];}else{if(x1===x2)return null;let s=((y2-y1)*modInv(x2-x1,SECP256K1_P))%SECP256K1_P;let x3=(s*s-x1-x2)%SECP256K1_P;let y3=(s*(x1-x3)-y1)%SECP256K1_P;return[x3<0n?x3+SECP256K1_P:x3,y3<0n?y3+SECP256K1_P:y3];}}
-function scalarMul(k,P){if(k===0n)return null;let r=null,a=P,n=k;while(n>0n){if(n&1n)r=pointAdd(r,a);a=pointAdd(a,a);n>>=1n;}return r;}
-
-async function sha256HexWorker(h){
-    let b=h.match(/.{2}/g).map(x=>parseInt(x,16));
-    let d=await crypto.subtle.digest("SHA-256", new Uint8Array(b));
-    return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');
-}
-async function rmd160HexWorker(h){
-    let b=h.match(/.{2}/g).map(x=>parseInt(x,16));
-    let d=await crypto.subtle.digest("SHA-256", new Uint8Array(b));
-    return Array.from(new Uint8Array(d)).map(x=>x.toString(16).padStart(2,'0')).join('');
-}
-async function calcChecksumWorker(pub){
-    let s1=await sha256HexWorker(pub);
-    let h160=await rmd160HexWorker(s1);
-    let s2=await sha256HexWorker(h160);
-    let s3=await sha256HexWorker(s2);
-    return s3.substring(0,8);
-}
-
-const NUM_STEPS=32;let JUMP_SIZES=[];let JUMP_POINTS=[];
-function initJumps(rs,re){JUMP_SIZES=[];JUMP_POINTS=[];let W=re-rs,x0=W/2n,sw=1n;if(x0>0n){let x1=(x0+W/x0)/2n;while(x1<x0){x0=x1;x1=(x0+W/x0)/2n;}sw=x0;}for(let i=0;i<NUM_STEPS;i++){let s=(sw*BigInt(i+1))/BigInt(NUM_STEPS);if(s===0n)s=1n;JUMP_SIZES.push(s);JUMP_POINTS.push(scalarMul(s,[GX,GY]));}}
-function randBigInt(lo,hi){let r=hi-lo,bits=r.toString(2).length,bytes=Math.ceil(bits/8);let a=new Uint8Array(bytes);crypto.getRandomValues(a);let h=Array.from(a,b=>b.toString(16).padStart(2,'0')).join('');return lo+(BigInt("0x"+h)%r);}
-function kangarooJump(pt,dist){let idx=Number(dist%BigInt(NUM_STEPS));let np=pointAdd(pt,JUMP_POINTS[idx]);return{point:np,dist:dist+JUMP_SIZES[idx]};}
-function pointToHex(P){if(!P)return null;let[x,y]=P;let xh=x.toString(16).padStart(64,'0');return(y%2n===0n?"02":"03")+xh;}
-
-self.onmessage=async function(e){
-    if(e.data.type==="FORCE_DONE"){
-        self.postMessage({type:"TAME_READY",traps:{},jumps:0,workerId:-1});
-        return;
+    function randBigInt(lo,hi){
+        const range=hi-lo, bits=range.toString(2).length, bytes=Math.ceil(bits/8);
+        const arr=new Uint8Array(bytes);
+        self.crypto.getRandomValues(arr);
+        const hex=Array.from(arr,b=>b.toString(16).padStart(2,'0')).join('');
+        return lo + (BigInt("0x"+hex) % range);
     }
-    
-    let {type, rangeStartStr, rangeEndStr, targetPubHex, workerId, pathsPerWorker, stepsPerPath, dpMask}=e.data;
-    let rangeStart=BigInt("0x"+rangeStartStr), rangeEnd=BigInt("0x"+rangeEndStr);
-    initJumps(rangeStart, rangeEnd);
 
-    if(type==="TAME"){
-        let traps={}, paths=pathsPerWorker||200, steps=stepsPerPath||1500, mask=dpMask||0x0F, jumps=0;
-        let targetChk = await calcChecksumWorker(targetPubHex);
-        
-        for(let p=0;p<paths;p++){
-            let ks=randBigInt(rangeStart, rangeEnd), dist=0n, pt=scalarMul(ks,[GX,GY]);
-            if(!pt) continue;
-            for(let i=0;i<steps;i++){
-                let ph=pointToHex(pt); if(!ph) break;
-                // DP check: laatste 4 bits (1 hex char) moeten 0 zijn met mask 0x0F
-                if((parseInt(ph.slice(-1),16) & mask) === 0){
-                    traps[ph]={absKey:ks.toString(16), dist:dist.toString()};
+    self.onmessage = function(e){
+        const {type, rangeStartStr, rangeEndStr, targetPubHex, workerId, maxWildJumps, pathsPerWorker, stepsPerPath, dpMask, useNegation} = e.data;
+        const rangeStart = BigInt("0x"+rangeStartStr);
+        const rangeEnd = BigInt("0x"+rangeEndStr);
+        initJumps(rangeStart, rangeEnd);
+
+        if(type === "TAME"){
+            const localTraps = {};
+            const paths = pathsPerWorker || 200;
+            const steps = stepsPerPath || 1500;
+            const mask = dpMask || 0x3FF;
+            let jumpsCount = 0;
+
+            for(let p=0; p<paths; p++){
+                let currKey = randBigInt(rangeStart, rangeEnd);
+                let currPoint = G.mul(currKey.toString(16));
+
+                for(let i=0; i<steps; i++){
+                    // Negation Optimization wiskunde: Canonicalize Y
+                    if(useNegation && currPoint.getY().isOdd()){
+                        currPoint = currPoint.neg();
+                        currKey = (N_BIG - currKey) % N_BIG; // Inverse modulo N
+                    }
+
+                    const pubHex = currPoint.encode('hex', true);
+                    
+                    if((parseInt(pubHex.slice(-4), 16) & mask) === 0){
+                        // We slaan nu de exacte absKey op, wat wiskundig robuuster is
+                        localTraps[pubHex] = currKey.toString(16);
+                    }
+
+                    const r = parseInt(pubHex.substr(2,8), 16) % NUM_STEPS;
+                    currPoint = currPoint.add(JUMP_POINTS[r]);
+                    currKey = (currKey + JUMP_SIZES[r]) % N_BIG;
+                    jumpsCount++;
                 }
-                let r=kangarooJump(pt,dist); pt=r.point; dist=r.dist; jumps++;
-                if(!pt) break;
             }
+            self.postMessage({type: "TAME_READY", traps: localTraps, jumps: jumpsCount, workerId});
+            return;
         }
-        
-        // ALTIJD een bericht terugsturen, ook als er geen traps zijn
-        self.postMessage({type:"TAME_READY",traps,jumps,workerId});
-        return;
-    }
-};
-`;
-    return new Worker(URL.createObjectURL(new Blob([workerCode],{type:'text/javascript'})));
-}
 
-// === MITM SPLITSING ===
-function splitRange(rangeStart, rangeEnd, splitPct){
-    const A=BigInt("0x"+rangeStart), B=BigInt("0x"+rangeEnd);
-    const W=B-A, mid=A+(W*BigInt(splitPct))/100n;
-    return { high:{start:rangeStart, end:mid.toString(16).padStart(64,'0')}, low:{start:mid.toString(16).padStart(64,'0'), end:rangeEnd} };
-}
+        if(type === "WILD"){
+            const wildTraps = e.data.traps || {};
+            const wildMaxBatch = 10000;
+            const wildMax = maxWildJumps || 3000000;
+            const targetPubKey = ec.keyFromPublic(targetPubHex.trim().toLowerCase(), 'hex').getPublic();
 
-function calculateSubRange(){
-    const A=BigInt("0x"+document.getElementById('rangeStart').value.trim());
-    const B=BigInt("0x"+document.getElementById('rangeEnd').value.trim());
-    const W=B-A, SCALE=1_000_000n;
-    const s=BigInt(Math.floor(parseFloat(document.getElementById('pctStart').value)*10000));
-    const e=BigInt(Math.floor(parseFloat(document.getElementById('pctEnd').value)*10000));
-    return { start:(A+(W*s)/SCALE).toString(16).padStart(64,'0'), end:(A+(W*e)/SCALE).toString(16).padStart(64,'0') };
-}
+            let wildTotalJumps = 0;
+            let currPoint = targetPubKey;
+            let wildC = 1n; // Vermenigvuldiger (1 of -1)
+            let wildD = 0n; // Opgebouwde afstand
 
-// === START ===
-startBtn.onclick=async()=>{
-    if(isRunning)return;
-    totalJumps=0; startTime=Date.now(); globalTraps={}; 
-    mitmHighTraps={}; mitmLowTraps={}; mitmPhase=0;
-    kangarooLoopActive=false;
-    document.getElementById('totalJumps').textContent='0';
-    document.getElementById('speed').textContent='0 /s';
-    document.getElementById('trapCount').textContent='0';
-    document.getElementById('mitmHigh').textContent='0';
-    document.getElementById('mitmLow').textContent='0';
-    document.getElementById('kangarooCount').textContent='0';
-    document.getElementById('progressBar').style.width='0%';
-    document.getElementById('matchTable').innerHTML='<tr class="empty-row"><td colspan="3">Bezig met zoeken...</td></tr>';
-    setRunning(true);
-    log('🚀 Hybride Kangaroo gestart (MITM + Kangaroo + Range Reduction)');
-    await runMITM();
-};
-
-stopBtn.onclick=()=>{
-    kangarooLoopActive=false;
-    setRunning(false); killWorkers(); setStatus('Gestopt');
-    document.getElementById('progressBar').style.width='0%';
-    log('🛑 Gestopt door gebruiker');
-};
-
-saveBtn.onclick=()=>{
-    if(isRunning){
-        saveToStorage(mitmHighTraps, mitmLowTraps, totalJumps, {
-            pubKey:document.getElementById('pubKey').value,
-            rangeStart:document.getElementById('rangeStart').value,
-            rangeEnd:document.getElementById('rangeEnd').value,
-            pctStart:document.getElementById('pctStart').value,
-            pctEnd:document.getElementById('pctEnd').value,
-            mitmSplit:document.getElementById('mitmSplit').value
-        });
-    }
-};
-
-loadBtn.onclick=()=>{
-    const data=loadFromStorage();
-    if(data){
-        if(data.metadata){
-            document.getElementById('pubKey').value=data.metadata.pubKey||'';
-            document.getElementById('rangeStart').value=data.metadata.rangeStart||'';
-            document.getElementById('rangeEnd').value=data.metadata.rangeEnd||'';
-            document.getElementById('pctStart').value=data.metadata.pctStart||'0';
-            document.getElementById('pctEnd').value=data.metadata.pctEnd||'100';
-            document.getElementById('mitmSplit').value=data.metadata.mitmSplit||'50';
-        }
-        mitmHighTraps=data.highTraps||{};
-        mitmLowTraps=data.lowTraps||{};
-        totalJumps=data.totalJumps||0;
-        document.getElementById('mitmHigh').textContent=Object.keys(mitmHighTraps).length;
-        document.getElementById('mitmLow').textContent=Object.keys(mitmLowTraps).length;
-        document.getElementById('totalJumps').textContent=totalJumps.toLocaleString();
-        
-        const totalTraps = Object.keys(mitmHighTraps).length + Object.keys(mitmLowTraps).length;
-        document.getElementById('trapCount').textContent = totalTraps;
-        
-        log(`📂 Geladen: ${Object.keys(mitmHighTraps).length} high + ${Object.keys(mitmLowTraps).length} low traps`);
-        setStatus('Geladen','');
-    }
-};
-
-function setRunning(v){isRunning=v;startBtn.disabled=v;stopBtn.disabled=!v;saveBtn.disabled=!v;}
-
-// === MITM LOOP ===
-async function runMITM(){
-    if(!isRunning)return;
-    const range=calculateSubRange();
-    const splitPct=parseInt(document.getElementById('mitmSplit').value)||50;
-    const split=splitRange(range.start, range.end, splitPct);
-    const targetPubHex=document.getElementById('pubKey').value.trim();
-    const numW=Math.max(1,parseInt(document.getElementById('numW').value)||4);
-    const paths=200, steps=1000;
-
-    // FASE 1: Hoge bits
-    if(Object.keys(mitmHighTraps).length===0){
-        mitmPhase=1; setStatus('MITM Hoge bits','running');
-        log(`🔵 Fase 1: Hoge bits (${splitPct}% van range)`);
-        document.getElementById('progressBar').style.width='15%';
-        const highTraps=await runTamePhase(split.high.start, split.high.end, targetPubHex, numW, paths, steps);
-        mitmHighTraps=highTraps;
-        document.getElementById('mitmHigh').textContent=Object.keys(highTraps).length;
-        log(`✅ Hoge bits klaar: ${Object.keys(highTraps).length} vallen`);
-        document.getElementById('progressBar').style.width='40%';
-        saveToStorage(mitmHighTraps, mitmLowTraps, totalJumps, null);
-    }else{
-        log(`🔵 Hoge bits al geladen: ${Object.keys(mitmHighTraps).length} vallen`);
-        document.getElementById('progressBar').style.width='40%';
-    }
-
-    // FASE 2: Lage bits
-    if(Object.keys(mitmLowTraps).length===0){
-        mitmPhase=2; setStatus('MITM Lage bits','running');
-        log(`🔴 Fase 2: Lage bits (${100-splitPct}% van range)`);
-        document.getElementById('progressBar').style.width='50%';
-        const lowTraps=await runTamePhase(split.low.start, split.low.end, targetPubHex, numW, paths, steps);
-        mitmLowTraps=lowTraps;
-        document.getElementById('mitmLow').textContent=Object.keys(lowTraps).length;
-        log(`✅ Lage bits klaar: ${Object.keys(lowTraps).length} vallen`);
-        document.getElementById('progressBar').style.width='70%';
-        saveToStorage(mitmHighTraps, mitmLowTraps, totalJumps, null);
-    }else{
-        log(`🔴 Lage bits al geladen: ${Object.keys(mitmLowTraps).length} vallen`);
-        document.getElementById('progressBar').style.width='70%';
-    }
-
-    // FASE 3: Kangaroo (normaal)
-    mitmPhase=3; setStatus('Kangaroo zoeken','running');
-    log(`🦘 Fase 3: Kangaroo algoritme (Pollard's Kangaroo)`);
-    document.getElementById('progressBar').style.width='80%';
-    
-    const rs=BigInt("0x"+document.getElementById('rangeStart').value.trim());
-    const re=BigInt("0x"+document.getElementById('rangeEnd').value.trim());
-    initJumps(rs, re);
-    
-    kangarooLoopActive=true;
-    await runKangarooPhase(targetPubHex, mitmHighTraps, mitmLowTraps, numW);
-
-    // FASE 4: Range Reduction (nieuw!)
-    if(isRunning && !kangarooLoopActive){
-        mitmPhase=4; setStatus('Range Reduction','running');
-        log('🔽 Fase 4: Range Reduction - Verkleinen van zoekrange');
-        document.getElementById('progressBar').style.width='90%';
-        
-        await runRangeReduction(targetPubHex, numW);
-    }
-}
-
-// === TAME FASE ===
-function runTamePhase(rangeStart, rangeEnd, targetPubHex, numW, paths, steps){
-    return new Promise((resolve)=>{
-        let allTraps={}, done=0;
-        killWorkers();
-        
-        for(let i=0;i<numW;i++){
-            const w=makeWorker(); workers.push(w);
-            
-            // Timeout om vastgelopen workers te forceren
-            const timeoutId = setTimeout(() => {
-                try { w.postMessage({type:"FORCE_DONE"}); } catch(e) {}
-            }, 30000);
-            
-            w.onmessage=(ev)=>{
-                clearTimeout(timeoutId);
-                if(ev.data.type==="TAME_READY"){
-                    // Voeg gevonden traps toe
-                    if(ev.data.traps && Object.keys(ev.data.traps).length > 0){
-                        Object.assign(allTraps, ev.data.traps);
-                    }
-                    totalJumps+=ev.data.jumps || 0;
-                    document.getElementById('totalJumps').textContent=totalJumps.toLocaleString();
+            function loop(){
+                let batchJumps = 0;
+                for(let i=0; i<wildMaxBatch && wildTotalJumps < wildMax; i++){
                     
-                    const trapCount = Object.keys(allTraps).length;
-                    document.getElementById('trapCount').textContent = trapCount;
-                    
-                    done++;
-                    if(done===numW) {
-                        log(`🔍 Tame fase klaar: ${trapCount} vallen gevonden (${totalJumps.toLocaleString()} sprongen)`);
-                        resolve(allTraps);
+                    // Negation Optimization wiskunde: Canonicalize Y
+                    if(useNegation && currPoint.getY().isOdd()){
+                        currPoint = currPoint.neg();
+                        wildC = -wildC;
+                        wildD = (N_BIG - wildD) % N_BIG; // Inverse afstand modulo N
                     }
+
+                    const pubHex = currPoint.encode('hex', true);
+
+                    if(wildTraps[pubHex]){
+                        const tameKey = BigInt("0x" + wildTraps[pubHex]);
+                        // Algebraïsche reconstructie van de target sleutel: Target = C * (tameKey - D) mod N
+                        let secretKey = wildC === 1n ? (tameKey - wildD + N_BIG) % N_BIG : (wildD - tameKey + N_BIG) % N_BIG;
+
+                        if(secretKey > 0n){
+                            const privHexCheck = secretKey.toString(16).padStart(64, '0');
+                            try {
+                                const keyPairCheck = ec.keyFromPrivate(privHexCheck);
+                                if(keyPairCheck.getPublic().encode('hex', true) === targetPubHex.trim().toLowerCase()){
+                                    const wifPayload = "80" + privHexCheck + "01";
+                                    const doubleSha = sha256(sha256(wifPayload));
+                                    self.postMessage({type: "FOUND", privHex: privHexCheck, wif: toBase58(wifPayload + doubleSha.slice(0,8))});
+                                    return;
+                                }
+                            } catch(err) {}
+                        }
+                    }
+
+                    const r = parseInt(pubHex.substr(2,8), 16) % NUM_STEPS;
+                    currPoint = currPoint.add(JUMP_POINTS[r]);
+                    wildD = (wildD + JUMP_SIZES[r]) % N_BIG;
+                    wildTotalJumps++; batchJumps++;
                 }
-            };
-            
-            w.onerror=(err)=>{
-                clearTimeout(timeoutId);
-                log(`❌ Worker error: ${err.message}`);
-                done++;
-                if(done===numW) resolve(allTraps);
-            };
-            
-            w.postMessage({
-                type:"TAME",
-                rangeStartStr:rangeStart,
-                rangeEndStr:rangeEnd,
-                targetPubHex:targetPubHex,
-                workerId:i,
-                pathsPerWorker:paths,
-                stepsPerPath:steps,
-                dpMask:0x0F // Minder strikt masker: laatste 4 bits moeten 0 zijn
-            });
-        }
-    });
-}
 
-// === KANGAROO FASE ===
-async function runKangarooPhase(targetPubHex, highTraps, lowTraps, numW){
-    if(!kangarooLoopActive || !isRunning) return;
-    
-    const targetChecksum=await calcChecksum(targetPubHex);
-    const rangeStart=BigInt("0x"+document.getElementById('rangeStart').value.trim());
-    const rangeEnd=BigInt("0x"+document.getElementById('rangeEnd').value.trim());
-    const W=rangeEnd-rangeStart;
-    const kangarooSteps=parseInt(document.getElementById('kangarooSteps').value)||100000;
-    let kangarooCount=parseInt(document.getElementById('kangarooCount').textContent)||0;
-
-    // Tame kangaroos (lopen vanaf rangeStart)
-    const numTame=Math.min(numW*2, 8);
-    for(let i=0;i<numTame && kangarooLoopActive && isRunning;i++){
-        const startDist=randBigInt(0n, W/100n);
-        let pos=rangeStart+startDist;
-        let dist=startDist;
-        let jumps=0;
-        
-        while(jumps<kangarooSteps/numTame && kangarooLoopActive && isRunning){
-            const idx=Number(dist%BigInt(NUM_STEPS));
-            pos+=JUMP_SIZES[idx];
-            dist+=JUMP_SIZES[idx];
-            jumps++;
-            kangarooCount++;
-            
-            if(jumps%100===0){
-                const privHex=pos.toString(16).padStart(64,'0');
-                const pubHex=pubFromPriv(privHex);
-                if(pubHex && pubHex===targetPubHex){
-                    await foundPrivateKey(privHex);
+                if(batchJumps > 0) self.postMessage({type: "PROGRESS", jumps: batchJumps});
+                if(wildTotalJumps >= wildMax) {
+                    self.postMessage({type: "WILD_DONE"});
                     return;
                 }
+                setTimeout(loop, 0);
             }
+            loop();
         }
-    }
+    };
+</script>
 
-    // Wild kangaroos (lopen vanaf target)
-    const numWild=Math.min(numW*2, 8);
-    const targetPoint=hexToPoint(targetPubHex);
-    if(!targetPoint) return;
+<script>
+    (function(){
+        let workers=[], globalTraps=new Map(), totalJumps=0, cumulativeWildJumps=0;
+        let startTime=0, epoch=0, isRunning=false, tameDone=0, wildDone=0;
+        let lastSpeed=0, lastTime=0;
+        const logBox=document.getElementById('logBox'), startBtn=document.getElementById('startBtn'), stopBtn=document.getElementById('stopBtn');
+        const statusVal=document.getElementById('statusVal'), progressBar=document.getElementById('progressBar');
 
-    for(let i=0;i<numWild && kangarooLoopActive && isRunning;i++){
-        let pos=targetPoint;
-        let dist=0n;
-        let jumps=0;
-        
-        while(jumps<kangarooSteps/numWild && kangarooLoopActive && isRunning){
-            const idx=Number(dist%BigInt(NUM_STEPS));
-            pos=pointAdd(pos, JUMP_POINTS[idx]);
-            dist+=JUMP_SIZES[idx];
-            jumps++;
-            kangarooCount++;
+        function log(msg,cls=''){
+            const ts=new Date().toLocaleTimeString('nl-NL');
+            const div=document.createElement('div');
+            div.innerHTML=`<span class="ts">[${ts}]</span> ${msg}`;
+            if(cls) div.className=cls;
+            logBox.appendChild(div);
+            logBox.scrollTop=logBox.scrollHeight;
+        }
+        function setStatus(txt,cls=''){ statusVal.textContent=txt; statusVal.className=cls; }
+        function killWorkers(){ workers.forEach(w=>{try{w.terminate();}catch(_){}}); workers=[]; }
+        function calculateSubRange(){
+            const A=BigInt("0x"+document.getElementById('rangeStart').value.trim());
+            const B=BigInt("0x"+document.getElementById('rangeEnd').value.trim());
+            const W=B-A, SCALE=1000000n;
+            const s=BigInt(Math.floor(parseFloat(document.getElementById('pctStart').value)*10000));
+            const e=BigInt(Math.floor(parseFloat(document.getElementById('pctEnd').value)*10000));
+            return {start:(A+(W*s)/SCALE).toString(16), end:(A+(W*e)/SCALE).toString(16)};
+        }
+        function makeWorker(){
+            const code=document.getElementById('workerCode').textContent;
+            return new Worker(URL.createObjectURL(new Blob([code],{type:'text/javascript'})));
+        }
+        function setRunning(v){ isRunning=v; startBtn.disabled=v; stopBtn.disabled=!v; }
+
+        // --- OPTIMISER & TIME ESTIMATE ---
+        function updateOptimizer(){
+            const paths=parseInt(document.getElementById('pathsSlider').value);
+            const steps=parseInt(document.getElementById('stepsPerPath').value);
+            const wild=parseInt(document.getElementById('wildJumps').value);
+            const useNeg=document.getElementById('useNegation').value === "true";
             
-            const ph=pointToHex(pos);
-            if(ph){
-                if(ph in highTraps){
-                    const trapData=highTraps[ph];
-                    const privHex=(BigInt(trapData.dist)+dist).toString(16).padStart(64,'0');
-                    const pubHex=pubFromPriv(privHex);
-                    if(pubHex && pubHex===targetPubHex){
-                        await foundPrivateKey(privHex);
-                        return;
-                    }
-                }
-                if(ph in lowTraps){
-                    const trapData=lowTraps[ph];
-                    const privHex=(BigInt(trapData.dist)+dist).toString(16).padStart(64,'0');
-                    const pubHex=pubFromPriv(privHex);
-                    if(pubHex && pubHex===targetPubHex){
-                        await foundPrivateKey(privHex);
-                        return;
-                    }
-                }
+            document.getElementById('pathsVal').textContent=`${paths} × ${steps} stappen`;
+
+            const baseWork=200*1500+3000000;
+            const curWork=paths*steps+wild;
+            const speedFactor=curWork/baseWork;
+
+            const dpMask=parseInt(document.getElementById('dpFilter').value);
+            let maskFactor=1.0;
+            if(dpMask>1023) maskFactor=0.8; else if(dpMask<255) maskFactor=1.2;
+
+            // Negation optimization theorethisch x2 boost op zoekruimte
+            const negBoost = useNeg ? 2.0 : 1.0; 
+            const totalFactor=(speedFactor * maskFactor * negBoost).toFixed(2);
+            document.getElementById('boostVal').textContent=((totalFactor-1)*100).toFixed(0)+'%';
+
+            if(lastSpeed>0){
+                const rangeStart=BigInt("0x"+document.getElementById('rangeStart').value.trim());
+                const rangeEnd=BigInt("0x"+document.getElementById('rangeEnd').value.trim());
+                const N=Number(rangeEnd-rangeStart);
+                const effectiveN = useNeg ? N / 2 : N; // Zoekruimte gehalveerd door negatieve spiegeling
+                
+                const expectedJumps=2*Math.sqrt(effectiveN);
+                const seconds=expectedJumps/(lastSpeed*(speedFactor*maskFactor));
+                const timeStr=seconds>3.15e13? (seconds/3.15e13).toFixed(1)+' mln jaar'
+                    : seconds>3.15e7? (seconds/3.15e7).toFixed(0)+' jaar'
+                    : seconds>86400? (seconds/86400).toFixed(0)+' d'
+                    : seconds>3600? (seconds/3600).toFixed(1)+' h'
+                    : seconds.toFixed(0)+' s';
+                document.getElementById('optTimeEstimate').innerHTML=`<strong>⏱ Verwachte tijd:</strong> ${timeStr} (bij huidige snelheid)`;
+            }else{
+                document.getElementById('optTimeEstimate').innerHTML=`<strong>⏱ Verwachte tijd:</strong> start scan om te berekenen`;
             }
         }
-        
-        document.getElementById('kangarooCount').textContent=kangarooCount;
-        const elapsed=(Date.now()-startTime)/1000;
-        if(elapsed>0){
-            document.getElementById('speed').textContent=`${Math.floor(kangarooCount/elapsed)}/s`;
-        }
-        if(i%2===0) log(`🦘 ${kangarooCount.toLocaleString()} kangaroo sprongen gedaan...`);
-    }
 
-    if(kangarooLoopActive && isRunning){
-        log(`🔄 Kangaroo ronde klaar (${kangarooCount.toLocaleString()} sprongen), herstart...`);
-        setTimeout(()=>{
-            if(kangarooLoopActive && isRunning) {
-                runKangarooPhase(targetPubHex, highTraps, lowTraps, numW);
+        // --- CENTRALE KANS & CALCULUS UPDATE ---
+        function updateAllStats(){
+            const T=globalTraps.size;
+            const W=cumulativeWildJumps;
+            const rangeStart=BigInt("0x"+document.getElementById('rangeStart').value.trim());
+            const rangeEnd=BigInt("0x"+document.getElementById('rangeEnd').value.trim());
+            const N=Number(rangeEnd-rangeStart);
+            if(N<=0) return;
+
+            const useNeg=document.getElementById('useNegation').value === "true";
+            const effectiveN = useNeg ? N / 2 : N;
+
+            // Poisson parameter
+            const lambda=(T*W)/effectiveN*0.8;
+            const kans=1-Math.exp(-lambda);
+            const logKans=Math.log10(Math.max(kans,1e-300));
+
+            // Gauge
+            const gaugeNorm=Math.max(0,Math.min(1,(logKans+15)/15));
+            document.getElementById('gaugeFill').style.strokeDashoffset=238.76-gaugeNorm*238.76;
+            document.getElementById('gaugePct').textContent=(gaugeNorm*100).toFixed(2)+'%';
+            document.getElementById('kansBar').style.width=Math.max(0.01,gaugeNorm*100)+'%';
+            document.getElementById('coveragePct').textContent=(kans*100).toExponential(2)+'%';
+            document.getElementById('jumpsCoverage').textContent=W.toLocaleString()+' wild sprongen';
+            document.getElementById('chanceScientific').innerHTML=`1 op ~2<sup>${(Math.log2(1/(kans+1e-300))).toFixed(0)}</sup>`;
+            document.getElementById('chanceUitleg').innerHTML=`Accumulatie actief. Totaal <strong>${epoch}</strong> rondes, <strong>${T.toLocaleString()}</strong> vallen.`;
+
+            document.getElementById('cmpUniverse').textContent= effectiveN>1e30? '~2¹³⁴' : effectiveN.toExponential(1);
+            document.getElementById('cmpLottery').textContent=(1/(kans+1e-300)/7e6).toExponential(1)+'×';
+
+            const now=Date.now();
+            const elapsed=(now-startTime)/1000;
+            let currentSpeed=0;
+            if(elapsed>0.5) currentSpeed=Math.floor(totalJumps/elapsed);
+            document.getElementById('speed').textContent=currentSpeed.toLocaleString()+' /s';
+            lastSpeed=currentSpeed;
+            lastTime=now;
+
+            if(currentSpeed>0){
+                const sec=1/(kans+1e-300)/currentSpeed;
+                let t;
+                if(sec>3.15e13) t=(sec/3.15e13).toExponential(1)+' mln jaar';
+                else if(sec>3.15e7) t=(sec/3.15e7).toFixed(0)+' jaar';
+                else t=sec.toExponential(1)+' sec';
+                document.getElementById('cmpTime').textContent=t;
             }
-        }, 100);
-    }
-}
 
-// === RANGE REDUCTION FASE ===
-async function runRangeReduction(targetPubHex, numW){
-    if(!isRunning) return;
-    
-    const rangeStart=BigInt("0x"+document.getElementById('rangeStart').value.trim());
-    const rangeEnd=BigInt("0x"+document.getElementById('rangeEnd').value.trim());
-    const W=rangeEnd-rangeStart;
-    
-    const newRangeEnd = rangeStart + (W / 2n);
-    document.getElementById('rangeEnd').value = newRangeEnd.toString(16).padStart(64,'0');
-    
-    log(`📉 Range verkleind tot: ${document.getElementById('rangeStart').value} - ${document.getElementById('rangeEnd').value}`);
-    document.getElementById('progressBar').style.width='10%';
-    
-    mitmHighTraps={};
-    mitmLowTraps={};
-    totalJumps=0;
-    kangarooLoopActive=false;
-    
-    log('🔄 Herstarten met verkleinde range...');
-    await runMITM();
-}
+            if(currentSpeed>0 && T>0){
+                const wildSpeed=currentSpeed*(cumulativeWildJumps/totalJumps||0.5);
+                const gradient=(T/effectiveN*wildSpeed)*Math.exp(-lambda);
+                document.getElementById('calcGradient').textContent=gradient.toExponential(3)+' /s';
+                document.getElementById('calcPoisson').textContent=(kans*100).toExponential(4)+' %';
+            }else{
+                document.getElementById('calcGradient').textContent='0.00e+0 /s';
+                document.getElementById('calcPoisson').textContent='0.0000 %';
+            }
 
-// === FOUND HANDLER ===
-async function foundPrivateKey(privHex){
-    kangarooLoopActive=false;
-    setRunning(false); killWorkers();
-    setStatus('🎉 GEVONDEN!','running');
-    document.getElementById('progressBar').style.width='100%';
-    
-    const wifPayload="80"+privHex+"01";
-    const s1=await sha256Hex(wifPayload);
-    const s2=await sha256Hex(s1);
-    const wif=toBase58(wifPayload+s2.slice(0,8));
-    
-    log(`🎉 GEVONDEN! Privé: ${privHex}`, 'ev-found');
-    document.getElementById('matchTable').innerHTML=`
-        <tr class="found-row">
-            <td>✅ MATCH</td>
-            <td>${wif}</td>
-            <td>${privHex}</td>
-        </tr>`;
-}
+            const ramMB=(T*200/1e6).toFixed(1);
+            document.getElementById('ramUsage').textContent=ramMB+' MB';
+            document.getElementById('wildJumpsTotal').textContent=cumulativeWildJumps.toLocaleString();
+            document.getElementById('trapCount').textContent=T.toLocaleString();
+            document.getElementById('epochCount').textContent=epoch;
+            document.getElementById('cmpEpochs').textContent=epoch;
+        }
 
-// === INITIALISATIE ===
-const savedData=loadFromStorage();
-if(savedData){
-    log('📂 Opgeslagen state gevonden! Gebruik "Load" om te hervatten.');
-    document.getElementById('saveStatus').textContent='Beschikbaar';
-}
+        // --- EPOCH CONTROLE ---
+        function nextEpoch(){
+            if(!isRunning) return;
+            epoch++;
+            tameDone=0; wildDone=0;
+            document.getElementById('progressBar').style.width='10%';
+            const numW=Math.max(1,parseInt(document.getElementById('numW').value)||4);
+            const range=calculateSubRange();
+            const paths=parseInt(document.getElementById('pathsSlider').value);
+            const steps=parseInt(document.getElementById('stepsPerPath').value);
+            const dpMask=parseInt(document.getElementById('dpFilter').value);
+            const useNegation=document.getElementById('useNegation').value === "true";
+            
+            killWorkers();
+            setStatus('TAME — Net vergroten','tame');
+            log(`🏁 Ronde ${epoch} — TAME fase met ${numW} workers`, 'ev-epoch');
+            for(let i=0;i<numW;i++){
+                const w=makeWorker();
+                workers.push(w);
+                w.onmessage=(ev)=>{
+                    if(ev.data.type==="TAME_READY"){
+                        for(const k in ev.data.traps) globalTraps.set(k,ev.data.traps[k]);
+                        totalJumps+=ev.data.jumps;
+                        tameDone++;
+                        if(tameDone===numW){
+                            log(`✅ TAME voltooid — ${globalTraps.size.toLocaleString()} vallen in RAM`, 'ev-tame');
+                            document.getElementById('progressBar').style.width='40%';
+                            startWild(numW,range);
+                        }
+                    }
+                };
+                w.postMessage({type:"TAME",rangeStartStr:range.start,rangeEndStr:range.end,
+                    targetPubHex:document.getElementById('pubKey').value.trim(),workerId:i,pathsPerWorker:paths,stepsPerPath:steps,dpMask,useNegation});
+            }
+        }
 
-log('🦘 Kangaroo √N geladen - klaar voor MITM + Kangaroo + Range Reduction');
-log('⚙️ Configuratie: DP masker = 0x0F (elke 16e punt wordt opgeslagen)');
-log('💡 Tips: Start de MITM fase eerst, daarna automatisch Kangaroo');
+        function startWild(numW,range){
+            if(!isRunning) return;
+            killWorkers();
+            setStatus('WILD — jacht','running');
+            log(`🦘 WILD jacht met ${globalTraps.size} vallen`, 'ev-epoch');
+            document.getElementById('progressBar').style.width='55%';
+            const trapObj=Object.fromEntries(globalTraps);
+            const targetPubHex=document.getElementById('pubKey').value.trim();
+            const maxWildJumps=parseInt(document.getElementById('wildJumps').value);
+            const useNegation=document.getElementById('useNegation').value === "true";
+
+            for(let i=0;i<numW;i++){
+                const w=makeWorker();
+                workers.push(w);
+                w.onmessage=(ev)=>{
+                    if(ev.data.type==="PROGRESS"){
+                        totalJumps+=ev.data.jumps;
+                        cumulativeWildJumps+=ev.data.jumps;
+                        updateAllStats();
+                        document.getElementById('totalJumps').textContent=totalJumps.toLocaleString();
+                        const pct=Math.min(95,55+(cumulativeWildJumps/(maxWildJumps*numW))*40);
+                        document.getElementById('progressBar').style.width=pct+'%';
+                    }else if(ev.data.type==="WILD_DONE"){
+                        wildDone++;
+                        if(wildDone===numW){
+                            log(`🔄 Ronde ${epoch} afgerond. Volgende accumulatie...`, 'ev-epoch');
+                            document.getElementById('progressBar').style.width='0%';
+                            setTimeout(nextEpoch,50);
+                        }
+                    }else if(ev.data.type==="FOUND"){
+                        setRunning(false); killWorkers();
+                        setStatus('🎉 GEVONDEN!','running');
+                        document.getElementById('progressBar').style.width='100%';
+                        document.getElementById('gaugeFill').style.strokeDashoffset='0';
+                        document.getElementById('gaugePct').textContent='100%';
+                        document.getElementById('kansBar').style.width='100%';
+                        log(`🎉 PRIVÉSLEUTEL GEVONDEN!`, 'ev-found');
+                        document.getElementById('matchTable').innerHTML=`
+                            <tr class="found-row"><td>✅ MATCH</td><td style="font-size:.65rem">${ev.data.wif}</td><td style="font-size:.65rem">${ev.data.privHex}</td></tr>`;
+                    }
+                };
+                w.postMessage({type:"WILD",rangeStartStr:range.start,rangeEndStr:range.end,targetPubHex,traps:trapObj,workerId:i,maxWildJumps,useNegation});
+            }
+        }
+
+        startBtn.onclick=()=>{
+            if(isRunning) return;
+            totalJumps=0; cumulativeWildJumps=0; epoch=0;
+            globalTraps.clear();
+            startTime=Date.now();
+            lastSpeed=0;
+            ['totalJumps','speed','epochCount','trapCount','wildJumpsTotal'].forEach(id=>document.getElementById(id).textContent='0');
+            progressBar.style.width='0%';
+            setRunning(true);
+            log('🚀 Accumulerende Kangaroo gestart', 'ev-epoch');
+            nextEpoch();
+        };
+        stopBtn.onclick=()=>{
+            setRunning(false); killWorkers();
+            setStatus('Gestopt');
+            progressBar.style.width='0%';
+            log(`🛑 Scanner gepauzeerd. ${globalTraps.size} vallen in RAM.`, 'ev-stop');
+        };
+
+        setInterval(()=>{ if(isRunning) updateAllStats(); }, 500);
+        updateOptimizer();
+        updateAllStats();
+        log('⚡ Calculus-geïntegreerde Kangaroo geladen met Equivalence Classes.');
+    })();
 </script>
 </body>
 </html>
