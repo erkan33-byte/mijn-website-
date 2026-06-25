@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #71 – Random Slice Sniper (2³⁵ Keys)</title>
+    <title>Puzzel #71 – Random Slice Sniper (Auto-Hop)</title>
     <style>
         :root {
             --bg: #07090f;
@@ -72,7 +72,7 @@
             border-radius: 3px; padding: 7px 10px; font-family: inherit; font-size: .78rem; outline: none; width: 100%;
         }
         .field input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0, 255, 153, .12); }
-        .field input[type="number"] { max-width: 120px; }
+        .field input[type="number"] { max-width: 150px; }
         .divider { border: none; border-top: 1px dashed var(--dim); margin: 14px 0; }
         .btn-row { display: flex; gap: 10px; margin-top: 4px; }
         .btn {
@@ -126,6 +126,7 @@
         .log .ev-found { color: var(--warn); font-weight: bold; }
         .log .ev-epoch { color: var(--accent2); }
         .log .ev-stop { color: var(--danger); }
+        .log .ev-hop { color: var(--warn); font-style: italic; }
         .result-table { width: 100%; border-collapse: collapse; font-size: .72rem; }
         .result-table th {
             background: var(--surface); color: var(--accent2); letter-spacing: .1em; font-size: .62rem;
@@ -142,8 +143,8 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – Dynamisch Plakje van 2³⁵ Keys · Elke Refresh Uniek</div>
-            <span class="badge">SLICE MODE (2³⁵ SIZE)</span>
+            <div class="sub">Puzzel #71 – Dynamisch Plakje van 2³⁵ Keys · Auto-Hop</div>
+            <span class="badge">AUTO-HOP MODE</span>
         </div>
         <div class="card">
             <div class="card-title">⚙ Actieve Plakje Configuratie</div>
@@ -158,13 +159,17 @@
                     <option value="linear">📏 Lineair door plakje heen</option>
                 </select>
             </div>
+            <div class="field">
+                <label>Keys per Plakje (Daarna Switch)</label>
+                <input id="keysLimit" value="10000000" type="number" min="1000">
+            </div>
             <hr class="divider">
             <div class="field"><label>Workers (CPU Cores)</label><input id="numW" value="4" type="number" min="1" max="32"></div>
-            <div class="field"><label>Geselecteerd Plakje Start</label><input id="rangeStart" value="" type="text" readonly style="color: var(--accent2); background: rgba(0,0,0,0.2);"></div>
-            <div class="field"><label>Geselecteerd Plakje Eind</label><input id="rangeEnd" value="" type="text" readonly style="color: var(--accent2); background: rgba(0,0,0,0.2);"></div>
-            <div style="font-size: 0.65rem; color: var(--muted); margin-top: 6px; text-align: right;">ℹ️ Deze HEX-waarden veranderen automatisch bij elke pagina-refresh.</div>
+            <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" readonly style="color: var(--accent2); background: rgba(0,0,0,0.2);"></div>
+            <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" readonly style="color: var(--accent2); background: rgba(0,0,0,0.2);"></div>
+            <div style="font-size: 0.65rem; color: var(--muted); margin-top: 6px; text-align: right;">ℹ️ Deze HEX-waarden vernieuwen na het bereiken van je ingestelde key limiet.</div>
             <div class="btn-row">
-                <button class="btn btn-start" id="startBtn">▶ Start Slice Scan</button>
+                <button class="btn btn-start" id="startBtn">▶ Start Auto-Hop Scan</button>
                 <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
             </div>
         </div>
@@ -176,17 +181,17 @@
                     <div class="value" id="calcGradient" style="color:#7fcfff">0.00e+0 /s</div>
                 </div>
                 <div class="stat-cell" style="background:rgba(0,0,0,0.3); border-color:#1a3a5c;">
-                    <div class="label" style="color:var(--accent2)">Sessie Dekking (P)</div>
+                    <div class="label" style="color:var(--accent2)">Limiet Dekking (P)</div>
                     <div class="value" id="calcPoisson" style="color:#7fcfff">0.0000 %</div>
                 </div>
             </div>
             <div class="formula-box" style="background:rgba(0,0,0,0.5); border-left:3px solid var(--accent2); padding:10px; font-size:.75rem; color:#bfe4ff; line-height:1.5;">
-                P = k / N_slice &nbsp; (keys gescand / grootte van dit plakje)<br>
-                dP/dt = v / N_slice &nbsp; (scansnelheid / grootte van dit plakje)
+                P = k / N_limiet &nbsp; (keys gescand / hop limiet)<br>
+                dP/dt = v / N_limiet &nbsp; (scansnelheid / hop limiet)
             </div>
         </div>
         <div class="chance-card">
-            <div class="chance-title">🎲 Voortgang binnen dit Plakje (2³⁵)</div>
+            <div class="chance-title">🎲 Voortgang tot volgende Hop</div>
             <div class="chance-main">
                 <div class="chance-gauge">
                     <svg viewBox="0 0 100 100">
@@ -197,18 +202,18 @@
                 </div>
                 <div class="chance-info">
                     <div class="big-number" id="chanceScientific">0.00%</div>
-                    <div class="label-small">van huidige zone doorzocht</div>
+                    <div class="label-small">van limiet bereikt</div>
                     <div class="kans-uitleg" id="chanceUitleg">Nog niet gestart.</div>
                 </div>
             </div>
             <div class="kans-progress">
-                <div class="kp-label"><span>Dekkingsgraad actieve zone</span><span id="coveragePct">0.000000%</span></div>
+                <div class="kp-label"><span>Dekkingsgraad tot Switch</span><span id="coveragePct">0.000000%</span></div>
                 <div class="kans-track"><div class="kans-fill" id="kansBar" style="width:0%"></div></div>
-                <div class="kans-pct-label" id="jumpsCoverage">0 keys gescand</div>
+                <div class="kans-pct-label" id="jumpsCoverage">0 keys in dit plakje</div>
             </div>
             <div class="comparison-grid">
                 <div class="cmp-cell"><div class="cmp-label">🌌 Plakje Grootte</div><div class="cmp-val" id="cmpUniverse">2³⁵ keys</div><div class="cmp-desc">34.359.738.368 opties</div></div>
-                <div class="cmp-cell"><div class="cmp-label">⏱ Tijd tot 100% slice</div><div class="cmp-val" id="cmpTime">—</div><div class="cmp-desc">volledige zone scan</div></div>
+                <div class="cmp-cell"><div class="cmp-label">⏱ Tijd tot hop</div><div class="cmp-val" id="cmpTime">—</div><div class="cmp-desc">tijd tot nieuwe zone</div></div>
                 <div class="cmp-cell"><div class="cmp-label">🎰 Globale Puzzel 71 Kans</div><div class="cmp-val" id="cmpLottery">0.00e+0</div><div class="cmp-desc">statistische trefkans</div></div>
                 <div class="cmp-cell"><div class="cmp-label">📡 % van Puzzel 71</div><div class="cmp-val" id="cmpEpochs">0%</div></div>
             </div>
@@ -217,11 +222,11 @@
             <div class="card-title">📊 Sessie Statistieken</div>
             <div class="stats-grid">
                 <div class="stat-cell"><div class="label">Status</div><div class="value" id="statusVal">Gestopt</div></div>
-                <div class="stat-cell"><div class="label">Keys gescand</div><div class="value" id="keysScanned">0</div></div>
+                <div class="stat-cell"><div class="label">Totaal Gescand</div><div class="value" id="keysScanned">0</div></div>
                 <div class="stat-cell"><div class="label">Snelheid</div><div class="value" id="speed">0 /s</div></div>
-                <div class="stat-cell"><div class="label">Plakje Uitgeput</div><div class="value" id="ramUsage">0.00%</div></div>
+                <div class="stat-cell"><div class="label">Plakjes bezocht</div><div class="value" id="slicesVisitedCount">1</div></div>
             </div>
-            <div style="margin-top:10px;font-size:.7rem;color:var(--muted);">Totaal binnen dit plakje gescand: <span id="totalJumps">0</span> / 34.359.738.368</div>
+            <div style="margin-top:10px;font-size:.7rem;color:var(--muted);">In dit plakje: <span id="currentSliceKeys">0</span> / <span id="limitDisplay">10.000.000</span></div>
             <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
         </div>
         <div class="card"><div class="card-title">📋 Activiteitenlog</div><div class="log" id="logBox"></div></div>
@@ -232,7 +237,7 @@
                 <tbody id="matchTable"><tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Random Slice Sniper · Geladen met 2³⁵ zoekomvang · Live Berekening</div>
+        <div class="footer">Random Slice Sniper · Auto-Hop functionaliteit ingeschakeld · Live Berekening</div>
     </div>
 
     <script id="workerCode" type="javascript/worker">
@@ -380,6 +385,9 @@
     <script>
         (function() {
             let workers = [], totalJumps = 0, cumulativeScanned = 0;
+            let currentSliceScanned = 0; // Telt keys in huidige plakje
+            let slicesVisited = 1;       // Telt aantal plakjes
+            let targetLimit = 10000000;  // Standaard limiet (uit input)
             let startTime = 0, isRunning = false;
             
             // Harde grootte van het plakje: 2^35 keys
@@ -411,15 +419,12 @@
                 workers = [];
             }
 
-            // --- DE DYNAMISCHE SLICE GENERATOR OP LOAD ---
             function generateRandomSlice() {
                 const globalStart = BigInt("0x400000000000000000");
                 const globalEnd = BigInt("0x7fffffffffffffffff");
                 
-                // Bereken maximale offset om niet buiten Puzzel 71 te schieten
                 const maxOffset = (globalEnd - globalStart + 1n) - SLICE_SIZE;
                 
-                // Veilige cryptografische random BigInt generator
                 const bits = maxOffset.toString(2).length;
                 const bytes = Math.ceil(bits / 8);
                 const arr = new Uint8Array(bytes);
@@ -434,8 +439,7 @@
                 document.getElementById('rangeStart').value = sliceStart.toString(16);
                 document.getElementById('rangeEnd').value = sliceEnd.toString(16);
 
-                log(`🎲 Succesvol verbonden met Puzzel #71 range!`, 'ev-epoch');
-                log(`🎯 Uniek plakje van 2³³ + 2³⁴ (= 2³⁵) keys afgesneden.`);
+                log(`🎯 Nieuw uniek plakje afgesneden (2³⁵ keys).`);
                 log(`📍 Start HEX: 0x${sliceStart.toString(16)}`);
                 log(`📍 Eind HEX:  0x${sliceEnd.toString(16)}`);
             }
@@ -494,27 +498,31 @@
             }
 
             function updateAllStats() {
+                // Lees actuele limiet, update UI
+                targetLimit = Number(document.getElementById('keysLimit').value) || 10000000;
+                document.getElementById('limitDisplay').textContent = targetLimit.toLocaleString();
+                document.getElementById('slicesVisitedCount').textContent = slicesVisited.toLocaleString();
+
+                const limitNum = Number(targetLimit);
                 const W = cumulativeScanned;
-                const N_slice = Number(SLICE_SIZE);
                 
-                // Bereken voortgang binnen dit specifieke plakje
-                const sliceProgress = Math.min(1, W / N_slice);
+                // Bereken voortgang naar de HOP (de ingestelde limiet)
+                const hopProgress = Math.min(1, currentSliceScanned / limitNum);
 
-                document.getElementById('gaugePct').textContent = (sliceProgress * 100).toFixed(1) + '%';
-                document.getElementById('gaugeFill').style.strokeDashoffset = 238.76 - (sliceProgress * 238.76);
-                document.getElementById('kansBar').style.width = (sliceProgress * 100) + '%';
-                document.getElementById('coveragePct').textContent = (sliceProgress * 100).toFixed(6) + '%';
-                document.getElementById('jumpsCoverage').textContent = W.toLocaleString() + ' keys gescand';
+                document.getElementById('gaugePct').textContent = (hopProgress * 100).toFixed(1) + '%';
+                document.getElementById('gaugeFill').style.strokeDashoffset = 238.76 - (hopProgress * 238.76);
+                document.getElementById('kansBar').style.width = (hopProgress * 100) + '%';
+                document.getElementById('coveragePct').textContent = (hopProgress * 100).toFixed(2) + '%';
+                document.getElementById('jumpsCoverage').textContent = currentSliceScanned.toLocaleString() + ' keys gescand';
 
-                document.getElementById('chanceScientific').innerHTML = `${(sliceProgress * 100).toFixed(4)}%`;
+                document.getElementById('chanceScientific').innerHTML = `${(hopProgress * 100).toFixed(2)}%`;
                 document.getElementById('chanceUitleg').innerHTML =
-                    `Je scant nu met een verhoogde dichtheid binnen een zone van 34,35 miljard sleutels.`;
+                    `Wanneer dit de 100% raakt, hopt het systeem direct naar een ander plakje!`;
 
-                // Globale kans ten opzichte van heel Puzzel 71
+                // Globale kans ten opzichte van heel Puzzel 71 (blijft gebaseerd op totale jumps)
                 const globaleKans = Number(W) / Number(PUZZLE_71_TOTAL);
                 document.getElementById('cmpLottery').textContent = globaleKans.toExponential(4);
                 
-                // Percentage van de totale puzzel dat dit plakje beslaat
                 const trefPercentage = (Number(SLICE_SIZE) / Number(PUZZLE_71_TOTAL)) * 100;
                 document.getElementById('cmpEpochs').textContent = trefPercentage.toExponential(6) + '%';
                 
@@ -525,55 +533,62 @@
                 document.getElementById('speed').textContent = currentSpeed.toLocaleString() + ' /s';
 
                 if (currentSpeed > 0) {
-                    const remainingKeys = N_slice - W;
-                    const secondsToCompleteSlice = remainingKeys / currentSpeed;
-                    document.getElementById('cmpTime').textContent = formatSeconds(secondsToCompleteSlice);
+                    const remainingToHop = limitNum - currentSliceScanned;
+                    const secondsToHop = remainingToHop / currentSpeed;
+                    document.getElementById('cmpTime').textContent = formatSeconds(secondsToHop);
                     
                     document.getElementById('calcGradient').textContent = currentSpeed.toLocaleString() + ' /s';
-                    document.getElementById('calcPoisson').textContent = (sliceProgress * 100).toFixed(4) + ' %';
+                    document.getElementById('calcPoisson').textContent = (hopProgress * 100).toFixed(2) + ' %';
                 }
 
-                document.getElementById('ramUsage').textContent = (sliceProgress * 100).toFixed(2) + '%';
-                progressBar.style.width = (sliceProgress * 100) + '%';
+                progressBar.style.width = (hopProgress * 100) + '%';
                 document.getElementById('keysScanned').textContent = cumulativeScanned.toLocaleString();
-                document.getElementById('totalJumps').textContent = totalJumps.toLocaleString();
+                document.getElementById('currentSliceKeys').textContent = currentSliceScanned.toLocaleString();
             }
 
-            function startAddressScan() {
-                if (isRunning) return;
+            function spawnWorkers() {
                 const targetAddr = document.getElementById('btcAddr').value.trim();
-                if (!targetAddr) { log('❌ Voer een Bitcoin adres in.'); return; }
-                
                 let targetChecksum;
                 try {
                     const decodedHex = fromBase58(targetAddr);
-                    if (decodedHex.length !== 50) throw new Error('Geen geldig P2PKH adres.');
                     targetChecksum = decodedHex.slice(-8);
-                } catch (e) { log('❌ Ongeldig adres: ' + e.message); return; }
+                } catch (e) { return; }
 
                 const startBI = BigInt("0x" + document.getElementById('rangeStart').value);
                 const endBI = BigInt("0x" + document.getElementById('rangeEnd').value);
                 const totalRange = endBI - startBI + 1n;
                 const numW = Math.max(1, parseInt(document.getElementById('numW').value) || 4);
                 const method = document.getElementById('scanMethod').value;
-
-                totalJumps = 0;
-                cumulativeScanned = 0;
-                startTime = Date.now();
+                
+                // Zeker weten dat workers leeg zijn
                 killWorkers();
-                setRunning(true);
-                setStatus('Sniper Actief', 'running');
-                log(`🔍 Aanval geopend op dit plakje met ${numW} workers via ${method} scan.`, 'ev-epoch');
-
                 let workersDone = 0;
-                let lastLogUpdate = 0;
+                let lastLogUpdate = currentSliceScanned;
 
                 function handleProgress(count) {
+                    if (!isRunning) return;
+                    
                     totalJumps += count;
                     cumulativeScanned += count;
-                    if (cumulativeScanned - lastLogUpdate >= 250000) {
-                        lastLogUpdate = cumulativeScanned;
-                        log(`📊 ${cumulativeScanned.toLocaleString()} keys gecontroleerd in deze zone...`, 'ev-epoch');
+                    currentSliceScanned += count;
+                    
+                    if (currentSliceScanned - lastLogUpdate >= 500000) {
+                        lastLogUpdate = currentSliceScanned;
+                        log(`📊 ${currentSliceScanned.toLocaleString()} keys gescand in dit huidige plakje...`, 'ev-epoch');
+                    }
+
+                    // Check of we de limiet hebben bereikt voor een hop
+                    if (currentSliceScanned >= targetLimit && isRunning) {
+                        log(`🔄 Limiet van ${targetLimit.toLocaleString()} bereikt! Switchen naar nieuw plakje...`, 'ev-hop');
+                        killWorkers();
+                        generateRandomSlice();
+                        slicesVisited++;
+                        currentSliceScanned = 0;
+                        
+                        // Korte pauze voor de UI en daarna meteen weer spawnWorkers
+                        setTimeout(() => {
+                            if (isRunning) spawnWorkers();
+                        }, 50);
                     }
                 }
 
@@ -594,24 +609,25 @@
 
                     worker.onmessage = (ev) => {
                         if (ev.data.type === "WORKER_STARTED") {
-                            if(method === 'linear') {
-                                log(`🟢 Worker ${ev.data.workerId} klaargezet op sub-segment.`);
-                            }
+                            // Stil, om log spam bij het hoppen te voorkomen
                         } else if (ev.data.type === "PROGRESS") {
                             handleProgress(ev.data.count);
                         } else if (ev.data.type === "SCAN_DONE") {
                             workersDone++;
                             if (workersDone === numW) {
-                                setRunning(false);
-                                setStatus('Afgerond');
-                                updateAllStats();
-                                log('🏁 Dit plakje van 2³⁵ is volledig uitgekampt. Ververs de pagina voor een nieuwe zone!');
+                                // Mocht het hele 2^35 plakje gescand zijn (zeer onwaarschijnlijk tenzij limiet enorm is)
+                                log('🏁 Dit plakje van 2³⁵ is volledig uitgekampt. Hoppen naar de volgende!');
+                                killWorkers();
+                                generateRandomSlice();
+                                slicesVisited++;
+                                currentSliceScanned = 0;
+                                setTimeout(() => { if (isRunning) spawnWorkers(); }, 50);
                             }
                         } else if (ev.data.type === "FOUND") {
                             setRunning(false);
                             killWorkers();
                             setStatus('🎉 GEVONDEN!', 'running');
-                            log('🎉 PRIVÉSLEUTEL GEVONDEN BINNEN DIT PLAKJE!', 'ev-found');
+                            log('🎉 PRIVÉSLEUTEL GEVONDEN!', 'ev-found');
                             document.getElementById('matchTable').innerHTML =
                                 `<tr><td>✅ MATCH</td><td style="font-size:.65rem">${ev.data.wif}</td><td style="font-size:.65rem">${ev.data.privHex}</td></tr>`;
                         } else if (ev.data.type === "WORKER_ERROR") {
@@ -631,12 +647,36 @@
                 }
             }
 
+            function startAddressScan() {
+                if (isRunning) return;
+                const targetAddr = document.getElementById('btcAddr').value.trim();
+                if (!targetAddr) { log('❌ Voer een Bitcoin adres in.'); return; }
+                
+                try {
+                    const decodedHex = fromBase58(targetAddr);
+                    if (decodedHex.length !== 50) throw new Error('Geen geldig P2PKH adres.');
+                } catch (e) { log('❌ Ongeldig adres: ' + e.message); return; }
+
+                targetLimit = Number(document.getElementById('keysLimit').value) || 10000000;
+
+                totalJumps = 0;
+                cumulativeScanned = 0;
+                currentSliceScanned = 0;
+                slicesVisited = 1;
+                startTime = Date.now();
+                setRunning(true);
+                setStatus('Sniper Actief', 'running');
+                log(`🔍 Auto-Hop geactiveerd! Doel per plakje is ${targetLimit.toLocaleString()} keys.`, 'ev-epoch');
+
+                spawnWorkers();
+            }
+
             startBtn.onclick = () => { if (!isRunning) startAddressScan(); };
             stopBtn.onclick = () => {
                 setRunning(false);
                 killWorkers();
                 setStatus('Gestopt');
-                log(`🛑 Sniper handmatig gepauzeerd.`, 'ev-stop');
+                log(`🛑 Auto-Hop Sniper handmatig gepauzeerd.`, 'ev-stop');
             };
 
             // Genereer direct een willekeurige start- en eindlocatie bij het opstarten
