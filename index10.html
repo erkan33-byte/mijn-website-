@@ -244,7 +244,7 @@
     }
 
     self.onmessage = function(e){
-        const {type, rangeStartStr, rangeEndStr, targetPubHex, workerId, maxWildJumps, pathsPerWorker, useNegation} = e.data;
+        const {type, rangeStartStr, rangeEndStr, targetPubHex, workerId, maxWildJumps, pathsPerWorker} = e.data;
         const rangeStart = BigInt("0x"+rangeStartStr);
         const rangeEnd = BigInt("0x"+rangeEndStr);
         initJumps(rangeStart, rangeEnd);
@@ -253,26 +253,30 @@
             const localTraps = {};
             const paths = pathsPerWorker || 500;
             const steps = 1500;
-            const mask = 1023n; // 10-bit DP
+            const mask = 1023n; 
             let jumpsCount = 0;
+            let trapLimit = 250000; // Geheugen-bescherming
 
             for(let p=0; p<paths; p++){
                 let currKey = randBigInt(rangeStart, rangeEnd);
                 let currPoint = G.mul(currKey.toString(16));
 
                 for(let i=0; i<steps; i++){
-                    if(useNegation && currPoint.getY().isOdd()){ currPoint = currPoint.neg(); currKey = (N_BIG - currKey) % N_BIG; }
-
                     const pubHex = currPoint.encode('hex', true);
                     const hash = sha256(pubHex);
                     const hashInt = BigInt("0x" + hash.slice(0, 8));
-                    if ((hashInt & mask) === 0n) localTraps[pubHex] = currKey.toString(16);
+                    
+                    if ((hashInt & mask) === 0n) {
+                        localTraps[pubHex] = currKey.toString(16);
+                        if(Object.keys(localTraps).length >= trapLimit) break;
+                    }
 
                     const r = parseInt(pubHex.substr(2,8), 16) % NUM_STEPS;
                     currPoint = currPoint.add(JUMP_POINTS[r]);
                     currKey = (currKey + JUMP_SIZES[r]) % N_BIG;
                     jumpsCount++;
                 }
+                if(Object.keys(localTraps).length >= trapLimit) break;
             }
             self.postMessage({type: "TAME_READY", traps: localTraps, jumps: jumpsCount, workerId});
             return;
@@ -292,34 +296,23 @@
             function loop(){
                 let batchJumps = 0;
                 for(let i=0; i<wildMaxBatch && wildTotalJumps < wildMax; i++){
-                    if(useNegation && currPoint.getY().isOdd()){ currPoint = currPoint.neg(); wildC = -wildC; wildD = (N_BIG - wildD) % N_BIG; }
-
                     const pubHex = currPoint.encode('hex', true);
-
                     if(wildTraps[pubHex]){
                         const tameKey = BigInt("0x" + wildTraps[pubHex]);
-                        let secretKey = wildC === 1n ? (tameKey - wildD + N_BIG) % N_BIG : (wildD - tameKey + N_BIG) % N_BIG;
-
-                        if(secretKey > 0n){
-                            const privHexCheck = secretKey.toString(16).padStart(64, '0');
-                            try {
-                                const keyPairCheck = ec.keyFromPrivate(privHexCheck);
-                                if(keyPairCheck.getPublic().encode('hex', true) === targetPubHex.trim().toLowerCase()){
-                                    const wifPayload = "80" + privHexCheck + "01";
-                                    const doubleSha = sha256(sha256(wifPayload));
-                                    self.postMessage({type: "FOUND", privHex: privHexCheck, wif: toBase58(wifPayload + doubleSha.slice(0,8))});
-                                    return;
-                                }
-                            } catch(err) {}
+                        let secretKey = (tameKey - wildD + N_BIG) % N_BIG;
+                        const privHexCheck = secretKey.toString(16).padStart(64, '0');
+                        if(ec.keyFromPrivate(privHexCheck).getPublic().encode('hex', true) === targetPubHex.trim().toLowerCase()){
+                            const wifPayload = "80" + privHexCheck + "01";
+                            const doubleSha = sha256(sha256(wifPayload));
+                            self.postMessage({type: "FOUND", privHex: privHexCheck, wif: toBase58(wifPayload + doubleSha.slice(0,8))});
+                            return;
                         }
                     }
-
                     const r = parseInt(pubHex.substr(2,8), 16) % NUM_STEPS;
                     currPoint = currPoint.add(JUMP_POINTS[r]);
                     wildD = (wildD + JUMP_SIZES[r]) % N_BIG;
                     wildTotalJumps++; batchJumps++;
                 }
-
                 if(batchJumps > 0) self.postMessage({type: "PROGRESS", jumps: batchJumps});
                 if(wildTotalJumps >= wildMax) { self.postMessage({type: "WILD_DONE"}); return; }
                 setTimeout(loop, 0);
@@ -327,6 +320,86 @@
             loop();
         }
     };
+</script>
+
+<script>
+    (function(){
+        let workers=[], globalTraps=new Map(), totalJumps=0, cumulativeWildJumps=0;
+        let startTime=0, sliceEpochs=0, isRunning=false;
+        const logBox=document.getElementById('logBox'), startBtn=document.getElementById('startBtn'), stopBtn=document.getElementById('stopBtn');
+        
+        function log(msg,cls=''){ const d=document.createElement('div'); d.innerHTML=`[${new Date().toLocaleTimeString()}] ${msg}`; if(cls) d.className=cls; logBox.appendChild(d); logBox.scrollTop=logBox.scrollHeight; }
+        function killWorkers(){ workers.forEach(w=>w.terminate()); workers=[]; }
+
+        window.randomizeSliceIndex = function(){
+            const A = BigInt("0x" + document.getElementById('rangeStart').value.trim());
+            const B = BigInt("0x" + document.getElementById('rangeEnd').value.trim());
+            const sliceWidth = 1n << BigInt(document.getElementById('sliceBits').value);
+            const maxSlices = (B - A) / sliceWidth;
+            const arr = new Uint8Array(16); window.crypto.getRandomValues(arr);
+            let randIdx = BigInt("0x" + Array.from(arr,b=>b.toString(16).padStart(2,'0')).join('')) % maxSlices;
+            document.getElementById('sliceIndex').value = randIdx.toString();
+            updateSniperBounds();
+        }
+
+        window.updateSniperBounds = function(){
+            const A = BigInt("0x" + document.getElementById('rangeStart').value.trim());
+            const sliceWidth = 1n << BigInt(document.getElementById('sliceBits').value);
+            const start = A + (sliceWidth * BigInt(document.getElementById('sliceIndex').value || "0"));
+            document.getElementById('currentSliceStart').textContent = "0x" + start.toString(16);
+            document.getElementById('currentSliceEnd').textContent = "0x" + (start + sliceWidth - 1n).toString(16);
+            return {start: start.toString(16), end: (start + sliceWidth - 1n).toString(16), width: sliceWidth};
+        }
+
+        function nextEpoch(){
+            if(!isRunning) return;
+            
+            // TRUE SHOTGUN: Elke ronde opnieuw een willekeurige locatie
+            window.randomizeSliceIndex();
+            
+            globalTraps.clear(); 
+            cumulativeWildJumps = 0;
+            log(`🎯 SHOTGUN: Nieuwe ronde gestart op willekeurige positie.`, 'ev-epoch');
+            
+            const range = updateSniperBounds();
+            const numW = parseInt(document.getElementById('numW').value);
+            let tameDone = 0;
+
+            killWorkers();
+            for(let i=0; i<numW; i++){
+                const w = new Worker(URL.createObjectURL(new Blob([document.getElementById('workerCode').textContent],{type:'text/javascript'})));
+                workers.push(w);
+                w.onmessage = (e) => {
+                    if(e.data.type === "TAME_READY"){
+                        for(const k in e.data.traps) globalTraps.set(k, e.data.traps[k]);
+                        if(++tameDone === numW) startWild(numW, range);
+                    }
+                };
+                w.postMessage({type:"TAME", ...range, targetPubHex:document.getElementById('pubKey').value.trim(), workerId:i, pathsPerWorker:parseInt(document.getElementById('pathsSlider').value)});
+            }
+        }
+
+        function startWild(numW, range){
+            const trapObj = Object.fromEntries(globalTraps);
+            let wildDone = 0;
+            for(let i=0; i<numW; i++){
+                workers[i].onmessage = (e) => {
+                    if(e.data.type === "PROGRESS") { cumulativeWildJumps += e.data.jumps; document.getElementById('wildJumpsTotal').textContent = cumulativeWildJumps.toLocaleString(); }
+                    else if(e.data.type === "WILD_DONE") { if(++wildDone === numW) nextEpoch(); }
+                    else if(e.data.type === "FOUND") { 
+                        isRunning=false; killWorkers(); 
+                        document.getElementById('matchTable').innerHTML=`<tr><td>MATCH</td><td>${e.data.wif}</td><td>0x${e.data.privHex}</td></tr>`;
+                        alert("GEVONDEN: " + e.data.wif);
+                    }
+                };
+                workers[i].postMessage({type:"WILD", ...range, targetPubHex:document.getElementById('pubKey').value.trim(), traps:trapObj, maxWildJumps:parseInt(document.getElementById('wildJumps').value)});
+            }
+        }
+
+        startBtn.onclick = () => { isRunning=true; startBtn.disabled=true; stopBtn.disabled=false; nextEpoch(); };
+        stopBtn.onclick = () => { isRunning=false; killWorkers(); startBtn.disabled=false; stopBtn.disabled=true; };
+        window.randomizeSliceIndex();
+    })();
 </script>
 
 <script>
