@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Hybride Kangaroo — Volledige Calculus Integratie</title>
+    <title>Puzzel #135 — Hybride Kangaroo + Sniper Slice</title>
     <style>
         :root {
             --bg: #07090f;
@@ -11,6 +11,7 @@
             --border: #1f2937;
             --accent: #00ff99;
             --accent2: #00c3ff;
+            --sniper: #ef4444;
             --calculus: #d633ff;
             --warn: #f59e0b;
             --danger: #ef4444;
@@ -22,69 +23,45 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: 'Courier New', monospace;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            padding: 24px 16px 48px;
+            background: var(--bg); color: var(--text);
+            min-height: 100vh; padding: 24px 16px 48px;
         }
         body::before {
-            content: '';
-            position: fixed; inset: 0;
+            content: ''; position: fixed; inset: 0;
             background: repeating-linear-gradient(transparent 0px, transparent 3px, rgba(0,255,153,.015) 3px, rgba(0,255,153,.015) 4px);
             pointer-events: none; z-index: 999;
         }
         .container { max-width: 760px; margin: 0 auto; }
         .header { text-align: center; margin-bottom: 28px; }
-        .header h1 { font-size: 1.6rem; letter-spacing: .2em; color: var(--accent); text-shadow: 0 0 18px var(--accent); text-transform: uppercase; }
+        .header h1 { font-size: 1.5rem; letter-spacing: .15em; color: var(--accent); text-shadow: 0 0 18px var(--accent); text-transform: uppercase; }
         .header .sub { font-size: .72rem; color: var(--muted); letter-spacing: .12em; margin-top: 6px; }
-        .badge {
-            display: inline-block; background: linear-gradient(90deg, #1a2a1a, #0d2010);
-            border: 1px solid var(--accent); color: var(--accent); font-size: .62rem; letter-spacing: .15em;
-            padding: 3px 10px; border-radius: 2px; margin-top: 10px;
-        }
-        .card, .calc-card, .opt-card, .chance-card {
-            background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 20px; margin-bottom: 16px;
-        }
+        .badge { display: inline-block; background: linear-gradient(90deg, #1a2a1a, #0d2010); border: 1px solid var(--accent); color: var(--accent); font-size: .62rem; letter-spacing: .15em; padding: 3px 10px; border-radius: 2px; margin-top: 10px; }
+        .card, .calc-card, .opt-card, .chance-card, .sniper-card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 20px; margin-bottom: 16px; }
         .calc-card { background: linear-gradient(135deg, #14051a 0%, #0d0514 100%); border-color: #4a156d; }
         .opt-card { background: linear-gradient(135deg, #0f1a0a 0%, #0d1f10 100%); border-color: #1a5c2a; }
-        .chance-card {
-            background: linear-gradient(135deg, #0a0f1a 0%, #0d1520 100%); border-color: #1a3a5c;
-            position: relative; overflow: hidden;
-        }
-        .chance-card::before {
-            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
-            background: radial-gradient(ellipse at center, rgba(0,195,255,.04) 0%, transparent 60%);
-            pointer-events: none;
-        }
-        .card-title, .calc-title, .opt-title, .chance-title {
-            font-size: .65rem; letter-spacing: .18em; text-transform: uppercase;
-            border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px;
-        }
+        .sniper-card { background: linear-gradient(135deg, #1f0a0a 0%, #120505 100%); border-color: #7f1d1d; }
+        .chance-card { background: linear-gradient(135deg, #0a0f1a 0%, #0d1520 100%); border-color: #1a3a5c; position: relative; overflow: hidden; }
+        .card-title, .calc-title, .opt-title, .chance-title, .sniper-title { font-size: .65rem; letter-spacing: .18em; text-transform: uppercase; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px; }
         .calc-title { color: var(--calculus); border-color: #4a156d; }
         .opt-title { color: var(--accent); border-color: #1a5c2a; }
         .chance-title { color: var(--accent2); border-color: #1a3a5c; }
+        .sniper-title { color: var(--sniper); border-color: #7f1d1d; }
+        
         .field { display: grid; grid-template-columns: 210px 1fr; align-items: center; gap: 10px; margin-bottom: 12px; }
         .field label { font-size: .72rem; color: var(--muted); letter-spacing: .06em; }
-        .field input, select {
-            background: var(--surface); color: var(--accent); border: 1px solid var(--dim); border-radius: 3px;
-            padding: 7px 10px; font-family: inherit; font-size: .78rem; outline: none; width: 100%;
-        }
+        .field input, select { background: var(--surface); color: var(--accent); border: 1px solid var(--dim); border-radius: 3px; padding: 7px 10px; font-family: inherit; font-size: .78rem; outline: none; width: 100%; }
         .field input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,255,153,.12); }
-        .field input[type="number"] { max-width: 120px; }
+        .field input[type="number"] { max-width: 140px; }
         .divider { border: none; border-top: 1px dashed var(--dim); margin: 14px 0; }
         .btn-row { display: flex; gap: 10px; margin-top: 4px; }
-        .btn {
-            flex: 1; padding: 11px 16px; font-family: inherit; font-size: .8rem; font-weight: bold; letter-spacing: .1em;
-            cursor: pointer; border: none; border-radius: 4px; transition: opacity .15s, transform .1s;
-        }
+        .btn { flex: 1; padding: 11px 16px; font-family: inherit; font-size: .8rem; font-weight: bold; letter-spacing: .1em; cursor: pointer; border: none; border-radius: 4px; transition: opacity .15s, transform .1s; }
         .btn:active:not(:disabled) { transform: scale(.97); }
         .btn:disabled { opacity: .35; cursor: not-allowed; }
         .btn-start { background: var(--success); color: #000; }
         .btn-stop { background: var(--danger); color: #fff; }
+        
         .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .stat-cell {
-            background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 10px 14px;
-        }
+        .stat-cell { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 10px 14px; }
         .stat-cell .label { font-size: .6rem; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
         .stat-cell .value { font-size: 1.05rem; font-weight: bold; color: var(--accent); }
         #statusVal { color: var(--danger); }
@@ -96,162 +73,127 @@
         .chance-gauge { position: relative; width: 100px; height: 100px; flex-shrink: 0; }
         .chance-gauge svg { width: 100%; height: 100%; }
         .gauge-bg { fill: none; stroke: #1a2a3a; stroke-width: 8; }
-        .gauge-fill {
-            fill: none; stroke: var(--accent2); stroke-width: 8; stroke-linecap: round;
-            transition: stroke-dashoffset 1s ease; transform: rotate(-90deg); transform-origin: 50% 50%;
-        }
-        .gauge-label {
-            position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-            font-size: .62rem; color: var(--muted); text-align: center; line-height: 1.3;
-        }
+        .gauge-fill { fill: none; stroke: var(--accent2); stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 1s ease; transform: rotate(-90deg); transform-origin: 50% 50%; }
+        .gauge-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: .62rem; color: var(--muted); text-align: center; line-height: 1.3; }
         .gauge-label span { font-size: 1rem; color: var(--accent2); font-weight: bold; }
         .chance-info { flex: 1; }
         .chance-info .big-number { font-size: 1.1rem; color: var(--accent2); font-weight: bold; letter-spacing: .05em; word-break: break-all; margin-bottom: 4px; }
         .chance-info .label-small { font-size: .62rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px; }
         .chance-info .kans-uitleg { font-size: .68rem; color: var(--text); line-height: 1.6; }
-        .comparison-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
-        .cmp-cell { background: rgba(0,0,0,.4); border: 1px solid #1a3a5c; border-radius: 4px; padding: 9px 12px; }
-        .cmp-cell .cmp-label { font-size: .58rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 3px; }
-        .cmp-cell .cmp-val { font-size: .78rem; color: var(--accent2); font-weight: bold; }
-        .cmp-cell .cmp-desc { font-size: .62rem; color: var(--muted); margin-top: 2px; }
-        .kans-progress { margin-top: 14px; }
-        .kans-progress .kp-label { display: flex; justify-content: space-between; font-size: .62rem; color: var(--muted); margin-bottom: 5px; }
-        .kans-track { height: 18px; background: #0a1520; border: 1px solid #1a3a5c; border-radius: 3px; overflow: hidden; position: relative; }
-        .kans-fill { height: 100%; background: linear-gradient(90deg, #003366, var(--accent2)); border-radius: 3px; transition: width 1s ease; position: relative; }
-        .kans-fill::after { content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 20px; background: rgba(255,255,255,.15); filter: blur(4px); }
-        .kans-pct-label { font-size: .62rem; color: var(--muted); text-align: right; margin-top: 4px; }
-        .sci-note { background: rgba(0,195,255,.05); border: 1px solid rgba(0,195,255,.15); border-radius: 4px; padding: 10px 14px; margin-top: 14px; font-size: .67rem; color: var(--muted); line-height: 1.7; }
-        .sci-note strong { color: var(--accent2); }
-        .opt-boost { display: flex; align-items: center; justify-content: space-between; background: rgba(0,255,153,.06); border: 1px solid rgba(0,255,153,.2); border-radius: 4px; padding: 10px 14px; margin-bottom: 10px; }
-        .opt-boost-label { font-size: .7rem; color: var(--accent); }
-        .opt-boost-val { font-size: 1.1rem; font-weight: bold; color: var(--accent); }
-        .range-val { font-size: .75rem; color: var(--accent); margin-top: 4px; }
+
         .log { background: #000; color: var(--accent); height: 150px; overflow-y: scroll; padding: 10px 12px; font-size: .72rem; line-height: 1.6; border-radius: 4px; border: 1px solid var(--border); }
         .log .ts { color: var(--muted); }
+        .log .ev-warn { color: var(--sniper); }
         .log .ev-found { color: var(--warn); font-weight: bold; }
         .log .ev-epoch { color: var(--accent2); }
-        .log .ev-stop { color: var(--danger); }
+        
         .result-table { width: 100%; border-collapse: collapse; font-size: .72rem; }
         .result-table th { background: var(--surface); color: var(--accent2); letter-spacing: .1em; font-size: .62rem; text-transform: uppercase; padding: 10px 12px; border: 1px solid var(--border); text-align: left; }
         .result-table td { border: 1px solid var(--border); padding: 9px 12px; color: var(--text); word-break: break-all; }
-        .footer { text-align: center; font-size: .6rem; color: var(--muted); letter-spacing: .1em; margin-top: 24px; }
+        .sniper-bounds-box { background: rgba(0,0,0,0.5); border: 1px dashed var(--sniper); padding: 10px; border-radius: 4px; margin-top: 10px; font-size: .65rem; color: var(--muted); }
+        .sniper-bounds-box span { color: var(--sniper); font-weight: bold; font-family: monospace; }
         ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: var(--surface); } ::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 3px; }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header">
-        <h1>🦘 Hybride Kangaroo (Calculus)</h1>
-        <div class="sub">Live Kans &amp; Gradiënt · Accumulerende RAM</div>
-        <span class="badge">POLLARD'S KANGAROO · INTEGRATED MATH</span>
+        <h1>🦘 Kangaroo + Sniper Slice</h1>
+        <div class="sub">Puzzel #135 · Lineair Verschuivend Venster</div>
+        <span class="badge">POLLARD'S KANGAROO · BERBEREIK 2¹³⁴ - 2¹³⁵</span>
     </div>
 
     <div class="card">
-        <div class="card-title">⚙ Configuratie</div>
+        <div class="card-title">⚙ Puzzel #135 Target &amp; Globale Grenzen</div>
         <div class="field"><label>Workers (CPU Cores)</label><input id="numW" value="4" type="number" min="1" max="32"></div>
-        <div class="field"><label>Target Public Key</label><input id="pubKey" value="02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16" type="text"></div>
-        <div class="field"><label>Target BTC Adres</label><input id="btcAddr" value="16RGFo6hjq9ym6Pj7N5H7L1NR1rVPJyw2v" type="text" disabled style="opacity:0.5;"></div>
+        <div class="field"><label>Target Public Key (135)</label><input id="pubKey" value="02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16" type="text" readonly style="opacity:0.85; background:rgba(0,0,0,0.2);"></div>
         <hr class="divider">
-        <div class="field"><label>Absoluut Start (HEX)</label><input id="rangeStart" value="4000000000000000000000000000000000" type="text"></div>
-        <div class="field"><label>Absoluut Eind (HEX)</label><input id="rangeEnd" value="7fffffffffffffffffffffffffffffffff" type="text"></div>
-        <hr class="divider">
-        <div class="field"><label>Zoekbereik Start (%)</label><input id="pctStart" value="0" type="number" step="0.1" min="0" max="100"></div>
-        <div class="field"><label>Zoekbereik Eind (%)</label><input id="pctEnd" value="100" type="number" step="0.1" min="0" max="100"></div>
-        <div class="btn-row">
-            <button class="btn btn-start" id="startBtn">▶ Start Accumulerende Scan</button>
-            <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
-        </div>
+        <div class="field"><label>Absoluut Start (HEX)</label><input id="rangeStart" value="4000000000000000000000000000000000" type="text" readonly style="color: var(--accent2); background: rgba(0,0,0,0.2);"></div>
+        <div class="field"><label>Absoluut Eind (HEX)</label><input id="rangeEnd" value="7fffffffffffffffffffffffffffffffff" type="text" readonly style="color: var(--accent2); background: rgba(0,0,0,0.2);"></div>
     </div>
 
-    <div class="calc-card">
-        <div class="calc-title">📐 Calculus Validatie &amp; Live Gradiënt</div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
-            <div class="stat-cell" style="background:rgba(0,0,0,0.3); border-color:#4a156d;">
-                <div class="label" style="color:var(--calculus)">Gradiënt dP/dt</div>
-                <div class="value" id="calcGradient" style="color:#f0b5ff">0.00e+0 /s</div>
-            </div>
-            <div class="stat-cell" style="background:rgba(0,0,0,0.3); border-color:#4a156d;">
-                <div class="label" style="color:var(--calculus)">Continue kans (λ)</div>
-                <div class="value" id="calcPoisson" style="color:#f0b5ff">0.0000 %</div>
+    <div class="sniper-card">
+        <div class="sniper-title">🎯 Sniper Slicer Mode</div>
+        <div class="field">
+            <label style="color:var(--sniper); font-weight:bold;">Activeer Sniper Mode</label>
+            <select id="useSniper" onchange="toggleSniper()" style="border-color:var(--sniper); background:rgba(239, 68, 68, 0.05); color:var(--sniper);">
+                <option value="false">Uitgeschakeld (Zoek in globaal %-bereik)</option>
+                <option value="true" selected>Ingeschakeld (Neem sequentiële plakjes)</option>
+            </select>
+        </div>
+        
+        <div id="sniperSettings">
+            <div class="field"><label>Slice Breedte (Bits)</label><input id="sliceBits" value="48" type="number" min="20" max="134" oninput="updateSniperBounds()"></div>
+            <div class="field"><label>Huidige Slice (Index #)</label><input id="sliceIndex" value="0" type="number" min="0" oninput="updateSniperBounds()"></div>
+            <div class="field"><label>Auto-Shift na Epochs</label><input id="autoShift" value="10" type="number" min="1"></div>
+            
+            <div class="sniper-bounds-box">
+                Actieve Vizier Start:<br> <span id="currentSliceStart">...</span><br><br>
+                Actieve Vizier Eind:<br> <span id="currentSliceEnd">...</span>
             </div>
         </div>
-        <div class="formula-box" style="background:rgba(0,0,0,0.5); border-left:3px solid var(--calculus); padding:10px; font-size:.75rem; color:#eabfff; line-height:1.5;">
-            λ = (T · W<sub>wild</sub>) / N<sub>effectief</sub> · 0.8<br>
-            P(kans) = 1 − e<sup>−λ</sup> &nbsp; | &nbsp; dP/dt = (T · v<sub>wild</sub> / N) · e<sup>−λ</sup>
+
+        <div id="pctSettings" style="display:none;">
+            <div class="field"><label>Sub-zoekbereik Start (%)</label><input id="pctStart" value="0" type="number" step="0.1" min="0" max="100"></div>
+            <div class="field"><label>Sub-zoekbereik Eind (%)</label><input id="pctEnd" value="100" type="number" step="0.1" min="0" max="100"></div>
         </div>
     </div>
 
     <div class="opt-card">
-        <div class="opt-title">⚡ Kans Optimizer — Impact op doorlooptijd</div>
-        <div class="opt-boost">
-            <div class="opt-boost-label">📈 Relatieve snelheid t.o.v. standaard</div>
-            <div class="opt-boost-val" id="boostVal">+0%</div>
-        </div>
+        <div class="opt-title">⚡ Matrix Optimizer</div>
         <div class="field" style="margin-bottom: 15px;">
-            <label style="color:var(--calculus); font-weight:bold;">Negation Optimization</label>
-            <select id="useNegation" onchange="updateOptimizer()" style="border-color:var(--calculus); background:rgba(214, 51, 255, 0.05);">
-                <option value="false">Uitgeschakeld (Standaard Interval Kangaroo)</option>
-                <option value="true">Ingeschakeld (Halveert zoekruimte, waarschuwing: breekt bounds!)</option>
+            <label>Negation Optimization</label>
+            <select id="useNegation">
+                <option value="false" selected>Uitgeschakeld (Vereist voor Slicing!)</option>
+                <option value="true">Ingeschakeld (Alleen globaal bereik)</option>
             </select>
         </div>
-        <div class="opt-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
-            <div class="opt-item"><div class="opt-label">Traps per worker</div><input type="range" id="pathsSlider" min="100" max="800" step="100" value="800" oninput="updateOptimizer()"><div class="range-val" id="pathsVal">800 × 1500 stappen</div></div>
-            <div class="opt-item"><div class="opt-label">DP Filter</div><select id="dpFilter" onchange="updateOptimizer()"><option value="1023">10-bit (snel)</option><option value="4095">12-bit (meer vallen)</option><option value="255">8-bit (minder)</option></select></div>
-            <div class="opt-item"><div class="opt-label">Wild Jumps/Epoch</div><select id="wildJumps" onchange="updateOptimizer()"><option value="1000000">1M</option><option value="3000000" selected>3M</option><option value="6000000">6M</option><option value="10000000">10M</option></select></div>
-            <div class="opt-item"><div class="opt-label">Stappen/pad (TAME)</div><select id="stepsPerPath" onchange="updateOptimizer()"><option value="1000">1000</option><option value="1500" selected>1500</option><option value="2500">2500</option><option value="4000">4000</option></select></div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+            <div class="field" style="grid-template-columns:1fr;"><label>Traps per worker (TAME)</label><input type="number" id="pathsSlider" value="500"></div>
+            <div class="field" style="grid-template-columns:1fr;"><label>Wild Jumps / Epoch</label><input type="number" id="wildJumps" value="2000000"></div>
         </div>
-        <div class="sci-note" id="optTimeEstimate"><strong>⏱ Verwachte tijd:</strong> —</div>
+        <div class="btn-row">
+            <button class="btn btn-start" id="startBtn">▶ Start Sniper Slicer</button>
+            <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
+        </div>
     </div>
 
     <div class="chance-card">
-        <div class="chance-title">🎲 Kans op Succes — Live Berekening</div>
+        <div class="chance-title">🎲 Lokale Plak-Dekking (Kans op Succes in actieve slice)</div>
         <div class="chance-main">
             <div class="chance-gauge">
                 <svg viewBox="0 0 100 100">
                     <circle class="gauge-bg" cx="50" cy="50" r="38"/>
                     <circle class="gauge-fill" cx="50" cy="50" r="38" id="gaugeFill" stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
                 </svg>
-                <div class="gauge-label"><span id="gaugePct">~0%</span>log-schaal</div>
+                <div class="gauge-label"><span id="gaugePct">~0%</span>dekking</div>
             </div>
             <div class="chance-info">
-                <div class="big-number" id="chanceScientific">1 op ~2<sup>?</sup></div>
-                <div class="label-small">benodigde operaties (Kangaroo algebraïsch)</div>
-                <div class="kans-uitleg" id="chanceUitleg">Nog niet gestart.</div>
+                <div class="big-number" id="chanceScientific">Kans in slice: 0%</div>
+                <div class="label-small">Kangaroo dekking in het huidige vizier</div>
+                <div class="kans-uitleg" id="chanceUitleg">Nog niet gestart. Pas slice breedte aan voor de beste resultaten.</div>
             </div>
-        </div>
-        <div class="kans-progress">
-            <div class="kp-label"><span>Gedekte zoekruimte (cumulatief)</span><span id="coveragePct">0.000000%</span></div>
-            <div class="kans-track"><div class="kans-fill" id="kansBar" style="width:0%"></div></div>
-            <div class="kans-pct-label" id="jumpsCoverage">0 wild sprongen</div>
-        </div>
-        <div class="comparison-grid">
-            <div class="cmp-cell"><div class="cmp-label">🌌 Zoekruimte</div><div class="cmp-val" id="cmpUniverse">—</div><div class="cmp-desc">mogelijke sleutels</div></div>
-            <div class="cmp-cell"><div class="cmp-label">⏱ Geschatte tijd</div><div class="cmp-val" id="cmpTime">—</div><div class="cmp-desc">bij huidige snelheid</div></div>
-            <div class="cmp-cell"><div class="cmp-label">🎰 Loterij factor</div><div class="cmp-val" id="cmpLottery">—</div><div class="cmp-desc">× staatsloterij</div></div>
-            <div class="cmp-cell"><div class="cmp-label">📡 Epochs voltooid</div><div class="cmp-val" id="cmpEpochs">0</div></div>
         </div>
     </div>
 
     <div class="card">
-        <div class="card-title">📊 Live Statistieken</div>
+        <div class="card-title">📊 Live Statistieken (Sessie)</div>
         <div class="stats-grid" id="statsGrid">
             <div class="stat-cell"><div class="label">Status</div><div class="value" id="statusVal">Gestopt</div></div>
-            <div class="stat-cell"><div class="label">Epoch</div><div class="value" id="epochCount">0</div></div>
-            <div class="stat-cell"><div class="label">Vallen (RAM)</div><div class="value" id="trapCount">0</div></div>
+            <div class="stat-cell"><div class="label">Actieve Slice #</div><div class="value" id="activeSliceVal">0</div></div>
+            <div class="stat-cell"><div class="label">Epoch (in Slice)</div><div class="value" id="epochCount">0</div></div>
             <div class="stat-cell"><div class="label">Snelheid</div><div class="value" id="speed">0 /s</div></div>
-            <div class="stat-cell"><div class="label">Wild sprongen</div><div class="value" id="wildJumpsTotal">0</div></div>
-            <div class="stat-cell"><div class="label">RAM schatting</div><div class="value" id="ramUsage">0 MB</div></div>
+            <div class="stat-cell"><div class="label">Vallen (RAM)</div><div class="value" id="trapCount">0</div></div>
+            <div class="stat-cell"><div class="label">Sprongen (Slice)</div><div class="value" id="wildJumpsTotal">0</div></div>
         </div>
-        <div style="margin-top:10px;font-size:.7rem;color:var(--muted);">Totaal sprongen: <span id="totalJumps">0</span></div>
         <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
     </div>
 
     <div class="card"><div class="card-title">📋 Activiteitenlog</div><div class="log" id="logBox"></div></div>
     <div class="card">
         <div class="card-title">🎯 Resultaten</div>
-        <table class="result-table"><thead><tr><th>Type</th><th>WIF</th><th>Privésleutel (HEX)</th></tr></thead><tbody id="matchTable"><tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr></tbody></table>
+        <table class="result-table"><thead><tr><th>Type</th><th>WIF (Sleutel)</th><th>Privésleutel (HEX)</th></tr></thead><tbody id="matchTable"><tr class="empty-row"><td colspan="3">Nog geen match gevonden binnen de vallenmatrix...</td></tr></tbody></table>
     </div>
-    <div class="footer">Hybride Kangaroo · Oneindige Accumulatie · Calculus Integratie</div>
 </div>
 
 <script id="workerCode" type="javascript/worker">
@@ -284,7 +226,7 @@
         const W = rangeEnd - rangeStart;
         let sqrtW = 1n;
         if(W>0n){ let x0=W/2n, x1=(x0+W/x0)/2n; while(x1<x0){x0=x1; x1=(x0+W/x0)/2n;} sqrtW=x0; }
-        for(let i=0;i<NUM_STEPS;i++){
+        for(let i=0; i<NUM_STEPS; i++){
             let size = (sqrtW * BigInt(i+1)) / BigInt(NUM_STEPS);
             if(size===0n) size=1n;
             JUMP_SIZES.push(size);
@@ -301,16 +243,16 @@
     }
 
     self.onmessage = function(e){
-        const {type, rangeStartStr, rangeEndStr, targetPubHex, workerId, maxWildJumps, pathsPerWorker, stepsPerPath, dpMask, useNegation} = e.data;
+        const {type, rangeStartStr, rangeEndStr, targetPubHex, workerId, maxWildJumps, pathsPerWorker, useNegation} = e.data;
         const rangeStart = BigInt("0x"+rangeStartStr);
         const rangeEnd = BigInt("0x"+rangeEndStr);
         initJumps(rangeStart, rangeEnd);
 
         if(type === "TAME"){
             const localTraps = {};
-            const paths = pathsPerWorker || 200;
-            const steps = stepsPerPath || 1500;
-            const mask = dpMask || 0x3FF;
+            const paths = pathsPerWorker || 500;
+            const steps = 1500;
+            const mask = 1023n; // 10-bit DP
             let jumpsCount = 0;
 
             for(let p=0; p<paths; p++){
@@ -318,18 +260,12 @@
                 let currPoint = G.mul(currKey.toString(16));
 
                 for(let i=0; i<steps; i++){
-                    // Negation Optimization wiskunde: Canonicalize Y
-                    if(useNegation && currPoint.getY().isOdd()){
-                        currPoint = currPoint.neg();
-                        currKey = (N_BIG - currKey) % N_BIG; // Inverse modulo N
-                    }
+                    if(useNegation && currPoint.getY().isOdd()){ currPoint = currPoint.neg(); currKey = (N_BIG - currKey) % N_BIG; }
 
                     const pubHex = currPoint.encode('hex', true);
-                    
-                    if((parseInt(pubHex.slice(-4), 16) & mask) === 0){
-                        // We slaan nu de exacte absKey op, wat wiskundig robuuster is
-                        localTraps[pubHex] = currKey.toString(16);
-                    }
+                    const hash = sha256(pubHex);
+                    const hashInt = BigInt("0x" + hash.slice(0, 8));
+                    if ((hashInt & mask) === 0n) localTraps[pubHex] = currKey.toString(16);
 
                     const r = parseInt(pubHex.substr(2,8), 16) % NUM_STEPS;
                     currPoint = currPoint.add(JUMP_POINTS[r]);
@@ -344,30 +280,23 @@
         if(type === "WILD"){
             const wildTraps = e.data.traps || {};
             const wildMaxBatch = 10000;
-            const wildMax = maxWildJumps || 3000000;
+            const wildMax = maxWildJumps || 2000000;
             const targetPubKey = ec.keyFromPublic(targetPubHex.trim().toLowerCase(), 'hex').getPublic();
 
             let wildTotalJumps = 0;
             let currPoint = targetPubKey;
-            let wildC = 1n; // Vermenigvuldiger (1 of -1)
-            let wildD = 0n; // Opgebouwde afstand
+            let wildC = 1n;
+            let wildD = 0n;
 
             function loop(){
                 let batchJumps = 0;
                 for(let i=0; i<wildMaxBatch && wildTotalJumps < wildMax; i++){
-                    
-                    // Negation Optimization wiskunde: Canonicalize Y
-                    if(useNegation && currPoint.getY().isOdd()){
-                        currPoint = currPoint.neg();
-                        wildC = -wildC;
-                        wildD = (N_BIG - wildD) % N_BIG; // Inverse afstand modulo N
-                    }
+                    if(useNegation && currPoint.getY().isOdd()){ currPoint = currPoint.neg(); wildC = -wildC; wildD = (N_BIG - wildD) % N_BIG; }
 
                     const pubHex = currPoint.encode('hex', true);
 
                     if(wildTraps[pubHex]){
                         const tameKey = BigInt("0x" + wildTraps[pubHex]);
-                        // Algebraïsche reconstructie van de target sleutel: Target = C * (tameKey - D) mod N
                         let secretKey = wildC === 1n ? (tameKey - wildD + N_BIG) % N_BIG : (wildD - tameKey + N_BIG) % N_BIG;
 
                         if(secretKey > 0n){
@@ -391,10 +320,7 @@
                 }
 
                 if(batchJumps > 0) self.postMessage({type: "PROGRESS", jumps: batchJumps});
-                if(wildTotalJumps >= wildMax) {
-                    self.postMessage({type: "WILD_DONE"});
-                    return;
-                }
+                if(wildTotalJumps >= wildMax) { self.postMessage({type: "WILD_DONE"}); return; }
                 setTimeout(loop, 0);
             }
             loop();
@@ -405,8 +331,7 @@
 <script>
     (function(){
         let workers=[], globalTraps=new Map(), totalJumps=0, cumulativeWildJumps=0;
-        let startTime=0, epoch=0, isRunning=false, tameDone=0, wildDone=0;
-        let lastSpeed=0, lastTime=0;
+        let startTime=0, sliceEpochs=0, isRunning=false, tameDone=0, wildDone=0;
         const logBox=document.getElementById('logBox'), startBtn=document.getElementById('startBtn'), stopBtn=document.getElementById('stopBtn');
         const statusVal=document.getElementById('statusVal'), progressBar=document.getElementById('progressBar');
 
@@ -420,142 +345,121 @@
         }
         function setStatus(txt,cls=''){ statusVal.textContent=txt; statusVal.className=cls; }
         function killWorkers(){ workers.forEach(w=>{try{w.terminate();}catch(_){}}); workers=[]; }
-        function calculateSubRange(){
-            const A=BigInt("0x"+document.getElementById('rangeStart').value.trim());
-            const B=BigInt("0x"+document.getElementById('rangeEnd').value.trim());
-            const W=B-A, SCALE=1000000n;
-            const s=BigInt(Math.floor(parseFloat(document.getElementById('pctStart').value)*10000));
-            const e=BigInt(Math.floor(parseFloat(document.getElementById('pctEnd').value)*10000));
-            return {start:(A+(W*s)/SCALE).toString(16), end:(A+(W*e)/SCALE).toString(16)};
+        
+        window.toggleSniper = function(){
+            const useSniper = document.getElementById('useSniper').value === "true";
+            document.getElementById('sniperSettings').style.display = useSniper ? "block" : "none";
+            document.getElementById('pctSettings').style.display = useSniper ? "none" : "block";
+            
+            // Forceer negation uit als Sniper aan staat (cruciaal voor integriteit slice)
+            if(useSniper) document.getElementById('useNegation').value = "false";
+            
+            updateSniperBounds();
         }
+
+        window.updateSniperBounds = function(){
+            const A = BigInt("0x" + document.getElementById('rangeStart').value.trim());
+            const B = BigInt("0x" + document.getElementById('rangeEnd').value.trim());
+            const sliceBits = BigInt(document.getElementById('sliceBits').value);
+            const sliceWidth = 1n << sliceBits;
+            const sliceIndex = BigInt(document.getElementById('sliceIndex').value);
+
+            let start = A + (sliceWidth * sliceIndex);
+            let end = start + sliceWidth - 1n;
+            if (end > B) end = B;
+
+            document.getElementById('currentSliceStart').textContent = "0x" + start.toString(16);
+            document.getElementById('currentSliceEnd').textContent = "0x" + end.toString(16);
+            return {start: start.toString(16), end: end.toString(16), width: (end - start + 1n)};
+        }
+
+        function calculateSubRange(){
+            if(document.getElementById('useSniper').value === "true"){
+                return updateSniperBounds();
+            } else {
+                const A=BigInt("0x"+document.getElementById('rangeStart').value.trim());
+                const B=BigInt("0x"+document.getElementById('rangeEnd').value.trim());
+                const W=B-A, SCALE=1000000n;
+                const s=BigInt(Math.floor(parseFloat(document.getElementById('pctStart').value)*10000));
+                const e=BigInt(Math.floor(parseFloat(document.getElementById('pctEnd').value)*10000));
+                let start = A+(W*s)/SCALE;
+                let end = A+(W*e)/SCALE;
+                return {start:start.toString(16), end:end.toString(16), width: (end - start)};
+            }
+        }
+
         function makeWorker(){
             const code=document.getElementById('workerCode').textContent;
             return new Worker(URL.createObjectURL(new Blob([code],{type:'text/javascript'})));
         }
-        function setRunning(v){ isRunning=v; startBtn.disabled=v; stopBtn.disabled=!v; }
 
-        // --- OPTIMISER & TIME ESTIMATE ---
-        function updateOptimizer(){
-            const paths=parseInt(document.getElementById('pathsSlider').value);
-            const steps=parseInt(document.getElementById('stepsPerPath').value);
-            const wild=parseInt(document.getElementById('wildJumps').value);
-            const useNeg=document.getElementById('useNegation').value === "true";
-            
-            document.getElementById('pathsVal').textContent=`${paths} × ${steps} stappen`;
-
-            const baseWork=200*1500+3000000;
-            const curWork=paths*steps+wild;
-            const speedFactor=curWork/baseWork;
-
-            const dpMask=parseInt(document.getElementById('dpFilter').value);
-            let maskFactor=1.0;
-            if(dpMask>1023) maskFactor=0.8; else if(dpMask<255) maskFactor=1.2;
-
-            // Negation optimization theorethisch x2 boost op zoekruimte
-            const negBoost = useNeg ? 2.0 : 1.0; 
-            const totalFactor=(speedFactor * maskFactor * negBoost).toFixed(2);
-            document.getElementById('boostVal').textContent=((totalFactor-1)*100).toFixed(0)+'%';
-
-            if(lastSpeed>0){
-                const rangeStart=BigInt("0x"+document.getElementById('rangeStart').value.trim());
-                const rangeEnd=BigInt("0x"+document.getElementById('rangeEnd').value.trim());
-                const N=Number(rangeEnd-rangeStart);
-                const effectiveN = useNeg ? N / 2 : N; // Zoekruimte gehalveerd door negatieve spiegeling
-                
-                const expectedJumps=2*Math.sqrt(effectiveN);
-                const seconds=expectedJumps/(lastSpeed*(speedFactor*maskFactor));
-                const timeStr=seconds>3.15e13? (seconds/3.15e13).toFixed(1)+' mln jaar'
-                    : seconds>3.15e7? (seconds/3.15e7).toFixed(0)+' jaar'
-                    : seconds>86400? (seconds/86400).toFixed(0)+' d'
-                    : seconds>3600? (seconds/3600).toFixed(1)+' h'
-                    : seconds.toFixed(0)+' s';
-                document.getElementById('optTimeEstimate').innerHTML=`<strong>⏱ Verwachte tijd:</strong> ${timeStr} (bij huidige snelheid)`;
-            }else{
-                document.getElementById('optTimeEstimate').innerHTML=`<strong>⏱ Verwachte tijd:</strong> start scan om te berekenen`;
-            }
-        }
-
-        // --- CENTRALE KANS & CALCULUS UPDATE ---
         function updateAllStats(){
             const T=globalTraps.size;
             const W=cumulativeWildJumps;
-            const rangeStart=BigInt("0x"+document.getElementById('rangeStart').value.trim());
-            const rangeEnd=BigInt("0x"+document.getElementById('rangeEnd').value.trim());
-            const N=Number(rangeEnd-rangeStart);
-            if(N<=0) return;
+            const range = calculateSubRange();
+            const rangeSize = range.width;
+            
+            let useNeg = document.getElementById('useNegation').value === "true";
+            if(document.getElementById('useSniper').value === "true") useNeg = false; 
 
-            const useNeg=document.getElementById('useNegation').value === "true";
-            const effectiveN = useNeg ? N / 2 : N;
+            let effectiveN = Number(rangeSize);
+            if(useNeg) effectiveN /= 2;
 
-            // Poisson parameter
-            const lambda=(T*W)/effectiveN*0.8;
-            const kans=1-Math.exp(-lambda);
-            const logKans=Math.log10(Math.max(kans,1e-300));
+            // Kansberekening λ = (T * W) / N * 0.8
+            const lambda = (T * W * 0.8) / Math.max(1, effectiveN);
+            const kans = 1 - Math.exp(-lambda);
 
-            // Gauge
-            const gaugeNorm=Math.max(0,Math.min(1,(logKans+15)/15));
-            document.getElementById('gaugeFill').style.strokeDashoffset=238.76-gaugeNorm*238.76;
-            document.getElementById('gaugePct').textContent=(gaugeNorm*100).toFixed(2)+'%';
-            document.getElementById('kansBar').style.width=Math.max(0.01,gaugeNorm*100)+'%';
-            document.getElementById('coveragePct').textContent=(kans*100).toExponential(2)+'%';
-            document.getElementById('jumpsCoverage').textContent=W.toLocaleString()+' wild sprongen';
-            document.getElementById('chanceScientific').innerHTML=`1 op ~2<sup>${(Math.log2(1/(kans+1e-300))).toFixed(0)}</sup>`;
-            document.getElementById('chanceUitleg').innerHTML=`Accumulatie actief. Totaal <strong>${epoch}</strong> rondes, <strong>${T.toLocaleString()}</strong> vallen.`;
-
-            document.getElementById('cmpUniverse').textContent= effectiveN>1e30? '~2¹³⁴' : effectiveN.toExponential(1);
-            document.getElementById('cmpLottery').textContent=(1/(kans+1e-300)/7e6).toExponential(1)+'×';
-
+            let gaugeNorm = Math.min(1, Math.max(0, kans));
+            // Als we een hele kleine N hebben (bv slice 40 bit), kan de kans snel naar 1 gaan
+            document.getElementById('gaugeFill').style.strokeDashoffset = 238.76 - gaugeNorm * 238.76;
+            document.getElementById('gaugePct').textContent = (gaugeNorm * 100).toFixed(2) + '%';
+            document.getElementById('chanceScientific').textContent = `Kans in slice: ${(gaugeNorm * 100).toFixed(4)}%`;
+            
             const now=Date.now();
             const elapsed=(now-startTime)/1000;
             let currentSpeed=0;
             if(elapsed>0.5) currentSpeed=Math.floor(totalJumps/elapsed);
             document.getElementById('speed').textContent=currentSpeed.toLocaleString()+' /s';
-            lastSpeed=currentSpeed;
-            lastTime=now;
 
-            if(currentSpeed>0){
-                const sec=1/(kans+1e-300)/currentSpeed;
-                let t;
-                if(sec>3.15e13) t=(sec/3.15e13).toExponential(1)+' mln jaar';
-                else if(sec>3.15e7) t=(sec/3.15e7).toFixed(0)+' jaar';
-                else t=sec.toExponential(1)+' sec';
-                document.getElementById('cmpTime').textContent=t;
-            }
-
-            if(currentSpeed>0 && T>0){
-                const wildSpeed=currentSpeed*(cumulativeWildJumps/totalJumps||0.5);
-                const gradient=(T/effectiveN*wildSpeed)*Math.exp(-lambda);
-                document.getElementById('calcGradient').textContent=gradient.toExponential(3)+' /s';
-                document.getElementById('calcPoisson').textContent=(kans*100).toExponential(4)+' %';
-            }else{
-                document.getElementById('calcGradient').textContent='0.00e+0 /s';
-                document.getElementById('calcPoisson').textContent='0.0000 %';
-            }
-
-            const ramMB=(T*200/1e6).toFixed(1);
-            document.getElementById('ramUsage').textContent=ramMB+' MB';
             document.getElementById('wildJumpsTotal').textContent=cumulativeWildJumps.toLocaleString();
             document.getElementById('trapCount').textContent=T.toLocaleString();
-            document.getElementById('epochCount').textContent=epoch;
-            document.getElementById('cmpEpochs').textContent=epoch;
+            document.getElementById('epochCount').textContent=sliceEpochs;
+            document.getElementById('activeSliceVal').textContent=document.getElementById('sliceIndex').value;
+            
+            document.getElementById('chanceUitleg').innerHTML = `Zoekvenster breedte: <strong>~2<sup>${Math.log2(effectiveN).toFixed(1)}</sup></strong> keys. Lokaal accumuleren binnen dit vizier.`;
         }
 
-        // --- EPOCH CONTROLE ---
         function nextEpoch(){
             if(!isRunning) return;
-            epoch++;
+            
+            const useSniper = document.getElementById('useSniper').value === "true";
+            let currentIdx = parseInt(document.getElementById('sliceIndex').value);
+            
+            if (useSniper && sliceEpochs >= parseInt(document.getElementById('autoShift').value)) {
+                // AUTO SHIFT NAAR VOLGENDE SLICE
+                currentIdx++;
+                document.getElementById('sliceIndex').value = currentIdx;
+                sliceEpochs = 0;
+                globalTraps.clear(); 
+                cumulativeWildJumps = 0; // Reset wilde sprongen voor de nieuwe slice kansberekening
+                log(`🎯 SNIPER AUTO-SHIFT: Plakje #${currentIdx-1} uitgewerkt. Vizier verschoven naar plakje #${currentIdx}. Geheugen gewist.`, 'ev-warn');
+                updateSniperBounds();
+            }
+
+            sliceEpochs++;
             tameDone=0; wildDone=0;
             document.getElementById('progressBar').style.width='10%';
+            
             const numW=Math.max(1,parseInt(document.getElementById('numW').value)||4);
             const range=calculateSubRange();
             const paths=parseInt(document.getElementById('pathsSlider').value);
-            const steps=parseInt(document.getElementById('stepsPerPath').value);
-            const dpMask=parseInt(document.getElementById('dpFilter').value);
-            const useNegation=document.getElementById('useNegation').value === "true";
+            let useNegation=document.getElementById('useNegation').value === "true";
+            if(useSniper) useNegation = false; // Security override
             
             killWorkers();
-            setStatus('TAME — Net vergroten','tame');
-            log(`🏁 Ronde ${epoch} — TAME fase met ${numW} workers`, 'ev-epoch');
+            setStatus('TAME — Net configureren','tame');
+            log(`🏁 Epoch ${sliceEpochs} (Slice #${currentIdx}) — TAME-vallenmatrix genereren...`, 'ev-epoch');
+            
             for(let i=0;i<numW;i++){
                 const w=makeWorker();
                 workers.push(w);
@@ -565,14 +469,14 @@
                         totalJumps+=ev.data.jumps;
                         tameDone++;
                         if(tameDone===numW){
-                            log(`✅ TAME voltooid — ${globalTraps.size.toLocaleString()} vallen in RAM`, 'ev-tame');
+                            log(`✅ TAME voltooid — ${globalTraps.size.toLocaleString()} unieke vallen actief in het plakje.`, 'ev-epoch');
                             document.getElementById('progressBar').style.width='40%';
                             startWild(numW,range);
                         }
                     }
                 };
                 w.postMessage({type:"TAME",rangeStartStr:range.start,rangeEndStr:range.end,
-                    targetPubHex:document.getElementById('pubKey').value.trim(),workerId:i,pathsPerWorker:paths,stepsPerPath:steps,dpMask,useNegation});
+                    targetPubHex:document.getElementById('pubKey').value.trim(),workerId:i,pathsPerWorker:paths,useNegation});
             }
         }
 
@@ -580,12 +484,12 @@
             if(!isRunning) return;
             killWorkers();
             setStatus('WILD — jacht','running');
-            log(`🦘 WILD jacht met ${globalTraps.size} vallen`, 'ev-epoch');
             document.getElementById('progressBar').style.width='55%';
             const trapObj=Object.fromEntries(globalTraps);
             const targetPubHex=document.getElementById('pubKey').value.trim();
             const maxWildJumps=parseInt(document.getElementById('wildJumps').value);
-            const useNegation=document.getElementById('useNegation').value === "true";
+            let useNegation=document.getElementById('useNegation').value === "true";
+            if(document.getElementById('useSniper').value === "true") useNegation = false;
 
             for(let i=0;i<numW;i++){
                 const w=makeWorker();
@@ -595,26 +499,23 @@
                         totalJumps+=ev.data.jumps;
                         cumulativeWildJumps+=ev.data.jumps;
                         updateAllStats();
-                        document.getElementById('totalJumps').textContent=totalJumps.toLocaleString();
                         const pct=Math.min(95,55+(cumulativeWildJumps/(maxWildJumps*numW))*40);
                         document.getElementById('progressBar').style.width=pct+'%';
                     }else if(ev.data.type==="WILD_DONE"){
                         wildDone++;
                         if(wildDone===numW){
-                            log(`🔄 Ronde ${epoch} afgerond. Volgende accumulatie...`, 'ev-epoch');
                             document.getElementById('progressBar').style.width='0%';
                             setTimeout(nextEpoch,50);
                         }
                     }else if(ev.data.type==="FOUND"){
-                        setRunning(false); killWorkers();
+                        isRunning=false; stopBtn.disabled=true; startBtn.disabled=false; killWorkers();
                         setStatus('🎉 GEVONDEN!','running');
                         document.getElementById('progressBar').style.width='100%';
                         document.getElementById('gaugeFill').style.strokeDashoffset='0';
                         document.getElementById('gaugePct').textContent='100%';
-                        document.getElementById('kansBar').style.width='100%';
-                        log(`🎉 PRIVÉSLEUTEL GEVONDEN!`, 'ev-found');
+                        log(`🎉 COLLISIE DETECTIE: PRIVÉSLEUTEL VOOR PUZZEL 135 GEVONDEN!`, 'ev-found');
                         document.getElementById('matchTable').innerHTML=`
-                            <tr class="found-row"><td>✅ MATCH</td><td style="font-size:.65rem">${ev.data.wif}</td><td style="font-size:.65rem">${ev.data.privHex}</td></tr>`;
+                            <tr style="background:rgba(16,185,129,0.2); font-weight:bold; color:var(--accent);"><td>✅ PUZZLE 135 MATCH</td><td style="font-size:.65rem; word-break:break-all;">${ev.data.wif}</td><td style="font-size:.65rem; word-break:break-all;">0x${ev.data.privHex}</td></tr>`;
                     }
                 };
                 w.postMessage({type:"WILD",rangeStartStr:range.start,rangeEndStr:range.end,targetPubHex,traps:trapObj,workerId:i,maxWildJumps,useNegation});
@@ -623,27 +524,34 @@
 
         startBtn.onclick=()=>{
             if(isRunning) return;
-            totalJumps=0; cumulativeWildJumps=0; epoch=0;
+            
+            const useSniper = document.getElementById('useSniper').value === "true";
+            if(useSniper && document.getElementById('useNegation').value === "true"){
+                log("⚠️ Waarschuwing: Negation Optimization geforceerd uitgeschakeld om lokaal binnen het plakje te blijven.", "ev-warn");
+                document.getElementById('useNegation').value = "false";
+            }
+
+            totalJumps=0; cumulativeWildJumps=0; sliceEpochs=0;
             globalTraps.clear();
             startTime=Date.now();
-            lastSpeed=0;
-            ['totalJumps','speed','epochCount','trapCount','wildJumpsTotal'].forEach(id=>document.getElementById(id).textContent='0');
+            ['speed','epochCount','trapCount','wildJumpsTotal'].forEach(id=>document.getElementById(id).textContent='0');
             progressBar.style.width='0%';
-            setRunning(true);
-            log('🚀 Accumulerende Kangaroo gestart', 'ev-epoch');
+            
+            isRunning=true; startBtn.disabled=true; stopBtn.disabled=false;
+            log(`🚀 Sniper Slicer gestart op Puzzel #135. Doelwit vastgezet op plakje #${document.getElementById('sliceIndex').value}...`, 'ev-epoch');
             nextEpoch();
         };
+        
         stopBtn.onclick=()=>{
-            setRunning(false); killWorkers();
+            isRunning=false; startBtn.disabled=false; stopBtn.disabled=true; killWorkers();
             setStatus('Gestopt');
             progressBar.style.width='0%';
-            log(`🛑 Scanner gepauzeerd. ${globalTraps.size} vallen in RAM.`, 'ev-stop');
+            log(`🛑 Slicer gepauzeerd in plakje #${document.getElementById('sliceIndex').value}.`, 'ev-warn');
         };
 
         setInterval(()=>{ if(isRunning) updateAllStats(); }, 500);
-        updateOptimizer();
-        updateAllStats();
-        log('⚡ Calculus-geïntegreerde Kangaroo geladen met Equivalence Classes.');
+        toggleSniper();
+        log('⚡ Hybride Kangaroo met Sniper Slicer-logica geladen.');
     })();
 </script>
 </body>
