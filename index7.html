@@ -155,8 +155,8 @@
             <div class="field">
                 <label>Scan methode (binnen plakje)</label>
                 <select id="scanMethod">
-                    <option value="random" selected>🎲 Willekeurig binnen plakje (aanbevolen)</option>
-                    <option value="linear">📏 Lineair door plakje heen</option>
+                    <option value="random">🎲 Willekeurig binnen plakje</option>
+                    <option value="linear" selected>📏 Lineair (Wiskundige Snelweg!)</option>
                 </select>
             </div>
             <div class="field">
@@ -237,7 +237,7 @@
                 <tbody id="matchTable"><tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Random Slice Sniper · Auto-Hop functionaliteit ingeschakeld · Live Berekening</div>
+        <div class="footer">Random Slice Sniper · Auto-Hop · Point Addition Snelweg</div>
     </div>
 
     <script id="workerCode" type="javascript/worker">
@@ -323,43 +323,47 @@
                 const method = data.method || 'random';
                 const workerId = data.workerId;
                 
-                const BATCH_SIZE = 250; 
-
-                function checkKey(privKey) {
-                    try {
-                        const privHex = privKey.toString(16).padStart(64, '0');
-                        const key = ec.keyFromPrivate(privHex);
-                        const pubHex = key.getPublic().encode('hex', true);
-                        const h160 = hash160(pubHex);
-                        const payload = '00' + h160;
-                        const checksum = doubleSha256(payload).slice(0, 8);
-                        if (checksum === targetChecksum) {
-                            const fullAddr = toBase58(payload + checksum);
-                            if (fullAddr === targetAddr) {
-                                const wifPayload = "80" + privHex + "01";
-                                const doubleSha = doubleSha256(wifPayload);
-                                const wif = toBase58(wifPayload + doubleSha.slice(0, 8));
-                                self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: fullAddr });
-                                return true;
-                            }
-                        }
-                    } catch (err) {}
-                    return false;
-                }
-
                 self.postMessage({ type: "WORKER_STARTED", workerId: workerId });
 
                 if (method === 'linear') {
+                    // --- POINT ADDITION SNELWEG (Lineair) ---
+                    const G = ec.curve.g;
                     let currentKey = startKey;
+                    
+                    // Bereken de eerste sleutel volledig (zwaar wiskundig proces)
+                    let currentPoint = G.mul(currentKey.toString(16));
+                    
+                    const LINEAR_BATCH_SIZE = 1000; // Hogere batch size omdat lineair nu veel sneller is
+
                     function step() {
                         let batchCount = 0;
-                        for(let i = 0; i < BATCH_SIZE; i++) {
+                        for(let i = 0; i < LINEAR_BATCH_SIZE; i++) {
                             if (currentKey > endKey) {
                                 if (batchCount > 0) self.postMessage({ type: "PROGRESS", count: batchCount, workerId });
                                 self.postMessage({ type: "SCAN_DONE", workerId });
                                 return;
                             }
-                            if (checkKey(currentKey)) return;
+                            
+                            // Haal de gecomprimeerde public key hex op van het huidige punt
+                            const pubHex = currentPoint.encode('hex', true);
+                            const h160 = hash160(pubHex);
+                            const payload = '00' + h160;
+                            const checksum = doubleSha256(payload).slice(0, 8);
+                            
+                            if (checksum === targetChecksum) {
+                                const fullAddr = toBase58(payload + checksum);
+                                if (fullAddr === targetAddr) {
+                                    const privHex = currentKey.toString(16).padStart(64, '0');
+                                    const wifPayload = "80" + privHex + "01";
+                                    const doubleSha = doubleSha256(wifPayload);
+                                    const wif = toBase58(wifPayload + doubleSha.slice(0, 8));
+                                    self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: fullAddr });
+                                    return;
+                                }
+                            }
+                            
+                            // DE MAGIE: Tellen we simpelweg G op bij het huidige punt voor de volgende iteratie
+                            currentPoint = currentPoint.add(G);
                             currentKey++;
                             batchCount++;
                         }
@@ -368,12 +372,37 @@
                     }
                     step();
                 } else {
+                    // --- ORIGINELE METHODE (Random - geen Point Addition mogelijk) ---
+                    const RANDOM_BATCH_SIZE = 250;
+                    
+                    function checkKeyRandom(privKey) {
+                        try {
+                            const privHex = privKey.toString(16).padStart(64, '0');
+                            const key = ec.keyFromPrivate(privHex);
+                            const pubHex = key.getPublic().encode('hex', true);
+                            const h160 = hash160(pubHex);
+                            const payload = '00' + h160;
+                            const checksum = doubleSha256(payload).slice(0, 8);
+                            if (checksum === targetChecksum) {
+                                const fullAddr = toBase58(payload + checksum);
+                                if (fullAddr === targetAddr) {
+                                    const wifPayload = "80" + privHex + "01";
+                                    const doubleSha = doubleSha256(wifPayload);
+                                    const wif = toBase58(wifPayload + doubleSha.slice(0, 8));
+                                    self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: fullAddr });
+                                    return true;
+                                }
+                            }
+                        } catch (err) {}
+                        return false;
+                    }
+
                     function randomLoop() {
-                        for(let i = 0; i < BATCH_SIZE; i++) {
+                        for(let i = 0; i < RANDOM_BATCH_SIZE; i++) {
                             const candidate = randBigIntInRange(startKey, endKey);
-                            if (checkKey(candidate)) return;
+                            if (checkKeyRandom(candidate)) return;
                         }
-                        self.postMessage({ type: "PROGRESS", count: BATCH_SIZE, workerId });
+                        self.postMessage({ type: "PROGRESS", count: RANDOM_BATCH_SIZE, workerId });
                         setTimeout(randomLoop, 0);
                     }
                     randomLoop();
@@ -385,14 +414,13 @@
     <script>
         (function() {
             let workers = [], totalJumps = 0, cumulativeScanned = 0;
-            let currentSliceScanned = 0; // Telt keys in huidige plakje
-            let slicesVisited = 1;       // Telt aantal plakjes
-            let targetLimit = 10000000;  // Standaard limiet (uit input)
+            let currentSliceScanned = 0; 
+            let slicesVisited = 1;       
+            let targetLimit = 10000000;  
             let startTime = 0, isRunning = false;
             
-            // Harde grootte van het plakje: 2^35 keys
             const SLICE_SIZE = 34359738368n; 
-            const PUZZLE_71_TOTAL = 1180591620717411303424n; // 2^70
+            const PUZZLE_71_TOTAL = 1180591620717411303424n; 
 
             const logBox = document.getElementById('logBox'),
                   startBtn = document.getElementById('startBtn'),
@@ -498,7 +526,6 @@
             }
 
             function updateAllStats() {
-                // Lees actuele limiet, update UI
                 targetLimit = Number(document.getElementById('keysLimit').value) || 10000000;
                 document.getElementById('limitDisplay').textContent = targetLimit.toLocaleString();
                 document.getElementById('slicesVisitedCount').textContent = slicesVisited.toLocaleString();
@@ -506,7 +533,6 @@
                 const limitNum = Number(targetLimit);
                 const W = cumulativeScanned;
                 
-                // Bereken voortgang naar de HOP (de ingestelde limiet)
                 const hopProgress = Math.min(1, currentSliceScanned / limitNum);
 
                 document.getElementById('gaugePct').textContent = (hopProgress * 100).toFixed(1) + '%';
@@ -519,7 +545,6 @@
                 document.getElementById('chanceUitleg').innerHTML =
                     `Wanneer dit de 100% raakt, hopt het systeem direct naar een ander plakje!`;
 
-                // Globale kans ten opzichte van heel Puzzel 71 (blijft gebaseerd op totale jumps)
                 const globaleKans = Number(W) / Number(PUZZLE_71_TOTAL);
                 document.getElementById('cmpLottery').textContent = globaleKans.toExponential(4);
                 
@@ -560,7 +585,6 @@
                 const numW = Math.max(1, parseInt(document.getElementById('numW').value) || 4);
                 const method = document.getElementById('scanMethod').value;
                 
-                // Zeker weten dat workers leeg zijn
                 killWorkers();
                 let workersDone = 0;
                 let lastLogUpdate = currentSliceScanned;
@@ -577,7 +601,6 @@
                         log(`📊 ${currentSliceScanned.toLocaleString()} keys gescand in dit huidige plakje...`, 'ev-epoch');
                     }
 
-                    // Check of we de limiet hebben bereikt voor een hop
                     if (currentSliceScanned >= targetLimit && isRunning) {
                         log(`🔄 Limiet van ${targetLimit.toLocaleString()} bereikt! Switchen naar nieuw plakje...`, 'ev-hop');
                         killWorkers();
@@ -585,7 +608,6 @@
                         slicesVisited++;
                         currentSliceScanned = 0;
                         
-                        // Korte pauze voor de UI en daarna meteen weer spawnWorkers
                         setTimeout(() => {
                             if (isRunning) spawnWorkers();
                         }, 50);
@@ -609,13 +631,12 @@
 
                     worker.onmessage = (ev) => {
                         if (ev.data.type === "WORKER_STARTED") {
-                            // Stil, om log spam bij het hoppen te voorkomen
+                            // Silent start
                         } else if (ev.data.type === "PROGRESS") {
                             handleProgress(ev.data.count);
                         } else if (ev.data.type === "SCAN_DONE") {
                             workersDone++;
                             if (workersDone === numW) {
-                                // Mocht het hele 2^35 plakje gescand zijn (zeer onwaarschijnlijk tenzij limiet enorm is)
                                 log('🏁 Dit plakje van 2³⁵ is volledig uitgekampt. Hoppen naar de volgende!');
                                 killWorkers();
                                 generateRandomSlice();
@@ -666,7 +687,11 @@
                 startTime = Date.now();
                 setRunning(true);
                 setStatus('Sniper Actief', 'running');
-                log(`🔍 Auto-Hop geactiveerd! Doel per plakje is ${targetLimit.toLocaleString()} keys.`, 'ev-epoch');
+                log(`🔍 Auto-Hop geactiveerd met doel ${targetLimit.toLocaleString()} keys per plakje.`, 'ev-epoch');
+                
+                if (document.getElementById('scanMethod').value === 'linear') {
+                    log(`⚡ Wiskundige Snelweg (Point Addition) is ACTIEF!`, 'ev-found');
+                }
 
                 spawnWorkers();
             }
@@ -679,7 +704,6 @@
                 log(`🛑 Auto-Hop Sniper handmatig gepauzeerd.`, 'ev-stop');
             };
 
-            // Genereer direct een willekeurige start- en eindlocatie bij het opstarten
             generateRandomSlice();
             setInterval(() => { if (isRunning) updateAllStats(); }, 500);
             updateAllStats();
