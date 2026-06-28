@@ -329,48 +329,44 @@
                     // --- POINT ADDITION SNELWEG (Lineair) ---
                     const G = ec.curve.g;
                     let currentKey = startKey;
-                    
-                    // Bereken de eerste sleutel volledig (zwaar wiskundig proces)
                     let currentPoint = G.mul(currentKey.toString(16));
-                    
-                    const LINEAR_BATCH_SIZE = 1000; // Hogere batch size omdat lineair nu veel sneller is
+                    let count = 0;
+                    const PROGRESS_INTERVAL = 10000; // rapporteer elke 10k keys
 
-                    function step() {
-                        let batchCount = 0;
-                        for(let i = 0; i < LINEAR_BATCH_SIZE; i++) {
-                            if (currentKey > endKey) {
-                                if (batchCount > 0) self.postMessage({ type: "PROGRESS", count: batchCount, workerId });
-                                self.postMessage({ type: "SCAN_DONE", workerId });
+                    while (currentKey <= endKey) {
+                        // Haal de gecomprimeerde public key hex op van het huidige punt
+                        const pubHex = currentPoint.encode('hex', true);
+                        const h160 = hash160(pubHex);
+                        const payload = '00' + h160;
+                        const checksum = doubleSha256(payload).slice(0, 8);
+                        
+                        if (checksum === targetChecksum) {
+                            const fullAddr = toBase58(payload + checksum);
+                            if (fullAddr === targetAddr) {
+                                const privHex = currentKey.toString(16).padStart(64, '0');
+                                const wifPayload = "80" + privHex + "01";
+                                const doubleSha = doubleSha256(wifPayload);
+                                const wif = toBase58(wifPayload + doubleSha.slice(0, 8));
+                                self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: fullAddr });
                                 return;
                             }
-                            
-                            // Haal de gecomprimeerde public key hex op van het huidige punt
-                            const pubHex = currentPoint.encode('hex', true);
-                            const h160 = hash160(pubHex);
-                            const payload = '00' + h160;
-                            const checksum = doubleSha256(payload).slice(0, 8);
-                            
-                            if (checksum === targetChecksum) {
-                                const fullAddr = toBase58(payload + checksum);
-                                if (fullAddr === targetAddr) {
-                                    const privHex = currentKey.toString(16).padStart(64, '0');
-                                    const wifPayload = "80" + privHex + "01";
-                                    const doubleSha = doubleSha256(wifPayload);
-                                    const wif = toBase58(wifPayload + doubleSha.slice(0, 8));
-                                    self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: fullAddr });
-                                    return;
-                                }
-                            }
-                            
-                            // DE MAGIE: Tellen we simpelweg G op bij het huidige punt voor de volgende iteratie
-                            currentPoint = currentPoint.add(G);
-                            currentKey++;
-                            batchCount++;
                         }
-                        self.postMessage({ type: "PROGRESS", count: batchCount, workerId });
-                        setTimeout(step, 0);
+                        
+                        // DE MAGIE: Tellen we simpelweg G op bij het huidige punt voor de volgende iteratie
+                        currentPoint = currentPoint.add(G);
+                        currentKey++;
+                        count++;
+                        
+                        if (count >= PROGRESS_INTERVAL) {
+                            self.postMessage({ type: "PROGRESS", count: count, workerId });
+                            count = 0;
+                        }
                     }
-                    step();
+                    // Stuur resterende count
+                    if (count > 0) {
+                        self.postMessage({ type: "PROGRESS", count: count, workerId });
+                    }
+                    self.postMessage({ type: "SCAN_DONE", workerId });
                 } else {
                     // --- ORIGINELE METHODE (Random - geen Point Addition mogelijk) ---
                     const RANDOM_BATCH_SIZE = 250;
