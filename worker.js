@@ -1,5 +1,4 @@
-// Bepaal de hoofdlocatie van de worker om altijd het juiste WASM-pakket te importeren
-const base = self.location.href.substring(0, self.location.href.lastIndexOf('/') + 1);
+// We importeren de WASM initialisatie via de absolute URL die index.html ons heeft meegegeven
 import init, { scan_batch_linear } from './pkg/slice_sniper_wasm.js';
 
 let wasmInitialized = false;
@@ -8,8 +7,9 @@ self.onmessage = async function(e) {
     const data = e.data;
     if (data.type === "ADDRESS_SCAN") {
         if (!wasmInitialized) {
-            // Initialiseer de WASM-engine vanaf de absolute base-locatie
-            await init(base + 'pkg/slice_sniper_wasm_bg.wasm');
+            // Gebruik de geïnjecteerde absolute basis-URL om de .wasm-binary direct aan te spreken
+            const wasmPath = WORKER_BASE_URL + 'pkg/slice_sniper_wasm_bg.wasm';
+            await init(wasmPath);
             wasmInitialized = true;
         }
 
