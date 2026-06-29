@@ -1,5 +1,3 @@
-// Omdat je op GitHub Pages zit onder /mijn-website-/, 
-// wijst dit pad naar de juiste plek in je repository.
 const WASM_PATH = '/mijn-website-/pkg/slice_sniper_wasm_bg.wasm';
 import init, { scan_batch_linear } from './pkg/slice_sniper_wasm.js';
 
@@ -24,7 +22,7 @@ self.onmessage = async function(e) {
             data.targetHash160Hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))
         );
         const method = data.method || 'linear';
-        const BATCH_SIZE = 50000; 
+        const BATCH_SIZE = 50000;
 
         if (method === 'linear') {
             while (BigInt("0x" + currentStartHex) <= endKey) {
