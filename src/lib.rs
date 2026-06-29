@@ -1,8 +1,7 @@
 use wasm_bindgen::prelude::*;
-use k256::{ProjectivePoint, Scalar};
+use k256::{ProjectivePoint, Scalar, FieldBytes};
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use k256::elliptic_curve::PrimeField;
-use k256::elliptic_curve::generic_array::GenericArray;
 use sha2::{Sha256, Digest};
 use ripemd::Ripemd160;
 
@@ -25,7 +24,6 @@ impl ScanResult {
 
 #[wasm_bindgen]
 pub fn scan_batch_linear(start_hex: &str, steps: u32, target_hash160: &[u8]) -> ScanResult {
-    // Zet de HEX string om naar een 32-byte array
     let hex_bytes = match hex_decode(start_hex) {
         Some(b) => b,
         None => return ScanResult { found: false, priv_hex: String::new(), wif: String::new() }
@@ -35,12 +33,12 @@ pub fn scan_batch_linear(start_hex: &str, steps: u32, target_hash160: &[u8]) -> 
     let offset = 32 - hex_bytes.len();
     bytes[offset..].copy_from_slice(&hex_bytes);
 
-    // Maak een Scalar aan van de bytes (gebruik GenericArray om typefouten te voorkomen)
-    let scalar = Scalar::from_repr(GenericArray::from(bytes));
-    if bool::from(scalar.is_none()) {
+    // Bijgewerkt voor k256 0.13+
+    let scalar_opt = Scalar::from_repr((*FieldBytes::from_slice(&bytes)).into());
+    if scalar_opt.is_none().into() {
         return ScanResult { found: false, priv_hex: String::new(), wif: String::new() };
     }
-    let mut scalar = scalar.unwrap();
+    let mut scalar = scalar_opt.unwrap();
 
     let g = ProjectivePoint::GENERATOR;
     let mut current_point = g * scalar;
@@ -51,30 +49,25 @@ pub fn scan_batch_linear(start_hex: &str, steps: u32, target_hash160: &[u8]) -> 
     }
 
     for _ in 0..steps {
-        // Genereer gecomprimeerde public key (33 bytes) direct uit ProjectivePoint
         let encoded = current_point.to_affine().to_encoded_point(true);
         let pubkey_bytes = encoded.as_bytes();
 
-        // Stap 1: SHA256
         let mut sha = Sha256::new();
         sha.update(pubkey_bytes);
         let sha_res = sha.finalize();
 
-        // Stap 2: RIPEMD160
         let mut rip = Ripemd160::new();
         rip.update(&sha_res);
         let rip_res = rip.finalize();
 
-        // Snelle 20-byte vergelijking
         if rip_res.as_slice() == target {
             let priv_bytes = scalar.to_bytes();
             let priv_hex = hex_encode(&priv_bytes);
             
-            // Match! Bereken nu pas de WIF om CPU-tijd in de loop te besparen
             let mut wif_payload = Vec::with_capacity(34);
             wif_payload.push(0x80);
             wif_payload.extend_from_slice(&priv_bytes);
-            wif_payload.push(0x01); // Compressed marker
+            wif_payload.push(0x01);
             
             let mut s1 = Sha256::new();
             s1.update(&wif_payload);
@@ -91,9 +84,9 @@ pub fn scan_batch_linear(start_hex: &str, steps: u32, target_hash160: &[u8]) -> 
             return ScanResult { found: true, priv_hex, wif };
         }
 
-        // Wiskundige snelweg: Point Addition (P + G)
         current_point += g;
-        scalar += Scalar::ONE;
+        // Bijgewerkt voor k256 0.13+
+        scalar = (scalar + Scalar::ONE).into();
     }
 
     ScanResult { found: false, priv_hex: String::new(), wif: String::new() }
