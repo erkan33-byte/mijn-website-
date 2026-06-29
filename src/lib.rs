@@ -2,6 +2,7 @@ use wasm_bindgen::prelude::*;
 use k256::{ProjectivePoint, Scalar};
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use k256::elliptic_curve::PrimeField;
+use k256::elliptic_curve::generic_array::GenericArray;
 use sha2::{Sha256, Digest};
 use ripemd::Ripemd160;
 
@@ -24,20 +25,22 @@ impl ScanResult {
 
 #[wasm_bindgen]
 pub fn scan_batch_linear(start_hex: &str, steps: u32, target_hash160: &[u8]) -> ScanResult {
-    let mut bytes = [0u8; 32];
+    // Zet de HEX string om naar een 32-byte array
     let hex_bytes = match hex_decode(start_hex) {
         Some(b) => b,
         None => return ScanResult { found: false, priv_hex: String::new(), wif: String::new() }
     };
     
+    let mut bytes = [0u8; 32];
     let offset = 32 - hex_bytes.len();
     bytes[offset..].copy_from_slice(&hex_bytes);
 
-    let scalar_opt = Scalar::from_repr(bytes.into());
-    if scalar_opt.is_none().into() {
+    // Maak een Scalar aan van de bytes (gebruik GenericArray om typefouten te voorkomen)
+    let scalar = Scalar::from_repr(GenericArray::from(bytes));
+    if bool::from(scalar.is_none()) {
         return ScanResult { found: false, priv_hex: String::new(), wif: String::new() };
     }
-    let mut scalar = scalar_opt.unwrap();
+    let mut scalar = scalar.unwrap();
 
     let g = ProjectivePoint::GENERATOR;
     let mut current_point = g * scalar;
