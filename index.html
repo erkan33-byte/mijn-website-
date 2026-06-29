@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #71 – Random Slice Sniper (Auto-Hop)</title>
+    <title>Puzzel #71 – Random Slice Sniper (WASM Auto-Hop)</title>
     <style>
         :root {
             --bg: #07090f;
@@ -143,8 +143,8 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – Dynamisch Plakje van 2³⁵ Keys · Auto-Hop</div>
-            <span class="badge">AUTO-HOP MODE (V2 OPTIMIZED)</span>
+            <div class="sub">Puzzel #71 – Dynamisch Plakje van 2³⁵ Keys · Auto-Hop (WASM Engine)</div>
+            <span class="badge">AUTO-HOP MODE (WASM V3 ULTRA)</span>
         </div>
         <div class="card">
             <div class="card-title">⚙ Actieve Plakje Configuratie</div>
@@ -161,7 +161,7 @@
             </div>
             <div class="field">
                 <label>Keys per Plakje (Daarna Switch)</label>
-                <input id="keysLimit" value="10000000" type="number" min="1000">
+                <input id="keysLimit" value="50000000" type="number" min="1000">
             </div>
             <hr class="divider">
             <div class="field"><label>Workers (CPU Cores)</label><input id="numW" value="4" type="number" min="1" max="32"></div>
@@ -242,7 +242,7 @@
                 <div class="stat-cell"><div class="label">Snelheid</div><div class="value" id="speed">0 /s</div></div>
                 <div class="stat-cell"><div class="label">Plakjes bezocht</div><div class="value" id="slicesVisitedCount">1</div></div>
             </div>
-            <div style="margin-top:10px;font-size:.7rem;color:var(--muted);">In dit plakje: <span id="currentSliceKeys">0</span> / <span id="limitDisplay">10.000.000</span></div>
+            <div style="margin-top:10px;font-size:.7rem;color:var(--muted);">In dit plakje: <span id="currentSliceKeys">0</span> / <span id="limitDisplay">50.000.000</span></div>
             <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
         </div>
         <div class="card"><div class="card-title">📋 Activiteitenlog</div><div class="log" id="logBox"></div></div>
@@ -253,7 +253,7 @@
                 <tbody id="matchTable"><tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Random Slice Sniper · Auto-Hop · Geoptimaliseerd met Noble Crypto</div>
+        <div class="footer">Random Slice Sniper · Auto-Hop · Geoptimaliseerd met Rust WebAssembly</div>
     </div>
 
     <script>
@@ -261,7 +261,7 @@
             let workers = [], totalJumps = 0, cumulativeScanned = 0;
             let currentSliceScanned = 0; 
             let slicesVisited = 1;       
-            let targetLimit = 10000000;  
+            let targetLimit = 50000000;  
             let startTime = 0, isRunning = false;
             
             const SLICE_SIZE = 34359738368n; 
@@ -319,9 +319,7 @@
             }
 
             function makeWorker() {
-                // GEWIJZIGD VOOR GITHUB PAGES: Laad de worker direct als los module-bestand!
                 const worker = new Worker('worker.js', { type: 'module' });
-
                 worker.onerror = function(e) {
                     log(`❌ Worker fout: ${e.message || 'Onbekende fout'}`, 'ev-stop');
                     setStatus('Worker gecrasht', '');
@@ -372,7 +370,7 @@
             }
 
             function updateAllStats() {
-                targetLimit = Number(document.getElementById('keysLimit').value) || 10000000;
+                targetLimit = Number(document.getElementById('keysLimit').value) || 50000000;
                 document.getElementById('limitDisplay').textContent = targetLimit.toLocaleString();
                 document.getElementById('slicesVisitedCount').textContent = slicesVisited.toLocaleString();
 
@@ -419,10 +417,11 @@
 
             function spawnWorkers() {
                 const targetAddr = document.getElementById('btcAddr').value.trim();
-                let targetChecksum;
+                let targetHash160Hex;
                 try {
                     const decodedHex = fromBase58(targetAddr);
-                    targetChecksum = decodedHex.slice(-8);
+                    // Het pure 20-byte RIPEMD160 gedeelte zit tussen byte 1 en 20 (char index 2 tot 42)
+                    targetHash160Hex = decodedHex.slice(2, 42);
                 } catch (e) { return; }
 
                 const startBI = BigInt("0x" + document.getElementById('rangeStart').value);
@@ -442,9 +441,9 @@
                     cumulativeScanned += count;
                     currentSliceScanned += count;
                     
-                    if (currentSliceScanned - lastLogUpdate >= 500000) {
+                    if (currentSliceScanned - lastLogUpdate >= 2000000) {
                         lastLogUpdate = currentSliceScanned;
-                        log(`📊 ${currentSliceScanned.toLocaleString()} keys gescand in dit huidige plakje...`, 'ev-epoch');
+                        log(`⚡ WASM: ${currentSliceScanned.toLocaleString()} keys verwerkt in dit plakje...`, 'ev-epoch');
                     }
 
                     if (currentSliceScanned >= targetLimit && isRunning) {
@@ -476,14 +475,12 @@
                     }
 
                     worker.onmessage = (ev) => {
-                        if (ev.data.type === "WORKER_STARTED") {
-                            // Silent start
-                        } else if (ev.data.type === "PROGRESS") {
+                        if (ev.data.type === "PROGRESS") {
                             handleProgress(ev.data.count);
                         } else if (ev.data.type === "SCAN_DONE") {
                             workersDone++;
                             if (workersDone === numW) {
-                                log('🏁 Dit plakje van 2³⁵ is volledig uitgekampt. Hoppen naar de volgende!');
+                                log('🏁 Dit plakje is volledig uitgekampt. Hoppen!');
                                 killWorkers();
                                 generateRandomSlice();
                                 slicesVisited++;
@@ -494,11 +491,9 @@
                             setRunning(false);
                             killWorkers();
                             setStatus('🎉 GEVONDEN!', 'running');
-                            log('🎉 PRIVÉSLEUTEL GEVONDEN!', 'ev-found');
+                            log('🎉 PRIVÉSLEUTEL GEVONDEN VIA RUST WASM!', 'ev-found');
                             document.getElementById('matchTable').innerHTML =
                                 `<tr><td>✅ MATCH</td><td style="font-size:.65rem">${ev.data.wif}</td><td style="font-size:.65rem">${ev.data.privHex}</td></tr>`;
-                        } else if (ev.data.type === "WORKER_ERROR") {
-                            log(`⚠️ Worker fout: ${ev.data.message}`, 'ev-stop');
                         }
                     };
                     
@@ -506,7 +501,7 @@
                         type: "ADDRESS_SCAN",
                         startHex: segStart,
                         endHex: segEnd,
-                        targetChecksumHex: targetChecksum,
+                        targetHash160Hex: targetHash160Hex,
                         targetAddress: targetAddr,
                         method: method,
                         workerId: i
@@ -524,7 +519,7 @@
                     if (decodedHex.length !== 50) throw new Error('Geen geldig P2PKH adres.');
                 } catch (e) { log('❌ Ongeldig adres: ' + e.message); return; }
 
-                targetLimit = Number(document.getElementById('keysLimit').value) || 10000000;
+                targetLimit = Number(document.getElementById('keysLimit').value) || 50000000;
 
                 totalJumps = 0;
                 cumulativeScanned = 0;
@@ -533,12 +528,8 @@
                 startTime = Date.now();
                 setRunning(true);
                 setStatus('Sniper Actief', 'running');
-                log(`🔍 Auto-Hop geactiveerd met doel ${targetLimit.toLocaleString()} keys per plakje.`, 'ev-epoch');
+                log(`🔍 WASM Sniper gestart. Target limiet: ${targetLimit.toLocaleString()} keys per zone.`, 'ev-epoch');
                 
-                if (document.getElementById('scanMethod').value === 'linear') {
-                    log(`⚡ Wiskundige Snelweg (Point Addition) is ACTIEF!`, 'ev-found');
-                }
-
                 spawnWorkers();
             }
 
@@ -548,12 +539,6 @@
                     setRunning(false);
                     log('🛑 Gestopt om handmatig plakje te laden.', 'ev-stop');
                 }
-                const startHex = document.getElementById('rangeStart').value.trim();
-                const endHex = document.getElementById('rangeEnd').value.trim();
-                if (!startHex || !endHex) {
-                    log('❌ Vul een geldige Start en Eind HEX in.', 'ev-stop');
-                    return;
-                }
                 startAddressScan();
             };
 
@@ -562,7 +547,7 @@
                 setRunning(false);
                 killWorkers();
                 setStatus('Gestopt');
-                log(`🛑 Auto-Hop Sniper handmatig gepauzeerd.`, 'ev-stop');
+                log(`🛑 Sniper handmatig gepauzeerd.`, 'ev-stop');
             };
 
             generateRandomSlice();
