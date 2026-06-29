@@ -319,7 +319,10 @@
             }
 
             function makeWorker() {
-                const worker = new Worker('worker.js', { type: 'module' });
+                // Dynamische base URL bepalen om submappen op GitHub Pages te ondersteunen
+                const baseUrl = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+                const worker = new Worker(baseUrl + 'worker.js', { type: 'module' });
+                
                 worker.onerror = function(e) {
                     log(`❌ Worker fout: ${e.message || 'Onbekende fout'}`, 'ev-stop');
                     setStatus('Worker gecrasht', '');
@@ -420,7 +423,6 @@
                 let targetHash160Hex;
                 try {
                     const decodedHex = fromBase58(targetAddr);
-                    // Het pure 20-byte RIPEMD160 gedeelte zit tussen byte 1 en 20 (char index 2 tot 42)
                     targetHash160Hex = decodedHex.slice(2, 42);
                 } catch (e) { return; }
 
