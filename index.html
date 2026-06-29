@@ -318,10 +318,19 @@
                 log(`📍 Eind HEX:  0x${sliceEnd.toString(16)}`);
             }
 
-            function makeWorker() {
-                // Dynamische base URL bepalen om submappen op GitHub Pages te ondersteunen
-                const baseUrl = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
-                const worker = new Worker(baseUrl + 'worker.js', { type: 'module' });
+            async function makeWorker() {
+                const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+                
+                // We halen het echte worker-bestand op via een fetch call om MIME/CORS problemen te omzeilen
+                const response = await fetch(baseUrl + 'worker.js');
+                const code = await response.text();
+                
+                // We verpakken de code in een Blob en injecteren de absolute URL-basis
+                const blobCode = `const WORKER_BASE_URL = "${baseUrl}";\n` + code;
+                const blob = new Blob([blobCode], { type: 'application/javascript' });
+                const blobUrl = URL.createObjectURL(blob);
+                
+                const worker = new Worker(blobUrl, { type: 'module' });
                 
                 worker.onerror = function(e) {
                     log(`❌ Worker fout: ${e.message || 'Onbekende fout'}`, 'ev-stop');
@@ -418,7 +427,7 @@
                 document.getElementById('currentSliceKeys').textContent = currentSliceScanned.toLocaleString();
             }
 
-            function spawnWorkers() {
+            async function spawnWorkers() {
                 const targetAddr = document.getElementById('btcAddr').value.trim();
                 let targetHash160Hex;
                 try {
@@ -462,52 +471,56 @@
                 }
 
                 for (let i = 0; i < numW; i++) {
-                    const worker = makeWorker();
-                    workers.push(worker);
-                    
-                    let segStart = startBI.toString(16);
-                    let segEnd = endBI.toString(16);
+                    try {
+                        const worker = await makeWorker();
+                        workers.push(worker);
+                        
+                        let segStart = startBI.toString(16);
+                        let segEnd = endBI.toString(16);
 
-                    if (method === 'linear') {
-                        const chunkSize = totalRange / BigInt(numW);
-                        const s = startBI + chunkSize * BigInt(i);
-                        const e = (i === numW - 1) ? endBI : (startBI + chunkSize * BigInt(i + 1) - 1n);
-                        segStart = s.toString(16);
-                        segEnd = e.toString(16);
-                    }
-
-                    worker.onmessage = (ev) => {
-                        if (ev.data.type === "PROGRESS") {
-                            handleProgress(ev.data.count);
-                        } else if (ev.data.type === "SCAN_DONE") {
-                            workersDone++;
-                            if (workersDone === numW) {
-                                log('🏁 Dit plakje is volledig uitgekampt. Hoppen!');
-                                killWorkers();
-                                generateRandomSlice();
-                                slicesVisited++;
-                                currentSliceScanned = 0;
-                                setTimeout(() => { if (isRunning) spawnWorkers(); }, 50);
-                            }
-                        } else if (ev.data.type === "FOUND") {
-                            setRunning(false);
-                            killWorkers();
-                            setStatus('🎉 GEVONDEN!', 'running');
-                            log('🎉 PRIVÉSLEUTEL GEVONDEN VIA RUST WASM!', 'ev-found');
-                            document.getElementById('matchTable').innerHTML =
-                                `<tr><td>✅ MATCH</td><td style="font-size:.65rem">${ev.data.wif}</td><td style="font-size:.65rem">${ev.data.privHex}</td></tr>`;
+                        if (method === 'linear') {
+                            const chunkSize = totalRange / BigInt(numW);
+                            const s = startBI + chunkSize * BigInt(i);
+                            const e = (i === numW - 1) ? endBI : (startBI + chunkSize * BigInt(i + 1) - 1n);
+                            segStart = s.toString(16);
+                            segEnd = e.toString(16);
                         }
-                    };
-                    
-                    worker.postMessage({
-                        type: "ADDRESS_SCAN",
-                        startHex: segStart,
-                        endHex: segEnd,
-                        targetHash160Hex: targetHash160Hex,
-                        targetAddress: targetAddr,
-                        method: method,
-                        workerId: i
-                    });
+
+                        worker.onmessage = (ev) => {
+                            if (ev.data.type === "PROGRESS") {
+                                handleProgress(ev.data.count);
+                            } else if (ev.data.type === "SCAN_DONE") {
+                                workersDone++;
+                                if (workersDone === numW) {
+                                    log('🏁 Dit plakje is volledig uitgekampt. Hoppen!');
+                                    killWorkers();
+                                    generateRandomSlice();
+                                    slicesVisited++;
+                                    currentSliceScanned = 0;
+                                    setTimeout(() => { if (isRunning) spawnWorkers(); }, 50);
+                                }
+                            } else if (ev.data.type === "FOUND") {
+                                setRunning(false);
+                                killWorkers();
+                                setStatus('🎉 GEVONDEN!', 'running');
+                                log('🎉 PRIVÉSLEUTEL GEVONDEN VIA RUST WASM!', 'ev-found');
+                                document.getElementById('matchTable').innerHTML =
+                                    `<tr><td>✅ MATCH</td><td style="font-size:.65rem">${ev.data.wif}</td><td style="font-size:.65rem">${ev.data.privHex}</td></tr>`;
+                            }
+                        };
+                        
+                        worker.postMessage({
+                            type: "ADDRESS_SCAN",
+                            startHex: segStart,
+                            endHex: segEnd,
+                            targetHash160Hex: targetHash160Hex,
+                            targetAddress: targetAddr,
+                            method: method,
+                            workerId: i
+                        });
+                    } catch (err) {
+                        log(`❌ Fout bij opstarten worker ${i}: ${err.message}`);
+                    }
                 }
             }
 
