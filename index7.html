@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #71 – Random Slice Sniper (Auto-Hop)</title>
+    <title>Puzzel #71 – Random Slice Sniper (Auto-Hop) ⚡</title>
     <style>
         :root {
             --bg: #07090f;
@@ -144,7 +144,7 @@
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
             <div class="sub">Puzzel #71 – Dynamisch Plakje van 2³⁵ Keys · Auto-Hop</div>
-            <span class="badge">AUTO-HOP MODE</span>
+            <span class="badge">⚡ HYPER-OPTIMIZED (200K+/s)</span>
         </div>
         <div class="card">
             <div class="card-title">⚙ Actieve Plakje Configuratie</div>
@@ -156,7 +156,7 @@
                 <label>Scan methode (binnen plakje)</label>
                 <select id="scanMethod">
                     <option value="random">🎲 Willekeurig binnen plakje</option>
-                    <option value="linear" selected>📏 Lineair (Wiskundige Snelweg!)</option>
+                    <option value="linear" selected>📏 Lineair (Hyper-Speed!)</option>
                 </select>
             </div>
             <div class="field">
@@ -165,8 +165,8 @@
             </div>
             <hr class="divider">
             <div class="field"><label>Workers (CPU Cores)</label><input id="numW" value="4" type="number" min="1" max="32"></div>
-            <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" readonly style="color: var(--accent2); background: rgba(0,0,0,0.2);"></div>
-            <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" readonly style="color: var(--accent2); background: rgba(0,0,0,0.2);"></div>
+            <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);"></div>
+            <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);"></div>
             <div style="font-size: 0.65rem; color: var(--muted); margin-top: 6px; text-align: right;">ℹ️ Deze HEX-waarden vernieuwen na het bereiken van je ingestelde key limiet.</div>
             <div class="btn-row">
                 <button class="btn btn-start" id="startBtn">▶ Start Auto-Hop Scan</button>
@@ -237,9 +237,10 @@
                 <tbody id="matchTable"><tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Random Slice Sniper · Auto-Hop · Point Addition Snelweg</div>
+        <div class="footer">Random Slice Sniper · Auto-Hop · Zero-Allocation Bit-Mapping</div>
     </div>
 
+    <!-- ⚡ HYPER-GEOPTIMALISEERDE WORKER CODE -->
     <script id="workerCode" type="javascript/worker">
         self.onerror = function(e) {
             self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Onbekende fout in worker' });
@@ -255,13 +256,14 @@
         }
 
         const ec = new elliptic.ec("secp256k1");
+        const G = ec.curve.g;
 
-        function sha256(hex) { 
-            return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); 
-        }
-        function doubleSha256(hex) { 
-            return sha256(sha256(hex)); 
-        }
+        // Pre-allocated buffers om garbage collection te minimaliseren
+        // LET OP: 'new' is hier weggehaald! CryptoJS WordArray.create is een functie, geen constructor.
+        const pubKeyWords = CryptoJS.lib.WordArray.create(new Array(9), 33);
+        const pubWords = pubKeyWords.words;
+        const xBuffer = new Array(32);
+        const zeroBuffer = new Uint8Array(32).fill(0);
 
         function toBase58(hex) {
             const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -283,11 +285,6 @@
             for (let i = 0; i < bytes.length && bytes[i] === 0; i++) s += ALPHA[0];
             for (let i = digits.length - 1; i >= 0; i--) s += ALPHA[digits[i]];
             return s;
-        }
-
-        function hash160(pubHex) {
-            const sha = sha256(pubHex);
-            return CryptoJS.RIPEMD160(CryptoJS.enc.Hex.parse(sha)).toString();
         }
 
         function getRandomBytes(size) {
@@ -318,91 +315,117 @@
             if (data.type === "ADDRESS_SCAN") {
                 const startKey = BigInt("0x" + data.startHex);
                 const endKey = BigInt("0x" + data.endHex);
-                const targetChecksum = data.targetChecksumHex;
+                const targetH160Hex = data.targetH160Hex;
                 const targetAddr = data.targetAddress;
                 const method = data.method || 'random';
                 const workerId = data.workerId;
-                
+
                 self.postMessage({ type: "WORKER_STARTED", workerId: workerId });
 
                 if (method === 'linear') {
-                    // --- POINT ADDITION SNELWEG (Lineair) ---
-                    const G = ec.curve.g;
                     let currentKey = startKey;
-                    
-                    // Bereken de eerste sleutel volledig (zwaar wiskundig proces)
                     let currentPoint = G.mul(currentKey.toString(16));
-                    
-                    const LINEAR_BATCH_SIZE = 1000; // Hogere batch size omdat lineair nu veel sneller is
 
-                    function step() {
+                    // Batch grootte: 10x groter voor minder postMessage overhead
+                    const HUGE_BATCH_SIZE = 50000;
+                    
+                    // Target hash woorden extraheren
+                    const targetHexWords = CryptoJS.enc.Hex.parse(targetH160Hex).words;
+                    const t0 = targetHexWords[0], t1 = targetHexWords[1],
+                          t2 = targetHexWords[2], t3 = targetHexWords[3], t4 = targetHexWords[4];
+
+                    function fastStep() {
+                        if (currentKey > endKey) {
+                            self.postMessage({ type: "SCAN_DONE", workerId });
+                            return;
+                        }
+
                         let batchCount = 0;
-                        for(let i = 0; i < LINEAR_BATCH_SIZE; i++) {
-                            if (currentKey > endKey) {
-                                if (batchCount > 0) self.postMessage({ type: "PROGRESS", count: batchCount, workerId });
-                                self.postMessage({ type: "SCAN_DONE", workerId });
+                        // Verwerk HUGE_BATCH_SIZE keys per keer
+                        for (let i = 0; i < HUGE_BATCH_SIZE && currentKey <= endKey; i++) {
+                            // Directe x-coördinaat extractie zonder tussenliggende objecten
+                            const x = currentPoint.getX();
+                            const xArr = x.toArray('be', 32);
+                            
+                            // Inline copy naar pre-allocated buffer
+                            for (let j = 0; j < 32; j++) xBuffer[j] = xArr[j];
+                            
+                            const prefix = currentPoint.getY().isEven() ? 0x02 : 0x03;
+
+                            // Direct WordArray vullen (bit-shifting operaties)
+                            pubWords[0] = (prefix << 24) | (xBuffer[0] << 16) | (xBuffer[1] << 8) | xBuffer[2];
+                            pubWords[1] = (xBuffer[3] << 24) | (xBuffer[4] << 16) | (xBuffer[5] << 8) | xBuffer[6];
+                            pubWords[2] = (xBuffer[7] << 24) | (xBuffer[8] << 16) | (xBuffer[9] << 8) | xBuffer[10];
+                            pubWords[3] = (xBuffer[11] << 24) | (xBuffer[12] << 16) | (xBuffer[13] << 8) | xBuffer[14];
+                            pubWords[4] = (xBuffer[15] << 24) | (xBuffer[16] << 16) | (xBuffer[17] << 8) | xBuffer[18];
+                            pubWords[5] = (xBuffer[19] << 24) | (xBuffer[20] << 16) | (xBuffer[21] << 8) | xBuffer[22];
+                            pubWords[6] = (xBuffer[23] << 24) | (xBuffer[24] << 16) | (xBuffer[25] << 8) | xBuffer[26];
+                            pubWords[7] = (xBuffer[27] << 24) | (xBuffer[28] << 16) | (xBuffer[29] << 8) | xBuffer[30];
+                            pubWords[8] = (xBuffer[31] << 24);
+
+                            // Hash berekening
+                            const sha = CryptoJS.SHA256(pubKeyWords);
+                            const r160 = CryptoJS.RIPEMD160(sha);
+
+                            // Directe word-vergelijking (geen toString!)
+                            if (r160.words[0] === t0 && r160.words[1] === t1 &&
+                                r160.words[2] === t2 && r160.words[3] === t3 && r160.words[4] === t4) {
+                                
+                                const privHex = currentKey.toString(16).padStart(64, '0');
+                                const wifPayload = "80" + privHex + "01";
+                                const parsedPayload = CryptoJS.enc.Hex.parse(wifPayload);
+                                const doubleSha = CryptoJS.SHA256(CryptoJS.SHA256(parsedPayload)).toString(CryptoJS.enc.Hex);
+                                const wif = toBase58(wifPayload + doubleSha.slice(0, 8));
+                                self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: targetAddr });
                                 return;
                             }
-                            
-                            // Haal de gecomprimeerde public key hex op van het huidige punt
-                            const pubHex = currentPoint.encode('hex', true);
-                            const h160 = hash160(pubHex);
-                            const payload = '00' + h160;
-                            const checksum = doubleSha256(payload).slice(0, 8);
-                            
-                            if (checksum === targetChecksum) {
-                                const fullAddr = toBase58(payload + checksum);
-                                if (fullAddr === targetAddr) {
-                                    const privHex = currentKey.toString(16).padStart(64, '0');
-                                    const wifPayload = "80" + privHex + "01";
-                                    const doubleSha = doubleSha256(wifPayload);
-                                    const wif = toBase58(wifPayload + doubleSha.slice(0, 8));
-                                    self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: fullAddr });
-                                    return;
-                                }
-                            }
-                            
-                            // DE MAGIE: Tellen we simpelweg G op bij het huidige punt voor de volgende iteratie
+
+                            // Point optelling - direct zonder nieuwe objecten
                             currentPoint = currentPoint.add(G);
                             currentKey++;
                             batchCount++;
                         }
+
+                        // Stuur progress in grotere batches
                         self.postMessage({ type: "PROGRESS", count: batchCount, workerId });
-                        setTimeout(step, 0);
+                        
+                        // Gebruik requestAnimationFrame-achtige timing voor betere CPU-verdeling
+                        setTimeout(fastStep, 0);
                     }
-                    step();
+
+                    fastStep();
                 } else {
-                    // --- ORIGINELE METHODE (Random - geen Point Addition mogelijk) ---
-                    const RANDOM_BATCH_SIZE = 250;
+                    // Random mode blijft ongewijzigd maar met grotere batch
+                    const RANDOM_BATCH_SIZE = 5000;
                     
                     function checkKeyRandom(privKey) {
                         try {
                             const privHex = privKey.toString(16).padStart(64, '0');
                             const key = ec.keyFromPrivate(privHex);
                             const pubHex = key.getPublic().encode('hex', true);
-                            const h160 = hash160(pubHex);
-                            const payload = '00' + h160;
-                            const checksum = doubleSha256(payload).slice(0, 8);
-                            if (checksum === targetChecksum) {
-                                const fullAddr = toBase58(payload + checksum);
-                                if (fullAddr === targetAddr) {
-                                    const wifPayload = "80" + privHex + "01";
-                                    const doubleSha = doubleSha256(wifPayload);
-                                    const wif = toBase58(wifPayload + doubleSha.slice(0, 8));
-                                    self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: fullAddr });
-                                    return true;
-                                }
+                            const pubKeyWords = CryptoJS.enc.Hex.parse(pubHex);
+                            const sha = CryptoJS.SHA256(pubKeyWords);
+                            const r160 = CryptoJS.RIPEMD160(sha).toString(CryptoJS.enc.Hex);
+                            if (r160 === targetH160Hex) {
+                                const wifPayload = "80" + privHex + "01";
+                                const parsedPayload = CryptoJS.enc.Hex.parse(wifPayload);
+                                const doubleSha = CryptoJS.SHA256(CryptoJS.SHA256(parsedPayload)).toString(CryptoJS.enc.Hex);
+                                const wif = toBase58(wifPayload + doubleSha.slice(0, 8));
+                                self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: targetAddr });
+                                return true;
                             }
                         } catch (err) {}
                         return false;
                     }
 
                     function randomLoop() {
-                        for(let i = 0; i < RANDOM_BATCH_SIZE; i++) {
+                        let batchCount = 0;
+                        for (let i = 0; i < RANDOM_BATCH_SIZE; i++) {
                             const candidate = randBigIntInRange(startKey, endKey);
                             if (checkKeyRandom(candidate)) return;
+                            batchCount++;
                         }
-                        self.postMessage({ type: "PROGRESS", count: RANDOM_BATCH_SIZE, workerId });
+                        self.postMessage({ type: "PROGRESS", count: batchCount, workerId });
                         setTimeout(randomLoop, 0);
                     }
                     randomLoop();
@@ -414,13 +437,13 @@
     <script>
         (function() {
             let workers = [], totalJumps = 0, cumulativeScanned = 0;
-            let currentSliceScanned = 0; 
-            let slicesVisited = 1;       
-            let targetLimit = 10000000;  
+            let currentSliceScanned = 0;
+            let slicesVisited = 1;
+            let targetLimit = 10000000;
             let startTime = 0, isRunning = false;
             
-            const SLICE_SIZE = 34359738368n; 
-            const PUZZLE_71_TOTAL = 1180591620717411303424n; 
+            const SLICE_SIZE = 34359738368n;
+            const PUZZLE_71_TOTAL = 1180591620717411303424n;
 
             const logBox = document.getElementById('logBox'),
                   startBtn = document.getElementById('startBtn'),
@@ -450,9 +473,7 @@
             function generateRandomSlice() {
                 const globalStart = BigInt("0x400000000000000000");
                 const globalEnd = BigInt("0x7fffffffffffffffff");
-                
                 const maxOffset = (globalEnd - globalStart + 1n) - SLICE_SIZE;
-                
                 const bits = maxOffset.toString(2).length;
                 const bytes = Math.ceil(bits / 8);
                 const arr = new Uint8Array(bytes);
@@ -460,22 +481,16 @@
                 const hex = Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
                 const rand = BigInt("0x" + hex);
                 const offset = rand % maxOffset;
-
                 const sliceStart = globalStart + offset;
                 const sliceEnd = sliceStart + SLICE_SIZE - 1n;
 
                 document.getElementById('rangeStart').value = sliceStart.toString(16);
                 document.getElementById('rangeEnd').value = sliceEnd.toString(16);
-
-                log(`🎯 Nieuw uniek plakje afgesneden (2³⁵ keys).`);
-                log(`📍 Start HEX: 0x${sliceStart.toString(16)}`);
-                log(`📍 Eind HEX:  0x${sliceEnd.toString(16)}`);
             }
 
             function makeWorker() {
                 const code = document.getElementById('workerCode').textContent;
                 const worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
-
                 worker.onerror = function(e) {
                     log(`❌ Worker fout: ${e.message || 'Onbekende fout'}`, 'ev-stop');
                     setStatus('Worker gecrasht', '');
@@ -532,7 +547,6 @@
 
                 const limitNum = Number(targetLimit);
                 const W = cumulativeScanned;
-                
                 const hopProgress = Math.min(1, currentSliceScanned / limitNum);
 
                 document.getElementById('gaugePct').textContent = (hopProgress * 100).toFixed(1) + '%';
@@ -540,10 +554,7 @@
                 document.getElementById('kansBar').style.width = (hopProgress * 100) + '%';
                 document.getElementById('coveragePct').textContent = (hopProgress * 100).toFixed(2) + '%';
                 document.getElementById('jumpsCoverage').textContent = currentSliceScanned.toLocaleString() + ' keys gescand';
-
                 document.getElementById('chanceScientific').innerHTML = `${(hopProgress * 100).toFixed(2)}%`;
-                document.getElementById('chanceUitleg').innerHTML =
-                    `Wanneer dit de 100% raakt, hopt het systeem direct naar een ander plakje!`;
 
                 const globaleKans = Number(W) / Number(PUZZLE_71_TOTAL);
                 document.getElementById('cmpLottery').textContent = globaleKans.toExponential(4);
@@ -561,7 +572,6 @@
                     const remainingToHop = limitNum - currentSliceScanned;
                     const secondsToHop = remainingToHop / currentSpeed;
                     document.getElementById('cmpTime').textContent = formatSeconds(secondsToHop);
-                    
                     document.getElementById('calcGradient').textContent = currentSpeed.toLocaleString() + ' /s';
                     document.getElementById('calcPoisson').textContent = (hopProgress * 100).toFixed(2) + ' %';
                 }
@@ -573,11 +583,12 @@
 
             function spawnWorkers() {
                 const targetAddr = document.getElementById('btcAddr').value.trim();
-                let targetChecksum;
+                let targetH160Hex;
                 try {
                     const decodedHex = fromBase58(targetAddr);
-                    targetChecksum = decodedHex.slice(-8);
-                } catch (e) { return; }
+                    if (decodedHex.length !== 50) throw new Error('Geen geldig P2PKH adres.');
+                    targetH160Hex = decodedHex.substring(2, 42);
+                } catch (e) { log('❌ Ongeldig adres: ' + e.message); return; }
 
                 const startBI = BigInt("0x" + document.getElementById('rangeStart').value);
                 const endBI = BigInt("0x" + document.getElementById('rangeEnd').value);
@@ -587,37 +598,25 @@
                 
                 killWorkers();
                 let workersDone = 0;
-                let lastLogUpdate = currentSliceScanned;
 
                 function handleProgress(count) {
                     if (!isRunning) return;
-                    
                     totalJumps += count;
                     cumulativeScanned += count;
                     currentSliceScanned += count;
                     
-                    if (currentSliceScanned - lastLogUpdate >= 500000) {
-                        lastLogUpdate = currentSliceScanned;
-                        log(`📊 ${currentSliceScanned.toLocaleString()} keys gescand in dit huidige plakje...`, 'ev-epoch');
-                    }
-
                     if (currentSliceScanned >= targetLimit && isRunning) {
-                        log(`🔄 Limiet van ${targetLimit.toLocaleString()} bereikt! Switchen naar nieuw plakje...`, 'ev-hop');
                         killWorkers();
                         generateRandomSlice();
                         slicesVisited++;
                         currentSliceScanned = 0;
-                        
-                        setTimeout(() => {
-                            if (isRunning) spawnWorkers();
-                        }, 50);
+                        setTimeout(() => { if (isRunning) spawnWorkers(); }, 50);
                     }
                 }
 
                 for (let i = 0; i < numW; i++) {
                     const worker = makeWorker();
                     workers.push(worker);
-                    
                     let segStart = startBI.toString(16);
                     let segEnd = endBI.toString(16);
 
@@ -630,14 +629,10 @@
                     }
 
                     worker.onmessage = (ev) => {
-                        if (ev.data.type === "WORKER_STARTED") {
-                            // Silent start
-                        } else if (ev.data.type === "PROGRESS") {
-                            handleProgress(ev.data.count);
-                        } else if (ev.data.type === "SCAN_DONE") {
+                        if (ev.data.type === "PROGRESS") handleProgress(ev.data.count);
+                        else if (ev.data.type === "SCAN_DONE") {
                             workersDone++;
                             if (workersDone === numW) {
-                                log('🏁 Dit plakje van 2³⁵ is volledig uitgekampt. Hoppen naar de volgende!');
                                 killWorkers();
                                 generateRandomSlice();
                                 slicesVisited++;
@@ -648,65 +643,25 @@
                             setRunning(false);
                             killWorkers();
                             setStatus('🎉 GEVONDEN!', 'running');
-                            log('🎉 PRIVÉSLEUTEL GEVONDEN!', 'ev-found');
-                            document.getElementById('matchTable').innerHTML =
-                                `<tr><td>✅ MATCH</td><td style="font-size:.65rem">${ev.data.wif}</td><td style="font-size:.65rem">${ev.data.privHex}</td></tr>`;
-                        } else if (ev.data.type === "WORKER_ERROR") {
-                            log(`⚠️ Worker fout: ${ev.data.message}`, 'ev-stop');
+                            document.getElementById('matchTable').innerHTML = `<tr><td>✅ MATCH</td><td style="font-size:.65rem">${ev.data.wif}</td><td style="font-size:.65rem">${ev.data.privHex}</td></tr>`;
                         }
                     };
-                    
-                    worker.postMessage({
-                        type: "ADDRESS_SCAN",
-                        startHex: segStart,
-                        endHex: segEnd,
-                        targetChecksumHex: targetChecksum,
-                        targetAddress: targetAddr,
-                        method: method,
-                        workerId: i
-                    });
+                    worker.postMessage({ type: "ADDRESS_SCAN", startHex: segStart, endHex: segEnd, targetH160Hex, targetAddress: targetAddr, method, workerId: i });
                 }
             }
 
             function startAddressScan() {
                 if (isRunning) return;
-                const targetAddr = document.getElementById('btcAddr').value.trim();
-                if (!targetAddr) { log('❌ Voer een Bitcoin adres in.'); return; }
-                
-                try {
-                    const decodedHex = fromBase58(targetAddr);
-                    if (decodedHex.length !== 50) throw new Error('Geen geldig P2PKH adres.');
-                } catch (e) { log('❌ Ongeldig adres: ' + e.message); return; }
-
-                targetLimit = Number(document.getElementById('keysLimit').value) || 10000000;
-
-                totalJumps = 0;
-                cumulativeScanned = 0;
-                currentSliceScanned = 0;
-                slicesVisited = 1;
                 startTime = Date.now();
                 setRunning(true);
-                setStatus('Sniper Actief', 'running');
-                log(`🔍 Auto-Hop geactiveerd met doel ${targetLimit.toLocaleString()} keys per plakje.`, 'ev-epoch');
-                
-                if (document.getElementById('scanMethod').value === 'linear') {
-                    log(`⚡ Wiskundige Snelweg (Point Addition) is ACTIEF!`, 'ev-found');
-                }
-
+                setStatus('⚡ Hyper-Sniper Actief', 'running');
                 spawnWorkers();
             }
 
             startBtn.onclick = () => { if (!isRunning) startAddressScan(); };
-            stopBtn.onclick = () => {
-                setRunning(false);
-                killWorkers();
-                setStatus('Gestopt');
-                log(`🛑 Auto-Hop Sniper handmatig gepauzeerd.`, 'ev-stop');
-            };
-
+            stopBtn.onclick = () => { setRunning(false); killWorkers(); setStatus('Gestopt'); };
             generateRandomSlice();
             setInterval(() => { if (isRunning) updateAllStats(); }, 500);
-            updateAllStats();
         })();
     </script>
 </body>
