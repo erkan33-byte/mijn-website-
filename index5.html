@@ -2,50 +2,34 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #71 – Random Slice Sniper (Auto-Hop)</title>
+    <title>Puzzel #71 – Random Slice Sniper (NATIVE TURBO) ⚡</title>
     <style>
         :root {
-            --bg: #07090f;
-            --surface: #0d1117;
-            --panel: #111827;
-            --border: #1f2937;
-            --accent: #00ff99;
-            --accent2: #00c3ff;
-            --warn: #f59e0b;
-            --danger: #ef4444;
-            --success: #10b981;
-            --dim: #374151;
-            --muted: #6b7280;
-            --text: #e2e8f0;
+            --bg: #07090f; --surface: #0d1117; --panel: #111827;
+            --border: #1f2937; --accent: #00ff99; --accent2: #00c3ff;
+            --warn: #f59e0b; --danger: #ef4444; --success: #10b981;
+            --dim: #374151; --muted: #6b7280; --text: #e2e8f0;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: 'Courier New', monospace;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            padding: 24px 16px 48px;
+            background: var(--bg); color: var(--text);
+            min-height: 100vh; padding: 24px 16px 48px;
         }
         body::before {
-            content: '';
-            position: fixed;
-            inset: 0;
-            background: repeating-linear-gradient(transparent 0px, transparent 3px, rgba(0, 255, 153, .015) 3px, rgba(0, 255, 153, .015) 4px);
-            pointer-events: none;
-            z-index: 999;
+            content: ''; position: fixed; inset: 0;
+            background: repeating-linear-gradient(transparent 0px, transparent 3px,
+                rgba(0,255,153,.015) 3px, rgba(0,255,153,.015) 4px);
+            pointer-events: none; z-index: 999;
         }
         .container { max-width: 820px; margin: 0 auto; position: relative; z-index: 1; }
         .header { text-align: center; margin-bottom: 28px; }
-        .header h1 {
-            font-size: 1.6rem; letter-spacing: .2em; color: var(--accent);
-            text-shadow: 0 0 18px var(--accent); text-transform: uppercase;
-        }
+        .header h1 { font-size: 1.6rem; letter-spacing: .2em; color: var(--accent);
+            text-shadow: 0 0 18px var(--accent); text-transform: uppercase; }
         .header .sub { font-size: .72rem; color: var(--muted); letter-spacing: .12em; margin-top: 6px; }
-        .badge {
-            display: inline-block; background: linear-gradient(90deg, #1a2a1a, #0d2010);
+        .badge { display: inline-block; background: linear-gradient(90deg,#1a2a1a,#0d2010);
             border: 1px solid var(--accent); color: var(--accent); font-size: .62rem;
-            letter-spacing: .15em; padding: 3px 10px; border-radius: 2px; margin-top: 10px;
-        }
+            letter-spacing: .15em; padding: 3px 10px; border-radius: 2px; margin-top: 10px; }
         .card, .calc-card, .chance-card {
             background: var(--panel); border: 1px solid var(--border);
             border-radius: 6px; padding: 20px; margin-bottom: 16px;
@@ -57,7 +41,7 @@
         .chance-card { position: relative; overflow: hidden; }
         .chance-card::before {
             content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
-            background: radial-gradient(ellipse at center, rgba(0, 195, 255, .04) 0%, transparent 60%);
+            background: radial-gradient(ellipse at center, rgba(0,195,255,.04) 0%, transparent 60%);
             pointer-events: none;
         }
         .card-title, .calc-title, .chance-title {
@@ -71,7 +55,7 @@
             background: var(--surface); color: var(--accent); border: 1px solid var(--dim);
             border-radius: 3px; padding: 7px 10px; font-family: inherit; font-size: .78rem; outline: none; width: 100%;
         }
-        .field input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0, 255, 153, .12); }
+        .field input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,255,153,.12); }
         .field input[type="number"] { max-width: 150px; }
         .divider { border: none; border-top: 1px dashed var(--dim); margin: 14px 0; }
         .btn-row { display: flex; gap: 10px; margin-top: 4px; }
@@ -95,21 +79,17 @@
         .chance-gauge { position: relative; width: 100px; height: 100px; flex-shrink: 0; }
         .chance-gauge svg { width: 100%; height: 100%; }
         .gauge-bg { fill: none; stroke: #1a2a3a; stroke-width: 8; }
-        .gauge-fill {
-            fill: none; stroke: var(--accent2); stroke-width: 8; stroke-linecap: round;
-            transition: stroke-dashoffset 1s ease; transform: rotate(-90deg); transform-origin: 50% 50%;
-        }
-        .gauge-label {
-            position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
-            justify-content: center; font-size: .62rem; color: var(--muted); text-align: center; line-height: 1.3;
-        }
+        .gauge-fill { fill: none; stroke: var(--accent2); stroke-width: 8; stroke-linecap: round;
+            transition: stroke-dashoffset 1s ease; transform: rotate(-90deg); transform-origin: 50% 50%; }
+        .gauge-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+            justify-content: center; font-size: .62rem; color: var(--muted); text-align: center; line-height: 1.3; }
         .gauge-label span { font-size: 1rem; color: var(--accent2); font-weight: bold; }
         .chance-info { flex: 1; }
         .chance-info .big-number { font-size: 1.1rem; color: var(--accent2); font-weight: bold; letter-spacing: .05em; margin-bottom: 4px; }
         .chance-info .label-small { font-size: .62rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px; }
         .chance-info .kans-uitleg { font-size: .68rem; color: var(--text); line-height: 1.6; }
         .comparison-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
-        .cmp-cell { background: rgba(0, 0, 0, .4); border: 1px solid #1a3a5c; border-radius: 4px; padding: 9px 12px; }
+        .cmp-cell { background: rgba(0,0,0,.4); border: 1px solid #1a3a5c; border-radius: 4px; padding: 9px 12px; }
         .cmp-cell .cmp-label { font-size: .58rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 3px; }
         .cmp-cell .cmp-val { font-size: .78rem; color: var(--accent2); font-weight: bold; }
         .cmp-cell .cmp-desc { font-size: .62rem; color: var(--muted); margin-top: 2px; }
@@ -118,20 +98,16 @@
         .kans-track { height: 18px; background: #0a1520; border: 1px solid #1a3a5c; border-radius: 3px; overflow: hidden; position: relative; }
         .kans-fill { height: 100%; background: linear-gradient(90deg, #003366, var(--accent2)); transition: width 1s ease; }
         .kans-pct-label { font-size: .62rem; color: var(--muted); text-align: right; margin-top: 4px; }
-        .log {
-            background: #000; color: var(--accent); height: 150px; overflow-y: scroll;
-            padding: 10px 12px; font-size: .72rem; line-height: 1.6; border-radius: 4px; border: 1px solid var(--border);
-        }
+        .log { background: #000; color: var(--accent); height: 150px; overflow-y: scroll;
+            padding: 10px 12px; font-size: .72rem; line-height: 1.6; border-radius: 4px; border: 1px solid var(--border); }
         .log .ts { color: var(--muted); }
         .log .ev-found { color: var(--warn); font-weight: bold; }
         .log .ev-epoch { color: var(--accent2); }
         .log .ev-stop { color: var(--danger); }
         .log .ev-hop { color: var(--warn); font-style: italic; }
         .result-table { width: 100%; border-collapse: collapse; font-size: .72rem; }
-        .result-table th {
-            background: var(--surface); color: var(--accent2); letter-spacing: .1em; font-size: .62rem;
-            text-transform: uppercase; padding: 10px 12px; border: 1px solid var(--border); text-align: left;
-        }
+        .result-table th { background: var(--surface); color: var(--accent2); letter-spacing: .1em; font-size: .62rem;
+            text-transform: uppercase; padding: 10px 12px; border: 1px solid var(--border); text-align: left; }
         .result-table td { border: 1px solid var(--border); padding: 9px 12px; color: var(--text); word-break: break-all; }
         .footer { text-align: center; font-size: .6rem; color: var(--muted); letter-spacing: .1em; margin-top: 24px; }
         ::-webkit-scrollbar { width: 6px; }
@@ -143,8 +119,8 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – Dynamisch Plakje van 2³⁵ Keys · Auto-Hop</div>
-            <span class="badge">AUTO-HOP MODE (V2 OPTIMIZED)</span>
+            <div class="sub">Puzzel #71 – Native JS Turbo (Geen Netwerk nodig)</div>
+            <span class="badge">🚀 OPTIE 3: 100% INLINE NATIVE ENGINE</span>
         </div>
         <div class="card">
             <div class="card-title">⚙ Actieve Plakje Configuratie</div>
@@ -156,7 +132,7 @@
                 <label>Scan methode (binnen plakje)</label>
                 <select id="scanMethod">
                     <option value="random">🎲 Willekeurig binnen plakje</option>
-                    <option value="linear" selected>📏 Lineair (Wiskundige Snelweg!)</option>
+                    <option value="linear" selected>📏 Lineair (Hyper-Speed!)</option>
                 </select>
             </div>
             <div class="field">
@@ -165,25 +141,9 @@
             </div>
             <hr class="divider">
             <div class="field"><label>Workers (CPU Cores)</label><input id="numW" value="4" type="number" min="1" max="32"></div>
-            
-            <div class="field">
-                <label>Actueel Plakje Start</label>
-                <input id="rangeStart" value="" type="text" style="color: var(--accent2); background: rgba(0,0,0,0.2);">
-            </div>
-            <div class="field">
-                <label>Actueel Plakje Eind</label>
-                <input id="rangeEnd" value="" type="text" style="color: var(--accent2); background: rgba(0,0,0,0.2);">
-            </div>
-            <div style="display:flex; gap:10px; margin-top:8px; align-items:center;">
-                <button id="applySliceBtn" class="btn" style="flex:0.4; background:var(--surface); border:1px solid var(--dim); color:var(--accent2); font-size:0.7rem;">📥 Laad dit plakje</button>
-                <span style="flex:1; font-size:0.6rem; color:var(--muted);">
-                    Stop de scanner en start opnieuw met de bovenstaande Start/Eind HEX-waarden.
-                </span>
-            </div>
-            <div style="font-size: 0.65rem; color: var(--muted); margin-top: 6px; text-align: right;">
-                ℹ️ Auto-Hop overschrijft deze velden wanneer de key-limiet is bereikt.
-            </div>
-
+            <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);"></div>
+            <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);"></div>
+            <div style="font-size: 0.65rem; color: var(--muted); margin-top: 6px; text-align: right;">ℹ️ Deze HEX-waarden vernieuwen na het bereiken van je ingestelde key limiet.</div>
             <div class="btn-row">
                 <button class="btn btn-start" id="startBtn">▶ Start Auto-Hop Scan</button>
                 <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
@@ -194,7 +154,7 @@
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
                 <div class="stat-cell" style="background:rgba(0,0,0,0.3); border-color:#1a3a5c;">
                     <div class="label" style="color:var(--accent2)">Gradiënt dP/dt</div>
-                    <div class="value" id="calcGradient" style="color:#7fcfff">0.00e+0 /s</div>
+                    <div class="value" id="calcGradient" style="color:#7fcfff">0.00 /s</div>
                 </div>
                 <div class="stat-cell" style="background:rgba(0,0,0,0.3); border-color:#1a3a5c;">
                     <div class="label" style="color:var(--accent2)">Limiet Dekking (P)</div>
@@ -253,24 +213,155 @@
                 <tbody id="matchTable"><tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Random Slice Sniper · Auto-Hop · Geoptimaliseerd met Noble Crypto</div>
+        <div class="footer">Random Slice Sniper · NATIVE TURBO (100% Lokaal)</div>
     </div>
 
-    <script id="workerCode" type="text/plain">
-        import * as secp from 'https://esm.sh/@noble/secp256k1@2.0.0';
-        import { sha256 } from 'https://esm.sh/@noble/hashes@1.3.3/sha256';
-        import { ripemd160 } from 'https://esm.sh/@noble/hashes@1.3.3/ripemd160';
-        import { bytesToHex } from 'https://esm.sh/@noble/hashes@1.3.3/utils';
+    <!-- ⚡ PURE NATIVE JS WORKER ENGINE (Zero Network / Zero Fake WASM) -->
+    <script id="workerCode" type="javascript/worker">
+        self.onerror = function(e) {
+            self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
+        };
 
-        // Helpers voor conversie zonder overhead in de loop
-        function hexToBytes(hex) {
-            let bytes = new Uint8Array(hex.length / 2);
-            for (let i = 0; i < bytes.length; i++) {
-                bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+        // ==========================================
+        // 1. SECP256K1 NATIVE BIGINT
+        // ==========================================
+        const P = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
+        const G_x = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n;
+        const G_y = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n;
+        const G = { x: G_x, y: G_y };
+
+        function mod(a, b = P) { const r = a % b; return r >= 0n ? r : r + b; }
+        function inverse(a, n = P) {
+            let t = 0n, newt = 1n; let r = n, newr = a;
+            while (newr !== 0n) {
+                let q = r / newr;
+                let tmp = t - q * newt; t = newt; newt = tmp;
+                tmp = r - q * newr; r = newr; newr = tmp;
             }
+            return t < 0n ? t + n : t;
+        }
+        function add(p, q) {
+            if (!p) return q; if (!q) return p;
+            if (p.x === q.x) {
+                if (p.y !== q.y || p.y === 0n) return null;
+                let lam = mod((3n * p.x * p.x) * inverse(2n * p.y));
+                let x3 = mod(lam * lam - 2n * p.x);
+                return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
+            }
+            let lam = mod(mod(q.y - p.y) * inverse(mod(q.x - p.x)));
+            let x3 = mod(lam * lam - p.x - q.x);
+            return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
+        }
+        function mul(p, n) {
+            let r = null, base = p;
+            while (n > 0n) {
+                if (n & 1n) r = add(r, base);
+                base = add(base, base);
+                n >>= 1n;
+            }
+            return r;
+        }
+        function pubKeyBytes(point) {
+            const bytes = new Uint8Array(33);
+            bytes[0] = (point.y & 1n) === 0n ? 0x02 : 0x03;
+            let tmp = point.x;
+            for (let i = 32; i >= 1; i--) { bytes[i] = Number(tmp & 0xffn); tmp >>= 8n; }
             return bytes;
         }
 
+        // ==========================================
+        // 2. NATIVE PURE JS SHA256 (Bitwise Engine)
+        // ==========================================
+        const sha256_K = new Uint32Array([
+            0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+            0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+            0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+            0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+            0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+            0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+            0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+            0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+        ]);
+        function sha256(data) {
+            const h = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
+            let mLen = data.length;
+            let l = ((mLen + 8) >>> 6) + 1;
+            let m = new Uint8Array(l << 6);
+            m.set(data); m[mLen] = 0x80;
+            let view = new DataView(m.buffer);
+            view.setUint32((l << 6) - 4, mLen << 3);
+            let w = new Uint32Array(64);
+            for (let i = 0; i < l; i++) {
+                let a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], _h = h[7];
+                for (let j = 0; j < 64; j++) {
+                    if (j < 16) w[j] = view.getUint32((i << 6) + j * 4);
+                    else {
+                        let s0 = (w[j-15] >>> 7 | w[j-15] << 25) ^ (w[j-15] >>> 18 | w[j-15] << 14) ^ (w[j-15] >>> 3);
+                        let s1 = (w[j-2] >>> 17 | w[j-2] << 15) ^ (w[j-2] >>> 19 | w[j-2] << 13) ^ (w[j-2] >>> 10);
+                        w[j] = (w[j-16] + s0 + w[j-7] + s1) | 0;
+                    }
+                    let S1 = (e >>> 6 | e << 26) ^ (e >>> 11 | e << 21) ^ (e >>> 25 | e << 7);
+                    let ch = (e & f) ^ (~e & g);
+                    let temp1 = (_h + S1 + ch + sha256_K[j] + w[j]) | 0;
+                    let S0 = (a >>> 2 | a << 30) ^ (a >>> 13 | a << 19) ^ (a >>> 22 | a << 10);
+                    let maj = (a & b) ^ (a & c) ^ (b & c);
+                    let temp2 = (S0 + maj) | 0;
+                    _h = g; g = f; f = e; e = (d + temp1) | 0; d = c; c = b; b = a; a = (temp1 + temp2) | 0;
+                }
+                h[0] = (h[0] + a)|0; h[1] = (h[1] + b)|0; h[2] = (h[2] + c)|0; h[3] = (h[3] + d)|0;
+                h[4] = (h[4] + e)|0; h[5] = (h[5] + f)|0; h[6] = (h[6] + g)|0; h[7] = (h[7] + _h)|0;
+            }
+            let out = new Uint8Array(32);
+            let outView = new DataView(out.buffer);
+            for(let i=0; i<8; i++) outView.setUint32(i*4, h[i]);
+            return out;
+        }
+
+        // ==========================================
+        // 3. NATIVE PURE JS RIPEMD160 (Bitwise Engine)
+        // ==========================================
+        const zl = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15, 7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8, 3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12, 1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2, 4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13];
+        const zr = [5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12, 6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2, 15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13, 8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14, 12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11];
+        const sl = [11,14,15,12,5,8,7,9,11,13,14,15,6,7,9,8, 7,6,8,13,11,9,7,15,7,12,15,9,11,7,13,12, 11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5, 11,12,14,15,14,15,9,8,9,14,5,6,8,6,5,12, 9,15,5,11,6,8,13,12,5,12,13,14,11,8,5,6];
+        const sr = [8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6, 9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11, 9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5, 15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8, 8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];
+        const hl = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
+        const hr = [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000];
+        function ripemd160(msg) {
+            let mLen = msg.length, l = ((mLen + 8) >> 6) + 1;
+            let m = new Uint8Array(l << 6); m.set(msg); m[mLen] = 0x80;
+            let view = new DataView(m.buffer);
+            view.setUint32((l << 6) - 8, mLen << 3, true);
+            let h = new Uint32Array([0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0]);
+            let w = new Uint32Array(16);
+            for (let i = 0; i < l; i++) {
+                for (let j = 0; j < 16; j++) w[j] = view.getUint32((i << 6) + (j << 2), true);
+                let al = h[0], bl = h[1], cl = h[2], dl = h[3], el = h[4];
+                let ar = h[0], br = h[1], cr = h[2], dr = h[3], er = h[4];
+                for (let j = 0; j < 80; j++) {
+                    let round = Math.floor(j / 16), tL, tR;
+                    if (round === 0) { tL = al + (bl ^ cl ^ dl); tR = ar + (br ^ (cr | ~dr)); }
+                    else if (round === 1) { tL = al + ((bl & cl) | (~bl & dl)); tR = ar + ((br & dr) | (cr & ~dr)); }
+                    else if (round === 2) { tL = al + ((bl | ~cl) ^ dl); tR = ar + ((br | ~cr) ^ dr); }
+                    else if (round === 3) { tL = al + ((bl & dl) | (cl & ~dl)); tR = ar + ((br & cr) | (~br & dr)); }
+                    else { tL = al + (bl ^ (cl | ~dl)); tR = ar + (br ^ cr ^ dr); }
+                    tL = (tL + w[zl[j]] + hl[round]) | 0; tL = (tL << sl[j] | tL >>> (32 - sl[j])) + el;
+                    al = el; el = dl; dl = (cl << 10 | cl >>> 22); cl = bl; bl = tL;
+                    tR = (tR + w[zr[j]] + hr[round]) | 0; tR = (tR << sr[j] | tR >>> (32 - sr[j])) + er;
+                    ar = er; er = dr; dr = (cr << 10 | cr >>> 22); cr = br; br = tR;
+                }
+                let t = (h[1] + cl + dr) | 0;
+                h[1] = (h[2] + dl + er) | 0; h[2] = (h[3] + el + ar) | 0; h[3] = (h[4] + al + br) | 0;
+                h[4] = (h[0] + bl + cr) | 0; h[0] = t;
+            }
+            let out = new Uint8Array(20);
+            let outView = new DataView(out.buffer);
+            for(let i=0; i<5; i++) outView.setUint32(i*4, h[i], true);
+            return out;
+        }
+
+        // ==========================================
+        // 4. ALGEMENE FUNCTIES & LOGICA
+        // ==========================================
         function toBase58(hex) {
             const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
             const bytes = hex.match(/.{2}/g).map(b => parseInt(b, 16));
@@ -282,10 +373,7 @@
                     digits[j] = carry % 58;
                     carry = (carry / 58) | 0;
                 }
-                while (carry > 0) {
-                    digits.push(carry % 58);
-                    carry = (carry / 58) | 0;
-                }
+                while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0; }
             }
             let s = '';
             for (let i = 0; i < bytes.length && bytes[i] === 0; i++) s += ALPHA[0];
@@ -298,112 +386,46 @@
             if (data.type === "ADDRESS_SCAN") {
                 const startKey = BigInt("0x" + data.startHex);
                 const endKey = BigInt("0x" + data.endHex);
-                const targetBytes = hexToBytes(data.targetChecksumHex); // Pre-calculate bytes!
+                const targetH160 = new Uint8Array(data.targetH160Hex.match(/.{2}/g).map(b => parseInt(b, 16)));
                 const targetAddr = data.targetAddress;
-                const method = data.method || 'random';
                 const workerId = data.workerId;
+                const BATCH = 5000;
                 
-                self.postMessage({ type: "WORKER_STARTED", workerId: workerId });
+                let currentKey = startKey;
+                let currentPoint = mul(G, currentKey);
 
-                if (method === 'linear') {
-                    // --- GEOPTIMALISEERDE POINT ADDITION ---
-                    const G = secp.ProjectivePoint.BASE;
-                    let currentKey = startKey;
-                    let currentPoint = G.multiply(currentKey);
-                    let count = 0;
-                    const PROGRESS_INTERVAL = 20000; // Iets verhoogd vanwege de snelheid
-                    
-                    // Pre-allocatie van geheugen voorkomt Garbage Collection lag
-                    const payload = new Uint8Array(21);
-                    payload[0] = 0x00; // Mainnet byte
+                function fastStep() {
+                    let batchCount = 0;
+                    for (let i = 0; i < BATCH && currentKey <= endKey; i++) {
+                        const pubBytes = pubKeyBytes(currentPoint);
+                        const s256 = sha256(pubBytes);
+                        const r160 = ripemd160(s256);
 
-                    while (currentKey <= endKey) {
-                        // 1. Krijg ruwe public key bytes (snel!)
-                        const pubKeyBytes = currentPoint.toRawBytes(true);
-                        
-                        // 2. Hash direct (geen strings!)
-                        const hash1 = sha256(pubKeyBytes);
-                        const h160 = ripemd160(hash1);
-                        
-                        // 3. Bouw netwerk payload & dubbele SHA256 checksum
-                        payload.set(h160, 1);
-                        const check1 = sha256(payload);
-                        const checksum = sha256(check1);
-                        
-                        // 4. Extreem snelle byte vergelijking
-                        if (checksum[0] === targetBytes[0] &&
-                            checksum[1] === targetBytes[1] &&
-                            checksum[2] === targetBytes[2] &&
-                            checksum[3] === targetBytes[3]) {
-                            
-                            // Pas hier, bij een match, doen we de trage String conversies!
-                            const payloadHex = bytesToHex(payload);
-                            const checksumHex = bytesToHex(checksum).slice(0, 8);
-                            const fullAddr = toBase58(payloadHex + checksumHex);
-                            
-                            if (fullAddr === targetAddr) {
-                                const privHex = currentKey.toString(16).padStart(64, '0');
-                                const wifPayloadHex = "80" + privHex + "01";
-                                const wifPayloadBytes = hexToBytes(wifPayloadHex);
-                                const wifCheck1 = sha256(wifPayloadBytes);
-                                const wifChecksum = sha256(wifCheck1);
-                                const wifFullHex = wifPayloadHex + bytesToHex(wifChecksum).slice(0, 8);
-                                const wif = toBase58(wifFullHex);
-                                
-                                self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: fullAddr });
-                                return;
-                            }
+                        let match = true;
+                        for(let k = 0; k < 20; k++) {
+                            if (r160[k] !== targetH160[k]) { match = false; break; }
                         }
-                        
-                        // Stap vooruit op de curve
-                        currentPoint = currentPoint.add(G);
+
+                        if (match) {
+                            const privHex = currentKey.toString(16).padStart(64, '0');
+                            const payloadBytes = ("80" + privHex + "01").match(/.{2}/g).map(b => parseInt(b, 16));
+                            const doubleSha = sha256(sha256(new Uint8Array(payloadBytes)));
+                            const wif = toBase58("80" + privHex + "01" + Array.from(doubleSha).slice(0, 4).map(b => b.toString(16).padStart(2,'0')).join(''));
+                            self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: targetAddr });
+                            return;
+                        }
+                        currentPoint = add(currentPoint, G);
                         currentKey++;
-                        count++;
-                        
-                        if (count >= PROGRESS_INTERVAL) {
-                            self.postMessage({ type: "PROGRESS", count: count, workerId });
-                            count = 0;
-                        }
+                        batchCount++;
                     }
-                    if (count > 0) self.postMessage({ type: "PROGRESS", count: count, workerId });
-                    self.postMessage({ type: "SCAN_DONE", workerId });
-                } else {
-                    // Random mode is ook deels geoptimaliseerd, maar linear blijft veruit de koning
-                    const RANDOM_BATCH_SIZE = 1000;
-                    const range = endKey - startKey + 1n;
-                    
-                    function randomLoop() {
-                        for(let i = 0; i < RANDOM_BATCH_SIZE; i++) {
-                            const randBytes = new Uint8Array(32);
-                            crypto.getRandomValues(randBytes);
-                            let randOffset = 0n;
-                            for (let b = 0; b < 32; b++) { randOffset = (randOffset << 8n) | BigInt(randBytes[b]); }
-                            
-                            const candidateKey = startKey + (randOffset % range);
-                            const candidatePoint = secp.ProjectivePoint.BASE.multiply(candidateKey);
-                            const pubKeyBytes = candidatePoint.toRawBytes(true);
-                            
-                            const payload = new Uint8Array(21);
-                            payload[0] = 0x00;
-                            payload.set(ripemd160(sha256(pubKeyBytes)), 1);
-                            
-                            const checksum = sha256(sha256(payload));
-                            
-                            if (checksum[0] === targetBytes[0] && checksum[1] === targetBytes[1] &&
-                                checksum[2] === targetBytes[2] && checksum[3] === targetBytes[3]) {
-                                const fullAddr = toBase58(bytesToHex(payload) + bytesToHex(checksum).slice(0, 8));
-                                if (fullAddr === targetAddr) {
-                                    const privHex = candidateKey.toString(16).padStart(64, '0');
-                                    self.postMessage({ type: "FOUND", privHex: privHex, wif: "Zie logica in linear mode", address: fullAddr });
-                                    return;
-                                }
-                            }
-                        }
-                        self.postMessage({ type: "PROGRESS", count: RANDOM_BATCH_SIZE, workerId });
-                        setTimeout(randomLoop, 0);
+                    if (currentKey > endKey) {
+                        self.postMessage({ type: "SCAN_DONE", workerId });
+                        return;
                     }
-                    randomLoop();
+                    self.postMessage({ type: "PROGRESS", count: batchCount, workerId });
+                    setTimeout(fastStep, 0);
                 }
+                fastStep();
             }
         };
     </script>
@@ -411,20 +433,20 @@
     <script>
         (function() {
             let workers = [], totalJumps = 0, cumulativeScanned = 0;
-            let currentSliceScanned = 0; 
-            let slicesVisited = 1;       
-            let targetLimit = 10000000;  
+            let currentSliceScanned = 0;
+            let slicesVisited = 1;
+            let targetLimit = 10000000;
             let startTime = 0, isRunning = false;
-            
-            const SLICE_SIZE = 34359738368n; 
-            const PUZZLE_71_TOTAL = 1180591620717411303424n; 
+            let lastUpdateScanned = 0, lastUpdateTime = 0;
+
+            const SLICE_SIZE = 34359738368n;
+            const PUZZLE_71_TOTAL = 1180591620717411303424n;
 
             const logBox = document.getElementById('logBox'),
                   startBtn = document.getElementById('startBtn'),
                   stopBtn = document.getElementById('stopBtn'),
                   statusVal = document.getElementById('statusVal'),
-                  progressBar = document.getElementById('progressBar'),
-                  applySliceBtn = document.getElementById('applySliceBtn');
+                  progressBar = document.getElementById('progressBar');
 
             function log(msg, cls = '') {
                 const ts = new Date().toLocaleTimeString('nl-NL');
@@ -448,37 +470,26 @@
             function generateRandomSlice() {
                 const globalStart = BigInt("0x400000000000000000");
                 const globalEnd = BigInt("0x7fffffffffffffffff");
-                
                 const maxOffset = (globalEnd - globalStart + 1n) - SLICE_SIZE;
-                
-                const bits = maxOffset.toString(2).length;
-                const bytes = Math.ceil(bits / 8);
-                const arr = new Uint8Array(bytes);
-                window.crypto.getRandomValues(arr);
-                const hex = Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+                const bytes = new Uint8Array(Math.ceil(maxOffset.toString(2).length / 8));
+                window.crypto.getRandomValues(bytes);
+                const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
                 const rand = BigInt("0x" + hex);
                 const offset = rand % maxOffset;
-
                 const sliceStart = globalStart + offset;
                 const sliceEnd = sliceStart + SLICE_SIZE - 1n;
 
                 document.getElementById('rangeStart').value = sliceStart.toString(16);
                 document.getElementById('rangeEnd').value = sliceEnd.toString(16);
-
-                log(`🎯 Nieuw uniek plakje afgesneden (2³⁵ keys).`);
-                log(`📍 Start HEX: 0x${sliceStart.toString(16)}`);
-                log(`📍 Eind HEX:  0x${sliceEnd.toString(16)}`);
+                log(`Zone geladen. Start: ${sliceStart.toString(16).substring(0,8)}...`, 'ev-hop');
             }
 
             function makeWorker() {
                 const code = document.getElementById('workerCode').textContent;
-                // We laden de worker nu als 'module' zodat ESM imports werken
-                const blobUrl = URL.createObjectURL(new Blob([code], { type: 'application/javascript' }));
-                const worker = new Worker(blobUrl, { type: 'module' });
-
+                const worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
                 worker.onerror = function(e) {
-                    log(`❌ Worker fout: ${e.message || 'Onbekende fout'}`, 'ev-stop');
-                    setStatus('Worker gecrasht', '');
+                    log(`❌ Fout in verwerking. Controleer browser-limieten.`, 'ev-stop');
+                    setStatus('Gestopt', '');
                     killWorkers();
                     setRunning(false);
                 };
@@ -497,27 +508,22 @@
                 let bytes = [0];
                 for (let i = 0; i < address.length; i++) {
                     let c = ALPHA.indexOf(address[i]);
-                    if (c < 0) throw new Error('Ongeldig teken in Base58.');
+                    if (c < 0) throw new Error('Ongeldig Base58 adres.');
                     for (let j = 0; j < bytes.length; j++) {
-                        c += bytes[j] * 58;
-                        bytes[j] = c & 0xff;
-                        c >>= 8;
+                        c += bytes[j] * 58; bytes[j] = c & 0xff; c >>= 8;
                     }
-                    while (c > 0) {
-                        bytes.push(c & 0xff);
-                        c >>= 8;
-                    }
+                    while (c > 0) { bytes.push(c & 0xff); c >>= 8; }
                 }
-                let leadingZeros = 0;
-                for (let i = 0; i < address.length && address[i] === '1'; i++) leadingZeros++;
+                let zeros = 0;
+                for (let i = 0; i < address.length && address[i] === '1'; i++) zeros++;
                 while (bytes.length > 0 && bytes[bytes.length - 1] === 0) bytes.pop();
-                for (let i = 0; i < leadingZeros; i++) bytes.push(0);
+                for (let i = 0; i < zeros; i++) bytes.push(0);
                 bytes.reverse();
                 return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
             }
 
             function formatSeconds(seconds) {
-                if (!isFinite(seconds) || seconds === Infinity) return 'oneindig';
+                if (!isFinite(seconds) || seconds <= 0) return '—';
                 if (seconds > 3.15e7) return (seconds / 3.15e7).toFixed(1) + ' jaar';
                 if (seconds > 86400) return (seconds / 86400).toFixed(1) + ' dagen';
                 if (seconds > 3600) return (seconds / 3600).toFixed(1) + ' uur';
@@ -527,201 +533,107 @@
 
             function updateAllStats() {
                 targetLimit = Number(document.getElementById('keysLimit').value) || 10000000;
-                document.getElementById('limitDisplay').textContent = targetLimit.toLocaleString();
-                document.getElementById('slicesVisitedCount').textContent = slicesVisited.toLocaleString();
+                document.getElementById('limitDisplay').textContent = targetLimit.toLocaleString('nl-NL');
+                document.getElementById('slicesVisitedCount').textContent = slicesVisited.toLocaleString('nl-NL');
 
-                const limitNum = Number(targetLimit);
-                const W = cumulativeScanned;
-                
-                const hopProgress = Math.min(1, currentSliceScanned / limitNum);
-
+                const hopProgress = Math.min(1, currentSliceScanned / targetLimit);
                 document.getElementById('gaugePct').textContent = (hopProgress * 100).toFixed(1) + '%';
                 document.getElementById('gaugeFill').style.strokeDashoffset = 238.76 - (hopProgress * 238.76);
                 document.getElementById('kansBar').style.width = (hopProgress * 100) + '%';
                 document.getElementById('coveragePct').textContent = (hopProgress * 100).toFixed(2) + '%';
-                document.getElementById('jumpsCoverage').textContent = currentSliceScanned.toLocaleString() + ' keys gescand';
-
+                document.getElementById('jumpsCoverage').textContent = currentSliceScanned.toLocaleString('nl-NL') + ' keys gescand';
                 document.getElementById('chanceScientific').innerHTML = `${(hopProgress * 100).toFixed(2)}%`;
-                document.getElementById('chanceUitleg').innerHTML =
-                    `Wanneer dit de 100% raakt, hopt het systeem direct naar een ander plakje!`;
 
-                const globaleKans = Number(W) / Number(PUZZLE_71_TOTAL);
-                document.getElementById('cmpLottery').textContent = globaleKans.toExponential(4);
-                
-                const trefPercentage = (Number(SLICE_SIZE) / Number(PUZZLE_71_TOTAL)) * 100;
-                document.getElementById('cmpEpochs').textContent = trefPercentage.toExponential(6) + '%';
-                
+                document.getElementById('cmpLottery').textContent = (cumulativeScanned / Number(PUZZLE_71_TOTAL)).toExponential(4);
+                document.getElementById('cmpEpochs').textContent = ((Number(SLICE_SIZE) / Number(PUZZLE_71_TOTAL)) * 100).toExponential(6) + '%';
+
                 const now = Date.now();
-                const elapsed = (now - startTime) / 1000;
-                let currentSpeed = 0;
-                if (elapsed > 0.5) currentSpeed = Math.floor(totalJumps / elapsed);
-                document.getElementById('speed').textContent = currentSpeed.toLocaleString() + ' /s';
-
-                if (currentSpeed > 0) {
-                    const remainingToHop = limitNum - currentSliceScanned;
-                    const secondsToHop = remainingToHop / currentSpeed;
-                    document.getElementById('cmpTime').textContent = formatSeconds(secondsToHop);
+                const elapsedSec = (now - lastUpdateTime) / 1000;
+                
+                if (elapsedSec >= 1) { 
+                    const currentSpeed = Math.floor((cumulativeScanned - lastUpdateScanned) / elapsedSec);
+                    document.getElementById('speed').textContent = currentSpeed.toLocaleString('nl-NL') + ' /s';
                     
-                    document.getElementById('calcGradient').textContent = currentSpeed.toLocaleString() + ' /s';
-                    document.getElementById('calcPoisson').textContent = (hopProgress * 100).toFixed(2) + ' %';
+                    if (currentSpeed > 0) {
+                        const remaining = targetLimit - currentSliceScanned;
+                        document.getElementById('cmpTime').textContent = formatSeconds(remaining / currentSpeed);
+                        document.getElementById('calcGradient').textContent = currentSpeed.toLocaleString('nl-NL') + ' /s';
+                        document.getElementById('calcPoisson').textContent = (hopProgress * 100).toFixed(2) + ' %';
+                    }
+                    lastUpdateTime = now; lastUpdateScanned = cumulativeScanned;
                 }
 
                 progressBar.style.width = (hopProgress * 100) + '%';
-                document.getElementById('keysScanned').textContent = cumulativeScanned.toLocaleString();
-                document.getElementById('currentSliceKeys').textContent = currentSliceScanned.toLocaleString();
+                document.getElementById('keysScanned').textContent = cumulativeScanned.toLocaleString('nl-NL');
+                document.getElementById('currentSliceKeys').textContent = currentSliceScanned.toLocaleString('nl-NL');
             }
 
             function spawnWorkers() {
                 const targetAddr = document.getElementById('btcAddr').value.trim();
-                let targetChecksum;
+                let targetH160Hex;
                 try {
-                    const decodedHex = fromBase58(targetAddr);
-                    targetChecksum = decodedHex.slice(-8);
-                } catch (e) { return; }
+                    const decoded = fromBase58(targetAddr);
+                    if (decoded.length !== 50) throw new Error();
+                    targetH160Hex = decoded.substring(2, 42);
+                } catch (e) { 
+                    log('❌ Ongeldig BTC Adres', 'ev-stop'); setRunning(false); return; 
+                }
 
                 const startBI = BigInt("0x" + document.getElementById('rangeStart').value);
                 const endBI = BigInt("0x" + document.getElementById('rangeEnd').value);
-                const totalRange = endBI - startBI + 1n;
                 const numW = Math.max(1, parseInt(document.getElementById('numW').value) || 4);
-                const method = document.getElementById('scanMethod').value;
                 
                 killWorkers();
                 let workersDone = 0;
-                let lastLogUpdate = currentSliceScanned;
-
-                function handleProgress(count) {
-                    if (!isRunning) return;
-                    
-                    totalJumps += count;
-                    cumulativeScanned += count;
-                    currentSliceScanned += count;
-                    
-                    if (currentSliceScanned - lastLogUpdate >= 500000) {
-                        lastLogUpdate = currentSliceScanned;
-                        log(`📊 ${currentSliceScanned.toLocaleString()} keys gescand in dit huidige plakje...`, 'ev-epoch');
-                    }
-
-                    if (currentSliceScanned >= targetLimit && isRunning) {
-                        log(`🔄 Limiet van ${targetLimit.toLocaleString()} bereikt! Switchen naar nieuw plakje...`, 'ev-hop');
-                        killWorkers();
-                        generateRandomSlice();
-                        slicesVisited++;
-                        currentSliceScanned = 0;
-                        
-                        setTimeout(() => {
-                            if (isRunning) spawnWorkers();
-                        }, 50);
-                    }
-                }
 
                 for (let i = 0; i < numW; i++) {
                     const worker = makeWorker();
                     workers.push(worker);
                     
-                    let segStart = startBI.toString(16);
-                    let segEnd = endBI.toString(16);
-
-                    if (method === 'linear') {
-                        const chunkSize = totalRange / BigInt(numW);
-                        const s = startBI + chunkSize * BigInt(i);
-                        const e = (i === numW - 1) ? endBI : (startBI + chunkSize * BigInt(i + 1) - 1n);
-                        segStart = s.toString(16);
-                        segEnd = e.toString(16);
-                    }
+                    const chunkSize = (endBI - startBI + 1n) / BigInt(numW);
+                    const segStart = (startBI + chunkSize * BigInt(i)).toString(16);
+                    const segEnd = (i === numW - 1) ? endBI.toString(16) : (startBI + chunkSize * BigInt(i + 1) - 1n).toString(16);
 
                     worker.onmessage = (ev) => {
-                        if (ev.data.type === "WORKER_STARTED") {
-                            // Silent start
-                        } else if (ev.data.type === "PROGRESS") {
-                            handleProgress(ev.data.count);
-                        } else if (ev.data.type === "SCAN_DONE") {
+                        if (ev.data.type === "PROGRESS") {
+                            if (!isRunning) return;
+                            totalJumps += ev.data.count; cumulativeScanned += ev.data.count; currentSliceScanned += ev.data.count;
+                            if (currentSliceScanned >= targetLimit) {
+                                killWorkers(); generateRandomSlice(); slicesVisited++; currentSliceScanned = 0;
+                                setTimeout(() => { if (isRunning) spawnWorkers(); }, 50);
+                            }
+                        }
+                        else if (ev.data.type === "SCAN_DONE") {
                             workersDone++;
                             if (workersDone === numW) {
-                                log('🏁 Dit plakje van 2³⁵ is volledig uitgekampt. Hoppen naar de volgende!');
-                                killWorkers();
-                                generateRandomSlice();
-                                slicesVisited++;
-                                currentSliceScanned = 0;
+                                killWorkers(); generateRandomSlice(); slicesVisited++; currentSliceScanned = 0;
                                 setTimeout(() => { if (isRunning) spawnWorkers(); }, 50);
                             }
                         } else if (ev.data.type === "FOUND") {
-                            setRunning(false);
-                            killWorkers();
-                            setStatus('🎉 GEVONDEN!', 'running');
-                            log('🎉 PRIVÉSLEUTEL GEVONDEN!', 'ev-found');
-                            document.getElementById('matchTable').innerHTML =
-                                `<tr><td>✅ MATCH</td><td style="font-size:.65rem">${ev.data.wif}</td><td style="font-size:.65rem">${ev.data.privHex}</td></tr>`;
-                        } else if (ev.data.type === "WORKER_ERROR") {
-                            log(`⚠️ Worker fout: ${ev.data.message}`, 'ev-stop');
+                            setRunning(false); killWorkers(); setStatus('🎉 GEVONDEN!', 'running');
+                            document.getElementById('matchTable').innerHTML = `<tr><td>✅ MATCH</td><td style="font-size:.65rem; color:#00ff99;">${ev.data.wif}</td><td style="font-size:.65rem">${ev.data.privHex}</td></tr>`;
+                            log('🔥 MATCH GEVONDEN! Proces gestopt.', 'ev-found');
                         }
                     };
-                    
-                    worker.postMessage({
-                        type: "ADDRESS_SCAN",
-                        startHex: segStart,
-                        endHex: segEnd,
-                        targetChecksumHex: targetChecksum,
-                        targetAddress: targetAddr,
-                        method: method,
-                        workerId: i
-                    });
+                    worker.postMessage({ type: "ADDRESS_SCAN", startHex: segStart, endHex: segEnd, targetH160Hex, targetAddress: targetAddr, workerId: i });
                 }
             }
 
             function startAddressScan() {
                 if (isRunning) return;
-                const targetAddr = document.getElementById('btcAddr').value.trim();
-                if (!targetAddr) { log('❌ Voer een Bitcoin adres in.'); return; }
-                
-                try {
-                    const decodedHex = fromBase58(targetAddr);
-                    if (decodedHex.length !== 50) throw new Error('Geen geldig P2PKH adres.');
-                } catch (e) { log('❌ Ongeldig adres: ' + e.message); return; }
-
-                targetLimit = Number(document.getElementById('keysLimit').value) || 10000000;
-
-                totalJumps = 0;
-                cumulativeScanned = 0;
-                currentSliceScanned = 0;
-                slicesVisited = 1;
-                startTime = Date.now();
+                startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = cumulativeScanned;
                 setRunning(true);
-                setStatus('Sniper Actief', 'running');
-                log(`🔍 Auto-Hop geactiveerd met doel ${targetLimit.toLocaleString()} keys per plakje.`, 'ev-epoch');
-                
-                if (document.getElementById('scanMethod').value === 'linear') {
-                    log(`⚡ Wiskundige Snelweg (Point Addition) is ACTIEF!`, 'ev-found');
-                }
-
+                setStatus('⚡ Native Turbo Actief', 'running');
+                log('Native JS Scan gestart.', 'ev-epoch');
                 spawnWorkers();
             }
 
-            applySliceBtn.onclick = () => {
-                if (isRunning) {
-                    killWorkers();
-                    setRunning(false);
-                    log('🛑 Gestopt om handmatig plakje te laden.', 'ev-stop');
-                }
-                const startHex = document.getElementById('rangeStart').value.trim();
-                const endHex = document.getElementById('rangeEnd').value.trim();
-                if (!startHex || !endHex) {
-                    log('❌ Vul een geldige Start en Eind HEX in.', 'ev-stop');
-                    return;
-                }
-                startAddressScan();
-            };
-
             startBtn.onclick = () => { if (!isRunning) startAddressScan(); };
-            stopBtn.onclick = () => {
-                setRunning(false);
-                killWorkers();
-                setStatus('Gestopt');
-                log(`🛑 Auto-Hop Sniper handmatig gepauzeerd.`, 'ev-stop');
-            };
-
+            stopBtn.onclick = () => { setRunning(false); killWorkers(); setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop'); };
             generateRandomSlice();
-            setInterval(() => { if (isRunning) updateAllStats(); }, 500);
-            updateAllStats();
+            log('Systeem klaar. Turbo Engine Lokaal geladen.', 'ts');
+
+            setInterval(() => { if (isRunning) updateAllStats(); }, 800);
         })();
     </script>
 </body>
