@@ -2,768 +2,395 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Hybride Kangaroo — Gecorrigeerd</title>
+    <title>Puzzel #71 – Random Slice Sniper (NATIVE TURBO) ⚡</title>
     <style>
-        *,
-        *::before,
-        *::after {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
         :root {
-            --bg: #07090f;
-            --surface: #0d1117;
-            --panel: #111827;
-            --border: #1f2937;
-            --accent: #00ff99;
-            --accent2: #00c3ff;
-            --dim: #374151;
-            --muted: #6b7280;
-            --text: #e2e8f0;
-            --warn: #f59e0b;
-            --danger: #ef4444;
-            --success: #10b981;
-            --found: #f59e0b;
+            --bg: #07090f; --surface: #0d1117; --panel: #111827;
+            --border: #1f2937; --accent: #00ff99; --accent2: #00c3ff;
+            --warn: #f59e0b; --danger: #ef4444; --success: #10b981;
+            --dim: #374151; --muted: #6b7280; --text: #e2e8f0;
         }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: 'Courier New', Courier, monospace;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            padding: 24px 16px 48px;
+            font-family: 'Courier New', monospace;
+            background: var(--bg); color: var(--text);
+            min-height: 100vh; padding: 24px 16px 48px;
         }
         body::before {
-            content: '';
-            position: fixed;
-            inset: 0;
-            background: repeating-linear-gradient(to bottom, transparent 0px, transparent 3px, rgba(0, 255, 153, .015) 3px, rgba(0, 255, 153, .015) 4px);
-            pointer-events: none;
-            z-index: 999;
+            content: ''; position: fixed; inset: 0;
+            background: repeating-linear-gradient(transparent 0px, transparent 3px,
+                rgba(0,255,153,.015) 3px, rgba(0,255,153,.015) 4px);
+            pointer-events: none; z-index: 999;
         }
-        .container {
-            max-width: 760px;
-            margin: 0 auto;
+        .container { max-width: 820px; margin: 0 auto; position: relative; z-index: 1; }
+        .header { text-align: center; margin-bottom: 28px; }
+        .header h1 { font-size: 1.6rem; letter-spacing: .2em; color: var(--accent);
+            text-shadow: 0 0 18px var(--accent); text-transform: uppercase; }
+        .header .sub { font-size: .72rem; color: var(--muted); letter-spacing: .12em; margin-top: 6px; }
+        .badge { display: inline-block; background: linear-gradient(90deg,#1a2a1a,#0d2010);
+            border: 1px solid var(--accent); color: var(--accent); font-size: .62rem;
+            letter-spacing: .15em; padding: 3px 10px; border-radius: 2px; margin-top: 10px; }
+        .card, .calc-card, .chance-card {
+            background: var(--panel); border: 1px solid var(--border);
+            border-radius: 6px; padding: 20px; margin-bottom: 16px;
         }
-        .header {
-            text-align: center;
-            margin-bottom: 28px;
-        }
-        .header h1 {
-            font-size: 1.6rem;
-            letter-spacing: .2em;
-            color: var(--accent);
-            text-shadow: 0 0 18px var(--accent), 0 0 40px rgba(0, 255, 153, .3);
-            text-transform: uppercase;
-        }
-        .header .sub {
-            font-size: .72rem;
-            color: var(--muted);
-            letter-spacing: .12em;
-            margin-top: 6px;
-        }
-        .badge {
-            display: inline-block;
-            background: linear-gradient(90deg, #1a2a1a, #0d2010);
-            border: 1px solid var(--accent);
-            color: var(--accent);
-            font-size: .62rem;
-            letter-spacing: .15em;
-            padding: 3px 10px;
-            border-radius: 2px;
-            margin-top: 10px;
-        }
-        .card {
-            background: var(--panel);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 20px;
-            margin-bottom: 16px;
-        }
-        .card-title {
-            font-size: .65rem;
-            letter-spacing: .18em;
-            color: var(--accent2);
-            text-transform: uppercase;
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 8px;
-            margin-bottom: 16px;
-        }
-        .field {
-            display: grid;
-            grid-template-columns: 210px 1fr;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 12px;
-        }
-        .field label {
-            font-size: .72rem;
-            color: var(--muted);
-            letter-spacing: .06em;
-        }
-        .field input {
-            background: var(--surface);
-            color: var(--accent);
-            border: 1px solid var(--dim);
-            border-radius: 3px;
-            padding: 7px 10px;
-            font-family: inherit;
-            font-size: .78rem;
-            width: 100%;
-            outline: none;
-            transition: border-color .2s, box-shadow .2s;
-        }
-        .field input:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 2px rgba(0, 255, 153, .12);
-        }
-        .field input[type="number"] {
-            max-width: 120px;
-        }
-        .divider {
-            border: none;
-            border-top: 1px dashed var(--dim);
-            margin: 14px 0;
-        }
-        .btn-row {
-            display: flex;
-            gap: 10px;
-            margin-top: 4px;
-        }
-        .btn {
-            flex: 1;
-            padding: 11px 16px;
-            font-family: inherit;
-            font-size: .8rem;
-            font-weight: bold;
-            letter-spacing: .1em;
-            cursor: pointer;
-            border: none;
-            border-radius: 4px;
-            transition: opacity .15s, transform .1s;
-        }
-        .btn:active:not(:disabled) {
-            transform: scale(.97);
-        }
-        .btn:disabled {
-            opacity: .35;
-            cursor: not-allowed;
-        }
-        .btn-start {
-            background: var(--success);
-            color: #000;
-        }
-        .btn-stop {
-            background: var(--danger);
-            color: #fff;
-        }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-        .stat-cell {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            padding: 10px 14px;
-        }
-        .stat-cell .label {
-            font-size: .6rem;
-            letter-spacing: .14em;
-            color: var(--muted);
-            text-transform: uppercase;
-            margin-bottom: 4px;
-        }
-        .stat-cell .value {
-            font-size: 1.05rem;
-            font-weight: bold;
-            color: var(--accent);
-        }
-        #statusVal {
-            color: var(--danger);
-        }
-        #statusVal.running {
-            color: var(--success);
-        }
-        #statusVal.tame {
-            color: var(--warn);
-        }
-        .progress-wrap {
-            height: 4px;
-            background: var(--border);
-            border-radius: 2px;
-            margin-top: 14px;
-            overflow: hidden;
-        }
-        .progress-bar {
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, var(--accent2), var(--accent));
-            border-radius: 2px;
-            transition: width .4s;
-        }
-
-        /* KANS METER */
-        .chance-card {
+        .calc-card, .chance-card {
             background: linear-gradient(135deg, #0a0f1a 0%, #0d1520 100%);
-            border: 1px solid #1a3a5c;
-            border-radius: 6px;
-            padding: 20px;
-            margin-bottom: 16px;
-            position: relative;
-            overflow: hidden;
+            border-color: #1a3a5c;
         }
+        .chance-card { position: relative; overflow: hidden; }
         .chance-card::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(ellipse at center, rgba(0, 195, 255, .04) 0%, transparent 60%);
+            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+            background: radial-gradient(ellipse at center, rgba(0,195,255,.04) 0%, transparent 60%);
             pointer-events: none;
         }
-        .chance-title {
-            font-size: .65rem;
-            letter-spacing: .18em;
-            color: var(--accent2);
-            text-transform: uppercase;
-            border-bottom: 1px solid #1a3a5c;
-            padding-bottom: 8px;
-            margin-bottom: 16px;
+        .card-title, .calc-title, .chance-title {
+            font-size: .65rem; letter-spacing: .18em; text-transform: uppercase;
+            border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px;
         }
-        .chance-main {
-            display: flex;
-            align-items: center;
-            gap: 20px;
-            margin-bottom: 18px;
+        .calc-title, .chance-title { color: var(--accent2); border-color: #1a3a5c; }
+        .field { display: grid; grid-template-columns: 210px 1fr; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .field label { font-size: .72rem; color: var(--muted); letter-spacing: .06em; }
+        .field input, select {
+            background: var(--surface); color: var(--accent); border: 1px solid var(--dim);
+            border-radius: 3px; padding: 7px 10px; font-family: inherit; font-size: .78rem; outline: none; width: 100%;
         }
-        .chance-gauge {
-            position: relative;
-            width: 100px;
-            height: 100px;
-            flex-shrink: 0;
+        .field input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,255,153,.12); }
+        .field input[type="number"] { max-width: 150px; }
+        .divider { border: none; border-top: 1px dashed var(--dim); margin: 14px 0; }
+        .btn-row { display: flex; gap: 10px; margin-top: 4px; }
+        .btn {
+            flex: 1; padding: 11px 16px; font-family: inherit; font-size: .8rem; font-weight: bold;
+            letter-spacing: .1em; cursor: pointer; border: none; border-radius: 4px; transition: opacity .15s, transform .1s;
         }
-        .chance-gauge svg {
-            width: 100%;
-            height: 100%;
-        }
-        .gauge-bg {
-            fill: none;
-            stroke: #1a2a3a;
-            stroke-width: 8;
-        }
-        .gauge-fill {
-            fill: none;
-            stroke: var(--accent2);
-            stroke-width: 8;
-            stroke-linecap: round;
-            transition: stroke-dashoffset 1s ease;
-            transform: rotate(-90deg);
-            transform-origin: 50% 50%;
-        }
-        .gauge-label {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            font-size: .62rem;
-            color: var(--muted);
-            text-align: center;
-            line-height: 1.3;
-        }
-        .gauge-label span {
-            font-size: 1rem;
-            color: var(--accent2);
-            font-weight: bold;
-        }
-        .chance-info {
-            flex: 1;
-        }
-        .chance-info .big-number {
-            font-size: 1.1rem;
-            color: var(--accent2);
-            font-weight: bold;
-            letter-spacing: .05em;
-            word-break: break-all;
-            margin-bottom: 4px;
-        }
-        .chance-info .label-small {
-            font-size: .62rem;
-            color: var(--muted);
-            letter-spacing: .1em;
-            text-transform: uppercase;
-            margin-bottom: 10px;
-        }
-        .chance-info .kans-uitleg {
-            font-size: .68rem;
-            color: var(--text);
-            line-height: 1.6;
-        }
-        .comparison-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-top: 14px;
-        }
-        .cmp-cell {
-            background: rgba(0, 0, 0, .4);
-            border: 1px solid #1a3a5c;
-            border-radius: 4px;
-            padding: 9px 12px;
-        }
-        .cmp-cell .cmp-label {
-            font-size: .58rem;
-            color: var(--muted);
-            letter-spacing: .1em;
-            text-transform: uppercase;
-            margin-bottom: 3px;
-        }
-        .cmp-cell .cmp-val {
-            font-size: .78rem;
-            color: var(--accent2);
-            font-weight: bold;
-        }
-        .cmp-cell .cmp-desc {
-            font-size: .62rem;
-            color: var(--muted);
-            margin-top: 2px;
-        }
-        .kans-progress {
-            margin-top: 14px;
-        }
-        .kans-progress .kp-label {
-            display: flex;
-            justify-content: space-between;
-            font-size: .62rem;
-            color: var(--muted);
-            margin-bottom: 5px;
-        }
-        .kans-track {
-            height: 18px;
-            background: #0a1520;
-            border: 1px solid #1a3a5c;
-            border-radius: 3px;
-            overflow: hidden;
-            position: relative;
-        }
-        .kans-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #003366, var(--accent2));
-            border-radius: 3px;
-            transition: width 1s ease;
-            position: relative;
-        }
-        .kans-fill::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            right: 0;
-            bottom: 0;
-            width: 20px;
-            background: rgba(255, 255, 255, .15);
-            filter: blur(4px);
-        }
-        .kans-pct-label {
-            font-size: .62rem;
-            color: var(--muted);
-            text-align: right;
-            margin-top: 4px;
-        }
-        .sci-note {
-            background: rgba(0, 195, 255, .05);
-            border: 1px solid rgba(0, 195, 255, .15);
-            border-radius: 4px;
-            padding: 10px 14px;
-            margin-top: 14px;
-            font-size: .67rem;
-            color: var(--muted);
-            line-height: 1.7;
-        }
-        .sci-note strong {
-            color: var(--accent2);
-        }
-
-        /* OPTIMIZER CARD */
-        .opt-card {
-            background: linear-gradient(135deg, #0f1a0a 0%, #0d1f10 100%);
-            border: 1px solid #1a5c2a;
-            border-radius: 6px;
-            padding: 20px;
-            margin-bottom: 16px;
-        }
-        .opt-title {
-            font-size: .65rem;
-            letter-spacing: .18em;
-            color: var(--accent);
-            text-transform: uppercase;
-            border-bottom: 1px solid #1a5c2a;
-            padding-bottom: 8px;
-            margin-bottom: 16px;
-        }
-        .opt-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 14px;
-        }
-        .opt-item {
-            background: rgba(0, 0, 0, .35);
-            border: 1px solid #1a5c2a;
-            border-radius: 4px;
-            padding: 10px 12px;
-        }
-        .opt-item .opt-label {
-            font-size: .58rem;
-            color: var(--muted);
-            letter-spacing: .1em;
-            text-transform: uppercase;
-            margin-bottom: 6px;
-        }
-        .opt-item select,
-        .opt-item input[type=range] {
-            background: var(--surface);
-            color: var(--accent);
-            border: 1px solid var(--dim);
-            border-radius: 3px;
-            padding: 5px 8px;
-            font-family: inherit;
-            font-size: .75rem;
-            width: 100%;
-            outline: none;
-        }
-        .opt-item select option {
-            background: var(--surface);
-        }
-        .opt-boost {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            background: rgba(0, 255, 153, .06);
-            border: 1px solid rgba(0, 255, 153, .2);
-            border-radius: 4px;
-            padding: 10px 14px;
-            margin-bottom: 10px;
-        }
-        .opt-boost-label {
-            font-size: .7rem;
-            color: var(--accent);
-        }
-        .opt-boost-val {
-            font-size: 1.1rem;
-            font-weight: bold;
-            color: var(--accent);
-        }
-        .range-val {
-            font-size: .75rem;
-            color: var(--accent);
-            margin-top: 4px;
-        }
-
-        .log {
-            background: #000;
-            color: var(--accent);
-            height: 150px;
-            overflow-y: scroll;
-            padding: 10px 12px;
-            font-size: .72rem;
-            line-height: 1.6;
-            border-radius: 4px;
-            border: 1px solid var(--border);
-        }
-        .log .ts {
-            color: var(--muted);
-        }
-        .log .ev-found {
-            color: var(--found);
-            font-weight: bold;
-        }
-        .log .ev-epoch {
-            color: var(--accent2);
-        }
-        .log .ev-stop {
-            color: var(--danger);
-        }
-        .log .ev-tame {
-            color: var(--warn);
-        }
-        .result-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: .72rem;
-        }
-        .result-table th {
-            background: var(--surface);
-            color: var(--accent2);
-            letter-spacing: .1em;
-            font-size: .62rem;
-            text-transform: uppercase;
-            padding: 10px 12px;
-            border: 1px solid var(--border);
-            text-align: left;
-        }
-        .result-table td {
-            border: 1px solid var(--border);
-            padding: 9px 12px;
-            color: var(--text);
-            word-break: break-all;
-        }
-        .result-table .empty-row td {
-            text-align: center;
-            color: var(--muted);
-            font-style: italic;
-        }
-        .result-table .found-row td {
-            color: var(--found);
-        }
-        .footer {
-            text-align: center;
-            font-size: .6rem;
-            color: var(--muted);
-            letter-spacing: .1em;
-            margin-top: 24px;
-        }
-        ::-webkit-scrollbar {
-            width: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: var(--surface);
-        }
-        ::-webkit-scrollbar-thumb {
-            background: var(--dim);
-            border-radius: 3px;
-        }
+        .btn:active:not(:disabled) { transform: scale(.97); }
+        .btn:disabled { opacity: .35; cursor: not-allowed; }
+        .btn-start { background: var(--success); color: #000; }
+        .btn-stop { background: var(--danger); color: #fff; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .stat-cell { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 10px 14px; }
+        .stat-cell .label { font-size: .6rem; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+        .stat-cell .value { font-size: 1.05rem; font-weight: bold; color: var(--accent); }
+        #statusVal { color: var(--danger); }
+        #statusVal.running { color: var(--success); }
+        .progress-wrap { height: 4px; background: var(--border); border-radius: 2px; margin-top: 14px; overflow: hidden; }
+        .progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width .4s; }
+        .chance-main { display: flex; align-items: center; gap: 20px; margin-bottom: 18px; }
+        .chance-gauge { position: relative; width: 100px; height: 100px; flex-shrink: 0; }
+        .chance-gauge svg { width: 100%; height: 100%; }
+        .gauge-bg { fill: none; stroke: #1a2a3a; stroke-width: 8; }
+        .gauge-fill { fill: none; stroke: var(--accent2); stroke-width: 8; stroke-linecap: round;
+            transition: stroke-dashoffset 1s ease; transform: rotate(-90deg); transform-origin: 50% 50%; }
+        .gauge-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+            justify-content: center; font-size: .62rem; color: var(--muted); text-align: center; line-height: 1.3; }
+        .gauge-label span { font-size: 1rem; color: var(--accent2); font-weight: bold; }
+        .chance-info { flex: 1; }
+        .chance-info .big-number { font-size: 1.1rem; color: var(--accent2); font-weight: bold; letter-spacing: .05em; margin-bottom: 4px; }
+        .chance-info .label-small { font-size: .62rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px; }
+        .chance-info .kans-uitleg { font-size: .68rem; color: var(--text); line-height: 1.6; }
+        .comparison-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+        .cmp-cell { background: rgba(0,0,0,.4); border: 1px solid #1a3a5c; border-radius: 4px; padding: 9px 12px; }
+        .cmp-cell .cmp-label { font-size: .58rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 3px; }
+        .cmp-cell .cmp-val { font-size: .78rem; color: var(--accent2); font-weight: bold; }
+        .cmp-cell .cmp-desc { font-size: .62rem; color: var(--muted); margin-top: 2px; }
+        .kans-progress { margin-top: 14px; }
+        .kans-progress .kp-label { display: flex; justify-content: space-between; font-size: .62rem; color: var(--muted); margin-bottom: 5px; }
+        .kans-track { height: 18px; background: #0a1520; border: 1px solid #1a3a5c; border-radius: 3px; overflow: hidden; position: relative; }
+        .kans-fill { height: 100%; background: linear-gradient(90deg, #003366, var(--accent2)); transition: width 1s ease; }
+        .kans-pct-label { font-size: .62rem; color: var(--muted); text-align: right; margin-top: 4px; }
+        .log { background: #000; color: var(--accent); height: 150px; overflow-y: scroll;
+            padding: 10px 12px; font-size: .72rem; line-height: 1.6; border-radius: 4px; border: 1px solid var(--border); }
+        .log .ts { color: var(--muted); }
+        .log .ev-found { color: var(--warn); font-weight: bold; }
+        .log .ev-epoch { color: var(--accent2); }
+        .log .ev-stop { color: var(--danger); }
+        .log .ev-hop { color: var(--warn); font-style: italic; }
+        .result-table { width: 100%; border-collapse: collapse; font-size: .72rem; }
+        .result-table th { background: var(--surface); color: var(--accent2); letter-spacing: .1em; font-size: .62rem;
+            text-transform: uppercase; padding: 10px 12px; border: 1px solid var(--border); text-align: left; }
+        .result-table td { border: 1px solid var(--border); padding: 9px 12px; color: var(--text); word-break: break-all; }
+        .footer { text-align: center; font-size: .6rem; color: var(--muted); letter-spacing: .1em; margin-top: 24px; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--surface); }
+        ::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 3px; }
     </style>
 </head>
 <body>
     <div class="container">
-
         <div class="header">
-            <h1>🦘 Hybride Kangaroo (Gecorrigeerd)</h1>
-            <div class="sub">Wiskundige Validatie · Pollard's Kangaroo — Bitcoin Puzzle #135</div>
-            <span class="badge">POLLARD'S KANGAROO · DIRECTE PUBLIC KEY VALIDATIE</span>
+            <h1>📫 Random Slice Sniper</h1>
+            <div class="sub">Puzzel #71 – Native JS Turbo (Geen Netwerk nodig)</div>
+            <span class="badge">🚀 OPTIE 3: JACOBIAN BATCH INVERSION ENGINE</span>
         </div>
-
         <div class="card">
-            <div class="card-title">⚙ Configuratie</div>
-            <div class="field">
-                <label>Workers (CPU Cores)</label>
-                <input id="numW" value="4" type="number" min="1" max="32">
-            </div>
-            <div class="field">
-                <label>Target Public Key</label>
-                <input id="pubKey"
-                value="02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16"
-                type="text">
-            </div>
+            <div class="card-title">⚙ Actieve Plakje Configuratie</div>
             <div class="field">
                 <label>Target BTC Adres</label>
-                <input id="btcAddr" value="16RGFo6hjq9ym6Pj7N5H7L1NR1rVPJyw2v" type="text" disabled style="opacity:0.5;">
+                <input id="btcAddr" value="1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU" type="text">
+            </div>
+            <div class="field">
+                <label>Scan methode (binnen plakje)</label>
+                <select id="scanMethod">
+                    <option value="linear" selected>📏 Lineair (Batch Inversion Hyper-Speed!)</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Keys per Plakje (Daarna Switch)</label>
+                <input id="keysLimit" value="10000000" type="number" min="1000">
             </div>
             <hr class="divider">
-            <div class="field">
-                <label>Absoluut Start (HEX)</label>
-                <input id="rangeStart" value="4000000000000000000000000000000000" type="text">
-            </div>
-            <div class="field">
-                <label>Absoluut Eind (HEX)</label>
-                <input id="rangeEnd" value="7fffffffffffffffffffffffffffffffff" type="text">
-            </div>
-            <hr class="divider">
-            <div class="field">
-                <label>Zoekbereik Start (%)</label>
-                <input id="pctStart" value="0" type="number" step="0.1" min="0" max="100">
-            </div>
-            <div class="field">
-                <label>Zoekbereik Eind (%)</label>
-                <input id="pctEnd" value="100" type="number" step="0.1" min="0" max="100">
-            </div>
+            <div class="field"><label>Workers (CPU Cores)</label><input id="numW" value="4" type="number" min="1" max="32"></div>
+            <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);"></div>
+            <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);"></div>
+            <div style="font-size: 0.65rem; color: var(--muted); margin-top: 6px; text-align: right;">ℹ️ Deze HEX-waarden vernieuwen na het bereiken van je ingestelde key limiet.</div>
             <div class="btn-row">
-                <button class="btn btn-start" id="startBtn">▶ Start Hybride Scan</button>
+                <button class="btn btn-start" id="startBtn">▶ Start Auto-Hop Scan</button>
                 <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
             </div>
         </div>
-
-        <div class="opt-card">
-            <div class="opt-title">⚡ Kans Optimizer — Instellingen</div>
-            <div class="opt-boost">
-                <div class="opt-boost-label">📈 Geschatte relatieve kansverbetering t.o.v. standaard</div>
-                <div class="opt-boost-val" id="boostVal">+0%</div>
-            </div>
-            <div class="opt-grid">
-                <div class="opt-item">
-                    <div class="opt-label">Traps per worker (paden)</div>
-                    <input type="range" id="pathsSlider" min="100" max="800" step="100" value="800"
-                    oninput="updateOptimizer()">
-                    <div class="range-val" id="pathsVal">800 paden × 1500 stappen</div>
+        <div class="calc-card">
+            <div class="calc-title">📐 Live Gradiënt</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+                <div class="stat-cell" style="background:rgba(0,0,0,0.3); border-color:#1a3a5c;">
+                    <div class="label" style="color:var(--accent2)">Gradiënt dP/dt</div>
+                    <div class="value" id="calcGradient" style="color:#7fcfff">0.00 /s</div>
                 </div>
-                <div class="opt-item">
-                    <div class="opt-label">Distinguished Point Filter</div>
-                    <select id="dpFilter" onchange="updateOptimizer()">
-                        <option value="1023">10-bit (standaard, snel)</option>
-                        <option value="4095">12-bit (meer vallen)</option>
-                        <option value="255">8-bit (minder maar vaker check)</option>
-                    </select>
-                </div>
-                <div class="opt-item">
-                    <div class="opt-label">Wild Jumps per Epoch</div>
-                    <select id="wildJumps" onchange="updateOptimizer()">
-                        <option value="1000000">1M (snel per ronde)</option>
-                        <option value="3000000" selected>3M (standaard)</option>
-                        <option value="6000000">6M (meer kans per ronde)</option>
-                        <option value="10000000">10M (max kans per ronde)</option>
-                    </select>
-                </div>
-                <div class="opt-item">
-                    <div class="opt-label">Stappen per pad (TAME)</div>
-                    <select id="stepsPerPath" onchange="updateOptimizer()">
-                        <option value="1000">1000 (snel)</option>
-                        <option value="1500" selected>1500 (standaard)</option>
-                        <option value="2500">2500 (meer dekking)</option>
-                        <option value="4000">4000 (maximaal)</option>
-                    </select>
+                <div class="stat-cell" style="background:rgba(0,0,0,0.3); border-color:#1a3a5c;">
+                    <div class="label" style="color:var(--accent2)">Limiet Dekking (P)</div>
+                    <div class="value" id="calcPoisson" style="color:#7fcfff">0.0000 %</div>
                 </div>
             </div>
-            <div class="sci-note">
-                <strong>💡 Wat verhoogt de kans?</strong><br>
-                <strong>Meer traps:</strong> 800 paden = meer vallen in het veld.<br>
-                <strong>Meer wild jumps:</strong> 10M = langer zoeken per epoch ronde.<br>
-                <strong>Directe verificatie:</strong> Kandidaten worden wiskundig gecontroleerd op de elliptische curve.
+            <div class="formula-box" style="background:rgba(0,0,0,0.5); border-left:3px solid var(--accent2); padding:10px; font-size:.75rem; color:#bfe4ff; line-height:1.5;">
+                P = k / N_limiet &nbsp; (keys gescand / hop limiet)<br>
+                dP/dt = v / N_limiet &nbsp; (scansnelheid / hop limiet)
             </div>
         </div>
-
         <div class="chance-card">
-            <div class="chance-title">🎲 Kans op Succes — Live Berekening</div>
+            <div class="chance-title">🎲 Voortgang tot volgende Hop</div>
             <div class="chance-main">
                 <div class="chance-gauge">
                     <svg viewBox="0 0 100 100">
-                        <circle class="gauge-bg" cx="50" cy="50" r="38" />
-                        <circle class="gauge-fill" cx="50" cy="50" r="38" id="gaugeFill"
-                        stroke-dasharray="238.76" stroke-dashoffset="238.76" />
+                        <circle class="gauge-bg" cx="50" cy="50" r="38"/>
+                        <circle class="gauge-fill" cx="50" cy="50" r="38" id="gaugeFill" stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
                     </svg>
-                    <div class="gauge-label">
-                        <span id="gaugePct">~0%</span>
-                        log-schaal<br>meter
-                    </div>
+                    <div class="gauge-label"><span id="gaugePct">0%</span>gedekt</div>
                 </div>
                 <div class="chance-info">
-                    <div class="big-number" id="chanceScientific">1 op ~2<sup>67</sup></div>
-                    <div class="label-small">benodigde operaties (Kangaroo algebraïsche botsingen)</div>
-                    <div class="kans-uitleg" id="chanceUitleg">
-                        Nog niet gestart. Klik Start om de berekening te zien.
-                    </div>
+                    <div class="big-number" id="chanceScientific">0.00%</div>
+                    <div class="label-small">van limiet bereikt</div>
+                    <div class="kans-uitleg" id="chanceUitleg">Nog niet gestart.</div>
                 </div>
             </div>
             <div class="kans-progress">
-                <div class="kp-label">
-                    <span>Gedekte zoekruimte (logaritmisch, cumulatief)</span>
-                    <span id="coveragePct">0.000000%</span>
-                </div>
-                <div class="kans-track">
-                    <div class="kans-fill" id="kansBar" style="width:0%"></div>
-                </div>
-                <div class="kans-pct-label" id="jumpsCoverage">0 sprongen van ~2⁶⁷ benodigde</div>
+                <div class="kp-label"><span>Dekkingsgraad tot Switch</span><span id="coveragePct">0.000000%</span></div>
+                <div class="kans-track"><div class="kans-fill" id="kansBar" style="width:0%"></div></div>
+                <div class="kans-pct-label" id="jumpsCoverage">0 keys in dit plakje</div>
             </div>
             <div class="comparison-grid">
-                <div class="cmp-cell">
-                    <div class="cmp-label">🌌 Zoekruimte grootte</div>
-                    <div class="cmp-val" id="cmpUniverse">—</div>
-                    <div class="cmp-desc">mogelijke sleutelwaarden</div>
-                </div>
-                <div class="cmp-cell">
-                    <div class="cmp-label">⏱ Tijdschatting (browser)</div>
-                    <div class="cmp-val" id="cmpTime">—</div>
-                    <div class="cmp-desc">bij huidige snelheid</div>
-                </div>
-                <div class="cmp-cell">
-                    <div class="cmp-label">🎰 Loterij vergelijking</div>
-                    <div class="cmp-val" id="cmpLottery">—</div>
-                    <div class="cmp-desc">× moeilijker dan staatsloterij</div>
-                </div>
-                <div class="cmp-cell">
-                    <div class="cmp-label">📡 Epochs voltooid</div>
-                    <div class="cmp-val" id="cmpEpochs">0</div>
-                    <div class="cmp-desc">kangaroo-rondes uitgevoerd</div>
-                </div>
-            </div>
-            <div class="sci-note">
-                <strong>📐 Hoe werkt dit?</strong><br>
-                Bitcoin Puzzle #135 heeft een privésleutel in een 134-bit ruimte (~2<sup>134</sup> opties). 
-                Pollard's Kangaroo reduceert de complexiteit drastisch tot de wortel van de zoekruimte: **~2<sup>67</sup> operaties**. 
-                Zodra de Wild Kangaroo op een Tame trap landt, levert dit direct de exacte privésleutel op.
+                <div class="cmp-cell"><div class="cmp-label">🌌 Plakje Grootte</div><div class="cmp-val" id="cmpUniverse">2³⁵ keys</div><div class="cmp-desc">34.359.738.368 opties</div></div>
+                <div class="cmp-cell"><div class="cmp-label">⏱ Tijd tot hop</div><div class="cmp-val" id="cmpTime">—</div><div class="cmp-desc">tijd tot nieuwe zone</div></div>
+                <div class="cmp-cell"><div class="cmp-label">🎰 Globale Puzzel 71 Kans</div><div class="cmp-val" id="cmpLottery">0.00e+0</div><div class="cmp-desc">statistische trefkans</div></div>
+                <div class="cmp-cell"><div class="cmp-label">📡 % van Puzzel 71</div><div class="cmp-val" id="cmpEpochs">0%</div></div>
             </div>
         </div>
-
         <div class="card">
-            <div class="card-title">📊 Live Statistieken</div>
+            <div class="card-title">📊 Sessie Statistieken</div>
             <div class="stats-grid">
-                <div class="stat-cell">
-                    <div class="label">Status</div>
-                    <div class="value" id="statusVal">Gestopt</div>
-                </div>
-                <div class="stat-cell">
-                    <div class="label">Epoch (ronde)</div>
-                    <div class="value" style="color:var(--warn)" id="epochCount">0</div>
-                </div>
-                <div class="stat-cell">
-                    <div class="label">Actieve vallen</div>
-                    <div class="value" style="color:var(--text)" id="trapCount">0</div>
-                </div>
-                <div class="stat-cell">
-                    <div class="label">Snelheid</div>
-                    <div class="value" style="color:var(--accent2)" id="speed">0 /s</div>
-                </div>
+                <div class="stat-cell"><div class="label">Status</div><div class="value" id="statusVal">Gestopt</div></div>
+                <div class="stat-cell"><div class="label">Totaal Gescand</div><div class="value" id="keysScanned">0</div></div>
+                <div class="stat-cell"><div class="label">Snelheid</div><div class="value" id="speed">0 /s</div></div>
+                <div class="stat-cell"><div class="label">Plakjes bezocht</div><div class="value" id="slicesVisitedCount">1</div></div>
             </div>
-            <div style="margin-top:10px;font-size:.7rem;color:var(--muted);">
-                Totaal sprongen: <span id="totalJumps" style="color:var(--text)">0</span>
-            </div>
-            <div class="progress-wrap">
-                <div class="progress-bar" id="progressBar"></div>
-            </div>
+            <div style="margin-top:10px;font-size:.7rem;color:var(--muted);">In dit plakje: <span id="currentSliceKeys">0</span> / <span id="limitDisplay">10.000.000</span></div>
+            <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
         </div>
-
-        <div class="card">
-            <div class="card-title">📋 Activiteitenlog</div>
-            <div class="log" id="logBox"></div>
-        </div>
-
+        <div class="card"><div class="card-title">📋 Activiteitenlog</div><div class="log" id="logBox"></div></div>
         <div class="card">
             <div class="card-title">🎯 Resultaten</div>
             <table class="result-table">
-                <thead>
-                    <tr>
-                        <th>Type</th>
-                        <th>WIF (Compressed)</th>
-                        <th>Privésleutel (HEX)</th>
-                    </tr>
-                </thead>
-                <tbody id="matchTable">
-                    <tr class="empty-row">
-                        <td colspan="3">Nog geen match gevonden...</td>
-                    </tr>
-                </tbody>
+                <thead><tr><th>Type</th><th>WIF</th><th>Privésleutel (HEX)</th></tr></thead>
+                <tbody id="matchTable"><tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-
-        <div class="footer">Hybride Kangaroo · Wiskundige EC-Validatie · Schoolproject</div>
+        <div class="footer">Random Slice Sniper · NATIVE TURBO (100% Lokaal)</div>
     </div>
 
+    <!-- ⚡ PURE NATIVE JS WORKER ENGINE (Zero Network / Zero Fake WASM) -->
     <script id="workerCode" type="javascript/worker">
-        importScripts(
-            'https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js',
-            'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js'
-        );
-        const ec = new elliptic.ec("secp256k1");
-        const G = ec.g;
-        const N = ec.n;
-        const NUM_STEPS = 32;
-        const JUMP_SIZES = [];
-        const JUMP_POINTS = [];
+        self.onerror = function(e) {
+            self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
+        };
 
-        function sha256(hex) { return CryptoJS.SHA256(CryptoJS.enc.Hex.parse(hex)).toString(); }
+        const P = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
+        const G_x = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n;
+        const G_y = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n;
+        const G = { x: G_x, y: G_y };
+
+        function mod(a, b = P) { const r = a % b; return r >= 0n ? r : r + b; }
+        function inverse(a, n = P) {
+            let t = 0n, newt = 1n; let r = n, newr = a;
+            while (newr !== 0n) {
+                let q = r / newr;
+                let tmp = t - q * newt; t = newt; newt = tmp;
+                tmp = r - q * newr; r = newr; newr = tmp;
+            }
+            return t < 0n ? t + n : t;
+        }
+
+        // Gebruikt voor initiële setup van de point finder (affine math)
+        function add(p, q) {
+            if (!p) return q; if (!q) return p;
+            if (p.x === q.x) {
+                if (p.y !== q.y || p.y === 0n) return null;
+                let lam = mod((3n * p.x * p.x) * inverse(2n * p.y));
+                let x3 = mod(lam * lam - 2n * p.x);
+                return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
+            }
+            let lam = mod(mod(q.y - p.y) * inverse(mod(q.x - p.x)));
+            let x3 = mod(lam * lam - p.x - q.x);
+            return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
+        }
+        function mul(p, n) {
+            let r = null, base = p;
+            while (n > 0n) {
+                if (n & 1n) r = add(r, base);
+                base = add(base, base);
+                n >>= 1n;
+            }
+            return r;
+        }
+
+        // ==========================================
+        // PRE-ALLOCATED BUFFERS & FAST HASH ENGINES
+        // ==========================================
+        function swap32(val) { return ((val >>> 24) | ((val >>> 8) & 0xff00) | ((val & 0xff00) << 8) | (val << 24)) >>> 0; }
+
+        const sha256_K = new Uint32Array([
+            0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+            0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+            0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+            0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+            0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+            0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+            0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+            0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+        ]);
+        const H_INIT = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+        
+        const sha_W = new Uint32Array(64);
+        const sha_H = new Uint32Array(8);
+        const pubkeyBlock = new Uint8Array(64);
+        const pubkeyView = new DataView(pubkeyBlock.buffer);
+        pubkeyBlock[33] = 0x80;
+        pubkeyView.setUint32(60, 264, false); // Length=264 bits, BIG ENDIAN voor SHA256
+
+        // Directe bitshift vulling voorkomt DataView overhead per byte
+        function setPubkey(x, isEven) {
+            pubkeyBlock[0] = isEven ? 0x02 : 0x03;
+            let x0 = Number(x & 0xffffffffn); x >>= 32n;
+            let x1 = Number(x & 0xffffffffn); x >>= 32n;
+            let x2 = Number(x & 0xffffffffn); x >>= 32n;
+            let x3 = Number(x & 0xffffffffn); x >>= 32n;
+            let x4 = Number(x & 0xffffffffn); x >>= 32n;
+            let x5 = Number(x & 0xffffffffn); x >>= 32n;
+            let x6 = Number(x & 0xffffffffn); x >>= 32n;
+            let x7 = Number(x & 0xffffffffn);
+            pubkeyView.setUint32(1, x7, false); pubkeyView.setUint32(5, x6, false);
+            pubkeyView.setUint32(9, x5, false); pubkeyView.setUint32(13, x4, false);
+            pubkeyView.setUint32(17, x3, false); pubkeyView.setUint32(21, x2, false);
+            pubkeyView.setUint32(25, x1, false); pubkeyView.setUint32(29, x0, false);
+        }
+
+        function fastSha256() {
+            let a = H_INIT[0], b = H_INIT[1], c = H_INIT[2], d = H_INIT[3], e = H_INIT[4], f = H_INIT[5], g = H_INIT[6], _h = H_INIT[7];
+            for (let j = 0; j < 64; j++) {
+                if (j < 16) sha_W[j] = pubkeyView.getUint32(j * 4, false);
+                else {
+                    let w15 = sha_W[j-15], w2 = sha_W[j-2];
+                    let s0 = (w15 >>> 7 | w15 << 25) ^ (w15 >>> 18 | w15 << 14) ^ (w15 >>> 3);
+                    let s1 = (w2 >>> 17 | w2 << 15) ^ (w2 >>> 19 | w2 << 13) ^ (w2 >>> 10);
+                    sha_W[j] = (sha_W[j-16] + s0 + sha_W[j-7] + s1) | 0;
+                }
+                let S1 = (e >>> 6 | e << 26) ^ (e >>> 11 | e << 21) ^ (e >>> 25 | e << 7);
+                let ch = (e & f) ^ (~e & g);
+                let temp1 = (_h + S1 + ch + sha256_K[j] + sha_W[j]) | 0;
+                let S0 = (a >>> 2 | a << 30) ^ (a >>> 13 | a << 19) ^ (a >>> 22 | a << 10);
+                let maj = (a & b) ^ (a & c) ^ (b & c);
+                let temp2 = (S0 + maj) | 0;
+                _h = g; g = f; f = e; e = (d + temp1) | 0; d = c; c = b; b = a; a = (temp1 + temp2) | 0;
+            }
+            sha_H[0] = (H_INIT[0] + a)|0; sha_H[1] = (H_INIT[1] + b)|0; sha_H[2] = (H_INIT[2] + c)|0; sha_H[3] = (H_INIT[3] + d)|0;
+            sha_H[4] = (H_INIT[4] + e)|0; sha_H[5] = (H_INIT[5] + f)|0; sha_H[6] = (H_INIT[6] + g)|0; sha_H[7] = (H_INIT[7] + _h)|0;
+        }
+
+        const zl = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15, 7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8, 3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12, 1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2, 4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13];
+        const zr = [5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12, 6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2, 15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13, 8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14, 12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11];
+        const sl = [11,14,15,12,5,8,7,9,11,13,14,15,6,7,9,8, 7,6,8,13,11,9,7,15,7,12,15,9,11,7,13,12, 11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5, 11,12,14,15,14,15,9,8,9,14,5,6,8,6,5,12, 9,15,5,11,6,8,13,12,5,12,13,14,11,8,5,6];
+        const sr = [8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6, 9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11, 9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5, 15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8, 8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];
+        const hl = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
+        const hr = [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000];
+        
+        const rm_W = new Uint32Array(16);
+        const rm_H = new Uint32Array(5);
+        function fastRipemd160() {
+            for(let i=0; i<8; i++) rm_W[i] = swap32(sha_H[i]);
+            rm_W[8] = 0x00000080; rm_W[9] = 0; rm_W[10] = 0; rm_W[11] = 0; rm_W[12] = 0; rm_W[13] = 0;
+            rm_W[14] = 256; rm_W[15] = 0;
+            
+            let al = 0x67452301, bl = 0xefcdab89, cl = 0x98badcfe, dl = 0x10325476, el = 0xc3d2e1f0;
+            let ar = al, br = bl, cr = cl, dr = dl, er = el;
+            
+            for (let j = 0; j < 80; j++) {
+                let round = Math.floor(j / 16), tL, tR;
+                if (round === 0) { tL = al + (bl ^ cl ^ dl); tR = ar + (br ^ (cr | ~dr)); }
+                else if (round === 1) { tL = al + ((bl & cl) | (~bl & dl)); tR = ar + ((br & dr) | (cr & ~dr)); }
+                else if (round === 2) { tL = al + ((bl | ~cl) ^ dl); tR = ar + ((br | ~cr) ^ dr); }
+                else if (round === 3) { tL = al + ((bl & dl) | (cl & ~dl)); tR = ar + ((br & cr) | (~br & dr)); }
+                else { tL = al + (bl ^ (cl | ~dl)); tR = ar + (br ^ cr ^ dr); }
+                
+                tL = (tL + rm_W[zl[j]] + hl[round]) | 0; tL = ((tL << sl[j]) | (tL >>> (32 - sl[j]))) + el;
+                al = el; el = dl; dl = (cl << 10 | cl >>> 22); cl = bl; bl = tL;
+                
+                tR = (tR + rm_W[zr[j]] + hr[round]) | 0; tR = ((tR << sr[j]) | (tR >>> (32 - sr[j]))) + er;
+                ar = er; er = dr; dr = (cr << 10 | cr >>> 22); cr = br; br = tR;
+            }
+            rm_H[0] = (0x67452301 + bl + cr) | 0;
+            rm_H[1] = (0xefcdab89 + cl + dr) | 0;
+            rm_H[2] = (0x98badcfe + dl + er) | 0;
+            rm_H[3] = (0x10325476 + el + ar) | 0;
+            rm_H[4] = (0xc3d2e1f0 + al + br) | 0;
+        }
+
+        function slowSha256(data) {
+            const h = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
+            let mLen = data.length; let l = ((mLen + 8) >>> 6) + 1;
+            let m = new Uint8Array(l << 6); m.set(data); m[mLen] = 0x80;
+            let view = new DataView(m.buffer); view.setUint32((l << 6) - 4, mLen << 3);
+            let w = new Uint32Array(64);
+            for (let i = 0; i < l; i++) {
+                let a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], _h = h[7];
+                for (let j = 0; j < 64; j++) {
+                    if (j < 16) w[j] = view.getUint32((i << 6) + j * 4);
+                    else {
+                        let s0 = (w[j-15] >>> 7 | w[j-15] << 25) ^ (w[j-15] >>> 18 | w[j-15] << 14) ^ (w[j-15] >>> 3);
+                        let s1 = (w[j-2] >>> 17 | w[j-2] << 15) ^ (w[j-2] >>> 19 | w[j-2] << 13) ^ (w[j-2] >>> 10);
+                        w[j] = (w[j-16] + s0 + w[j-7] + s1) | 0;
+                    }
+                    let S1 = (e >>> 6 | e << 26) ^ (e >>> 11 | e << 21) ^ (e >>> 25 | e << 7);
+                    let ch = (e & f) ^ (~e & g);
+                    let temp1 = (_h + S1 + ch + sha256_K[j] + w[j]) | 0;
+                    let S0 = (a >>> 2 | a << 30) ^ (a >>> 13 | a << 19) ^ (a >>> 22 | a << 10);
+                    let maj = (a & b) ^ (a & c) ^ (b & c);
+                    let temp2 = (S0 + maj) | 0;
+                    _h = g; g = f; f = e; e = (d + temp1) | 0; d = c; c = b; b = a; a = (temp1 + temp2) | 0;
+                }
+                h[0] = (h[0] + a)|0; h[1] = (h[1] + b)|0; h[2] = (h[2] + c)|0; h[3] = (h[3] + d)|0;
+                h[4] = (h[4] + e)|0; h[5] = (h[5] + f)|0; h[6] = (h[6] + g)|0; h[7] = (h[7] + _h)|0;
+            }
+            let out = new Uint8Array(32); let outView = new DataView(out.buffer);
+            for(let i=0; i<8; i++) outView.setUint32(i*4, h[i]);
+            return out;
+        }
 
         function toBase58(hex) {
             const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -771,11 +398,10 @@
             const digits = [0];
             for (let i = 0; i < bytes.length; i++) {
                 let carry = bytes[i];
-                for (let j = 0; j < digits.length; j++) { carry += digits[j] << 8;
-                    digits[j] = carry % 58;
-                    carry = (carry / 58) | 0; }
-                while (carry > 0) { digits.push(carry % 58);
-                    carry = (carry / 58) | 0; }
+                for (let j = 0; j < digits.length; j++) {
+                    carry += digits[j] << 8; digits[j] = carry % 58; carry = (carry / 58) | 0;
+                }
+                while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0; }
             }
             let s = '';
             for (let i = 0; i < bytes.length && bytes[i] === 0; i++) s += ALPHA[0];
@@ -783,399 +409,327 @@
             return s;
         }
 
-        function initJumps(rangeStart, rangeEnd) {
-            if (JUMP_SIZES.length > 0) return;
-            const W = rangeEnd - rangeStart;
-            let x0 = W / 2n,
-                sqrtW = 1n;
-            if (x0 > 0n) { let x1 = (x0 + W / x0) / 2n; while (x1 < x0) { x0 = x1;
-                    x1 = (x0 + W / x0) / 2n; } sqrtW = x0; }
-            for (let i = 0; i < NUM_STEPS; i++) {
-                let size = (sqrtW * BigInt(i + 1)) / BigInt(NUM_STEPS);
-                if (size === 0n) size = 1n;
-                JUMP_SIZES.push(size);
-                JUMP_POINTS.push(G.mul(size.toString(16)));
-            }
-        }
+        self.onmessage = function(e) {
+            const data = e.data;
+            if (data.type === "ADDRESS_SCAN") {
+                const startKey = BigInt("0x" + data.startHex);
+                const endKey = BigInt("0x" + data.endHex);
+                const targetAddr = data.targetAddress;
+                const workerId = data.workerId;
+                
+                // Converteer Target HEX naar 5 little-endian words voor extreem snelle match
+                const targetH160Hex = data.targetH160Hex;
+                const targetWords = new Uint32Array(5);
+                for(let i = 0; i < 5; i++) {
+                    targetWords[i] = swap32(parseInt(targetH160Hex.substr(i * 8, 8), 16));
+                }
 
-        function randBigInt(lo, hi) {
-            const range = hi - lo,
-                bits = range.toString(2).length,
-                bytes = Math.ceil(bits / 8);
-            const arr = new Uint8Array(bytes);
-            self.crypto.getRandomValues(arr);
-            const hex = Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
-            return lo + (BigInt("0x" + hex) % range);
-        }
+                // Batch setup voor modulaire inversie limitering
+                const BATCH_SIZE = 2048;
+                let currentKey = startKey;
+                let currentPoint = mul(G, currentKey);
+                
+                let currX = currentPoint.x, currY = currentPoint.y, currZ = 1n;
+                const X_arr = new Array(BATCH_SIZE);
+                const Y_arr = new Array(BATCH_SIZE);
+                const Z_arr = new Array(BATCH_SIZE);
+                const scratch = new Array(BATCH_SIZE);
+                const Z_inv_arr = new Array(BATCH_SIZE);
 
-        function jumpIndex(pubHex) { return parseInt(pubHex.substr(2, 8), 16) % NUM_STEPS; }
+                // Controleer huidige pure key voordat de batch begint
+                let isEven = (currY & 1n) === 0n;
+                setPubkey(currX, isEven); fastSha256(); fastRipemd160();
+                if (rm_H[0] === targetWords[0] && rm_H[1] === targetWords[1] && rm_H[2] === targetWords[2] && rm_H[3] === targetWords[3] && rm_H[4] === targetWords[4]) {
+                    postMatch(currentKey); return;
+                }
 
-        // ===== WILD WORKER =====
-        let wildTraps = {};
-        let wildRunning = false;
-        let wildTotalJumps = 0;
-        let wildMaxJumps = 3000000;
-        let wildCurrPoint = null;
-        let wildCurrDist = 0n;
-        let wildBatchSize = 10000;
-        let wildPadLen = 64;
-        let wildNbig = 0n;
-        let wildTargetPubHex = "";
+                function postMatch(keyBI) {
+                    const privHex = keyBI.toString(16).padStart(64, '0');
+                    const payloadBytes = ("80" + privHex + "01").match(/.{2}/g).map(b => parseInt(b, 16));
+                    const doubleSha = slowSha256(slowSha256(new Uint8Array(payloadBytes)));
+                    const wif = toBase58("80" + privHex + "01" + Array.from(doubleSha).slice(0, 4).map(b => b.toString(16).padStart(2,'0')).join(''));
+                    self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: targetAddr });
+                }
 
-        function wildLoop() {
-            if (!wildRunning) return;
+                function fastStep() {
+                    // Jacobian Mixed Addition: Telt point G bij huidig punt op zonder INVERSE
+                    for(let i=0; i<BATCH_SIZE; i++) {
+                        let Z1_2 = mod(currZ * currZ);
+                        let Z1_3 = mod(Z1_2 * currZ);
+                        let U1 = currX;
+                        let U2 = mod(G_x * Z1_2);
+                        let S1 = currY;
+                        let S2 = mod(G_y * Z1_3);
+                        let H = mod(U2 - U1);
+                        let R = mod(S2 - S1);
+                        
+                        let H2 = mod(H * H);
+                        let H3 = mod(H2 * H);
+                        let U1H2 = mod(U1 * H2);
+                        
+                        let X3 = mod(R * R - H3 - 2n * U1H2);
+                        let Y3 = mod(R * (U1H2 - X3) - S1 * H3);
+                        let Z3 = mod(currZ * H);
+                        
+                        X_arr[i] = X3; Y_arr[i] = Y3; Z_arr[i] = Z3;
+                        currX = X3; currY = Y3; currZ = Z3;
+                    }
 
-            let batchJumps = 0;
-            for (let i = 0; i < wildBatchSize && wildTotalJumps < wildMaxJumps; i++) {
-                const pubHex = wildCurrPoint.encode('hex', true);
+                    // Montgomery Batch Inversion - Eén enkele zware berekening per BATCH_SIZE (2048x sneller)
+                    let acc = 1n;
+                    for(let i=0; i<BATCH_SIZE; i++) {
+                        scratch[i] = acc;
+                        acc = mod(acc * Z_arr[i]);
+                    }
+                    let accInv = inverse(acc);
+                    for(let i=BATCH_SIZE-1; i>=0; i--) {
+                        Z_inv_arr[i] = mod(accInv * scratch[i]);
+                        accInv = mod(accInv * Z_arr[i]);
+                    }
 
-                if (wildTraps[pubHex]) {
-                    const { absKey, dist: distStr } = wildTraps[pubHex];
-                    const k_tame = BigInt("0x" + absKey);
-                    const tameDist = BigInt(distStr);
-                    
-                    // Bereken de kandidaat sleutel op basis van de botsing
-                    let secretKey = ((k_tame + tameDist - wildCurrDist) % wildNbig + wildNbig) % wildNbig;
-                    if (secretKey > 0n) {
-                        const privHexCheck = secretKey.toString(16).padStart(64, '0');
-                        let keyPairCheck;
-                        try {
-                            keyPairCheck = ec.keyFromPrivate(privHexCheck);
-                        } catch (e) {
-                            wildTotalJumps++;
-                            batchJumps++;
-                            continue;
+                    // Scan de batch (100% flat array logic, geen allocaties)
+                    let matchIndex = -1;
+                    for(let i=0; i<BATCH_SIZE; i++) {
+                        let z_inv = Z_inv_arr[i];
+                        let z_inv2 = mod(z_inv * z_inv);
+                        let z_inv3 = mod(z_inv2 * z_inv);
+                        
+                        let x = mod(X_arr[i] * z_inv2);
+                        let y = mod(Y_arr[i] * z_inv3);
+                        
+                        setPubkey(x, (y & 1n) === 0n);
+                        fastSha256();
+                        fastRipemd160();
+                        
+                        if (rm_H[0] === targetWords[0] && rm_H[1] === targetWords[1] && rm_H[2] === targetWords[2] && rm_H[3] === targetWords[3] && rm_H[4] === targetWords[4]) {
+                            matchIndex = i;
+                            break;
                         }
-                        const pubKeyHexCheck = keyPairCheck.getPublic().encode('hex', true);
+                    }
 
-                        // Wiskundig waterdichte curve-verificatie tegen de echte target public key
-                        if (pubKeyHexCheck !== wildTargetPubHex) {
-                            wildTotalJumps++;
-                            batchJumps++;
-                            continue;
-                        }
-
-                        // === GELDIGE SLEUTEL GEVONDEN ===
-                        const privHex = privHexCheck;
-                        const wifPayload = "80" + privHex + "01";
-                        const doubleSha = sha256(sha256(wifPayload));
-                        const wif = toBase58(wifPayload + doubleSha.slice(0, 8));
-                        self.postMessage({ type: "FOUND", privHex, wif, pubKeyHex: pubKeyHexCheck });
-                        wildRunning = false;
+                    if (matchIndex !== -1) {
+                        postMatch(currentKey + BigInt(matchIndex + 1));
                         return;
                     }
-                }
 
-                const r = jumpIndex(pubHex);
-                wildCurrPoint = wildCurrPoint.add(JUMP_POINTS[r]);
-                wildCurrDist += JUMP_SIZES[r];
-                wildTotalJumps++;
-                batchJumps++;
-            }
-
-            if (batchJumps > 0) {
-                self.postMessage({ type: "PROGRESS", jumps: batchJumps });
-            }
-
-            if (wildTotalJumps >= wildMaxJumps) {
-                self.postMessage({ type: "WILD_DONE" });
-                wildRunning = false;
-                return;
-            }
-
-            setTimeout(wildLoop, 0);
-        }
-
-        self.onmessage = function(e) {
-            const { type, rangeStartStr, rangeEndStr, targetPubHex,
-                workerId, maxWildJumps, pathsPerWorker, stepsPerPath, dpMask } = e.data;
-
-            const rangeStart = BigInt("0x" + rangeStartStr);
-            const rangeEnd = BigInt("0x" + rangeEndStr);
-            initJumps(rangeStart, rangeEnd);
-
-            if (type === "TAME") {
-                const localTraps = {};
-                const paths = pathsPerWorker || 200;
-                const steps = stepsPerPath || 1500;
-                const mask = dpMask || 0x3FF;
-                let jumpsCount = 0;
-
-                for (let p = 0; p < paths; p++) {
-                    const k_start = randBigInt(rangeStart, rangeEnd);
-                    let currDist = 0n;
-                    let currPoint = G.mul(k_start.toString(16));
-                    for (let i = 0; i < steps; i++) {
-                        const pubHex = currPoint.encode('hex', true);
-                        if ((parseInt(pubHex.slice(-4), 16) & mask) === 0) {
-                            localTraps[pubHex] = { absKey: k_start.toString(16), dist: currDist.toString() };
-                        }
-                        const r = jumpIndex(pubHex);
-                        currPoint = currPoint.add(JUMP_POINTS[r]);
-                        currDist += JUMP_SIZES[r];
-                        jumpsCount++;
+                    currentKey += BigInt(BATCH_SIZE);
+                    if (currentKey > endKey) {
+                        self.postMessage({ type: "SCAN_DONE", workerId });
+                        return;
                     }
+                    self.postMessage({ type: "PROGRESS", count: BATCH_SIZE, workerId });
+                    setTimeout(fastStep, 0);
                 }
-                self.postMessage({ type: "TAME_READY", traps: localTraps, jumps: jumpsCount, workerId });
-                return;
-            }
-
-            if (type === "WILD") {
-                wildTraps = e.data.traps || {};
-                wildTotalJumps = 0;
-                wildMaxJumps = maxWildJumps || 3000000;
-                wildNbig = BigInt(N.toString());
-                wildTargetPubHex = targetPubHex.trim().toLowerCase();
-
-                const targetPubKey = ec.keyFromPublic(wildTargetPubHex, 'hex').getPublic();
-                wildCurrPoint = targetPubKey;
-                wildCurrDist = 0n;
-                wildRunning = true;
-
-                wildLoop();
+                fastStep();
             }
         };
     </script>
 
     <script>
-        let workers = [],
-            globalTraps = new Map(),
-            totalJumps = 0,
-            startTime = 0;
-        let epoch = 0,
-            isRunning = false,
-            tameDone = 0,
-            wildDone = 0,
-            cumulativeJumps = 0;
-        const KANGAROO_OPS = Math.pow(2, 67);
+        (function() {
+            let workers = [], totalJumps = 0, cumulativeScanned = 0;
+            let currentSliceScanned = 0;
+            let slicesVisited = 1;
+            let targetLimit = 10000000;
+            let startTime = 0, isRunning = false;
+            let lastUpdateScanned = 0, lastUpdateTime = 0;
 
-        const logBox = document.getElementById('logBox');
-        const startBtn = document.getElementById('startBtn');
-        const stopBtn = document.getElementById('stopBtn');
-        const statusVal = document.getElementById('statusVal');
-        const progressBar = document.getElementById('progressBar');
+            const SLICE_SIZE = 34359738368n;
+            const PUZZLE_71_TOTAL = 1180591620717411303424n;
 
-        function log(msg, cls = '') {
-            const ts = new Date().toLocaleTimeString('nl-NL');
-            const div = document.createElement('div');
-            div.innerHTML = `<span class="ts">[${ts}]</span> ${msg}`;
-            if (cls) div.className = cls;
-            logBox.appendChild(div);
-            logBox.scrollTop = logBox.scrollHeight;
-        }
+            const logBox = document.getElementById('logBox'),
+                  startBtn = document.getElementById('startBtn'),
+                  stopBtn = document.getElementById('stopBtn'),
+                  statusVal = document.getElementById('statusVal'),
+                  progressBar = document.getElementById('progressBar');
 
-        function setStatus(txt, cls = '') { statusVal.textContent = txt;
-            statusVal.className = cls; }
-
-        function killWorkers() { workers.forEach(w => { try { w.terminate(); } catch (_) {} });
-            workers = []; }
-
-        function calculateSubRange() {
-            const A = BigInt("0x" + document.getElementById('rangeStart').value.trim());
-            const B = BigInt("0x" + document.getElementById('rangeEnd').value.trim());
-            const W = B - A,
-                SCALE = 1_000_000n;
-            const s = BigInt(Math.floor(parseFloat(document.getElementById('pctStart').value) * 10000));
-            const e = BigInt(Math.floor(parseFloat(document.getElementById('pctEnd').value) * 10000));
-            return { start: (A + (W * s) / SCALE).toString(16), end: (A + (W * e) / SCALE).toString(16) };
-        }
-
-        function makeWorker() {
-            const code = document.getElementById('workerCode').textContent;
-            return new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
-        }
-
-        function setRunning(v) { isRunning = v;
-            startBtn.disabled = v;
-            stopBtn.disabled = !v; }
-
-        /* OPTIMIZER */
-        function updateOptimizer() {
-            const paths = parseInt(document.getElementById('pathsSlider').value);
-            const steps = parseInt(document.getElementById('stepsPerPath').value);
-            const wild = parseInt(document.getElementById('wildJumps').value);
-            document.getElementById('pathsVal').textContent = `${paths} paden × ${steps} stappen`;
-
-            const baseScore = 200 * 1500 + 3_000_000;
-            const curScore = paths * steps + wild;
-            const boost = Math.round(((curScore / baseScore) - 1) * 100);
-            document.getElementById('boostVal').textContent = (boost >= 0 ? '+' : '') + boost + '%';
-        }
-
-        /* KANS METER */
-        function updateChanceMeter(currentSpeed) {
-            const coverage = cumulativeJumps / KANGAROO_OPS;
-            const logCov = Math.log10(coverage + 1e-30);
-            const gaugeNorm = Math.max(0, Math.min(1, (logCov + 30) / 30));
-
-            const circumference = 238.76;
-            document.getElementById('gaugeFill').style.strokeDashoffset = circumference - gaugeNorm * circumference;
-            document.getElementById('gaugePct').textContent = (gaugeNorm * 100).toFixed(2) + '%';
-            document.getElementById('kansBar').style.width = Math.max(0.01, gaugeNorm * 100) + '%';
-            document.getElementById('coveragePct').textContent = (coverage * 100).toExponential(4) + '%';
-            document.getElementById('jumpsCoverage').textContent = cumulativeJumps.toLocaleString('nl-NL') + ' van ~2⁶⁷ benodigde';
-
-            document.getElementById('chanceScientific').innerHTML = `1 op ~2<sup>67</sup>`;
-            document.getElementById('chanceUitleg').innerHTML =
-                `Na <strong>${epoch}</strong> epoch(s) en <strong>${cumulativeJumps.toLocaleString('nl-NL')}</strong> sprongen.<br>
-         Cumulatieve kans op EC-botsing: <strong>≈ ${(coverage*100).toExponential(2)}%</strong><br>
-         Theoretisch complexiteitstarget: <strong>~2<sup>67</sup> ≈ 1.47 × 10<sup>20</sup></strong> operaties.`;
-
-            document.getElementById('cmpUniverse').textContent = '~2¹³⁴ ≈ 2,2×10⁴⁰';
-
-            if (currentSpeed > 0) {
-                const sec = KANGAROO_OPS / currentSpeed;
-                let t;
-                if (sec > 3.15e13) t = (sec / 3.15e13).toExponential(1) + ' mln jaar';
-                else if (sec > 3.15e7) t = (sec / 3.15e7).toFixed(0) + ' jaar';
-                else t = sec.toExponential(1) + ' sec';
-                document.getElementById('cmpTime').textContent = t;
+            function log(msg, cls = '') {
+                const ts = new Date().toLocaleTimeString('nl-NL');
+                const div = document.createElement('div');
+                div.innerHTML = `<span class="ts">[${ts}]</span> ${msg}`;
+                if (cls) div.className = cls;
+                logBox.appendChild(div);
+                logBox.scrollTop = logBox.scrollHeight;
             }
 
-            document.getElementById('cmpLottery').textContent = (KANGAROO_OPS / 7e6).toExponential(1) + '×';
-            document.getElementById('cmpEpochs').textContent = epoch;
-        }
+            function setStatus(txt, cls = '') {
+                statusVal.textContent = txt;
+                statusVal.className = cls;
+            }
 
-        /* START */
-        startBtn.onclick = () => {
-            if (isRunning) return;
-            totalJumps = 0;
-            epoch = 0;
-            startTime = Date.now();
-            cumulativeJumps = 0;
-            ['totalJumps', 'speed', 'epochCount', 'trapCount'].forEach(id => document.getElementById(id).textContent = '0');
-            progressBar.style.width = '0%';
-            setRunning(true);
-            log('🚀 Hybride Kangaroo gestart — Elliptische curve cryptografische validatie actief', 'ev-epoch');
-            nextEpoch();
-        };
+            function killWorkers() {
+                workers.forEach(w => { try { w.terminate(); } catch (_) {} });
+                workers = [];
+            }
 
-        stopBtn.onclick = () => {
-            setRunning(false);
-            killWorkers();
-            setStatus('Gestopt');
-            progressBar.style.width = '0%';
-            log('🛑 Scanner gestopt door gebruiker', 'ev-stop');
-        };
+            function generateRandomSlice() {
+                const globalStart = BigInt("0x400000000000000000");
+                const globalEnd = BigInt("0x7fffffffffffffffff");
+                const maxOffset = (globalEnd - globalStart + 1n) - SLICE_SIZE;
+                const bytes = new Uint8Array(Math.ceil(maxOffset.toString(2).length / 8));
+                window.crypto.getRandomValues(bytes);
+                const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+                const rand = BigInt("0x" + hex);
+                const offset = rand % maxOffset;
+                const sliceStart = globalStart + offset;
+                const sliceEnd = sliceStart + SLICE_SIZE - 1n;
 
-        function nextEpoch() {
-            if (!isRunning) return;
-            epoch++;
-            tameDone = 0;
-            wildDone = 0;
-            globalTraps.clear();
-            document.getElementById('epochCount').textContent = epoch;
-            document.getElementById('cmpEpochs').textContent = epoch;
-            progressBar.style.width = '10%';
+                document.getElementById('rangeStart').value = sliceStart.toString(16);
+                document.getElementById('rangeEnd').value = sliceEnd.toString(16);
+                log(`Zone geladen. Start: ${sliceStart.toString(16).substring(0,8)}...`, 'ev-hop');
+            }
 
-            const numW = Math.max(1, parseInt(document.getElementById('numW').value) || 4);
-            const range = calculateSubRange();
-            const paths = parseInt(document.getElementById('pathsSlider').value);
-            const steps = parseInt(document.getElementById('stepsPerPath').value);
-            const dpMask = parseInt(document.getElementById('dpFilter').value);
-
-            killWorkers();
-            setStatus('TAME — vallen plaatsen', 'tame');
-            log(`🏁 Epoch ${epoch} — TAME (${numW} workers, ${paths} paden, ${steps} stappen)`, 'ev-epoch');
-
-            for (let i = 0; i < numW; i++) {
-                const w = makeWorker();
-                workers.push(w);
-                w.onmessage = (ev) => {
-                    if (ev.data.type === "TAME_READY") {
-                        for (const k in ev.data.traps) globalTraps.set(k, ev.data.traps[k]);
-                        totalJumps += ev.data.jumps;
-                        cumulativeJumps += ev.data.jumps;
-                        tameDone++;
-                        if (tameDone === numW) {
-                            document.getElementById('trapCount').textContent = globalTraps.size.toLocaleString();
-                            log(`✅ TAME klaar — ${globalTraps.size.toLocaleString()} vallen opgeslagen`, 'ev-tame');
-                            progressBar.style.width = '40%';
-                            startWild(numW, range);
-                        }
-                    }
+            function makeWorker() {
+                const code = document.getElementById('workerCode').textContent;
+                const worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
+                worker.onerror = function(e) {
+                    log(`❌ Fout in verwerking. Controleer browser-limieten.`, 'ev-stop');
+                    setStatus('Gestopt', '');
+                    killWorkers();
+                    setRunning(false);
                 };
-                w.postMessage({
-                    type: "TAME",
-                    rangeStartStr: range.start,
-                    rangeEndStr: range.end,
-                    targetPubHex: document.getElementById('pubKey').value.trim(),
-                    workerId: i,
-                    pathsPerWorker: paths,
-                    stepsPerPath: steps,
-                    dpMask
-                });
+                return worker;
             }
-        }
 
-        function startWild(numW, range) {
-            if (!isRunning) return;
-            killWorkers();
-            setStatus('WILD — op jacht', 'running');
-            log('🦘 WILD fase gestart — Directe algebraïsche controle actief', 'ev-epoch');
-            progressBar.style.width = '55%';
+            function setRunning(v) {
+                isRunning = v;
+                startBtn.disabled = v;
+                stopBtn.disabled = !v;
+            }
 
-            const trapObj = Object.fromEntries(globalTraps);
-            const targetPubHex = document.getElementById('pubKey').value.trim();
-            const maxWildJumps = parseInt(document.getElementById('wildJumps').value);
-
-            for (let i = 0; i < numW; i++) {
-                const w = makeWorker();
-                workers.push(w);
-                w.onmessage = (ev) => {
-                    if (ev.data.type === "PROGRESS") {
-                        totalJumps += ev.data.jumps;
-                        cumulativeJumps += ev.data.jumps;
-                        const elapsed = (Date.now() - startTime) / 1000 || 1;
-                        const spd = Math.floor(totalJumps / elapsed);
-                        document.getElementById('totalJumps').textContent = totalJumps.toLocaleString();
-                        document.getElementById('speed').textContent = spd.toLocaleString() + ' /s';
-                        progressBar.style.width = Math.min(95, 55 + (totalJumps / (maxWildJumps * numW)) * 40) + '%';
-                        updateChanceMeter(spd);
-
-                        if (totalJumps % 100000 === 0) {
-                            log(`🦘 ${totalJumps.toLocaleString()} sprongen, snelheid: ${spd.toLocaleString()}/s`);
-                        }
-                    } else if (ev.data.type === "WILD_DONE") {
-                        wildDone++;
-                        if (wildDone === numW) {
-                            log(`🔄 Epoch ${epoch} WILD fase voltooid — Geen geldige botsing in deze ronde.`, 'ev-epoch');
-                            progressBar.style.width = '0%';
-                            setTimeout(nextEpoch, 50);
-                        }
-                    } else if (ev.data.type === "FOUND") {
-                        setRunning(false);
-                        killWorkers();
-                        setStatus('🎉 GEVONDEN!', 'running');
-                        progressBar.style.width = '100%';
-                        document.getElementById('gaugeFill').style.strokeDashoffset = '0';
-                        document.getElementById('gaugePct').textContent = '100%';
-                        document.getElementById('kansBar').style.width = '100%';
-                        log(`🎉 PRIVÉSLEUTEL GEVONDEN na ${totalJumps.toLocaleString()} sprongen!`, 'ev-found');
-                        log(`✅ Cryptografische EC-validatie geslaagd — Sleutel genereert exact de gezochte Public Key`, 'ev-found');
-                        document.getElementById('matchTable').innerHTML = `
-                    <tr class="found-row">
-                        <td>✅ MATCH</td>
-                        <td style="font-size:.65rem">${ev.data.wif}</td>
-                        <td style="font-size:.65rem">${ev.data.privHex}</td>
-                    </tr>`;
+            function fromBase58(address) {
+                const ALPHA = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+                if (!address) return '';
+                let bytes = [0];
+                for (let i = 0; i < address.length; i++) {
+                    let c = ALPHA.indexOf(address[i]);
+                    if (c < 0) throw new Error('Ongeldig Base58 adres.');
+                    for (let j = 0; j < bytes.length; j++) {
+                        c += bytes[j] * 58; bytes[j] = c & 0xff; c >>= 8;
                     }
-                };
-                w.postMessage({
-                    type: "WILD",
-                    rangeStartStr: range.start,
-                    rangeEndStr: range.end,
-                    targetPubHex,
-                    traps: trapObj,
-                    workerId: i,
-                    maxWildJumps
-                });
+                    while (c > 0) { bytes.push(c & 0xff); c >>= 8; }
+                }
+                let zeros = 0;
+                for (let i = 0; i < address.length && address[i] === '1'; i++) zeros++;
+                while (bytes.length > 0 && bytes[bytes.length - 1] === 0) bytes.pop();
+                for (let i = 0; i < zeros; i++) bytes.push(0);
+                bytes.reverse();
+                return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
             }
-        }
 
-        log('⚡ Hybride Kangaroo geladen — Secp256k1 Mathematische engine paraat');
-        updateOptimizer();
-        updateChanceMeter(0);
+            function formatSeconds(seconds) {
+                if (!isFinite(seconds) || seconds <= 0) return '—';
+                if (seconds > 3.15e7) return (seconds / 3.15e7).toFixed(1) + ' jaar';
+                if (seconds > 86400) return (seconds / 86400).toFixed(1) + ' dagen';
+                if (seconds > 3600) return (seconds / 3600).toFixed(1) + ' uur';
+                if (seconds > 60) return (seconds / 60).toFixed(0) + ' min';
+                return seconds.toFixed(0) + ' s';
+            }
+
+            function updateAllStats() {
+                targetLimit = Number(document.getElementById('keysLimit').value) || 10000000;
+                document.getElementById('limitDisplay').textContent = targetLimit.toLocaleString('nl-NL');
+                document.getElementById('slicesVisitedCount').textContent = slicesVisited.toLocaleString('nl-NL');
+
+                const hopProgress = Math.min(1, currentSliceScanned / targetLimit);
+                document.getElementById('gaugePct').textContent = (hopProgress * 100).toFixed(1) + '%';
+                document.getElementById('gaugeFill').style.strokeDashoffset = 238.76 - (hopProgress * 238.76);
+                document.getElementById('kansBar').style.width = (hopProgress * 100) + '%';
+                document.getElementById('coveragePct').textContent = (hopProgress * 100).toFixed(2) + '%';
+                document.getElementById('jumpsCoverage').textContent = currentSliceScanned.toLocaleString('nl-NL') + ' keys gescand';
+                document.getElementById('chanceScientific').innerHTML = `${(hopProgress * 100).toFixed(2)}%`;
+
+                document.getElementById('cmpLottery').textContent = (cumulativeScanned / Number(PUZZLE_71_TOTAL)).toExponential(4);
+                document.getElementById('cmpEpochs').textContent = ((Number(SLICE_SIZE) / Number(PUZZLE_71_TOTAL)) * 100).toExponential(6) + '%';
+
+                const now = Date.now();
+                const elapsedSec = (now - lastUpdateTime) / 1000;
+                
+                if (elapsedSec >= 1) { 
+                    const currentSpeed = Math.floor((cumulativeScanned - lastUpdateScanned) / elapsedSec);
+                    document.getElementById('speed').textContent = currentSpeed.toLocaleString('nl-NL') + ' /s';
+                    
+                    if (currentSpeed > 0) {
+                        const remaining = targetLimit - currentSliceScanned;
+                        document.getElementById('cmpTime').textContent = formatSeconds(remaining / currentSpeed);
+                        document.getElementById('calcGradient').textContent = currentSpeed.toLocaleString('nl-NL') + ' /s';
+                        document.getElementById('calcPoisson').textContent = (hopProgress * 100).toFixed(2) + ' %';
+                    }
+                    lastUpdateTime = now; lastUpdateScanned = cumulativeScanned;
+                }
+
+                progressBar.style.width = (hopProgress * 100) + '%';
+                document.getElementById('keysScanned').textContent = cumulativeScanned.toLocaleString('nl-NL');
+                document.getElementById('currentSliceKeys').textContent = currentSliceScanned.toLocaleString('nl-NL');
+            }
+
+            function spawnWorkers() {
+                const targetAddr = document.getElementById('btcAddr').value.trim();
+                let targetH160Hex;
+                try {
+                    const decoded = fromBase58(targetAddr);
+                    if (decoded.length !== 50) throw new Error();
+                    targetH160Hex = decoded.substring(2, 42);
+                } catch (e) { 
+                    log('❌ Ongeldig BTC Adres', 'ev-stop'); setRunning(false); return; 
+                }
+
+                const startBI = BigInt("0x" + document.getElementById('rangeStart').value);
+                const endBI = BigInt("0x" + document.getElementById('rangeEnd').value);
+                const numW = Math.max(1, parseInt(document.getElementById('numW').value) || 4);
+                
+                killWorkers();
+                let workersDone = 0;
+
+                for (let i = 0; i < numW; i++) {
+                    const worker = makeWorker();
+                    workers.push(worker);
+                    
+                    const chunkSize = (endBI - startBI + 1n) / BigInt(numW);
+                    const segStart = (startBI + chunkSize * BigInt(i)).toString(16);
+                    const segEnd = (i === numW - 1) ? endBI.toString(16) : (startBI + chunkSize * BigInt(i + 1) - 1n).toString(16);
+
+                    worker.onmessage = (ev) => {
+                        if (ev.data.type === "PROGRESS") {
+                            if (!isRunning) return;
+                            totalJumps += ev.data.count; cumulativeScanned += ev.data.count; currentSliceScanned += ev.data.count;
+                            if (currentSliceScanned >= targetLimit) {
+                                killWorkers(); generateRandomSlice(); slicesVisited++; currentSliceScanned = 0;
+                                setTimeout(() => { if (isRunning) spawnWorkers(); }, 50);
+                            }
+                        }
+                        else if (ev.data.type === "SCAN_DONE") {
+                            workersDone++;
+                            if (workersDone === numW) {
+                                killWorkers(); generateRandomSlice(); slicesVisited++; currentSliceScanned = 0;
+                                setTimeout(() => { if (isRunning) spawnWorkers(); }, 50);
+                            }
+                        } else if (ev.data.type === "FOUND") {
+                            setRunning(false); killWorkers(); setStatus('🎉 GEVONDEN!', 'running');
+                            document.getElementById('matchTable').innerHTML = `<tr><td>✅ MATCH</td><td style="font-size:.65rem; color:#00ff99;">${ev.data.wif}</td><td style="font-size:.65rem">${ev.data.privHex}</td></tr>`;
+                            log('🔥 MATCH GEVONDEN! Proces gestopt.', 'ev-found');
+                        }
+                    };
+                    worker.postMessage({ type: "ADDRESS_SCAN", startHex: segStart, endHex: segEnd, targetH160Hex, targetAddress: targetAddr, workerId: i });
+                }
+            }
+
+            function startAddressScan() {
+                if (isRunning) return;
+                startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = cumulativeScanned;
+                setRunning(true);
+                setStatus('⚡ Batch Turbo Actief', 'running');
+                log('Native JS Batch-Scan gestart.', 'ev-epoch');
+                spawnWorkers();
+            }
+
+            startBtn.onclick = () => { if (!isRunning) startAddressScan(); };
+            stopBtn.onclick = () => { setRunning(false); killWorkers(); setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop'); };
+            generateRandomSlice();
+            log('Systeem klaar. Jacobian Turbo Engine Lokaal geladen.', 'ts');
+
+            setInterval(() => { if (isRunning) updateAllStats(); }, 800);
+        })();
     </script>
 </body>
 </html>
