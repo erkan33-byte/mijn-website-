@@ -120,7 +120,7 @@
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
             <div class="sub">Puzzel #71 – Native JS Turbo (Geen Netwerk nodig)</div>
-            <span class="badge">🚀 OPTIE 3: JACOBIAN BATCH INVERSION ENGINE</span>
+            <span class="badge">🚀 OPTIE 3: 100% INLINE NATIVE ENGINE</span>
         </div>
         <div class="card">
             <div class="card-title">⚙ Actieve Plakje Configuratie</div>
@@ -131,7 +131,8 @@
             <div class="field">
                 <label>Scan methode (binnen plakje)</label>
                 <select id="scanMethod">
-                    <option value="linear" selected>📏 Lineair (Batch Inversion Hyper-Speed!)</option>
+                    <option value="random">🎲 Willekeurig binnen plakje</option>
+                    <option value="linear" selected>📏 Lineair (Hyper-Speed!)</option>
                 </select>
             </div>
             <div class="field">
@@ -221,6 +222,9 @@
             self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
         };
 
+        // ==========================================
+        // 1. SECP256K1 NATIVE BIGINT
+        // ==========================================
         const P = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
         const G_x = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n;
         const G_y = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n;
@@ -236,8 +240,6 @@
             }
             return t < 0n ? t + n : t;
         }
-
-        // Gebruikt voor initiële setup van de point finder (affine math)
         function add(p, q) {
             if (!p) return q; if (!q) return p;
             if (p.x === q.x) {
@@ -259,12 +261,17 @@
             }
             return r;
         }
+        function pubKeyBytes(point) {
+            const bytes = new Uint8Array(33);
+            bytes[0] = (point.y & 1n) === 0n ? 0x02 : 0x03;
+            let tmp = point.x;
+            for (let i = 32; i >= 1; i--) { bytes[i] = Number(tmp & 0xffn); tmp >>= 8n; }
+            return bytes;
+        }
 
         // ==========================================
-        // PRE-ALLOCATED BUFFERS & FAST HASH ENGINES
+        // 2. NATIVE PURE JS SHA256 (Bitwise Engine)
         // ==========================================
-        function swap32(val) { return ((val >>> 24) | ((val >>> 8) & 0xff00) | ((val & 0xff00) << 8) | (val << 24)) >>> 0; }
-
         const sha256_K = new Uint32Array([
             0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
             0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -275,97 +282,14 @@
             0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
             0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
         ]);
-        const H_INIT = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
-        
-        const sha_W = new Uint32Array(64);
-        const sha_H = new Uint32Array(8);
-        const pubkeyBlock = new Uint8Array(64);
-        const pubkeyView = new DataView(pubkeyBlock.buffer);
-        pubkeyBlock[33] = 0x80;
-        pubkeyView.setUint32(60, 264, false); // Length=264 bits, BIG ENDIAN voor SHA256
-
-        // Directe bitshift vulling voorkomt DataView overhead per byte
-        function setPubkey(x, isEven) {
-            pubkeyBlock[0] = isEven ? 0x02 : 0x03;
-            let x0 = Number(x & 0xffffffffn); x >>= 32n;
-            let x1 = Number(x & 0xffffffffn); x >>= 32n;
-            let x2 = Number(x & 0xffffffffn); x >>= 32n;
-            let x3 = Number(x & 0xffffffffn); x >>= 32n;
-            let x4 = Number(x & 0xffffffffn); x >>= 32n;
-            let x5 = Number(x & 0xffffffffn); x >>= 32n;
-            let x6 = Number(x & 0xffffffffn); x >>= 32n;
-            let x7 = Number(x & 0xffffffffn);
-            pubkeyView.setUint32(1, x7, false); pubkeyView.setUint32(5, x6, false);
-            pubkeyView.setUint32(9, x5, false); pubkeyView.setUint32(13, x4, false);
-            pubkeyView.setUint32(17, x3, false); pubkeyView.setUint32(21, x2, false);
-            pubkeyView.setUint32(25, x1, false); pubkeyView.setUint32(29, x0, false);
-        }
-
-        function fastSha256() {
-            let a = H_INIT[0], b = H_INIT[1], c = H_INIT[2], d = H_INIT[3], e = H_INIT[4], f = H_INIT[5], g = H_INIT[6], _h = H_INIT[7];
-            for (let j = 0; j < 64; j++) {
-                if (j < 16) sha_W[j] = pubkeyView.getUint32(j * 4, false);
-                else {
-                    let w15 = sha_W[j-15], w2 = sha_W[j-2];
-                    let s0 = (w15 >>> 7 | w15 << 25) ^ (w15 >>> 18 | w15 << 14) ^ (w15 >>> 3);
-                    let s1 = (w2 >>> 17 | w2 << 15) ^ (w2 >>> 19 | w2 << 13) ^ (w2 >>> 10);
-                    sha_W[j] = (sha_W[j-16] + s0 + sha_W[j-7] + s1) | 0;
-                }
-                let S1 = (e >>> 6 | e << 26) ^ (e >>> 11 | e << 21) ^ (e >>> 25 | e << 7);
-                let ch = (e & f) ^ (~e & g);
-                let temp1 = (_h + S1 + ch + sha256_K[j] + sha_W[j]) | 0;
-                let S0 = (a >>> 2 | a << 30) ^ (a >>> 13 | a << 19) ^ (a >>> 22 | a << 10);
-                let maj = (a & b) ^ (a & c) ^ (b & c);
-                let temp2 = (S0 + maj) | 0;
-                _h = g; g = f; f = e; e = (d + temp1) | 0; d = c; c = b; b = a; a = (temp1 + temp2) | 0;
-            }
-            sha_H[0] = (H_INIT[0] + a)|0; sha_H[1] = (H_INIT[1] + b)|0; sha_H[2] = (H_INIT[2] + c)|0; sha_H[3] = (H_INIT[3] + d)|0;
-            sha_H[4] = (H_INIT[4] + e)|0; sha_H[5] = (H_INIT[5] + f)|0; sha_H[6] = (H_INIT[6] + g)|0; sha_H[7] = (H_INIT[7] + _h)|0;
-        }
-
-        const zl = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15, 7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8, 3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12, 1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2, 4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13];
-        const zr = [5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12, 6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2, 15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13, 8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14, 12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11];
-        const sl = [11,14,15,12,5,8,7,9,11,13,14,15,6,7,9,8, 7,6,8,13,11,9,7,15,7,12,15,9,11,7,13,12, 11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5, 11,12,14,15,14,15,9,8,9,14,5,6,8,6,5,12, 9,15,5,11,6,8,13,12,5,12,13,14,11,8,5,6];
-        const sr = [8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6, 9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11, 9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5, 15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8, 8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];
-        const hl = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
-        const hr = [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000];
-        
-        const rm_W = new Uint32Array(16);
-        const rm_H = new Uint32Array(5);
-        function fastRipemd160() {
-            for(let i=0; i<8; i++) rm_W[i] = swap32(sha_H[i]);
-            rm_W[8] = 0x00000080; rm_W[9] = 0; rm_W[10] = 0; rm_W[11] = 0; rm_W[12] = 0; rm_W[13] = 0;
-            rm_W[14] = 256; rm_W[15] = 0;
-            
-            let al = 0x67452301, bl = 0xefcdab89, cl = 0x98badcfe, dl = 0x10325476, el = 0xc3d2e1f0;
-            let ar = al, br = bl, cr = cl, dr = dl, er = el;
-            
-            for (let j = 0; j < 80; j++) {
-                let round = Math.floor(j / 16), tL, tR;
-                if (round === 0) { tL = al + (bl ^ cl ^ dl); tR = ar + (br ^ (cr | ~dr)); }
-                else if (round === 1) { tL = al + ((bl & cl) | (~bl & dl)); tR = ar + ((br & dr) | (cr & ~dr)); }
-                else if (round === 2) { tL = al + ((bl | ~cl) ^ dl); tR = ar + ((br | ~cr) ^ dr); }
-                else if (round === 3) { tL = al + ((bl & dl) | (cl & ~dl)); tR = ar + ((br & cr) | (~br & dr)); }
-                else { tL = al + (bl ^ (cl | ~dl)); tR = ar + (br ^ cr ^ dr); }
-                
-                tL = (tL + rm_W[zl[j]] + hl[round]) | 0; tL = ((tL << sl[j]) | (tL >>> (32 - sl[j]))) + el;
-                al = el; el = dl; dl = (cl << 10 | cl >>> 22); cl = bl; bl = tL;
-                
-                tR = (tR + rm_W[zr[j]] + hr[round]) | 0; tR = ((tR << sr[j]) | (tR >>> (32 - sr[j]))) + er;
-                ar = er; er = dr; dr = (cr << 10 | cr >>> 22); cr = br; br = tR;
-            }
-            rm_H[0] = (0x67452301 + bl + cr) | 0;
-            rm_H[1] = (0xefcdab89 + cl + dr) | 0;
-            rm_H[2] = (0x98badcfe + dl + er) | 0;
-            rm_H[3] = (0x10325476 + el + ar) | 0;
-            rm_H[4] = (0xc3d2e1f0 + al + br) | 0;
-        }
-
-        function slowSha256(data) {
+        function sha256(data) {
             const h = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
-            let mLen = data.length; let l = ((mLen + 8) >>> 6) + 1;
-            let m = new Uint8Array(l << 6); m.set(data); m[mLen] = 0x80;
-            let view = new DataView(m.buffer); view.setUint32((l << 6) - 4, mLen << 3);
+            let mLen = data.length;
+            let l = ((mLen + 8) >>> 6) + 1;
+            let m = new Uint8Array(l << 6);
+            m.set(data); m[mLen] = 0x80;
+            let view = new DataView(m.buffer);
+            view.setUint32((l << 6) - 4, mLen << 3);
             let w = new Uint32Array(64);
             for (let i = 0; i < l; i++) {
                 let a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], _h = h[7];
@@ -387,11 +311,57 @@
                 h[0] = (h[0] + a)|0; h[1] = (h[1] + b)|0; h[2] = (h[2] + c)|0; h[3] = (h[3] + d)|0;
                 h[4] = (h[4] + e)|0; h[5] = (h[5] + f)|0; h[6] = (h[6] + g)|0; h[7] = (h[7] + _h)|0;
             }
-            let out = new Uint8Array(32); let outView = new DataView(out.buffer);
+            let out = new Uint8Array(32);
+            let outView = new DataView(out.buffer);
             for(let i=0; i<8; i++) outView.setUint32(i*4, h[i]);
             return out;
         }
 
+        // ==========================================
+        // 3. NATIVE PURE JS RIPEMD160 (Bitwise Engine)
+        // ==========================================
+        const zl = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15, 7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8, 3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12, 1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2, 4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13];
+        const zr = [5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12, 6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2, 15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13, 8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14, 12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11];
+        const sl = [11,14,15,12,5,8,7,9,11,13,14,15,6,7,9,8, 7,6,8,13,11,9,7,15,7,12,15,9,11,7,13,12, 11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5, 11,12,14,15,14,15,9,8,9,14,5,6,8,6,5,12, 9,15,5,11,6,8,13,12,5,12,13,14,11,8,5,6];
+        const sr = [8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6, 9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11, 9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5, 15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8, 8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];
+        const hl = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
+        const hr = [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000];
+        function ripemd160(msg) {
+            let mLen = msg.length, l = ((mLen + 8) >> 6) + 1;
+            let m = new Uint8Array(l << 6); m.set(msg); m[mLen] = 0x80;
+            let view = new DataView(m.buffer);
+            view.setUint32((l << 6) - 8, mLen << 3, true);
+            let h = new Uint32Array([0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0]);
+            let w = new Uint32Array(16);
+            for (let i = 0; i < l; i++) {
+                for (let j = 0; j < 16; j++) w[j] = view.getUint32((i << 6) + (j << 2), true);
+                let al = h[0], bl = h[1], cl = h[2], dl = h[3], el = h[4];
+                let ar = h[0], br = h[1], cr = h[2], dr = h[3], er = h[4];
+                for (let j = 0; j < 80; j++) {
+                    let round = Math.floor(j / 16), tL, tR;
+                    if (round === 0) { tL = al + (bl ^ cl ^ dl); tR = ar + (br ^ (cr | ~dr)); }
+                    else if (round === 1) { tL = al + ((bl & cl) | (~bl & dl)); tR = ar + ((br & dr) | (cr & ~dr)); }
+                    else if (round === 2) { tL = al + ((bl | ~cl) ^ dl); tR = ar + ((br | ~cr) ^ dr); }
+                    else if (round === 3) { tL = al + ((bl & dl) | (cl & ~dl)); tR = ar + ((br & cr) | (~br & dr)); }
+                    else { tL = al + (bl ^ (cl | ~dl)); tR = ar + (br ^ cr ^ dr); }
+                    tL = (tL + w[zl[j]] + hl[round]) | 0; tL = (tL << sl[j] | tL >>> (32 - sl[j])) + el;
+                    al = el; el = dl; dl = (cl << 10 | cl >>> 22); cl = bl; bl = tL;
+                    tR = (tR + w[zr[j]] + hr[round]) | 0; tR = (tR << sr[j] | tR >>> (32 - sr[j])) + er;
+                    ar = er; er = dr; dr = (cr << 10 | cr >>> 22); cr = br; br = tR;
+                }
+                let t = (h[1] + cl + dr) | 0;
+                h[1] = (h[2] + dl + er) | 0; h[2] = (h[3] + el + ar) | 0; h[3] = (h[4] + al + br) | 0;
+                h[4] = (h[0] + bl + cr) | 0; h[0] = t;
+            }
+            let out = new Uint8Array(20);
+            let outView = new DataView(out.buffer);
+            for(let i=0; i<5; i++) outView.setUint32(i*4, h[i], true);
+            return out;
+        }
+
+        // ==========================================
+        // 4. ALGEMENE FUNCTIES & LOGICA
+        // ==========================================
         function toBase58(hex) {
             const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
             const bytes = hex.match(/.{2}/g).map(b => parseInt(b, 16));
@@ -399,7 +369,9 @@
             for (let i = 0; i < bytes.length; i++) {
                 let carry = bytes[i];
                 for (let j = 0; j < digits.length; j++) {
-                    carry += digits[j] << 8; digits[j] = carry % 58; carry = (carry / 58) | 0;
+                    carry += digits[j] << 8;
+                    digits[j] = carry % 58;
+                    carry = (carry / 58) | 0;
                 }
                 while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0; }
             }
@@ -414,110 +386,43 @@
             if (data.type === "ADDRESS_SCAN") {
                 const startKey = BigInt("0x" + data.startHex);
                 const endKey = BigInt("0x" + data.endHex);
+                const targetH160 = new Uint8Array(data.targetH160Hex.match(/.{2}/g).map(b => parseInt(b, 16)));
                 const targetAddr = data.targetAddress;
                 const workerId = data.workerId;
+                const BATCH = 5000;
                 
-                // Converteer Target HEX naar 5 little-endian words voor extreem snelle match
-                const targetH160Hex = data.targetH160Hex;
-                const targetWords = new Uint32Array(5);
-                for(let i = 0; i < 5; i++) {
-                    targetWords[i] = swap32(parseInt(targetH160Hex.substr(i * 8, 8), 16));
-                }
-
-                // Batch setup voor modulaire inversie limitering
-                const BATCH_SIZE = 2048;
                 let currentKey = startKey;
                 let currentPoint = mul(G, currentKey);
-                
-                let currX = currentPoint.x, currY = currentPoint.y, currZ = 1n;
-                const X_arr = new Array(BATCH_SIZE);
-                const Y_arr = new Array(BATCH_SIZE);
-                const Z_arr = new Array(BATCH_SIZE);
-                const scratch = new Array(BATCH_SIZE);
-                const Z_inv_arr = new Array(BATCH_SIZE);
-
-                // Controleer huidige pure key voordat de batch begint
-                let isEven = (currY & 1n) === 0n;
-                setPubkey(currX, isEven); fastSha256(); fastRipemd160();
-                if (rm_H[0] === targetWords[0] && rm_H[1] === targetWords[1] && rm_H[2] === targetWords[2] && rm_H[3] === targetWords[3] && rm_H[4] === targetWords[4]) {
-                    postMatch(currentKey); return;
-                }
-
-                function postMatch(keyBI) {
-                    const privHex = keyBI.toString(16).padStart(64, '0');
-                    const payloadBytes = ("80" + privHex + "01").match(/.{2}/g).map(b => parseInt(b, 16));
-                    const doubleSha = slowSha256(slowSha256(new Uint8Array(payloadBytes)));
-                    const wif = toBase58("80" + privHex + "01" + Array.from(doubleSha).slice(0, 4).map(b => b.toString(16).padStart(2,'0')).join(''));
-                    self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: targetAddr });
-                }
 
                 function fastStep() {
-                    // Jacobian Mixed Addition: Telt point G bij huidig punt op zonder INVERSE
-                    for(let i=0; i<BATCH_SIZE; i++) {
-                        let Z1_2 = mod(currZ * currZ);
-                        let Z1_3 = mod(Z1_2 * currZ);
-                        let U1 = currX;
-                        let U2 = mod(G_x * Z1_2);
-                        let S1 = currY;
-                        let S2 = mod(G_y * Z1_3);
-                        let H = mod(U2 - U1);
-                        let R = mod(S2 - S1);
-                        
-                        let H2 = mod(H * H);
-                        let H3 = mod(H2 * H);
-                        let U1H2 = mod(U1 * H2);
-                        
-                        let X3 = mod(R * R - H3 - 2n * U1H2);
-                        let Y3 = mod(R * (U1H2 - X3) - S1 * H3);
-                        let Z3 = mod(currZ * H);
-                        
-                        X_arr[i] = X3; Y_arr[i] = Y3; Z_arr[i] = Z3;
-                        currX = X3; currY = Y3; currZ = Z3;
-                    }
+                    let batchCount = 0;
+                    for (let i = 0; i < BATCH && currentKey <= endKey; i++) {
+                        const pubBytes = pubKeyBytes(currentPoint);
+                        const s256 = sha256(pubBytes);
+                        const r160 = ripemd160(s256);
 
-                    // Montgomery Batch Inversion - Eén enkele zware berekening per BATCH_SIZE (2048x sneller)
-                    let acc = 1n;
-                    for(let i=0; i<BATCH_SIZE; i++) {
-                        scratch[i] = acc;
-                        acc = mod(acc * Z_arr[i]);
-                    }
-                    let accInv = inverse(acc);
-                    for(let i=BATCH_SIZE-1; i>=0; i--) {
-                        Z_inv_arr[i] = mod(accInv * scratch[i]);
-                        accInv = mod(accInv * Z_arr[i]);
-                    }
-
-                    // Scan de batch (100% flat array logic, geen allocaties)
-                    let matchIndex = -1;
-                    for(let i=0; i<BATCH_SIZE; i++) {
-                        let z_inv = Z_inv_arr[i];
-                        let z_inv2 = mod(z_inv * z_inv);
-                        let z_inv3 = mod(z_inv2 * z_inv);
-                        
-                        let x = mod(X_arr[i] * z_inv2);
-                        let y = mod(Y_arr[i] * z_inv3);
-                        
-                        setPubkey(x, (y & 1n) === 0n);
-                        fastSha256();
-                        fastRipemd160();
-                        
-                        if (rm_H[0] === targetWords[0] && rm_H[1] === targetWords[1] && rm_H[2] === targetWords[2] && rm_H[3] === targetWords[3] && rm_H[4] === targetWords[4]) {
-                            matchIndex = i;
-                            break;
+                        let match = true;
+                        for(let k = 0; k < 20; k++) {
+                            if (r160[k] !== targetH160[k]) { match = false; break; }
                         }
-                    }
 
-                    if (matchIndex !== -1) {
-                        postMatch(currentKey + BigInt(matchIndex + 1));
-                        return;
+                        if (match) {
+                            const privHex = currentKey.toString(16).padStart(64, '0');
+                            const payloadBytes = ("80" + privHex + "01").match(/.{2}/g).map(b => parseInt(b, 16));
+                            const doubleSha = sha256(sha256(new Uint8Array(payloadBytes)));
+                            const wif = toBase58("80" + privHex + "01" + Array.from(doubleSha).slice(0, 4).map(b => b.toString(16).padStart(2,'0')).join(''));
+                            self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: targetAddr });
+                            return;
+                        }
+                        currentPoint = add(currentPoint, G);
+                        currentKey++;
+                        batchCount++;
                     }
-
-                    currentKey += BigInt(BATCH_SIZE);
                     if (currentKey > endKey) {
                         self.postMessage({ type: "SCAN_DONE", workerId });
                         return;
                     }
-                    self.postMessage({ type: "PROGRESS", count: BATCH_SIZE, workerId });
+                    self.postMessage({ type: "PROGRESS", count: batchCount, workerId });
                     setTimeout(fastStep, 0);
                 }
                 fastStep();
@@ -563,8 +468,8 @@
             }
 
             function generateRandomSlice() {
-                const globalStart = BigInt("0x400000000000000000");
-                const globalEnd = BigInt("0x7fffffffffffffffff");
+                const globalStart = BigInt("0x4000000000000000000");
+                const globalEnd = BigInt("0x7fffffffffffffffffff");
                 const maxOffset = (globalEnd - globalStart + 1n) - SLICE_SIZE;
                 const bytes = new Uint8Array(Math.ceil(maxOffset.toString(2).length / 8));
                 window.crypto.getRandomValues(bytes);
@@ -718,15 +623,15 @@
                 if (isRunning) return;
                 startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = cumulativeScanned;
                 setRunning(true);
-                setStatus('⚡ Batch Turbo Actief', 'running');
-                log('Native JS Batch-Scan gestart.', 'ev-epoch');
+                setStatus('⚡ Native Turbo Actief', 'running');
+                log('Native JS Scan gestart.', 'ev-epoch');
                 spawnWorkers();
             }
 
             startBtn.onclick = () => { if (!isRunning) startAddressScan(); };
             stopBtn.onclick = () => { setRunning(false); killWorkers(); setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop'); };
             generateRandomSlice();
-            log('Systeem klaar. Jacobian Turbo Engine Lokaal geladen.', 'ts');
+            log('Systeem klaar. Turbo Engine Lokaal geladen.', 'ts');
 
             setInterval(() => { if (isRunning) updateAllStats(); }, 800);
         })();
