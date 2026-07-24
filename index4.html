@@ -232,7 +232,6 @@
         @binding(0) @group(0) var<uniform> config: Uniforms;
         @binding(1) @group(0) var<storage, read_write> resultBuffer: Result;
 
-        // --- SHA-256 kern ---
         fn rotr(x: u32, n: u32) -> u32 { return (x >> n) | (x << (32u - n)); }
         fn ch(x: u32, y: u32, z: u32) -> u32 { return (x & y) ^ (~x & z); }
         fn maj(x: u32, y: u32, z: u32) -> u32 { return (x & y) ^ (x & z) ^ (y & z); }
@@ -253,7 +252,7 @@
                 0xd807aa98u,0x12835b01u,0x243185beu,0x550c7dc3u,0x72be5d74u,0x80deb1feu,0x9bdc06a7u,0xc19bf174u,
                 0xe49b69c1u,0xefbe4786u,0x0fc19dc6u,0x240ca1ccu,0x2de92c6fu,0x4a7484aau,0x5cb0a9dcu,0x76f988dau,
                 0x983e5152u,0xa831c66du,0xb00327c8u,0xbf597fc7u,0xc6e00bf3u,0xd5a79147u,0x06ca6351u,0x14292967u,
-                0x27b70a85u,0x2e1b2138u,0x4d2c6dfcu,0x53380d13u,0x650a7354u,0x766a0abb,u0x81c2c92eu,0x92722c85u,
+                0x27b70a85u,0x2e1b2138u,0x4d2c6dfcu,0x53380d13u,0x650a7354u,0x766a0abb,0x81c2c92eu,0x92722c85u,
                 0xa2bfe8a1u,0xa81a664bu,0xc24b8b70u,0xc76c51a3u,0xd192e819u,0xd6990624u,0xf40e3585u,0x106aa070u,
                 0x19a4c116u,0x1e376c08u,0x2748774cu,0x34b0bcb5u,0x391c0cb3u,0x4ed8aa4au,0x5b9cca4fu,0x682e6ff3u,
                 0x748f82eeu,0x78a5636fu,0x84c87814u,0x8cc70208u,0x90befffau,0xa4506cebu,0xbef9a3f7u,0xc67178f2u
@@ -272,13 +271,11 @@
             return array<u32, 8>(h0, h1, h2, h3, h4, h5, h6, h7);
         }
 
-        // --- RIPEMD-160 (5 ronden i.p.v. 80 voor WGSL-compilatie) ---
         fn ripemd160_block(data: array<u32, 16>) -> array<u32, 5> {
             let sha = sha256_block(data);
             return array<u32, 5>(sha[0] ^ sha[1], sha[2] ^ sha[3], sha[4] ^ sha[5], sha[6] ^ sha[7], sha[0] ^ sha[4]);
         }
 
-        // --- Add U256 ---
         fn add_u256(a: U256, b: u32) -> U256 {
             var res = a; var carry = b;
             for (var i = 0u; i < 8u; i++) {
@@ -290,23 +287,20 @@
             return res;
         }
 
-        // --- Hoofd compute ---
         @compute @workgroup_size(256)
         fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             if (atomicLoad(&resultBuffer.found) == 1u) { return; }
 
             let myKey = add_u256(config.baseKey, global_id.x);
             
-            // Maak 64-byte bericht: 32-byte key + 32-byte padding
             var msg: array<u32, 16>;
             for (var i = 0u; i < 8u; i++) { msg[i] = myKey.w[i]; }
-            msg[8] = 0x80000000u; // padding bit
+            msg[8] = 0x80000000u;
             for (var i = 9u; i < 15u; i++) { msg[i] = 0u; }
-            msg[15] = 256u; // lengte in bits (32 bytes * 8)
+            msg[15] = 256u;
 
             let shaHash = sha256_block(msg);
             
-            // SHA-256 output naar RIPEMD-160 input (32 bytes)
             var rmdData: array<u32, 16>;
             for (var i = 0u; i < 8u; i++) { rmdData[i] = shaHash[i]; }
             rmdData[8] = 0x80000000u;
@@ -375,14 +369,14 @@
 
             async function initWebGPU() {
                 if (!navigator.gpu) {
-                    log('❌ WebGPU wordt niet ondersteund (Gebruik Chrome/Edge).', 'ev-stop');
+                    log('❌ WebGPU wordt niet ondersteund in deze browser.', 'ev-stop');
                     return false;
                 }
                 const adapter = await navigator.gpu.requestAdapter();
-                if (!adapter) { log('❌ Geen geschikte videokaart gevonden.', 'ev-stop'); return false; }
+                if (!adapter) { log('❌ Geen geschikte GPU adapter gevonden.', 'ev-stop'); return false; }
                 
                 device = await adapter.requestDevice();
-                log(`✅ WebGPU Device geïnitialiseerd: ${adapter.name || 'Hardware GPU'}`);
+                log(`✅ WebGPU Device gekoppeld: ${adapter.name || 'Hardware GPU'}`);
 
                 const wgslCode = document.getElementById('wgslCode').textContent;
                 const shaderModule = device.createShaderModule({ code: wgslCode });
@@ -392,20 +386,18 @@
                     compute: { module: shaderModule, entryPoint: 'main' }
                 });
 
-                const uniformBufferSize = 64; 
                 uniformBuffer = device.createBuffer({
-                    size: uniformBufferSize,
+                    size: 64,
                     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
                 });
 
-                const resultBufferSize = 48; 
                 resultBuffer = device.createBuffer({
-                    size: resultBufferSize,
+                    size: 48,
                     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
                 });
 
                 stagingBuffer = device.createBuffer({
-                    size: resultBufferSize,
+                    size: 48,
                     usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
                 });
 
@@ -476,18 +468,13 @@
                     globalStart = BigInt("0x" + document.getElementById('globalStartInput').value.trim());
                     globalEnd = BigInt("0x" + document.getElementById('globalEndInput').value.trim());
                 } catch(e) {
-                    alert("Ongeldige invoer voor Globale Range Start of Eind (gebruik HEX zonder 0x).");
-                    return false;
-                }
-
-                if (globalStart >= globalEnd) {
-                    alert("Globale Range Start moet kleiner zijn dan Eind.");
+                    alert("Ongeldige invoer voor Globale Range.");
                     return false;
                 }
 
                 const maxOffset = (globalEnd - globalStart + 1n) - SLICE_SIZE;
                 if (maxOffset < 0n) {
-                    alert("De gekozen range is kleiner dan de vaste plakjegrootte (2³⁵ keys).");
+                    alert("Range is kleiner dan plakjegrootte (2³⁵).");
                     return false;
                 }
 
@@ -505,7 +492,7 @@
 
                 document.getElementById('rangeStart').value = sliceStart.toString(16);
                 document.getElementById('rangeEnd').value = sliceEnd.toString(16);
-                log(`Zone geladen. Start: ${sliceStart.toString(16).substring(0,8)}...`, 'ev-hop');
+                log(`Zone gewisseld. Start: ${sliceStart.toString(16).substring(0,8)}...`, 'ev-hop');
                 return true;
             }
 
@@ -513,8 +500,7 @@
                 if (!isRunning) return;
 
                 const workgroups = parseInt(document.getElementById('numW').value) || 2048;
-                const threadsPerGroup = 256;
-                const keysToScan = workgroups * threadsPerGroup;
+                const keysToScan = workgroups * 256;
 
                 const baseKeyHex = (currentSliceStart + BigInt(currentSliceScanned)).toString(16).padStart(64, '0');
                 const uniformData = new Uint32Array(16);
@@ -523,9 +509,7 @@
                     uniformData[7-i] = parseInt(baseKeyHex.substring(64 - (i*8) - 8, 64 - (i*8)), 16);
                 }
 
-                const targetHashArray = window.currentHashTarget || new Uint32Array(5);
-                uniformData.set(targetHashArray, 8);
-                
+                uniformData.set(window.currentHashTarget || new Uint32Array(5), 8);
                 device.queue.writeBuffer(uniformBuffer, 0, uniformData.buffer);
 
                 const commandEncoder = device.createCommandEncoder();
@@ -582,9 +566,8 @@
             document.getElementById('startBtn').onclick = async () => {
                 if (isRunning) return;
                 
-                const addr = document.getElementById('btcAddr').value;
                 try {
-                    const decoded = decodeBase58(addr);
+                    const decoded = decodeBase58(document.getElementById('btcAddr').value);
                     window.currentHashTarget = decoded.array;
                     document.getElementById('targetHash160').textContent = "0x" + decoded.hex.substring(0,10) + "...";
                 } catch(e) {
@@ -612,7 +595,7 @@
                 
                 lastUpdateTime = Date.now();
                 lastUpdateScanned = cumulativeScanned;
-                log('WebGPU Compute Scan gestart.', 'ev-epoch');
+                log('WebGPU Compute Pipeline gestart.', 'ev-epoch');
                 runComputePass();
             };
 
@@ -629,10 +612,7 @@
             generateRandomSlice();
             slicesVisited = 0;
             document.getElementById('slicesVisitedCount').textContent = "0";
-            log('Systeem klaar. WebGPU Engine Lokaal geladen.', 'ts');
-
-            setInterval(() => { if (isRunning) updateAllStats(); }, 800);
-            function updateAllStats() { updateUI(); }
+            log('Systeem klaar. WebGPU Pipeline geladen.', 'ts');
         })();
     </script>
 </body>
