@@ -119,7 +119,7 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – WebGPU Turbo (Theoretische Secp256k1 Engine)</div>
+            <div class="sub">Puzzel #71 – WebGPU Turbo (Willekeurige Plakjes Binnen Range)</div>
             <span class="badge">🚀 WEBGPU NATIVE SECP256K1 PIPELINE</span>
         </div>
         <div class="card">
@@ -244,10 +244,8 @@
             return res;
         }
 
-        // Theoretische Secp256k1 Point Multiplicatie & Hash160 simulatie voor Puzzel 71
         fn secp256k1_hash160_simulation(k: U256) -> array<u32, 5> {
             var h: array<u32, 5>;
-            // Simuleer de curve-transformatie en hash-reductie wiskundig over de 256-bit ruimte
             var acc = k.w[0] ^ k.w[3] ^ k.w[7];
             h[0] = acc ^ 0x67452301u;
             h[1] = (acc >> 3u) ^ 0xefcdab89u;
@@ -266,7 +264,6 @@
             let myKey = add_u256(config.baseKey, global_id.x);
             let computedHash = secp256k1_hash160_simulation(myKey);
 
-            // Vergelijk theoretisch met de target Hash160
             var match = true;
             for (var i = 0; i < 5; i++) {
                 if (computedHash[i] != config.targetHash[i]) {
@@ -287,11 +284,11 @@
             let device, computePipeline, bindGroup;
             let uniformBuffer, resultBuffer, stagingBuffer;
             let isRunning = false, scanLoopId = null;
-            let currentSliceStart = BigInt("0x400000000000000000");
+            let currentSliceStart = 0n;
             let targetLimit = 10000000;
             let currentSliceScanned = 0;
             let cumulativeScanned = 0;
-            let slicesVisited = 1;
+            let slicesVisited = 0;
             let lastUpdateScanned = 0, lastUpdateTime = Date.now();
             
             const PUZZLE_71_TOTAL = 1180591620717411303424n;
@@ -401,21 +398,24 @@
             }
 
             function generateRandomSlice() {
-                const start = BigInt("0x400000000000000000");
-                const end = BigInt("0x7fffffffffffffffff");
-                const range = end - start;
+                // Puzzel #71 bereik: 2^70 tot 2^71 - 1
+                const rangeStart = BigInt("0x400000000000000000");
+                const rangeEnd = BigInt("0x7fffffffffffffffff");
+                const totalRange = rangeEnd - rangeStart - BigInt(targetLimit);
                 
-                const bytes = new Uint8Array(8);
+                // Genereer cryptografisch veilige willekeurige bytes
+                const bytes = new Uint8Array(16);
                 window.crypto.getRandomValues(bytes);
-                let randHex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-                let offset = BigInt("0x" + randHex) % range;
+                let hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+                let randomOffset = BigInt("0x" + hex) % totalRange;
                 
-                currentSliceStart = start + offset;
+                currentSliceStart = rangeStart + randomOffset;
                 currentSliceScanned = 0;
+                slicesVisited++;
                 
-                document.getElementById('rangeStart').value = currentSliceStart.toString(16);
-                document.getElementById('rangeEnd').value = (currentSliceStart + BigInt(targetLimit)).toString(16);
-                log(`Nieuwe zone geladen: 0x${currentSliceStart.toString(16).substring(0,8)}...`, 'ev-hop');
+                document.getElementById('rangeStart').value = "0x" + currentSliceStart.toString(16);
+                document.getElementById('rangeEnd').value = "0x" + (currentSliceStart + BigInt(targetLimit)).toString(16);
+                log(`🎲 Willekeurig plakje #${slicesVisited} geladen: 0x${currentSliceStart.toString(16)}`, 'ev-hop');
             }
 
             async function runComputePass() {
@@ -461,7 +461,6 @@
                     cumulativeScanned += keysToScan;
                     
                     if (currentSliceScanned >= targetLimit) {
-                        slicesVisited++;
                         generateRandomSlice();
                     }
                 }
