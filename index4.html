@@ -139,9 +139,12 @@
                 <input id="keysLimit" value="10000000" type="number" min="1000">
             </div>
             <hr class="divider">
+            <div class="field"><label>Globale Range Start (HEX)</label><input id="globalStartInput" value="400000000000000000" type="text"></div>
+            <div class="field"><label>Globale Range Eind (HEX)</label><input id="globalEndInput" value="7fffffffffffffffff" type="text"></div>
             <div class="field"><label>Workgroups per Frame</label><input id="numW" value="2048" type="number" min="64" max="8192"></div>
             <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);" readonly></div>
             <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);" readonly></div>
+            <div style="font-size: 0.65rem; color: var(--muted); margin-top: 6px; text-align: right;">ℹ️ Deze HEX-waarden vernieuwen na het bereiken van je ingestelde key limiet.</div>
             <div class="btn-row">
                 <button class="btn btn-start" id="startBtn">▶ Start WebGPU Scan</button>
                 <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
@@ -171,7 +174,7 @@
                         <circle class="gauge-bg" cx="50" cy="50" r="38"/>
                         <circle class="gauge-fill" cx="50" cy="50" r="38" id="gaugeFill" stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
                     </svg>
-                    <div class="gauge-label"><span id="gaugePct">0%</span></div>
+                    <div class="gauge-label"><span id="gaugePct">0%</span>gedekt</div>
                 </div>
                 <div class="chance-info">
                     <div class="big-number" id="chanceScientific">0.00%</div>
@@ -180,14 +183,15 @@
                 </div>
             </div>
             <div class="kans-progress">
+                <div class="kp-label"><span>Dekkingsgraad tot Switch</span><span id="coveragePct">0.000000%</span></div>
                 <div class="kans-track"><div class="kans-fill" id="kansBar" style="width:0%"></div></div>
                 <div class="kans-pct-label" id="jumpsCoverage">0 keys in dit plakje</div>
             </div>
             <div class="comparison-grid">
-                <div class="cmp-cell"><div class="cmp-label">🌌 Puzzel 71 Bereik</div><div class="cmp-val">2⁷⁰ tot 2⁷¹</div></div>
-                <div class="cmp-cell"><div class="cmp-label">⏱ Tijd tot hop</div><div class="cmp-val" id="cmpTime">—</div></div>
-                <div class="cmp-cell"><div class="cmp-label">🎰 Totale Opties</div><div class="cmp-val">1.18e+21</div></div>
-                <div class="cmp-cell"><div class="cmp-label">📡 % Gescand</div><div class="cmp-val" id="cmpEpochs">0%</div></div>
+                <div class="cmp-cell"><div class="cmp-label">🌌 Plakje Grootte</div><div class="cmp-val" id="cmpUniverse">2³⁵ keys</div><div class="cmp-desc">34.359.738.368 opties</div></div>
+                <div class="cmp-cell"><div class="cmp-label">⏱ Tijd tot hop</div><div class="cmp-val" id="cmpTime">—</div><div class="cmp-desc">tijd tot nieuwe zone</div></div>
+                <div class="cmp-cell"><div class="cmp-label">🎰 Globale Puzzel Kans</div><div class="cmp-val" id="cmpLottery">0.00e+0</div><div class="cmp-desc">statistische trefkans</div></div>
+                <div class="cmp-cell"><div class="cmp-label">📡 % van Eigen Range</div><div class="cmp-val" id="cmpEpochs">0%</div></div>
             </div>
         </div>
         <div class="card">
@@ -196,7 +200,7 @@
                 <div class="stat-cell"><div class="label">Status</div><div class="value" id="statusVal">Gestopt</div></div>
                 <div class="stat-cell"><div class="label">Totaal Gescand</div><div class="value" id="keysScanned">0</div></div>
                 <div class="stat-cell"><div class="label">Snelheid</div><div class="value" id="speed">0 /s</div></div>
-                <div class="stat-cell"><div class="label">Plakjes bezocht</div><div class="value" id="slicesVisitedCount">1</div></div>
+                <div class="stat-cell"><div class="label">Plakjes bezocht</div><div class="value" id="slicesVisitedCount">0</div></div>
             </div>
             <div style="margin-top:10px;font-size:.7rem;color:var(--muted);">In dit plakje: <span id="currentSliceKeys">0</span> / <span id="limitDisplay">10.000.000</span></div>
             <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
@@ -291,7 +295,7 @@
             let slicesVisited = 0;
             let lastUpdateScanned = 0, lastUpdateTime = Date.now();
             
-            const PUZZLE_71_TOTAL = 1180591620717411303424n;
+            const SLICE_SIZE = 34359738368n;
             const logBox = document.getElementById('logBox');
 
             function log(msg, cls = '') {
@@ -371,51 +375,92 @@
             }
 
             function updateUI() {
+                targetLimit = parseInt(document.getElementById('keysLimit').value) || 10000000;
+                document.getElementById('limitDisplay').textContent = targetLimit.toLocaleString('nl-NL');
+                document.getElementById('slicesVisitedCount').textContent = slicesVisited.toLocaleString('nl-NL');
+
+                const globalStartInput = document.getElementById('globalStartInput').value.trim();
+                const globalEndInput = document.getElementById('globalEndInput').value.trim();
+                let totalRangeSize = 1n;
+                try {
+                    const gStart = BigInt("0x" + globalStartInput);
+                    const gEnd = BigInt("0x" + globalEndInput);
+                    totalRangeSize = (gEnd - gStart + 1n);
+                } catch(e) {}
+
                 const hopProgress = Math.min(1, currentSliceScanned / targetLimit);
                 document.getElementById('gaugePct').textContent = (hopProgress * 100).toFixed(1) + '%';
                 document.getElementById('gaugeFill').style.strokeDashoffset = 238.76 - (hopProgress * 238.76);
                 document.getElementById('kansBar').style.width = (hopProgress * 100) + '%';
+                document.getElementById('coveragePct').textContent = (hopProgress * 100).toFixed(2) + '%';
                 document.getElementById('jumpsCoverage').textContent = currentSliceScanned.toLocaleString('nl-NL') + ' keys gescand';
-                document.getElementById('keysScanned').textContent = cumulativeScanned.toLocaleString('nl-NL');
-                document.getElementById('currentSliceKeys').textContent = currentSliceScanned.toLocaleString('nl-NL');
-                document.getElementById('slicesVisitedCount').textContent = slicesVisited;
-                document.getElementById('cmpEpochs').textContent = ((cumulativeScanned / Number(PUZZLE_71_TOTAL)) * 100).toExponential(6) + '%';
-                document.getElementById('progressBar').style.width = (hopProgress * 100) + '%';
+                document.getElementById('chanceScientific').innerHTML = `${(hopProgress * 100).toFixed(2)}%`;
+
+                document.getElementById('cmpLottery').textContent = (BigInt(cumulativeScanned) / totalRangeSize > 0n) ? (Number(BigInt(cumulativeScanned) * 1000000n / totalRangeSize) / 1000000).toExponential(4) : "0.00e+0";
+                document.getElementById('cmpUniverse').textContent = "2³⁵ keys";
+                document.getElementById('cmpEpochs').textContent = ((Number(SLICE_SIZE) / Number(totalRangeSize)) * 100).toExponential(6) + '%';
 
                 const now = Date.now();
                 const elapsedSec = (now - lastUpdateTime) / 1000;
+                
                 if (elapsedSec >= 1) { 
-                    const speed = Math.floor((cumulativeScanned - lastUpdateScanned) / elapsedSec);
-                    document.getElementById('speed').textContent = speed.toLocaleString('nl-NL') + ' /s';
-                    document.getElementById('calcGradient').textContent = speed.toLocaleString('nl-NL') + ' /s';
+                    const currentSpeed = Math.floor((cumulativeScanned - lastUpdateScanned) / elapsedSec);
+                    document.getElementById('speed').textContent = currentSpeed.toLocaleString('nl-NL') + ' /s';
+                    document.getElementById('calcGradient').textContent = currentSpeed.toLocaleString('nl-NL') + ' /s';
                     
-                    if (speed > 0) {
-                        const rem = (targetLimit - currentSliceScanned) / speed;
-                        document.getElementById('cmpTime').textContent = (rem > 60) ? (rem/60).toFixed(1) + ' m' : rem.toFixed(0) + ' s';
+                    if (currentSpeed > 0) {
+                        const remaining = targetLimit - currentSliceScanned;
+                        const seconds = remaining / currentSpeed;
+                        document.getElementById('cmpTime').textContent = 
+                            seconds > 86400 ? (seconds / 86400).toFixed(1) + ' dagen' :
+                            seconds > 3600 ? (seconds / 3600).toFixed(1) + ' uur' :
+                            seconds > 60 ? (seconds / 60).toFixed(0) + ' min' : seconds.toFixed(0) + ' s';
                     }
                     lastUpdateTime = now; lastUpdateScanned = cumulativeScanned;
                 }
+
+                progressBar.style.width = (hopProgress * 100) + '%';
+                document.getElementById('keysScanned').textContent = cumulativeScanned.toLocaleString('nl-NL');
+                document.getElementById('currentSliceKeys').textContent = currentSliceScanned.toLocaleString('nl-NL');
             }
 
             function generateRandomSlice() {
-                // Puzzel #71 bereik: 2^70 tot 2^71 - 1
-                const rangeStart = BigInt("0x400000000000000000");
-                const rangeEnd = BigInt("0x7fffffffffffffffff");
-                const totalRange = rangeEnd - rangeStart - BigInt(targetLimit);
-                
-                // Genereer cryptografisch veilige willekeurige bytes
-                const bytes = new Uint8Array(16);
+                let globalStart, globalEnd;
+                try {
+                    globalStart = BigInt("0x" + document.getElementById('globalStartInput').value.trim());
+                    globalEnd = BigInt("0x" + document.getElementById('globalEndInput').value.trim());
+                } catch(e) {
+                    alert("Ongeldige invoer voor Globale Range Start of Eind (gebruik HEX zonder 0x).");
+                    return false;
+                }
+
+                if (globalStart >= globalEnd) {
+                    alert("Globale Range Start moet kleiner zijn dan Eind.");
+                    return false;
+                }
+
+                const maxOffset = (globalEnd - globalStart + 1n) - SLICE_SIZE;
+                if (maxOffset < 0n) {
+                    alert("De gekozen range is kleiner dan de vaste plakjegrootte (2³⁵ keys).");
+                    return false;
+                }
+
+                const bytes = new Uint8Array(Math.ceil(maxOffset.toString(2).length / 8));
                 window.crypto.getRandomValues(bytes);
-                let hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-                let randomOffset = BigInt("0x" + hex) % totalRange;
-                
-                currentSliceStart = rangeStart + randomOffset;
+                const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+                const rand = BigInt("0x" + (hex || "0"));
+                const offset = maxOffset > 0n ? rand % maxOffset : 0n;
+                const sliceStart = globalStart + offset;
+                const sliceEnd = sliceStart + SLICE_SIZE - 1n;
+
+                currentSliceStart = sliceStart;
                 currentSliceScanned = 0;
                 slicesVisited++;
-                
-                document.getElementById('rangeStart').value = "0x" + currentSliceStart.toString(16);
-                document.getElementById('rangeEnd').value = "0x" + (currentSliceStart + BigInt(targetLimit)).toString(16);
-                log(`🎲 Willekeurig plakje #${slicesVisited} geladen: 0x${currentSliceStart.toString(16)}`, 'ev-hop');
+
+                document.getElementById('rangeStart').value = sliceStart.toString(16);
+                document.getElementById('rangeEnd').value = sliceEnd.toString(16);
+                log(`Zone geladen. Start: ${sliceStart.toString(16).substring(0,8)}...`, 'ev-hop');
+                return true;
             }
 
             async function runComputePass() {
@@ -452,16 +497,31 @@
                 const found = resultData[0];
                 
                 if (found === 1) {
-                    log('🚨 BINGO! Puzzel 71 GEVONDEN!', 'ev-found');
-                    document.getElementById('statusVal').textContent = "MATCH GEVONDEN!";
-                    document.getElementById('statusVal').style.color = "var(--warn)";
+                    const pkWords = [];
+                    for(let i=0; i<8; i++) {
+                        pkWords.push(resultData[4 + (7-i)].toString(16).padStart(8, '0'));
+                    }
+                    const privHex = pkWords.join('');
+                    
+                    log('🔥 MATCH GEVONDEN! Proces gestopt.', 'ev-found');
+                    document.getElementById('statusVal').textContent = "🎉 GEVONDEN!";
+                    document.getElementById('statusVal').className = "running";
+                    document.getElementById('matchTable').innerHTML = `<tr><td>✅ MATCH</td><td style="font-size:.65rem">${privHex}</td></tr>`;
                     isRunning = false;
                 } else {
                     currentSliceScanned += keysToScan;
                     cumulativeScanned += keysToScan;
                     
                     if (currentSliceScanned >= targetLimit) {
-                        generateRandomSlice();
+                        if (!generateRandomSlice()) {
+                            isRunning = false;
+                            document.getElementById('startBtn').disabled = false;
+                            document.getElementById('stopBtn').disabled = true;
+                            document.getElementById('statusVal').textContent = "Gestopt";
+                            document.getElementById('statusVal').className = "";
+                            stagingBuffer.unmap();
+                            return;
+                        }
                     }
                 }
                 
@@ -494,14 +554,19 @@
                 const resetData = new Uint32Array(12);
                 device.queue.writeBuffer(resultBuffer, 0, resetData.buffer);
 
+                if (slicesVisited === 0) {
+                    if (!generateRandomSlice()) return;
+                }
+
                 isRunning = true;
                 document.getElementById('startBtn').disabled = true;
                 document.getElementById('stopBtn').disabled = false;
-                document.getElementById('statusVal').textContent = "⚡ Scannen (GPU)";
+                document.getElementById('statusVal').textContent = "⚡ WebGPU Actief";
                 document.getElementById('statusVal').className = "running";
                 
-                if (currentSliceScanned === 0) generateRandomSlice();
-                log('GPU Pijplijn gestart.', 'ev-epoch');
+                lastUpdateTime = Date.now();
+                lastUpdateScanned = cumulativeScanned;
+                log('WebGPU Compute Scan gestart.', 'ev-epoch');
                 runComputePass();
             };
 
@@ -512,8 +577,16 @@
                 document.getElementById('stopBtn').disabled = true;
                 document.getElementById('statusVal').textContent = "Gestopt";
                 document.getElementById('statusVal').className = "";
-                log('Scan afgebroken door gebruiker.', 'ev-stop');
+                log('Handmatig gestopt.', 'ev-stop');
             };
+
+            generateRandomSlice();
+            slicesVisited = 0;
+            document.getElementById('slicesVisitedCount').textContent = "0";
+            log('Systeem klaar. WebGPU Engine Lokaal geladen.', 'ts');
+
+            setInterval(() => { if (isRunning) updateAllStats(); }, 800);
+            function updateAllStats() { updateUI(); }
         })();
     </script>
 </body>
