@@ -161,7 +161,7 @@
                 </div>
             </div>
             <div class="formula-box" style="background:rgba(0,0,0,0.5); border-left:3px solid var(--accent2); padding:10px; font-size:.75rem; color:#bfe4ff; line-height:1.5;">
-                Engine: Jacobian Mixed Addition + Batch Z-Inversion (N=5000)
+                Engine: Jacobian Mixed Addition + Batch Z-Inversion (N=20000)
             </div>
         </div>
         <div class="chance-card">
@@ -375,7 +375,7 @@
                 const targetH160 = new Uint8Array(data.targetH160Hex.match(/.{2}/g).map(b => parseInt(b, 16)));
                 const targetAddr = data.targetAddress;
                 const workerId = data.workerId;
-                const BATCH = 5000; // Hoeveel we per tick doen
+                const BATCH = 20000; // Hoeveel we per tick doen
                 
                 let currentPoint = mul(G, currentKey);
 
@@ -418,7 +418,7 @@
                         return;
                     }
                     
-                    // STAP 2: BATCH INVERSION (5000 inverses voor de prijs van 1)
+                    // STAP 2: BATCH INVERSION (20000 inverses voor de prijs van 1)
                     let acc = 1n;
                     let partials = new Array(batchCount);
                     for(let i=0; i<batchCount; i++) {
