@@ -375,11 +375,11 @@
                     if (babyMap.has(ax)) {
                         let baby = babyMap.get(ax);
                         if (baby.y === ay) {
-                            let found = startKey + BigInt(j) * M + BigInt(baby.i);
+                            let found = startKey + BigInt(j) * M + BigInt(baby.i) + 1n;
                             self.postMessage({ type: "FOUND", privHex: found.toString(16).padStart(64, '0') });
                             return;
                         } else if (baby.y === mod(P - ay)) {
-                            let found = startKey + BigInt(j) * M - BigInt(baby.i);
+                            let found = startKey + BigInt(j) * M - (BigInt(baby.i) + 1n);
                             self.postMessage({ type: "FOUND", privHex: found.toString(16).padStart(64, '0') });
                             return;
                         }
