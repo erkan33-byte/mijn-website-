@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #49 – BSGS Quantum Sniper ⚡</title>
+    <title>Puzzel #49 – TEST MODUS ⚡</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -96,20 +96,18 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🌌 Puzzel #49 Sniper</h1>
+            <h1>🌌 Puzzel #49 Test Modus</h1>
             <div class="sub">Wiskundig Wonder: Baby-Step Giant-Step (BSGS)</div>
             <span class="badge">🚀 OPTIE 4: ALGEBRAÏSCHE KORTSLUITING (NON-LINEAR)</span>
         </div>
         <div class="card">
-            <div class="card-title">⚙ Actieve Configuratie</div>
+            <div class="card-title">⚙ Actieve Configuratie (Geforceerde Start)</div>
             <div class="field">
                 <label>Target Public Key (HEX)</label>
-                <!-- Geüpdatet naar Puzzel #49 Public Key -->
                 <input id="pubKey" value="02591d682c3da4a2a698633bf5751738b67c343285ebdc3492645cb44658911484" type="text">
             </div>
             <div class="field">
                 <label>Target BTC Adres (Opt.)</label>
-                <!-- Geüpdatet naar Puzzel #49 Adres -->
                 <input id="btcAddr" value="12CiUhYVTTH33w3SPUBqcpMoqnApAV4WCF" type="text">
             </div>
             <div class="field">
@@ -121,17 +119,16 @@
             <div class="field">
                 <label>Grootte per Plakje</label>
                 <select id="sliceSize">
-                    <option value="34359738368">2³⁵ Keys (34.3 Miljard) - Aanbevolen</option>
-                    <option value="68719476736">2³⁶ Keys (68.7 Miljard) - RAM Zwaar</option>
-                    <option value="100000000">100 Miljoen (Zeer snel, kleine sprongen)</option>
+                    <option value="100000000">100 Miljoen (Zeer snel, voor testen)</option>
+                    <option value="34359738368">2³⁵ Keys (34.3 Miljard)</option>
                 </select>
             </div>
             <hr class="divider">
-            <div class="field"><label>Workers (CPU Cores)</label><input id="numW" value="4" type="number" min="1" max="32"></div>
+            <div class="field"><label>Workers (CPU Cores)</label><input id="numW" value="1" type="number" min="1" max="32"></div>
             <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);"></div>
             <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);"></div>
             <div class="btn-row">
-                <button class="btn btn-start" id="startBtn">▶ Start Quantum Sprongen</button>
+                <button class="btn btn-start" id="startBtn">▶ Start Test (Vind Direct)</button>
                 <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
             </div>
         </div>
@@ -144,10 +141,6 @@
                 <div class="stat-cell"><div class="label">Plakjes (BSGS Checks)</div><div class="value" id="slicesVisitedCount">0</div></div>
                 <div class="stat-cell"><div class="label">Totaal Geëlimineerd</div><div class="value" id="keysScanned">0</div></div>
             </div>
-            <div class="comparison-grid">
-                <div class="cmp-cell"><div class="cmp-label">Puzzel 49 Kans</div><div class="cmp-val" id="cmpLottery">0.00e+0</div></div>
-                <div class="cmp-cell"><div class="cmp-label">% Geëlimineerd</div><div class="cmp-val" id="cmpEpochs">0%</div></div>
-            </div>
         </div>
         
         <div class="card"><div class="card-title">📋 Activiteitenlog</div><div class="log" id="logBox"></div></div>
@@ -158,7 +151,7 @@
                 <tbody id="matchTable"><tr class="empty-row"><td colspan="2">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Wiskundige Wonder Engine · PUZZLE #49</div>
+        <div class="footer">Wiskundige Wonder Engine · PUZZLE #49 TEST</div>
     </div>
 
     <!-- ⚡ BABY-STEP GIANT-STEP WORKER -->
@@ -242,7 +235,7 @@
                     return;
                 }
 
-                // 2. Bouw Baby Steps Tabel (i * G) - Met Jacobian snelle generatie
+                // 2. Bouw Baby Steps Tabel (i * G)
                 let babyMap = new Map();
                 let bX = new Array(M_num), bY = new Array(M_num), bZ = new Array(M_num);
                 bX[0] = G.x; bY[0] = G.y; bZ[0] = 1n;
@@ -276,7 +269,6 @@
                 }
 
                 // 3. Giant Steps Berekening
-                // Q_0 = P_target - StartPoint
                 let Q0 = add(P_target, { x: S.x, y: mod(P - S.y) });
                 let G_giant = mul(G, M);
                 let Neg_G_giant = { x: G_giant.x, y: mod(P - G_giant.y) };
@@ -290,7 +282,7 @@
                     let U2 = mod(Neg_G_giant.x * Z1Z1);
                     let S2 = mod(Neg_G_giant.y * mod(cZ * Z1Z1));
                     let H = mod(U2 - cX); let R = mod(S2 - cY);
-                    if (H === 0n) { /* Zeer zeldzaam incident genegeerd voor performance */ }
+                    if (H === 0n) {} 
                     let HH = mod(H * H); let HHH = mod(H * HH);
                     let V = mod(cX * HH);
                     cX = mod(R * R - HHH - 2n * V);
@@ -326,7 +318,6 @@
                     }
                 }
                 
-                // Plakje afgerond zonder match (binnen 1 seconde!)
                 self.postMessage({ type: "SCAN_DONE", scannedKeys: Number(W), workerId });
             }
         };
@@ -336,11 +327,6 @@
         (function() {
             let workers = [], totalScanned = 0, slicesVisited = 0;
             let isRunning = false, lastUpdateTime = 0, lastUpdateScanned = 0;
-
-            // Puzzel 49 Range Geüpdatet
-            const PUZZLE_START = BigInt("0x1000000000000");
-            const PUZZLE_END = BigInt("0x1ffffffffffff");
-            const PUZZLE_TOTAL = PUZZLE_END - PUZZLE_START + 1n;
 
             const logBox = document.getElementById('logBox');
             function log(msg, cls = '') {
@@ -362,89 +348,56 @@
                 workers = [];
             }
 
-            function generateRandomSlice() {
+            // AANGEPAST VOOR DE TEST: 
+            // Plaatst het startpunt expres 50.000 iteraties VÓÓR de bekende Puzzel 49 key.
+            function setForcedSlice() {
                 const sliceSize = BigInt(document.getElementById('sliceSize').value);
-                const maxOffset = PUZZLE_TOTAL - sliceSize;
+                const knownKey = BigInt("0x174176b015f4d"); 
                 
-                if (maxOffset <= 0n) {
-                    document.getElementById('rangeStart').value = PUZZLE_START.toString(16);
-                    document.getElementById('rangeEnd').value = PUZZLE_END.toString(16);
-                    return;
-                }
-
-                // Aangepast naar 6 bytes (48 bit), passend voor Puzzel 49 bereik
-                const bytes = new Uint8Array(6);
-                window.crypto.getRandomValues(bytes);
-                const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-                const rand = BigInt("0x" + hex);
-                const offset = rand % maxOffset;
-                
-                const sliceStart = PUZZLE_START + offset;
+                const sliceStart = knownKey - 50000n; // 50.000 keys voor de target starten
                 const sliceEnd = sliceStart + sliceSize - 1n;
 
                 document.getElementById('rangeStart').value = sliceStart.toString(16);
                 document.getElementById('rangeEnd').value = sliceEnd.toString(16);
             }
 
-            function updateStats() {
-                const now = Date.now();
-                const elapsedSec = (now - lastUpdateTime) / 1000;
-                if (elapsedSec >= 1) { 
-                    const speed = Math.floor((totalScanned - lastUpdateScanned) / elapsedSec);
-                    document.getElementById('speed').textContent = speed.toLocaleString('nl-NL') + ' /s';
-                    lastUpdateTime = now; lastUpdateScanned = totalScanned;
-                }
-                
-                document.getElementById('keysScanned').textContent = totalScanned.toLocaleString('nl-NL');
-                document.getElementById('slicesVisitedCount').textContent = slicesVisited.toLocaleString('nl-NL');
-                document.getElementById('cmpLottery').textContent = (totalScanned / Number(PUZZLE_TOTAL)).toExponential(4);
-                document.getElementById('cmpEpochs').textContent = ((totalScanned / Number(PUZZLE_TOTAL)) * 100).toExponential(6) + '%';
-            }
-
             function spawnWorkers() {
-                const numW = Math.max(1, parseInt(document.getElementById('numW').value) || 4);
                 const targetPubKey = document.getElementById('pubKey').value.trim();
                 killWorkers();
-                let workersDone = 0;
+                
+                // We gebruiken 1 worker voor deze specifieke test zodat hij direct op de target afgaat
+                const startHex = document.getElementById('rangeStart').value;
+                const endHex = document.getElementById('rangeEnd').value;
 
-                for (let i = 0; i < numW; i++) {
-                    generateRandomSlice(); // Iedere worker krijgt zijn EIGEN random plakje
-                    const startHex = document.getElementById('rangeStart').value;
-                    const endHex = document.getElementById('rangeEnd').value;
+                const code = document.getElementById('workerCode').textContent;
+                const worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
+                workers.push(worker);
 
-                    const code = document.getElementById('workerCode').textContent;
-                    const worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
-                    workers.push(worker);
-
-                    worker.onmessage = (ev) => {
-                        if (ev.data.type === "SCAN_DONE") {
-                            totalScanned += ev.data.scannedKeys;
-                            slicesVisited++;
-                            workersDone++;
-                            if (isRunning && workersDone === numW) {
-                                log(`✅ Ronde van ${numW} BSGS jumps geëlimineerd. Auto-Hop...`, 'ev-hop');
-                                spawnWorkers(); // Start de volgende ronde direct
-                            }
-                        } else if (ev.data.type === "FOUND") {
-                            isRunning = false; killWorkers(); setStatus('🎉 GEVONDEN!', 'running');
-                            document.getElementById('matchTable').innerHTML = `<tr><td>✅ WINST (HEX)</td><td style="font-size:.7rem; color:#ff007f;">${ev.data.privHex}</td></tr>`;
-                            log(`🔥 DOELWIT GEVONDEN in slice: ${startHex.substring(0,8)}...`, 'ev-found');
-                        } else if (ev.data.type === "WORKER_ERROR") {
-                            log(`❌ RAM / Crash in worker. Plakje mogelijk te groot.`, 'ev-stop');
-                        }
-                    };
-                    worker.postMessage({ type: "BSGS_SCAN", startHex, endHex, targetPubKey, workerId: i });
-                }
+                worker.onmessage = (ev) => {
+                    if (ev.data.type === "SCAN_DONE") {
+                        log(`❌ Slice gecontroleerd maar geen match gevonden. Is het doelwit correct?`, 'ev-stop');
+                        isRunning = false; killWorkers(); setStatus('Gestopt');
+                        document.getElementById('startBtn').disabled = false;
+                        document.getElementById('stopBtn').disabled = true;
+                    } else if (ev.data.type === "FOUND") {
+                        isRunning = false; killWorkers(); setStatus('🎉 GEVONDEN!', 'running');
+                        document.getElementById('matchTable').innerHTML = `<tr><td>✅ WINST (HEX)</td><td style="font-size:.7rem; color:#ff007f;">${ev.data.privHex}</td></tr>`;
+                        log(`🔥 DOELWIT GEVONDEN! Systeem is succesvol getest.`, 'ev-found');
+                        document.getElementById('startBtn').disabled = false;
+                        document.getElementById('stopBtn').disabled = true;
+                    }
+                };
+                worker.postMessage({ type: "BSGS_SCAN", startHex, endHex, targetPubKey, workerId: 1 });
             }
 
             document.getElementById('startBtn').onclick = () => {
                 if (isRunning) return;
                 isRunning = true;
-                startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = totalScanned;
+                setForcedSlice(); // Forceer het startpunt
                 document.getElementById('startBtn').disabled = true;
                 document.getElementById('stopBtn').disabled = false;
-                setStatus('⚡ BSGS Sprongen Actief', 'running');
-                log('Initiating Quantum Sprongen over 49-bit veld...', 'ev-epoch');
+                setStatus('⚡ Test Run Actief', 'running');
+                log('Gestart net voor de bekende sleutel om validatie te testen...', 'ev-epoch');
                 spawnWorkers();
             };
 
@@ -455,9 +408,8 @@
                 setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop');
             };
 
-            generateRandomSlice();
-            log('Systeem klaar. BSGS Engine geladen voor Puzzel 49.', 'ts');
-            setInterval(() => { if (isRunning) updateStats(); }, 500);
+            setForcedSlice();
+            log('Systeem klaar. TEST MODUS geladen (zoekt nabij bekende sleutel).', 'ts');
         })();
     </script>
 </body>
