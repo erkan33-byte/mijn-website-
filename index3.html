@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #135 – BSGS Quantum Sniper ⚡ (Test Mode)</title>
+    <title>Puzzel #135 – BSGS Quantum Sniper ⚡</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -98,18 +98,17 @@
         <div class="header">
             <h1>🌌 Puzzel #135 Sniper</h1>
             <div class="sub">Wiskundig Wonder: Baby-Step Giant-Step (BSGS)</div>
-            <span class="badge">🚀 TEST MODUS ACTIEF (PUZZEL #1)</span>
+            <span class="badge">🚀 OPTIE 4: ALGEBRAÏSCHE KORTSLUITING (NON-LINEAR)</span>
         </div>
         <div class="card">
             <div class="card-title">⚙ Actieve Configuratie</div>
             <div class="field">
                 <label>Target Public Key (HEX)</label>
-                <!-- Aangepast naar Puzzel 1 test vector -->
-                <input id="pubKey" value="0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798" type="text">
+                <input id="pubKey" value="02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16" type="text">
             </div>
             <div class="field">
                 <label>Target BTC Adres (Opt.)</label>
-                <input id="btcAddr" value="1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH" type="text">
+                <input id="btcAddr" value="16RGFo6hjq9ym6Pj7N5H7L1NR1rVPJyw2v" type="text">
             </div>
             <div class="field">
                 <label>Scan methode</label>
@@ -120,17 +119,15 @@
             <div class="field">
                 <label>Grootte per Plakje</label>
                 <select id="sliceSize">
-                    <option value="100000000" selected>100 Miljoen (Zeer snel, kleine sprongen)</option>
                     <option value="34359738368">2³⁵ Keys (34.3 Miljard) - Aanbevolen</option>
                     <option value="68719476736">2³⁶ Keys (68.7 Miljard) - RAM Zwaar</option>
+                    <option value="100000000">100 Miljoen (Zeer snel, kleine sprongen)</option>
                 </select>
             </div>
             <hr class="divider">
-            <!-- Aangepast naar 1 Worker voor de test -->
-            <div class="field"><label>Workers (CPU Cores)</label><input id="numW" value="1" type="number" min="1" max="32"></div>
-            <!-- Handmatige test range -->
-            <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="1" type="text" style="color: var(--accent2);"></div>
-            <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="1000" type="text" style="color: var(--accent2);"></div>
+            <div class="field"><label>Workers (CPU Cores)</label><input id="numW" value="4" type="number" min="1" max="32"></div>
+            <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);"></div>
+            <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);"></div>
             <div class="btn-row">
                 <button class="btn btn-start" id="startBtn">▶ Start Quantum Sprongen</button>
                 <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
@@ -159,7 +156,7 @@
                 <tbody id="matchTable"><tr class="empty-row"><td colspan="2">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Wiskundige Wonder Engine · TEST MODUS</div>
+        <div class="footer">Wiskundige Wonder Engine · PUZZLE #135</div>
     </div>
 
     <!-- ⚡ BABY-STEP GIANT-STEP WORKER -->
@@ -327,7 +324,7 @@
                     }
                 }
                 
-                // Plakje afgerond zonder match (binnen 1 seconde!)
+                // Plakje afgerond zonder match
                 self.postMessage({ type: "SCAN_DONE", scannedKeys: Number(W), workerId });
             }
         };
@@ -366,7 +363,6 @@
                 const sliceSize = BigInt(document.getElementById('sliceSize').value);
                 const maxOffset = PUZZLE_TOTAL - sliceSize;
                 
-                // Veilige random generatie voor 134 bits
                 const bytes = new Uint8Array(17);
                 window.crypto.getRandomValues(bytes);
                 const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
@@ -401,17 +397,13 @@
                 killWorkers();
                 let workersDone = 0;
 
+                // Lees de handmatige waarden uit de invoervelden
+                const startHexInput = document.getElementById('rangeStart').value.trim();
+                const endHexInput = document.getElementById('rangeEnd').value.trim();
+
                 for (let i = 0; i < numW; i++) {
-                    
-                    // ==========================================
-                    // ⚠️ AANGEPAST VOOR DE TEST:
-                    // De randomizer is hier uitgeschakeld.
-                    // Hij gebruikt nu exact wat jij in de velden hebt getypt!
-                    // ==========================================
-                    // generateRandomSlice(); 
-                    
-                    const startHex = document.getElementById('rangeStart').value;
-                    const endHex = document.getElementById('rangeEnd').value;
+                    const startHex = startHexInput;
+                    const endHex = endHexInput;
 
                     const code = document.getElementById('workerCode').textContent;
                     const worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
@@ -423,17 +415,14 @@
                             slicesVisited++;
                             workersDone++;
                             if (isRunning && workersDone === numW) {
-                                log(`✅ Ronde voltooid. Auto-Hop...`, 'ev-hop');
-                                // In test-modus zal hij hierna overigens weer 
-                                // dezelfde startHex en endHex scannen (omdat random uit staat).
-                                spawnWorkers(); 
+                                log(`✅ Ronde voltooid.`, 'ev-hop');
                             }
                         } else if (ev.data.type === "FOUND") {
                             isRunning = false; killWorkers(); setStatus('🎉 GEVONDEN!', 'running');
                             document.getElementById('matchTable').innerHTML = `<tr><td>✅ WINST (HEX)</td><td style="font-size:.7rem; color:#ff007f;">${ev.data.privHex}</td></tr>`;
-                            log(`🔥 DOELWIT GEVONDEN in slice: ${startHex.substring(0,8)}...`, 'ev-found');
+                            log(`🔥 DOELWIT GEVONDEN: ${ev.data.privHex}`, 'ev-found');
                         } else if (ev.data.type === "WORKER_ERROR") {
-                            log(`❌ RAM / Crash in worker. Plakje mogelijk te groot.`, 'ev-stop');
+                            log(`❌ RAM / Crash in worker.`, 'ev-stop');
                         }
                     };
                     worker.postMessage({ type: "BSGS_SCAN", startHex, endHex, targetPubKey, workerId: i });
@@ -442,12 +431,18 @@
 
             document.getElementById('startBtn').onclick = () => {
                 if (isRunning) return;
+                const startHex = document.getElementById('rangeStart').value.trim();
+                const endHex = document.getElementById('rangeEnd').value.trim();
+                if (!startHex || !endHex) {
+                    alert('Vul eerst een begin- en eindrange in!');
+                    return;
+                }
                 isRunning = true;
                 startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = totalScanned;
                 document.getElementById('startBtn').disabled = true;
                 document.getElementById('stopBtn').disabled = false;
                 setStatus('⚡ BSGS Sprongen Actief', 'running');
-                log('Initiating test over handmatige range...', 'ev-epoch');
+                log('Start scan over opgegeven range...', 'ev-epoch');
                 spawnWorkers();
             };
 
@@ -458,9 +453,8 @@
                 setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop');
             };
 
-            // UITGESCHAKELD VOOR DE TEST:
-            // generateRandomSlice();
-            log('Systeem klaar. Handmatige test-modus is actief.', 'ts');
+            generateRandomSlice();
+            log('Systeem klaar. Handmatige range invoer ingeschakeld.', 'ts');
             setInterval(() => { if (isRunning) updateStats(); }, 500);
         })();
     </script>
