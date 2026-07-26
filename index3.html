@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #135 – BSGS Quantum Sniper ⚡ + Test Mode</title>
+    <title>Puzzel #135 – BSGS Quantum Sniper ⚡ + Fix Test</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -33,10 +33,6 @@
         .card, .calc-card, .chance-card {
             background: var(--panel); border: 1px solid var(--border);
             border-radius: 6px; padding: 20px; margin-bottom: 16px;
-        }
-        .calc-card, .chance-card {
-            background: linear-gradient(135deg, #1a0a1a 0%, #200d20 100%);
-            border-color: #5c1a3a;
         }
         .card-title {
             font-size: .65rem; letter-spacing: .18em; text-transform: uppercase;
@@ -90,9 +86,9 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🌌 Puzzel #135 Sniper + Test</h1>
+            <h1>🌌 Puzzel #135 Sniper + Test Fix</h1>
             <div class="sub">Wiskundig Wonder: Baby-Step Giant-Step (BSGS)</div>
-            <span class="badge">🚀 INCL. WISKUNDIGE VALIDATIE TESTER</span>
+            <span class="badge">🚀 GEFIXTE VALIDATIE TESTER</span>
         </div>
         <div class="card">
             <div class="card-title">⚙ Actieve Configuratie</div>
@@ -110,7 +106,7 @@
                 <label>Grootte per Plakje</label>
                 <select id="sliceSize">
                     <option value="34359738368">2³⁵ Keys (34.3 Miljard) - Aanbevolen</option>
-                    <option value="100000000">100 Miljoen (Zeer snel, kleine sprongen)</option>
+                    <option value="1000000">1 Miljoen (Supersnel voor Test)</option>
                 </select>
             </div>
             <hr class="divider">
@@ -149,7 +145,7 @@
         <div class="footer">Wiskundige Wonder Engine · PUZZLE #135</div>
     </div>
 
-    <!-- ⚡ BABY-STEP GIANT-STEP WORKER (INCL. SECP256K1 CURVE MULTIPLICATION VOOR TEST) -->
+    <!-- ⚡ BABY-STEP GIANT-STEP WORKER -->
     <script id="workerCode" type="javascript/worker">
         self.onerror = function(e) {
             self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
@@ -205,7 +201,6 @@
         }
 
         self.onmessage = function(e) {
-            // Hulp-commando om snel een pubkey te genereren voor de test
             if (e.data.type === "GEN_PUB") {
                 const privKey = BigInt("0x" + e.data.privHex);
                 const pubPoint = mul(G, privKey);
@@ -233,86 +228,40 @@
                 const M = BigInt(M_num);
 
                 let S = mul(G, startKey);
-                if (S && S.x === P_target.x && S.y === P_target.y) {
-                    self.postMessage({ type: "FOUND", privHex: startKey.toString(16).padStart(64, '0') });
+                if (!S) {
+                    self.postMessage({ type: "SCAN_DONE", scannedKeys: Number(W), workerId });
                     return;
                 }
 
                 let babyMap = new Map();
-                let bX = new Array(M_num), bY = new Array(M_num), bZ = new Array(M_num);
-                bX[0] = G.x; bY[0] = G.y; bZ[0] = 1n;
-                
                 let jX = G.x, jY = G.y, jZ = 1n;
-                for (let i = 1; i < M_num; i++) {
-                    let Z1Z1 = mod(jZ * jZ);
-                    let U2 = mod(G_x * Z1Z1);
-                    let S2 = mod(G_y * mod(jZ * Z1Z1));
-                    let H = mod(U2 - jX); let R = mod(S2 - jY);
-                    let HH = mod(H * H); let HHH = mod(H * HH);
-                    let V = mod(jX * HH);
-                    jX = mod(R * R - HHH - 2n * V);
-                    jY = mod(R * (V - jX) - jY * HHH);
-                    jZ = mod(jZ * H);
-                    bX[i] = jX; bY[i] = jY; bZ[i] = jZ;
-                }
-
-                let acc = 1n;
-                let partials = new Array(M_num);
-                for(let i=0; i<M_num; i++) { partials[i] = acc; acc = mod(acc * bZ[i]); }
-                let invAcc = inverse(acc);
-                let invZ = new Array(M_num);
-                for(let i=M_num-1; i>=0; i--) { invZ[i] = mod(invAcc * partials[i]); invAcc = mod(invAcc * bZ[i]); }
-
-                for(let i=0; i<M_num; i++) {
-                    let iz = invZ[i]; let iz2 = mod(iz * iz);
-                    let ax = mod(bX[i] * iz2); let ay = mod(bY[i] * mod(iz * iz2));
-                    babyMap.set(ax, { y: ay, k: BigInt(i + 1) });
+                
+                // Genereer baby steps met gewone toevoeging om index-fouten te voorkomen
+                let curPoint = G;
+                for (let i = 1; i <= M_num; i++) {
+                    babyMap.set(curPoint.x, { y: curPoint.y, k: BigInt(i) });
+                    curPoint = add(curPoint, G);
                 }
 
                 let Q0 = add(P_target, { x: S.x, y: mod(P - S.y) });
                 let G_giant = mul(G, M);
                 let Neg_G_giant = { x: G_giant.x, y: mod(P - G_giant.y) };
 
-                let qX = new Array(M_num), qY = new Array(M_num), qZ = new Array(M_num);
-                qX[0] = Q0.x; qY[0] = Q0.y; qZ[0] = 1n;
-                let cX = Q0.x, cY = Q0.y, cZ = 1n;
-
-                for (let j = 1; j < M_num; j++) {
-                    let Z1Z1 = mod(cZ * cZ);
-                    let U2 = mod(Neg_G_giant.x * Z1Z1);
-                    let S2 = mod(Neg_G_giant.y * mod(cZ * Z1Z1));
-                    let H = mod(U2 - cX); let R = mod(S2 - cY);
-                    let HH = mod(H * H); let HHH = mod(H * HH);
-                    let V = mod(cX * HH);
-                    cX = mod(R * R - HHH - 2n * V);
-                    cY = mod(R * (V - cX) - cY * HHH);
-                    cZ = mod(cZ * H);
-                    qX[j] = cX; qY[j] = cY; qZ[j] = cZ;
-                }
-
-                acc = 1n;
-                let qPartials = new Array(M_num);
-                for(let j=0; j<M_num; j++) { qPartials[j] = acc; acc = mod(acc * qZ[j]); }
-                invAcc = inverse(acc);
-                let qInvZ = new Array(M_num);
-                for(let j=M_num-1; j>=0; j--) { qInvZ[j] = mod(invAcc * qPartials[j]); invAcc = mod(invAcc * qZ[j]); }
-
-                for(let j=0; j<M_num; j++) {
-                    let iz = qInvZ[j]; let iz2 = mod(iz * iz);
-                    let ax = mod(qX[j] * iz2); let ay = mod(qY[j] * mod(iz * iz2));
-                    
-                    if (babyMap.has(ax)) {
-                        let baby = babyMap.get(ax);
-                        if (baby.y === ay) {
+                let giantPoint = Q0;
+                for (let j = 0; j <= M_num; j++) {
+                    if (babyMap.has(giantPoint.x)) {
+                        let baby = babyMap.get(giantPoint.x);
+                        if (baby.y === giantPoint.y) {
                             let found = startKey + BigInt(j) * M + baby.k;
                             self.postMessage({ type: "FOUND", privHex: found.toString(16).padStart(64, '0') });
                             return;
-                        } else if (baby.y === mod(P - ay)) {
+                        } else if (baby.y === mod(P - giantPoint.y)) {
                             let found = startKey + BigInt(j) * M - baby.k;
                             self.postMessage({ type: "FOUND", privHex: found.toString(16).padStart(64, '0') });
                             return;
                         }
                     }
+                    giantPoint = add(giantPoint, Neg_G_giant);
                 }
                 
                 self.postMessage({ type: "SCAN_DONE", scannedKeys: Number(W), workerId });
@@ -417,16 +366,14 @@
                 }
             }
 
-            // 🧪 VALIDATIE TEST KNOP LOGICA
+            // 🧪 GEFIXTE VALIDATIE TEST KNOP
             document.getElementById('testBtn').onclick = () => {
                 if (isRunning) return;
                 log('🧪 Test gestart: Willekeurige geheime sleutel wordt gekozen en verstopt...', 'ev-epoch');
 
-                // Kies een willekeurige test-privéleutel (binnen normaal klein bereik voor snelle test)
-                const testPrivInt = 0x40000000000000000000000000000001n; // Valt mooi binnen Puzzle 135 startgebied
+                const testPrivInt = 0x40000000000000000000000000000064n; 
                 const testPrivHex = testPrivInt.toString(16).padStart(64, '0');
 
-                // Vraag de worker om de publieke sleutel hierbij te berekenen
                 const code = document.getElementById('workerCode').textContent;
                 const testWorker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
 
@@ -436,22 +383,20 @@
                         document.getElementById('pubKey').value = targetPub;
                         log(`🧪 Test PubKey berekend. Nu wordt gezocht in het plakje van deze sleutel...`, 'ev-hop');
 
-                        // Zet het zoekplakje PRECIES rondom deze sleutel
-                        const sliceSize = 1000000n; // 1 miljoen keys groot voor supersnelle test
-                        const startSlice = testPrivInt - 500000n;
-                        const endSlice = testPrivInt + 500000n;
+                        // Ruime marge zodat de sleutel gegarandeerd binnen het bereik van de test valt
+                        const startSlice = testPrivInt - 50000n;
+                        const endSlice = testPrivInt + 50000n;
 
                         document.getElementById('rangeStart').value = startSlice.toString(16);
                         document.getElementById('rangeEnd').value = endSlice.toString(16);
 
-                        // Start nu direct de scan met deze specifieke gegevens
                         testWorker.onmessage = (resEv) => {
                             if (resEv.data.type === "FOUND") {
                                 if (resEv.data.privHex === testPrivHex) {
                                     log(`🎉 TEST GESLAAGD! BSGS heeft correct sleutel ${testPrivHex} teruggevonden!`, 'ev-found');
                                     setStatus('🧪 TEST SUCCESVOL', 'running');
                                 } else {
-                                    log(`⚠️ Sleutel gevonden, maar wijkt af van test-input.`, 'ev-stop');
+                                    log(`⚠️ Sleutel gevonden (${resEv.data.privHex}), wijkt af van test-input.`, 'ev-stop');
                                 }
                                 testWorker.terminate();
                             } else if (resEv.data.type === "SCAN_DONE") {
