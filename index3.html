@@ -104,11 +104,11 @@
             <div class="card-title">⚙ Actieve Configuratie</div>
             <div class="field">
                 <label>Target Public Key (HEX)</label>
-                <input id="pubKey" value="02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16" type="text">
+                <input id="pubKey" value="031a746c78f72754e0be046186df8a20cdce5c79b2eda76013c647af08d306e49e" type="text">
             </div>
             <div class="field">
                 <label>Target BTC Adres (Opt.)</label>
-                <input id="btcAddr" value="16RGFo6hjq9ym6Pj7N5H7L1NR1rVPJyw2v" type="text">
+                <input id="btcAddr" value="14oFNXucftsHiUMY8uctg6N487riuyXs4h" type="text">
             </div>
             <div class="field">
                 <label>Scan methode</label>
@@ -126,8 +126,8 @@
             </div>
             <hr class="divider">
             <div class="field"><label>Workers (CPU Cores)</label><input id="numW" value="4" type="number" min="1" max="32"></div>
-            <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);"></div>
-            <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);"></div>
+            <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="100000" type="text" style="color: var(--accent2);"></div>
+            <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="1fffff" type="text" style="color: var(--accent2);"></div>
             <div class="btn-row">
                 <button class="btn btn-start" id="startBtn">▶ Start Quantum Sprongen</button>
                 <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
@@ -143,7 +143,7 @@
                 <div class="stat-cell"><div class="label">Totaal Geëlimineerd</div><div class="value" id="keysScanned">0</div></div>
             </div>
             <div class="comparison-grid">
-                <div class="cmp-cell"><div class="cmp-label">Puzzel 135 Kans</div><div class="cmp-val" id="cmpLottery">0.00e+0</div></div>
+                <div class="cmp-cell"><div class="cmp-label">Puzzel Kans</div><div class="cmp-val" id="cmpLottery">0.00e+0</div></div>
                 <div class="cmp-cell"><div class="cmp-label">% Geëlimineerd</div><div class="cmp-val" id="cmpEpochs">0%</div></div>
             </div>
         </div>
@@ -230,7 +230,12 @@
                 const P_target = { x: pX, y: pY };
 
                 const W = endKey - startKey + 1n;
-                const M_num = Math.ceil(Math.sqrt(Number(W)));
+                if (W <= 0n) {
+                    self.postMessage({ type: "SCAN_DONE", scannedKeys: 0, workerId });
+                    return;
+                }
+
+                const M_num = Math.max(1, Math.ceil(Math.sqrt(Number(W))));
                 const M = BigInt(M_num);
 
                 // Quick check: is de startkey precies de target?
@@ -240,7 +245,7 @@
                     return;
                 }
 
-                // 2. Bouw Baby Steps Tabel (i * G) - Met Jacobian snelle generatie
+                // 2. Bouw Baby Steps Tabel (i * G)
                 let babyMap = new Map();
                 let bX = new Array(M_num), bY = new Array(M_num), bZ = new Array(M_num);
                 bX[0] = G.x; bY[0] = G.y; bZ[0] = 1n;
@@ -274,7 +279,6 @@
                 }
 
                 // 3. Giant Steps Berekening
-                // Q_0 = P_target - StartPoint
                 let Q0 = add(P_target, { x: S.x, y: mod(P - S.y) });
                 let G_giant = mul(G, M);
                 let Neg_G_giant = { x: G_giant.x, y: mod(P - G_giant.y) };
@@ -288,7 +292,6 @@
                     let U2 = mod(Neg_G_giant.x * Z1Z1);
                     let S2 = mod(Neg_G_giant.y * mod(cZ * Z1Z1));
                     let H = mod(U2 - cX); let R = mod(S2 - cY);
-                    if (H === 0n) { /* Zeer zeldzaam incident genegeerd voor performance */ }
                     let HH = mod(H * H); let HHH = mod(H * HH);
                     let V = mod(cX * HH);
                     cX = mod(R * R - HHH - 2n * V);
@@ -324,7 +327,6 @@
                     }
                 }
                 
-                // Plakje afgerond zonder match
                 self.postMessage({ type: "SCAN_DONE", scannedKeys: Number(W), workerId });
             }
         };
@@ -334,10 +336,6 @@
         (function() {
             let workers = [], totalScanned = 0, slicesVisited = 0;
             let isRunning = false, lastUpdateTime = 0, lastUpdateScanned = 0;
-
-            const PUZZLE_START = BigInt("0x4000000000000000000000000000000000");
-            const PUZZLE_END = BigInt("0x7fffffffffffffffffffffffffffffffff");
-            const PUZZLE_TOTAL = PUZZLE_END - PUZZLE_START + 1n;
 
             const logBox = document.getElementById('logBox');
             function log(msg, cls = '') {
@@ -359,23 +357,6 @@
                 workers = [];
             }
 
-            function generateRandomSlice() {
-                const sliceSize = BigInt(document.getElementById('sliceSize').value);
-                const maxOffset = PUZZLE_TOTAL - sliceSize;
-                
-                const bytes = new Uint8Array(17);
-                window.crypto.getRandomValues(bytes);
-                const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-                const rand = BigInt("0x" + hex);
-                const offset = rand % maxOffset;
-                
-                const sliceStart = PUZZLE_START + offset;
-                const sliceEnd = sliceStart + sliceSize - 1n;
-
-                document.getElementById('rangeStart').value = sliceStart.toString(16);
-                document.getElementById('rangeEnd').value = sliceEnd.toString(16);
-            }
-
             function updateStats() {
                 const now = Date.now();
                 const elapsedSec = (now - lastUpdateTime) / 1000;
@@ -384,11 +365,8 @@
                     document.getElementById('speed').textContent = speed.toLocaleString('nl-NL') + ' /s';
                     lastUpdateTime = now; lastUpdateScanned = totalScanned;
                 }
-                
                 document.getElementById('keysScanned').textContent = totalScanned.toLocaleString('nl-NL');
                 document.getElementById('slicesVisitedCount').textContent = slicesVisited.toLocaleString('nl-NL');
-                document.getElementById('cmpLottery').textContent = (totalScanned / Number(PUZZLE_TOTAL)).toExponential(4);
-                document.getElementById('cmpEpochs').textContent = ((totalScanned / Number(PUZZLE_TOTAL)) * 100).toExponential(6) + '%';
             }
 
             function spawnWorkers() {
@@ -397,35 +375,56 @@
                 killWorkers();
                 let workersDone = 0;
 
-                // Lees de handmatige waarden uit de invoervelden
                 const startHexInput = document.getElementById('rangeStart').value.trim();
                 const endHexInput = document.getElementById('rangeEnd').value.trim();
 
+                const startBig = BigInt("0x" + startHexInput);
+                const endBig = BigInt("0x" + endHexInput);
+                const totalKeys = endBig - startBig + 1n;
+                const keysPerWorker = totalKeys / BigInt(numW);
+
                 for (let i = 0; i < numW; i++) {
-                    const startHex = startHexInput;
-                    const endHex = endHexInput;
+                    const wStart = startBig + BigInt(i) * keysPerWorker;
+                    const wEnd = (i === numW - 1) ? endBig : wStart + keysPerWorker - 1n;
 
                     const code = document.getElementById('workerCode').textContent;
                     const worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
                     workers.push(worker);
 
                     worker.onmessage = (ev) => {
+                        if (!isRunning) return;
                         if (ev.data.type === "SCAN_DONE") {
                             totalScanned += ev.data.scannedKeys;
                             slicesVisited++;
                             workersDone++;
-                            if (isRunning && workersDone === numW) {
-                                log(`✅ Ronde voltooid.`, 'ev-hop');
+                            if (workersDone === numW) {
+                                isRunning = false;
+                                killWorkers();
+                                document.getElementById('startBtn').disabled = false;
+                                document.getElementById('stopBtn').disabled = true;
+                                setStatus('Scan Voltooid (Geen match)', '');
+                                log(`🏁 Volledige range gescand zonder match.`, 'ev-stop');
                             }
                         } else if (ev.data.type === "FOUND") {
-                            isRunning = false; killWorkers(); setStatus('🎉 GEVONDEN!', 'running');
+                            isRunning = false; 
+                            killWorkers(); 
+                            setStatus('🎉 GEVONDEN!', 'running');
+                            document.getElementById('startBtn').disabled = false;
+                            document.getElementById('stopBtn').disabled = true;
                             document.getElementById('matchTable').innerHTML = `<tr><td>✅ WINST (HEX)</td><td style="font-size:.7rem; color:#ff007f;">${ev.data.privHex}</td></tr>`;
                             log(`🔥 DOELWIT GEVONDEN: ${ev.data.privHex}`, 'ev-found');
                         } else if (ev.data.type === "WORKER_ERROR") {
-                            log(`❌ RAM / Crash in worker.`, 'ev-stop');
+                            log(`❌ Fout in worker: ${ev.data.message}`, 'ev-stop');
                         }
                     };
-                    worker.postMessage({ type: "BSGS_SCAN", startHex, endHex, targetPubKey, workerId: i });
+                    
+                    worker.postMessage({ 
+                        type: "BSGS_SCAN", 
+                        startHex: wStart.toString(16), 
+                        endHex: wEnd.toString(16), 
+                        targetPubKey, 
+                        workerId: i 
+                    });
                 }
             }
 
@@ -438,7 +437,10 @@
                     return;
                 }
                 isRunning = true;
-                startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = totalScanned;
+                totalScanned = 0;
+                slicesVisited = 0;
+                lastUpdateTime = Date.now(); 
+                lastUpdateScanned = 0;
                 document.getElementById('startBtn').disabled = true;
                 document.getElementById('stopBtn').disabled = false;
                 setStatus('⚡ BSGS Sprongen Actief', 'running');
@@ -447,14 +449,15 @@
             };
 
             document.getElementById('stopBtn').onclick = () => {
-                isRunning = false; killWorkers();
+                isRunning = false; 
+                killWorkers();
                 document.getElementById('startBtn').disabled = false;
                 document.getElementById('stopBtn').disabled = true;
-                setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop');
+                setStatus('Gestopt'); 
+                log('Handmatig gestopt.', 'ev-stop');
             };
 
-            generateRandomSlice();
-            log('Systeem klaar. Handmatige range invoer ingeschakeld.', 'ts');
+            log('Systeem klaar. Testrange ingeladen.', 'ts');
             setInterval(() => { if (isRunning) updateStats(); }, 500);
         })();
     </script>
