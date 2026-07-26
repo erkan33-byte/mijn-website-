@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #135 – BSGS Quantum Sniper ⚡</title>
+    <title>Bitcoin Puzzel #31 – BSGS Sniper ⚡</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -45,7 +45,6 @@
             border-radius: 3px; padding: 7px 10px; font-family: inherit; font-size: .78rem; outline: none; width: 100%;
         }
         .field input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255,0,127,.12); }
-        .divider { border: none; border-top: 1px dashed var(--dim); margin: 14px 0; }
         .btn-row { display: flex; gap: 10px; margin-top: 4px; }
         .btn {
             flex: 1; padding: 11px 16px; font-family: inherit; font-size: .8rem; font-weight: bold;
@@ -61,10 +60,6 @@
         .stat-cell .value { font-size: 1.05rem; font-weight: bold; color: var(--accent); }
         #statusVal { color: var(--danger); }
         #statusVal.running { color: var(--success); }
-        .comparison-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
-        .cmp-cell { background: rgba(0,0,0,.4); border: 1px solid #5c1a3a; border-radius: 4px; padding: 9px 12px; }
-        .cmp-cell .cmp-label { font-size: .58rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 3px; }
-        .cmp-cell .cmp-val { font-size: .78rem; color: var(--accent2); font-weight: bold; }
         .log { background: #000; color: var(--accent); height: 160px; overflow-y: scroll;
             padding: 10px 12px; font-size: .72rem; line-height: 1.6; border-radius: 4px; border: 1px solid var(--border); }
         .log .ts { color: var(--muted); }
@@ -84,31 +79,32 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🌌 Puzzel #135 Sniper</h1>
-            <div class="sub">Wiskundig Wonder: Baby-Step Giant-Step (Strict Validation)</div>
-            <span class="badge">🚀 FIXED: STRICT POINT VERIFICATION & LOGIC</span>
+            <h1>🌌 Bitcoin Puzzel #31 Test</h1>
+            <div class="sub">Baby-Step Giant-Step (BSGS) Validatie</div>
+            <span class="badge">🎯 PUZZLE #31 TESTBENCH</span>
         </div>
         <div class="card">
-            <div class="card-title">⚙ Actieve Configuratie</div>
+            <div class="card-title">⚙ Configuratie Puzzel #31</div>
             <div class="field">
                 <label>Target Public Key (HEX)</label>
-                <input id="pubKey" value="030d282cf2ff536d2c42f105d0b8588821a915dc3f9a05bd98bb23af67a2e92a5b" type="text">
+                <input id="pubKey" value="0387dc70db1806cd9a9a76637412ec11dd998be666584849b3185f7f9313c8fd28" type="text">
             </div>
             <div class="field">
-                <label>Target BTC Adres (Opt.)</label>
-                <input id="btcAddr" value="1LHtnpd8nU5VHEMkG2TMYYNUjjLc992bps" type="text">
+                <label>Target BTC Adres</label>
+                <input id="btcAddr" value="1LhE6sCTuGae42Axu1L1ZB7L96yi9irEBE" type="text">
             </div>
             <div class="field"><label>Workers (CPU Cores)</label><input id="numW" value="4" type="number" min="1" max="32"></div>
             <div class="field">
                 <label>Sub-Range Start (HEX)</label>
-                <input id="rangeStart" value="20000000" type="text" style="color: var(--accent2);">
+                <!-- Exacte start voor puzzel 31 omvat de Opgeloste sleutel -->
+                <input id="rangeStart" value="40000000" type="text" style="color: var(--accent2);">
             </div>
             <div class="field">
                 <label>Sub-Range Eind (HEX)</label>
-                <input id="rangeEnd" value="3fffffff" type="text" style="color: var(--accent2);">
+                <input id="rangeEnd" value="7fffffff" type="text" style="color: var(--accent2);">
             </div>
             <div class="btn-row">
-                <button class="btn btn-start" id="startBtn">▶ Start Quantum Sprongen</button>
+                <button class="btn btn-start" id="startBtn">▶ Start Test Scan</button>
                 <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
             </div>
         </div>
@@ -131,10 +127,9 @@
                 <tbody id="matchTable"><tr class="empty-row"><td colspan="2">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Wiskundige Wonder Engine · PUZZLE #135</div>
+        <div class="footer">Wiskundige Validatie Engine · PUZZLE #31</div>
     </div>
 
-    <!-- ⚡ STRICT VERIFIED WORKER -->
     <script id="workerCode" type="javascript/worker">
         self.onerror = function(e) {
             self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
@@ -301,7 +296,6 @@
                         }
 
                         if (candidateKey !== 0n) {
-                            // STRICT VERIFICATION: Controleer of mul(G, candidateKey) exact de target key oplevert!
                             let testPoint = mul(G, candidateKey);
                             if (testPoint && testPoint.x === P_target.x && testPoint.y === P_target.y) {
                                 self.postMessage({ type: "FOUND", privHex: candidateKey.toString(16).padStart(64, '0') });
@@ -430,7 +424,7 @@
                 document.getElementById('startBtn').disabled = true;
                 document.getElementById('stopBtn').disabled = false;
                 setStatus('⚡ BSGS Sprongen Actief', 'running');
-                log('Start scan met strikte punttest...', 'ev-epoch');
+                log('Start test scan voor Puzzel #31...', 'ev-epoch');
                 spawnWorkers();
             };
 
@@ -443,7 +437,7 @@
                 log('Handmatig gestopt.', 'ev-stop');
             };
 
-            log('Systeem klaar.', 'ts');
+            log('Systeem klaar voor Puzzel #31.', 'ts');
             setInterval(() => { if (isRunning) updateStats(); }, 500);
         })();
     </script>
