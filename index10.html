@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #135 – BSGS Quantum Sniper ⚡ (WISKUNDIG CORRECT)</title>
+    <title>Puzzel #135 – BSGS Quantum Sniper ⚡ (MAX SPEED)</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -97,8 +97,8 @@
     <div class="container">
         <div class="header">
             <h1>🌌 Puzzel #135 Sniper</h1>
-            <div class="sub">Wiskundig Wonder: Baby-Step Giant-Step (BSGS) - <span style="color:var(--success)">GECORRIGEERD</span></div>
-            <span class="badge">🚀 OPTIE 4: ALGEBRAÏSCHE KORTSLUITING (NON-LINEAR)</span>
+            <div class="sub">Wiskundig Wonder: Baby-Step Giant-Step (BSGS) - <span style="color:var(--success)">MAX SPEED</span></div>
+            <span class="badge">🚀 ZERO-GC FLAT HASH + CONTINUOUS WORKERS</span>
         </div>
 
         <div class="card">
@@ -114,7 +114,7 @@
             <div class="field">
                 <label>Scan methode</label>
                 <select id="scanMethod">
-                    <option value="bsgs" selected>⚡ Baby-Step Giant-Step (Direct Slice Check)</option>
+                    <option value="bsgs" selected>⚡ BSGS (Zero-GC Platte Arrays)</option>
                 </select>
             </div>
             <div class="field">
@@ -130,8 +130,8 @@
             <div class="field"><label>Workers (CPU Cores)</label><input id="numW" value="4" type="number" min="1" max="128"></div>
             <div class="field"><label>Startwaarde (HEX)</label><input id="customStart" value="4000000000000000000000000000000000" type="text" style="color: var(--accent2);"></div>
             <div class="field"><label>Eindwaarde (HEX)</label><input id="customEnd" value="7fffffffffffffffffffffffffffffffff" type="text" style="color: var(--accent2);"></div>
-            <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);" readonly></div>
-            <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);" readonly></div>
+            <div class="field"><label>Laatst Gestarte Plak</label><input id="rangeStart" value="-" type="text" style="color: var(--accent2);" readonly></div>
+            <div class="field"><label>Tot (Eind)</label><input id="rangeEnd" value="-" type="text" style="color: var(--accent2);" readonly></div>
             <div class="btn-row">
                 <button class="btn btn-start" id="startBtn">▶ Start Quantum Sprongen</button>
                 <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
@@ -160,10 +160,10 @@
                 <tbody id="matchTable"><tr class="empty-row"><td colspan="2">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Wiskundige Wonder Engine · PUZZLE #135 · Wiskundig Gecorrigeerd</div>
+        <div class="footer">Wiskundige Wonder Engine · PUZZLE #135 · Zero-GC Geoptimaliseerd</div>
     </div>
 
-    <!-- ⚡ BABY-STEP GIANT-STEP WORKER (WISKUNDIG CORRECT & CRASHVRIJ) -->
+    <!-- ⚡ BABY-STEP GIANT-STEP WORKER (ZERO-GC & FLAT HASH) -->
     <script id="workerCode" type="javascript/worker">
         self.onerror = function(e) {
             self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
@@ -177,7 +177,7 @@
         function mod(a, b = P) { const r = a % b; return r >= 0n ? r : r + b; }
         
         function inverse(a, n = P) {
-            if (a === 0n) return 0n; // Safety
+            if (a === 0n) return 0n;
             let t = 0n, newt = 1n; let r = n, newr = a;
             while (newr !== 0n) {
                 let q = r / newr;
@@ -225,12 +225,17 @@
             if (n < 2n) return n;
             let x = n >> 1n;
             let y = (x + n / x) >> 1n;
-            while (y < x) {
-                x = y;
-                y = (x + n / x) >> 1n;
-            }
+            while (y < x) { x = y; y = (x + n / x) >> 1n; }
             return x;
         }
+
+        // GLOBALE VARIABELEN (Geheugenhergebruik voorkomt Garbage Collection pauzes!)
+        let M_current = 0;
+        let bX, bY, bZ, partials, invZ, qX, qY, qZ, qPartials, qInvZ;
+        let affineX, affineY;
+        const HASH_SIZE = 999983; // Groot priemgetal voor snelle spreiding
+        let hashHead = new Int32Array(HASH_SIZE);
+        let hashNext;
 
         self.onmessage = function(e) {
             if (e.data.type === "BSGS_SCAN") {
@@ -239,7 +244,6 @@
                 const pubHex = e.data.targetPubKey;
                 const workerId = e.data.workerId;
                 
-                // 1. Herleid de Y-coördinaat van de gecomprimeerde target Public Key
                 const prefix = parseInt(pubHex.substring(0, 2), 16);
                 const pX = BigInt("0x" + pubHex.substring(2));
                 const ySq = mod(pX * pX * pX + 7n);
@@ -249,38 +253,44 @@
 
                 const W = endKey - startKey + 1n;
                 const M = isqrt(W) + 1n; 
+                const M_num = Number(M);
 
-                // Quick check: is de startkey precies de target?
+                // ALLOCEER GEHEUGEN SLECHTS 1 KEER PER WORKER LEVENSDUUR
+                if (M_num !== M_current) {
+                    M_current = M_num;
+                    bX = new Array(M_num); bY = new Array(M_num); bZ = new Array(M_num);
+                    partials = new Array(M_num); invZ = new Array(M_num);
+                    qX = new Array(M_num); qY = new Array(M_num); qZ = new Array(M_num);
+                    qPartials = new Array(M_num); qInvZ = new Array(M_num);
+                    affineX = new Array(M_num); affineY = new Array(M_num);
+                    hashNext = new Int32Array(M_num);
+                }
+
+                // Reset de hashtabel razendsnel zonder objecten aan te maken
+                hashHead.fill(-1);
+
                 let S = mul(G, startKey);
                 if (S && S.x === P_target.x && S.y === P_target.y) {
                     self.postMessage({ type: "FOUND", privHex: startKey.toString(16).padStart(64, '0') });
                     return;
                 }
 
-                // 2. Bouw Baby Steps Tabel: baby[i] = (i+1) * G  (voor i = 0..M-1)
-                let babyMap = new Map();
-                let bX = new Array(Number(M)), bY = new Array(Number(M)), bZ = new Array(Number(M));
+                // --- 1. BABY STEPS BOUWEN ---
                 bX[0] = G.x; bY[0] = G.y; bZ[0] = 1n;
-                
-                if (Number(M) > 1) {
+                if (M_num > 1) {
                     let G2 = add(G, G);
                     bX[1] = G2.x; bY[1] = G2.y; bZ[1] = 1n;
                     let jX = G2.x, jY = G2.y, jZ = 1n;
-                    for (let i = 2; i < Number(M); i++) {
-                        let Z1Z1 = mod(jZ * jZ);
-                        let U2 = mod(G_x * Z1Z1);
-                        let S2 = mod(G_y * mod(jZ * Z1Z1));
+                    for (let i = 2; i < M_num; i++) {
+                        let Z1Z1 = mod(jZ * jZ); let U2 = mod(G_x * Z1Z1); let S2 = mod(G_y * mod(jZ * Z1Z1));
                         let H = mod(U2 - jX); let R = mod(S2 - jY);
-                        
                         if (H === 0n) {
-                            // Val terug op affine als H nul is (crash preventie)
                             let iz = inverse(jZ); let iz2 = mod(iz * iz);
                             let ax = mod(jX * iz2); let ay = mod(jY * mod(iz * iz2));
                             let aff = add({x: ax, y: ay}, G);
                             jX = aff.x; jY = aff.y; jZ = 1n;
                         } else {
-                            let HH = mod(H * H); let HHH = mod(H * HH);
-                            let V = mod(jX * HH);
+                            let HH = mod(H * H); let HHH = mod(H * HH); let V = mod(jX * HH);
                             jX = mod(R * R - HHH - 2n * V);
                             jY = mod(R * (V - jX) - jY * HHH);
                             jZ = mod(jZ * H);
@@ -289,59 +299,50 @@
                     }
                 }
 
-                // Veilige Batch Inversie Baby Steps (negeert z-waarden = 0)
                 let acc = 1n;
-                let partials = new Array(Number(M));
-                for(let i=0; i<Number(M); i++) { 
-                    partials[i] = acc; 
-                    if (bZ[i] !== 0n) acc = mod(acc * bZ[i]); 
-                }
+                for(let i=0; i<M_num; i++) { partials[i] = acc; if (bZ[i] !== 0n) acc = mod(acc * bZ[i]); }
                 let invAcc = inverse(acc);
-                let invZ = new Array(Number(M));
-                for(let i=Number(M)-1; i>=0; i--) { 
-                    if (bZ[i] !== 0n) {
-                        invZ[i] = mod(invAcc * partials[i]); 
-                        invAcc = mod(invAcc * bZ[i]); 
-                    } else { invZ[i] = 0n; }
+                for(let i=M_num-1; i>=0; i--) { 
+                    if (bZ[i] !== 0n) { invZ[i] = mod(invAcc * partials[i]); invAcc = mod(invAcc * bZ[i]); } 
+                    else { invZ[i] = 0n; }
                 }
 
-                for(let i=0; i<Number(M); i++) {
+                // ZET IN PLATTE HASH TABEL
+                for(let i=0; i<M_num; i++) {
                     if (bZ[i] === 0n) continue;
                     let iz = invZ[i]; let iz2 = mod(iz * iz);
                     let ax = mod(bX[i] * iz2); let ay = mod(bY[i] * mod(iz * iz2));
-                    babyMap.set(ax, { y: ay, i: i });
+                    
+                    affineX[i] = ax;
+                    affineY[i] = ay;
+                    
+                    let h = Number(BigInt.asUintN(32, ax)) % HASH_SIZE;
+                    hashNext[i] = hashHead[h];
+                    hashHead[h] = i;
                 }
 
-                // 3. Giant Steps: Q_j = P_target - startPoint - j * M * G
+                // --- 2. GIANT STEPS BOUWEN ---
                 let G_giant = mul(G, M);
                 let Neg_G_giant = { x: G_giant.x, y: mod(P - G_giant.y) };
                 
                 let Q0 = add(P_target, { x: S.x, y: mod(P - S.y) });
-                if (!Q0) Q0 = { x: 0n, y: 0n }; // Target is exactly startPoint (already caught above, just for safety)
+                if (!Q0) Q0 = { x: 0n, y: 0n };
 
-                let qX = new Array(Number(M)), qY = new Array(Number(M)), qZ = new Array(Number(M));
                 qX[0] = Q0.x; qY[0] = Q0.y; qZ[0] = (Q0.x === 0n && Q0.y === 0n) ? 0n : 1n;
                 let cX = Q0.x, cY = Q0.y, cZ = qZ[0];
 
-                for (let j = 1; j < Number(M); j++) {
-                    if (cZ === 0n) {
-                        // Vorig punt was oneindig, we tellen er simpelweg Neg_G_giant bij op
-                        cX = Neg_G_giant.x; cY = Neg_G_giant.y; cZ = 1n;
-                    } else {
-                        let Z1Z1 = mod(cZ * cZ);
-                        let U2 = mod(Neg_G_giant.x * Z1Z1);
-                        let S2 = mod(Neg_G_giant.y * mod(cZ * Z1Z1));
+                for (let j = 1; j < M_num; j++) {
+                    if (cZ === 0n) { cX = Neg_G_giant.x; cY = Neg_G_giant.y; cZ = 1n; } 
+                    else {
+                        let Z1Z1 = mod(cZ * cZ); let U2 = mod(Neg_G_giant.x * Z1Z1); let S2 = mod(Neg_G_giant.y * mod(cZ * Z1Z1));
                         let H = mod(U2 - cX); let R = mod(S2 - cY);
-                        
                         if (H === 0n) { 
                             let iz = inverse(cZ); let iz2 = mod(iz * iz);
                             let ax = mod(cX * iz2); let ay = mod(cY * mod(iz * iz2));
                             let aff = add({x: ax, y: ay}, Neg_G_giant);
-                            if (!aff) { cX = 0n; cY = 0n; cZ = 0n; } 
-                            else { cX = aff.x; cY = aff.y; cZ = 1n; }
+                            if (!aff) { cX = 0n; cY = 0n; cZ = 0n; } else { cX = aff.x; cY = aff.y; cZ = 1n; }
                         } else {
-                            let HH = mod(H * H); let HHH = mod(H * HH);
-                            let V = mod(cX * HH);
+                            let HH = mod(H * H); let HHH = mod(H * HH); let V = mod(cX * HH);
                             cX = mod(R * R - HHH - 2n * V);
                             cY = mod(R * (V - cX) - cY * HHH);
                             cZ = mod(cZ * H);
@@ -350,39 +351,37 @@
                     qX[j] = cX; qY[j] = cY; qZ[j] = cZ;
                 }
 
-                // Veilige Batch Inversie Giant Steps
                 acc = 1n;
-                let qPartials = new Array(Number(M));
-                for(let j=0; j<Number(M); j++) { 
-                    qPartials[j] = acc; 
-                    if (qZ[j] !== 0n) acc = mod(acc * qZ[j]); 
-                }
+                for(let j=0; j<M_num; j++) { qPartials[j] = acc; if (qZ[j] !== 0n) acc = mod(acc * qZ[j]); }
                 invAcc = inverse(acc);
-                let qInvZ = new Array(Number(M));
-                for(let j=Number(M)-1; j>=0; j--) { 
-                    if (qZ[j] !== 0n) {
-                        qInvZ[j] = mod(invAcc * qPartials[j]); 
-                        invAcc = mod(invAcc * qZ[j]); 
-                    } else { qInvZ[j] = 0n; }
+                for(let j=M_num-1; j>=0; j--) { 
+                    if (qZ[j] !== 0n) { qInvZ[j] = mod(invAcc * qPartials[j]); invAcc = mod(invAcc * qZ[j]); } 
+                    else { qInvZ[j] = 0n; }
                 }
 
-                // 4. De Magische Match Check (BSGS core)
-                for(let j=0; j<Number(M); j++) {
+                // --- 3. EXTREEM SNELLE HASH LOOKUP ---
+                for(let j=0; j<M_num; j++) {
                     if (qZ[j] === 0n) continue;
                     let iz = qInvZ[j]; let iz2 = mod(iz * iz);
                     let ax = mod(qX[j] * iz2); let ay = mod(qY[j] * mod(iz * iz2));
                     
-                    if (babyMap.has(ax)) {
-                        let baby = babyMap.get(ax);
-                        if (baby.y === ay) {
-                            let found = startKey + BigInt(j) * M + BigInt(baby.i) + 1n;
-                            self.postMessage({ type: "FOUND", privHex: found.toString(16).padStart(64, '0') });
-                            return;
-                        } else if (baby.y === mod(P - ay)) {
-                            let found = startKey + BigInt(j) * M - (BigInt(baby.i) + 1n);
-                            self.postMessage({ type: "FOUND", privHex: found.toString(16).padStart(64, '0') });
-                            return;
+                    let h = Number(BigInt.asUintN(32, ax)) % HASH_SIZE;
+                    let currIndex = hashHead[h];
+                    
+                    while (currIndex !== -1) {
+                        if (affineX[currIndex] === ax) {
+                            let babyY = affineY[currIndex];
+                            if (babyY === ay) {
+                                let found = startKey + BigInt(j) * M + BigInt(currIndex) + 1n;
+                                self.postMessage({ type: "FOUND", privHex: found.toString(16).padStart(64, '0') });
+                                return;
+                            } else if (babyY === mod(P - ay)) {
+                                let found = startKey + BigInt(j) * M - (BigInt(currIndex) + 1n);
+                                self.postMessage({ type: "FOUND", privHex: found.toString(16).padStart(64, '0') });
+                                return;
+                            }
                         }
+                        currIndex = hashNext[currIndex];
                     }
                 }
                 
@@ -416,7 +415,8 @@
                 workers = [];
             }
 
-            function generateRandomSlice() {
+            // Functie levert puur de hex-waardes af voor naadloze werking
+            function getNextSlice() {
                 const customStart = document.getElementById('customStart').value.trim();
                 const customEnd = document.getElementById('customEnd').value.trim();
                 const sliceSize = BigInt(document.getElementById('sliceSize').value);
@@ -426,12 +426,8 @@
                 const totalRange = end - start + 1n;
                 
                 const maxOffset = totalRange - sliceSize;
-                if (maxOffset < 0n) {
-                    log("❌ Plakje is groter dan het totale bereik! Verklein de plakgrootte.", 'ev-stop');
-                    return;
-                }
+                if (maxOffset < 0n) return null;
                 
-                // 32 bytes om gigantische offset ranges veilig te genereren (tot 256 bits)
                 const bytes = new Uint8Array(32);
                 window.crypto.getRandomValues(bytes);
                 const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
@@ -441,8 +437,33 @@
                 const sliceStart = start + offset;
                 const sliceEnd = sliceStart + sliceSize - 1n;
 
-                document.getElementById('rangeStart').value = sliceStart.toString(16);
-                document.getElementById('rangeEnd').value = sliceEnd.toString(16);
+                return { sHex: sliceStart.toString(16), eHex: sliceEnd.toString(16) };
+            }
+
+            // Geeft een specifieke worker DIRECT een nieuwe opdracht
+            function assignWork(worker, targetPubKey, workerId) {
+                if (!isRunning) return;
+                
+                const slice = getNextSlice();
+                if (!slice) {
+                    log("❌ Plakje is groter dan het totale bereik! Verklein de plakgrootte.", 'ev-stop');
+                    isRunning = false;
+                    return;
+                }
+                
+                // Laat visueel 1 worker de UI updaten zodat het niet knippert
+                if (workerId === 0) {
+                    document.getElementById('rangeStart').value = slice.sHex;
+                    document.getElementById('rangeEnd').value = slice.eHex;
+                }
+
+                worker.postMessage({ 
+                    type: "BSGS_SCAN", 
+                    startHex: slice.sHex, 
+                    endHex: slice.eHex, 
+                    targetPubKey: targetPubKey, 
+                    workerId: workerId 
+                });
             }
 
             function updateStats() {
@@ -467,41 +488,41 @@
                 document.getElementById('cmpEpochs').textContent = (progress * 100).toExponential(6) + '%';
             }
 
-            function spawnWorkers() {
+            function startScanning() {
                 const numW = Math.max(1, parseInt(document.getElementById('numW').value) || 4);
                 const targetPubKey = document.getElementById('pubKey').value.trim();
-                killWorkers();
-                let workersDone = 0;
-
-                for (let i = 0; i < numW; i++) {
-                    generateRandomSlice();
-                    const startHex = document.getElementById('rangeStart').value;
-                    const endHex = document.getElementById('rangeEnd').value;
-
+                
+                // We maken de workers maar 1 keer aan!
+                if (workers.length === 0) {
                     const code = document.getElementById('workerCode').textContent;
-                    const worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
-                    workers.push(worker);
-
-                    worker.onmessage = (ev) => {
-                        if (ev.data.type === "SCAN_DONE") {
-                            totalScanned += ev.data.scannedKeys;
-                            slicesVisited++;
-                            workersDone++;
-                            if (isRunning && workersDone === numW) {
-                                log(`✅ Ronde van ${numW} BSGS jumps geëlimineerd. Auto-Hop...`, 'ev-hop');
-                                spawnWorkers();
+                    const blobUrl = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+                    
+                    for (let i = 0; i < numW; i++) {
+                        const worker = new Worker(blobUrl);
+                        workers.push(worker);
+                        
+                        worker.onmessage = (ev) => {
+                            if (ev.data.type === "SCAN_DONE") {
+                                totalScanned += ev.data.scannedKeys;
+                                slicesVisited++;
+                                // Zodra worker klaar is, DIRECT nieuwe taak geven!
+                                assignWork(worker, targetPubKey, ev.data.workerId); 
+                            } else if (ev.data.type === "FOUND") {
+                                isRunning = false; killWorkers(); setStatus('🎉 GEVONDEN!', 'running');
+                                document.getElementById('matchTable').innerHTML = `<tr><td>✅ WINST (HEX)</td><td style="font-size:.7rem; color:#ff007f;">${ev.data.privHex}</td></tr>`;
+                                log(`🔥 DOELWIT GEVONDEN! Privé = ${ev.data.privHex}`, 'ev-found');
+                                document.getElementById('startBtn').disabled = false;
+                                document.getElementById('stopBtn').disabled = true;
+                            } else if (ev.data.type === "WORKER_ERROR") {
+                                log(`❌ Worker crash: ${ev.data.message}`, 'ev-stop');
                             }
-                        } else if (ev.data.type === "FOUND") {
-                            isRunning = false; killWorkers(); setStatus('🎉 GEVONDEN!', 'running');
-                            document.getElementById('matchTable').innerHTML = `<tr><td>✅ WINST (HEX)</td><td style="font-size:.7rem; color:#ff007f;">${ev.data.privHex}</td></tr>`;
-                            log(`🔥 DOELWIT GEVONDEN! Privé = ${ev.data.privHex}`, 'ev-found');
-                            document.getElementById('startBtn').disabled = false;
-                            document.getElementById('stopBtn').disabled = true;
-                        } else if (ev.data.type === "WORKER_ERROR") {
-                            log(`❌ Worker crash: ${ev.data.message}`, 'ev-stop');
-                        }
-                    };
-                    worker.postMessage({ type: "BSGS_SCAN", startHex, endHex, targetPubKey, workerId: i });
+                        };
+                    }
+                }
+
+                // Geef alle workers hun eerste taak
+                for (let i = 0; i < workers.length; i++) {
+                    assignWork(workers[i], targetPubKey, i);
                 }
             }
 
@@ -512,8 +533,8 @@
                 document.getElementById('startBtn').disabled = true;
                 document.getElementById('stopBtn').disabled = false;
                 setStatus('⚡ BSGS Sprongen Actief', 'running');
-                log('🚀 BSGS Engine gestart met gecorrigeerde wiskunde (Crashvrij)!', 'ev-epoch');
-                spawnWorkers();
+                log('🚀 BSGS Engine gestart! (Zero-GC + Continuous Loop)', 'ev-epoch');
+                startScanning();
             };
 
             document.getElementById('stopBtn').onclick = () => {
@@ -523,8 +544,6 @@
                 setStatus('Gestopt'); log('⏹ Handmatig gestopt.', 'ev-stop');
             };
 
-            // Init UI setup
-            generateRandomSlice();
             setInterval(() => { if (isRunning) updateStats(); }, 500);
         })();
     </script>
