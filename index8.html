@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Bitcoin API Nonce & Private Key Recovery Tool</title>
+    <title>Mass Target List API Monitor (40.000 Adressen)</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -18,8 +18,8 @@
         }
         .container { max-width: 900px; margin: 0 auto; }
         .header { text-align: center; margin-bottom: 28px; }
-        .header h1 { font-size: 1.5rem; letter-spacing: .15em; color: var(--accent); text-transform: uppercase; }
-        .header .sub { font-size: .7rem; color: var(--muted); margin-top: 6px; }
+        .header h1 { font-size: 1.4rem; letter-spacing: .15em; color: var(--accent); text-transform: uppercase; }
+        .header .sub { font-size: .68rem; color: var(--muted); margin-top: 6px; }
         .card {
             background: var(--panel); border: 1px solid var(--border);
             border-radius: 6px; padding: 20px; margin-bottom: 16px;
@@ -29,67 +29,66 @@
             border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px;
             color: var(--accent2);
         }
-        .field { margin-bottom: 12px; }
-        .field label { display: block; font-size: .7rem; color: var(--muted); margin-bottom: 6px; }
-        input {
-            background: var(--surface); color: var(--accent); border: 1px solid var(--dim);
-            border-radius: 3px; padding: 10px; font-family: inherit; font-size: .75rem; width: 100%; outline: none;
-        }
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+        .stat-cell { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 10px; text-align: center; }
+        .stat-cell .label { font-size: .58rem; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+        .stat-cell .value { font-size: 1rem; font-weight: bold; color: var(--accent); }
+        .btn-row { display: flex; gap: 10px; }
         .btn {
-            background: var(--success); color: #000; border: none; padding: 10px 16px;
-            font-family: inherit; font-size: .8rem; font-weight: bold; cursor: pointer; border-radius: 4px;
-            letter-spacing: .1em; width: 100%; transition: opacity .15s;
+            flex: 1; padding: 11px 16px; font-family: inherit; font-size: .8rem; font-weight: bold;
+            letter-spacing: .1em; cursor: pointer; border: none; border-radius: 4px; transition: opacity .15s;
         }
-        .btn:hover { opacity: .9; }
-        .log { background: #000; color: var(--accent); height: 260px; overflow-y: auto; padding: 10px; font-size: .7rem; border-radius: 4px; border: 1px solid var(--border); line-height: 1.5; }
+        .btn:active:not(:disabled) { transform: scale(.97); }
+        .btn:disabled { opacity: .35; cursor: not-allowed; }
+        .btn-start { background: var(--success); color: #000; }
+        .btn-stop { background: var(--danger); color: #fff; }
+        .log { background: #000; color: var(--accent); height: 240px; overflow-y: auto; padding: 10px; font-size: .7rem; border-radius: 4px; border: 1px solid var(--border); line-height: 1.5; }
         .log .ts { color: var(--muted); }
         .log .succ { color: var(--success); font-weight: bold; }
-        .log .err { color: var(--danger); }
         .log .warn { color: var(--warn); }
+        .log .err { color: var(--danger); }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🔓 Bitcoin Nonce & Private Key Extractor</h1>
-            <div class="sub">Haalt TX op, zoekt naar nonce-hergebruik en berekent direct de privésleutel</div>
+            <h1>🛡️ Batch Target Monitor (40K Adressen)</h1>
+            <div class="sub">Roteert automatisch elke 30 seconden door je vaste lijst via openbare API's</div>
         </div>
 
         <div class="card">
-            <div class="card-title">📥 Bitcoin Adres Invoer</div>
-            <div class="field">
-                <label>Voer een Bitcoin Adres in:</label>
-                <input id="btcAddress" type="text" value="16RGFo6hjq9ym6Pj7N5H7L1NR1rVPJyw2v">
+            <div class="card-title">📊 Monitor Statistieken</div>
+            <div class="stats-grid">
+                <div class="stat-cell"><div class="label">Status</div><div class="value" id="statusVal">Gestopt</div></div>
+                <div class="stat-cell"><div class="label">Voortgang (Batch)</div><div class="value" id="progressVal">0 / 40.000</div></div>
+                <div class="stat-cell"><div class="label">Volgende Loop Over</div><div class="value" id="timerVal">30s</div></div>
             </div>
-            <button class="btn" id="fetchApiBtn">▶ Start API Scan & Private Key Berekening</button>
+            <div class="btn-row">
+                <button class="btn btn-start" id="startBtn">▶ Start 30s Loop</button>
+                <button class="btn btn-stop" id="stopBtn" disabled>■ Stop Monitor</button>
+            </div>
         </div>
 
         <div class="card">
-            <div class="card-title">📋 Live Resultaten & Privésleutel Log</div>
+            <div class="card-title">📋 Live Activiteitenlog & Activiteit</div>
             <div class="log" id="logBox"></div>
         </div>
     </div>
 
     <script>
-        // Secp256k1 kromme orde (n)
-        const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
+        // Vaste targetlijst (Hier kun je jouw 40.000 adressen inladen/opnemen)
+        const targetList = [
+            "16RGFo6hjq9ym6Pj7N5H7L1NR1rVPJyw2v",
+            "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+            "1P5ZEDWTKTFGxQjZphgWPQUpe554WKDfHQ"
+            // ... Voeg hier tot 40.000 vaste adressen toe of laad ze dynamisch in
+        ];
 
-        function mod(a, b = N) {
-            const r = a % b;
-            return r >= 0n ? r : r + b;
-        }
-
-        function inverse(a, n = N) {
-            if (a === 0n) return 0n;
-            let t = 0n, newt = 1n;
-            let r = n, newr = a;
-            while (newr !== 0n) {
-                let q = r / newr;
-                let tmp = t - q * newt; t = newt; newt = tmp;
-                tmp = r - q * newr; r = newr; newr = tmp;
-            }
-            return t < 0n ? t + n : t;
-        }
+        let isRunning = false;
+        let currentIndex = 0;
+        let loopInterval = null;
+        let countdownTimer = null;
+        let secondsLeft = 30;
 
         function log(msg, cls = '') {
             const ts = new Date().toLocaleTimeString('nl-NL');
@@ -101,89 +100,71 @@
             box.scrollTop = box.scrollHeight;
         }
 
-        document.getElementById('fetchApiBtn').onclick = async () => {
-            const address = document.getElementById('btcAddress').value.trim();
-            const logBox = document.getElementById('logBox');
-            logBox.innerHTML = '';
+        async function checkNextBatch() {
+            if (!isRunning) return;
 
-            if (!address) {
-                log("❌ Voer eerst een geldig Bitcoin adres in.", 'err');
-                return;
-            }
-
-            log(`🌐 Verbinding maken met Blockstream API voor adres: ${address}...`);
+            // Pak bijvoorbeeld een blok van adressen per API-oproep om rate-limits te managen
+            const address = targetList[currentIndex % targetList.length];
+            document.getElementById('progressVal').textContent = `${currentIndex + 1} / ${targetList.length}`;
+            
+            log(`🌐 API Call uitsturen voor adres [${currentIndex + 1}/${targetList.length}]: ${address}`);
 
             try {
-                const response = await fetch(`https://blockstream.info/api/address/${address}/txs`);
+                // Openbare API call naar Mempool/Blockstream
+                const response = await fetch(`https://blockstream.info/api/address/${address}`);
                 if (!response.ok) throw new Error(`HTTP fout: ${response.status}`);
                 
-                const txs = await response.json();
-                log(`✅ Totaal ${txs.length} transactie(s) gevonden op de blockchain.`);
-
-                if (txs.length === 0) {
-                    log(`⚠️ Dit adres heeft geen transactiegeschiedenis (nieuw adres). Geen handtekeningen te controleren.`, 'warn');
-                    return;
-                }
-
-                let signaturesCache = new Map();
-                let vulnerableFound = false;
-
-                for (let i = 0; i < txs.length; i++) {
-                    const tx = txs[i];
-                    log(`--- Analyseert TX #${i + 1} (${tx.txid.substring(0, 12)}...) ---`);
-                    
-                    if (!tx.vin) continue;
-
-                    for (let j = 0; j < tx.vin.length; j++) {
-                        const input = tx.vin[j];
-                        
-                        // Voor demonstratiedoeleinden simuleren/lezen we handtekening parameters uit de input.
-                        // In een echte volledige productiescanner parse je hier de DER-handtekening en z (bericht hash).
-                        if (input.witness && input.witness.length > 1) {
-                            let rawSig = input.witness[0];
-                            // Mock parameters voor demonstratie van de wiskundige formule-uitvoering
-                            let mockR = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
-                            let mockS1 = "483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8";
-                            let mockZ1 = "1111111111111111111111111111111111111111111111111111111111111111";
-
-                            let sigObj = { r: mockR, s: mockS1, z: mockZ1, txid: tx.txid };
-
-                            if (signaturesCache.has(mockR)) {
-                                let prevSig = signaturesCache.get(mockR);
-                                vulnerableFound = true;
-                                log(`🔥 KWETSBAARHEID GEDECTEERD! Nonce hergebruik gevonden tussen TX ${prevSig.txid.substring(0,8)} en ${tx.txid.substring(0,8)}!`, 'succ');
-                                log(`⚙️ Berekenen van privésleutel met wiskundige formule...`, 'warn');
-
-                                // Wiskundige berekening van de privésleutel (d) bij nonce hergebruik:
-                                // d = (s1*z2 - s2*z1) * (r * (s2 - s1))^-1 mod N
-                                let r = BigInt("0x" + mockR);
-                                let s1 = BigInt("0x" + prevSig.s);
-                                let s2 = BigInt("0x" + sigObj.s);
-                                let z1 = BigInt("0x" + prevSig.z);
-                                let z2 = BigInt("0x" + sigObj.z);
-
-                                let numerator = mod((s1 * z2) - (s2 * z1));
-                                let denominator = mod(r * mod(s2 - s1));
-                                let privateKeyBigInt = mod(numerator * inverse(denominator));
-
-                                let privHex = privateKeyBigInt.toString(16).padStart(64, '0');
-                                log(`🎉 BEREKENING GESLAAGD! Gevonden Privé Sleutel (HEX):`, 'succ');
-                                log(`🔑 ${privHex}`, 'succ');
-                                return;
-                            } else {
-                                signaturesCache.set(mockR, sigObj);
-                            }
-                        }
-                    }
-                }
-
-                if (!vulnerableFound) {
-                    log(`🛡️ Scan voltooid. Geen kwetsbaarheden of hergebruikte nonces ontdekt in de transacties.`);
+                const data = await response.json();
+                const balance = data.chain_stats.funded_txo_sum - data.chain_stats.spent_txo_sum;
+                
+                if (balance > 0) {
+                    log(`🎉 ACTIVITEIT/SALDO GEVONDEN op ${address}! Saldo: ${balance} satoshis`, 'succ');
+                } else {
+                    log(`ℹ️ Adres ${address.substring(0, 10)}... gecheckt (Geen actueel saldo).`);
                 }
 
             } catch (err) {
-                log(`❌ Fout bij ophalen of verwerken van data: ${err.message}`, 'err');
+                log(`⚠️ API waarschuwing/fout voor ${address}: ${err.message}`, 'warn');
             }
+
+            currentIndex++;
+            secondsLeft = 30; // Reset timer naar 30 seconden
+        }
+
+        function startTimer() {
+            countdownTimer = setInterval(() => {
+                secondsLeft--;
+                document.getElementById('timerVal').textContent = secondsLeft + 's';
+                if (secondsLeft <= 0) {
+                    checkNextBatch();
+                }
+            }, 1000);
+        }
+
+        document.getElementById('startBtn').onclick = () => {
+            if (isRunning) return;
+            isRunning = true;
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('statusVal').textContent = 'Actief';
+            document.getElementById('statusVal').style.color = 'var(--success)';
+            
+            log(`🚀 40K Target Monitor gestart. Loopt elke 30 seconden een adres na.`);
+            
+            // Direct eerste check uitvoeren
+            checkNextBatch();
+            // Start de 30-seconde klok
+            startTimer();
+        };
+
+        document.getElementById('stopBtn').onclick = () => {
+            isRunning = false;
+            clearInterval(countdownTimer);
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('statusVal').textContent = 'Gestopt';
+            document.getElementById('statusVal').style.color = 'var(--danger)';
+            log(`⏹ Monitor handmatig gestopt.`, 'err');
         };
     </script>
 </body>
