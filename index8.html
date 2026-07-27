@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Advanced Nonce & Private Key Hunter (Fixed API Counter)</title>
+    <title>Advanced Nonce & Private Key Hunter (Fixed)</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -53,7 +53,7 @@
     <div class="container">
         <div class="header">
             <h1>🔓 Advanced Nonce & Private Key Hunter</h1>
-            <div class="sub">Gecorrigeerde API-teller voor werkelijk aantal transacties per adres</div>
+            <div class="sub">Gecorrigeerde API-teller & foutoplossing</div>
         </div>
 
         <div class="card">
@@ -130,7 +130,6 @@
                 
                 const txs = await response.json();
                 
-                // GECORRIGEERD: We tonen nu exact de lengte van wat de API terugstuurt (0, 5, 12, of max 25 per pagina)
                 log(`📊 Totaal ${txs.length} transactie(s) gevonden voor dit adres.`);
 
                 if (!txs || txs.length === 0) {
@@ -221,7 +220,7 @@
             document.getElementById('statusVal').textContent = 'Deep-Scanning';
             document.getElementById('statusVal').style.color = 'var(--success)';
             
-            log(`🚀 Deep-Scan Monitor gestart met gecorrigeerde teller.`);
+            log(`🚀 Deep-Scan Monitor gestart.`);
             
             deepScanAddress();
             startTimer();
@@ -233,7 +232,7 @@
             document.getElementById('startBtn').disabled = false;
             document.getElementById('stopBtn').disabled = true;
             document.getElementById('statusVal').textContent = 'Gestopt';
-            document.getElementById('statusVal'].style.color = 'var(--danger)';
+            document.getElementById('statusVal').style.color = 'var(--danger)'; // Gefixed: punt ipv haakje
             log(`⏹ Monitor handmatig gestopt.`, 'err');
         };
     </script>
