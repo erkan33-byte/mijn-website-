@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #71 – Random Slice Sniper (WEBGPU TURBO) ⚡</title>
+    <title>Puzzel #71 – Kangaroo Hash160 Slice Sniper (TURBO) ⚡</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -118,54 +118,52 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – WebGPU Turbo (Willekeurige Plakjes Binnen Range)</div>
-            <span class="badge">🚀 WEBGPU NATIVE SECP256K1 PIPELINE</span>
+            <h1>🦘 Kangaroo Hash160 Sniper</h1>
+            <div class="sub">Puzzel #71 – Alleen Adresbekend (Hash160 Match Engine)</div>
+            <span class="badge">🚀 OPTIE: KANGAROO SLICE HOPPER + HASH160 TARGET</span>
         </div>
         <div class="card">
-            <div class="card-title">⚙ Actieve Plakje Configuratie</div>
+            <div class="card-title">⚙ Puzzel #71 Doel & Configuratie</div>
             <div class="field">
-                <label>Target BTC Adres</label>
+                <label>Target BTC Adres (#71)</label>
                 <input id="btcAddr" value="1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU" type="text">
             </div>
             <div class="field">
-                <label>Scan methode</label>
-                <select id="scanMethod">
-                    <option value="webgpu" selected>⚡ WebGPU Compute Parallel Scan</option>
-                </select>
+                <label>Doel Hash160 (Ripemd160 van Sha256)</label>
+                <input id="targetH160Field" value="" type="text" readonly style="color: var(--accent2); font-size: 0.7rem;">
             </div>
             <div class="field">
-                <label>Keys per Plakje</label>
+                <label>Keys per Plakje (Hop limiet)</label>
                 <input id="keysLimit" value="10000000" type="number" min="1000">
             </div>
             <hr class="divider">
-            <div class="field"><label>Workgroups per Frame</label><input id="numW" value="2048" type="number" min="64" max="8192"></div>
-            <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);" readonly></div>
-            <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);" readonly></div>
-            <div style="font-size: 0.65rem; color: var(--muted); margin-top: 6px; text-align: right;">ℹ️ Deze HEX-waarden vernieuwen na het bereiken van je ingestelde key limiet.</div>
+            <div class="field"><label>Workers (CPU Cores)</label><input id="numW" value="4" type="number" min="1" max="32"></div>
+            <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);"></div>
+            <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);"></div>
+            <div style="font-size: 0.65rem; color: var(--muted); margin-top: 6px; text-align: right;">ℹ️ Puzzel #71 bereik: 0x400000000000000000 tot 0x7fffffffffffffffff.</div>
             <div class="btn-row">
-                <button class="btn btn-start" id="startBtn">▶ Start WebGPU Scan</button>
+                <button class="btn btn-start" id="startBtn">▶ Start Kangaroo Hopper</button>
                 <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
             </div>
         </div>
         <div class="calc-card">
-            <div class="calc-title">📐 Live Gradiënt</div>
+            <div class="calc-title">📐 Live Hopper Statistieken</div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
                 <div class="stat-cell" style="background:rgba(0,0,0,0.3); border-color:#1a3a5c;">
-                    <div class="label" style="color:var(--accent2)">Hash Snelheid</div>
+                    <div class="label" style="color:var(--accent2)">Snelheid dP/dt</div>
                     <div class="value" id="calcGradient" style="color:#7fcfff">0.00 /s</div>
                 </div>
                 <div class="stat-cell" style="background:rgba(0,0,0,0.3); border-color:#1a3a5c;">
-                    <div class="label" style="color:var(--accent2)">Doel Hash160</div>
-                    <div class="value" id="targetHash160" style="color:#7fcfff; font-size:0.6rem;">Decoderen...</div>
+                    <div class="label" style="color:var(--accent2)">Plakje Voortgang</div>
+                    <div class="value" id="calcPoisson" style="color:#7fcfff">0.0000 %</div>
                 </div>
             </div>
             <div class="formula-box" style="background:rgba(0,0,0,0.5); border-left:3px solid var(--accent2); padding:10px; font-size:.75rem; color:#bfe4ff; line-height:1.5;">
-                Engine: WebGPU WGSL v2.0 (Theoretische Secp256k1 Curve Point + Hash160 Pipeline)
+                Mode: Hash160 direct matching (Aangezien van Puzzel #71 enkel het eindadres bekend is).
             </div>
         </div>
         <div class="chance-card">
-            <div class="chance-title">🎲 Voortgang tot volgende Hop</div>
+            <div class="chance-title">🎲 Voortgang tot volgende Kangaroo Hop</div>
             <div class="chance-main">
                 <div class="chance-gauge">
                     <svg viewBox="0 0 100 100">
@@ -176,19 +174,19 @@
                 </div>
                 <div class="chance-info">
                     <div class="big-number" id="chanceScientific">0.00%</div>
-                    <div class="label-small">van limiet bereikt</div>
-                    <div class="kans-uitleg" id="chanceUitleg">GPU Memory Allocatie voltooid. Wachtend op input.</div>
+                    <div class="label-small">van plakje bereikt</div>
+                    <div class="kans-uitleg" id="chanceUitleg">Klaar om willekeurige zone te springen.</div>
                 </div>
             </div>
             <div class="kans-progress">
-                <div class="kp-label"><span>Dekkingsgraad tot Switch</span><span id="coveragePct">0.000000%</span></div>
+                <div class="kp-label"><span>Dekkingsgraad tot Hop</span><span id="coveragePct">0.000000%</span></div>
                 <div class="kans-track"><div class="kans-fill" id="kansBar" style="width:0%"></div></div>
                 <div class="kans-pct-label" id="jumpsCoverage">0 keys in dit plakje</div>
             </div>
             <div class="comparison-grid">
                 <div class="cmp-cell"><div class="cmp-label">🌌 Plakje Grootte</div><div class="cmp-val" id="cmpUniverse">2³⁵ keys</div><div class="cmp-desc">34.359.738.368 opties</div></div>
-                <div class="cmp-cell"><div class="cmp-label">⏱ Tijd tot hop</div><div class="cmp-val" id="cmpTime">—</div><div class="cmp-desc">tijd tot nieuwe zone</div></div>
-                <div class="cmp-cell"><div class="cmp-label">🎰 Globale Puzzel 71 Kans</div><div class="cmp-val" id="cmpLottery">0.00e+0</div><div class="cmp-desc">statistische trefkans</div></div>
+                <div class="cmp-cell"><div class="cmp-label">⏱ Tijd tot hop</div><div class="cmp-val" id="cmpTime">—</div><div class="cmp-desc">tijd tot willekeurige sprong</div></div>
+                <div class="cmp-cell"><div class="cmp-label">🎰 Kans Puzzel 71</div><div class="cmp-val" id="cmpLottery">0.00e+0</div><div class="cmp-desc">totaal gedekt deel</div></div>
                 <div class="cmp-cell"><div class="cmp-label">📡 % van Puzzel 71</div><div class="cmp-val" id="cmpEpochs">0%</div></div>
             </div>
         </div>
@@ -198,7 +196,7 @@
                 <div class="stat-cell"><div class="label">Status</div><div class="value" id="statusVal">Gestopt</div></div>
                 <div class="stat-cell"><div class="label">Totaal Gescand</div><div class="value" id="keysScanned">0</div></div>
                 <div class="stat-cell"><div class="label">Snelheid</div><div class="value" id="speed">0 /s</div></div>
-                <div class="stat-cell"><div class="label">Plakjes bezocht</div><div class="value" id="slicesVisitedCount">0</div></div>
+                <div class="stat-cell"><div class="label">Plakjes bezocht (Hops)</div><div class="value" id="slicesVisitedCount">1</div></div>
             </div>
             <div style="margin-top:10px;font-size:.7rem;color:var(--muted);">In dit plakje: <span id="currentSliceKeys">0</span> / <span id="limitDisplay">10.000.000</span></div>
             <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
@@ -207,95 +205,291 @@
         <div class="card">
             <div class="card-title">🎯 Resultaten</div>
             <table class="result-table">
-                <thead><tr><th>Type</th><th>Private Key (HEX)</th></tr></thead>
-                <tbody id="matchTable"><tr class="empty-row"><td colspan="2">Nog geen match gevonden...</td></tr></tbody>
+                <thead><tr><th>Type</th><th>WIF</th><th>Privésleutel (HEX)</th></tr></thead>
+                <tbody id="matchTable"><tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Random Slice Sniper · WEBGPU ENGINE</div>
+        <div class="footer">Kangaroo Hash160 Sniper · Puzzel #71 Edition</div>
     </div>
 
-    <script id="wgslCode" type="text/wgsl">
-        struct U256 {
-            w: array<u32, 8>
+    <!-- ⚡ WORKER SCRIPT: HASH160 TARGET CHECKER + BATCH INVERSION -->
+    <script id="workerCode" type="javascript/worker">
+        self.onerror = function(e) {
+            self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
         };
 
-        struct Uniforms {
-            baseKey: U256,
-            targetHash: array<u32, 5>,
-            padding: array<u32, 3>,
-        };
+        const P = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
+        const G_x = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n;
+        const G_y = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n;
+        const G = { x: G_x, y: G_y };
 
-        struct Result {
-            found: atomic<u32>,
-            padding: array<u32, 3>,
-            privateKey: U256,
-        };
-
-        @binding(0) @group(0) var<uniform> config: Uniforms;
-        @binding(1) @group(0) var<storage, read_write> resultBuffer: Result;
-
-        fn add_u256(a: U256, b: u32) -> U256 {
-            var res = a;
-            var carry = b;
-            for (var i = 0; i < 8; i++) {
-                let sum = res.w[i] + carry;
-                if (sum < res.w[i]) { carry = 1u; } else { carry = 0u; }
-                res.w[i] = sum;
-                if (carry == 0u) { break; }
+        function mod(a, b = P) { const r = a % b; return r >= 0n ? r : r + b; }
+        function inverse(a, n = P) {
+            let t = 0n, newt = 1n; let r = n, newr = a;
+            while (newr !== 0n) {
+                let q = r / newr;
+                let tmp = t - q * newt; t = newt; newt = tmp;
+                tmp = r - q * newr; r = newr; newr = tmp;
             }
-            return res;
+            return t < 0n ? t + n : t;
         }
 
-        fn secp256k1_hash160_simulation(k: U256) -> array<u32, 5> {
-            var h: array<u32, 5>;
-            var acc = k.w[0] ^ k.w[3] ^ k.w[7];
-            h[0] = acc ^ 0x67452301u;
-            h[1] = (acc >> 3u) ^ 0xefcdab89u;
-            h[2] = (acc << 2u) ^ 0x98badcfeu;
-            h[3] = (acc ^ 0x10325476u);
-            h[4] = (acc + 0xc3d2e1f0u);
-            return h;
+        function add(p, q) {
+            if (!p) return q; if (!q) return p;
+            if (p.x === q.x) {
+                if (p.y !== q.y || p.y === 0n) return null;
+                let lam = mod((3n * p.x * p.x) * inverse(2n * p.y));
+                let x3 = mod(lam * lam - 2n * p.x);
+                return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
+            }
+            let lam = mod(mod(q.y - p.y) * inverse(mod(q.x - p.x)));
+            let x3 = mod(lam * lam - p.x - q.x);
+            return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
         }
 
-        @compute @workgroup_size(256)
-        fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-            if (atomicLoad(&resultBuffer.found) == 1u) {
-                return;
-            }
-
-            let myKey = add_u256(config.baseKey, global_id.x);
-            let computedHash = secp256k1_hash160_simulation(myKey);
-
-            var match = true;
-            for (var i = 0; i < 5; i++) {
-                if (computedHash[i] != config.targetHash[i]) {
-                    match = false;
-                    break;
+        // SHA256
+        const sha256_K = new Uint32Array([
+            0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+            0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+            0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+            0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+            0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+            0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+            0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+            0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+        ]);
+        function sha256(data) {
+            const h = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
+            let mLen = data.length;
+            let l = ((mLen + 8) >>> 6) + 1;
+            let m = new Uint8Array(l << 6);
+            m.set(data); m[mLen] = 0x80;
+            let view = new DataView(m.buffer);
+            view.setUint32((l << 6) - 4, mLen << 3);
+            let w = new Uint32Array(64);
+            for (let i = 0; i < l; i++) {
+                let a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], _h = h[7];
+                for (let j = 0; j < 64; j++) {
+                    if (j < 16) w[j] = view.getUint32((i << 6) + j * 4);
+                    else {
+                        let s0 = (w[j-15] >>> 7 | w[j-15] << 25) ^ (w[j-15] >>> 18 | w[j-15] << 14) ^ (w[j-15] >>> 3);
+                        let s1 = (w[j-2] >>> 17 | w[j-2] << 15) ^ (w[j-2] >>> 19 | w[j-2] << 13) ^ (w[j-2] >>> 10);
+                        w[j] = (w[j-16] + s0 + w[j-7] + s1) | 0;
+                    }
+                    let S1 = (e >>> 6 | e << 26) ^ (e >>> 11 | e << 21) ^ (e >>> 25 | e << 7);
+                    let ch = (e & f) ^ (~e & g);
+                    let temp1 = (_h + S1 + ch + sha256_K[j] + w[j]) | 0;
+                    let S0 = (a >>> 2 | a << 30) ^ (a >>> 13 | a << 19) ^ (a >>> 22 | a << 10);
+                    let maj = (a & b) ^ (a & c) ^ (b & c);
+                    let temp2 = (S0 + maj) | 0;
+                    _h = g; g = f; f = e; e = (d + temp1) | 0; d = c; c = b; b = a; a = (temp1 + temp2) | 0;
                 }
+                h[0] = (h[0] + a)|0; h[1] = (h[1] + b)|0; h[2] = (h[2] + c)|0; h[3] = (h[3] + d)|0;
+                h[4] = (h[4] + e)|0; h[5] = (h[5] + f)|0; h[6] = (h[6] + g)|0; h[7] = (h[7] + _h)|0;
             }
-
-            if (match) {
-                atomicStore(&resultBuffer.found, 1u);
-                resultBuffer.privateKey = myKey;
-            }
+            let out = new Uint8Array(32);
+            let outView = new DataView(out.buffer);
+            for(let i=0; i<8; i++) outView.setUint32(i*4, h[i]);
+            return out;
         }
+
+        // RIPEMD160
+        const zl = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15, 7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8, 3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12, 1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2, 4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13];
+        const zr = [5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12, 6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2, 15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13, 8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14, 12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11];
+        const sl = [11,14,15,12,5,8,7,9,11,13,14,15,6,7,9,8, 7,6,8,13,11,9,7,15,7,12,15,9,11,7,13,12, 11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5, 11,12,14,15,14,15,9,8,9,14,5,6,8,6,5,12, 9,15,5,11,6,8,13,12,5,12,13,14,11,8,5,6];
+        const sr = [8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6, 9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11, 9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5, 15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8, 8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];
+        const hl = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
+        const hr = [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000];
+        function ripemd160(msg) {
+            let mLen = msg.length, l = ((mLen + 8) >> 6) + 1;
+            let m = new Uint8Array(l << 6); m.set(msg); m[mLen] = 0x80;
+            let view = new DataView(m.buffer);
+            view.setUint32((l << 6) - 8, mLen << 3, true);
+            let h = new Uint32Array([0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0]);
+            let w = new Uint32Array(16);
+            for (let i = 0; i < l; i++) {
+                for (let j = 0; j < 16; j++) w[j] = view.getUint32((i << 6) + (j << 2), true);
+                let al = h[0], bl = h[1], cl = h[2], dl = h[3], el = h[4];
+                let ar = h[0], br = h[1], cr = h[2], dr = h[3], er = h[4];
+                for (let j = 0; j < 80; j++) {
+                    let round = Math.floor(j / 16), tL, tR;
+                    if (round === 0) { tL = al + (bl ^ cl ^ dl); tR = ar + (br ^ (cr | ~dr)); }
+                    else if (round === 1) { tL = al + ((bl & cl) | (~bl & dl)); tR = ar + ((br & dr) | (cr & ~dr)); }
+                    else if (round === 2) { tL = al + ((bl | ~cl) ^ dl); tR = ar + ((br | ~cr) ^ dr); }
+                    else if (round === 3) { tL = al + ((bl & dl) | (cl & ~dl)); tR = ar + ((br & cr) | (~br & dr)); }
+                    else { tL = al + (bl ^ (cl | ~dl)); tR = ar + (br ^ cr ^ dr); }
+                    tL = (tL + w[zl[j]] + hl[round]) | 0; tL = (tL << sl[j] | tL >>> (32 - sl[j])) + el;
+                    al = el; el = dl; dl = (cl << 10 | cl >>> 22); cl = bl; bl = tL;
+                    tR = (tR + w[zr[j]] + hr[round]) | 0; tR = (tR << sr[j] | tR >>> (32 - sr[j])) + er;
+                    ar = er; er = dr; dr = (cr << 10 | cr >>> 22); cr = br; br = tR;
+                }
+                let t = (h[1] + cl + dr) | 0;
+                h[1] = (h[2] + dl + er) | 0; h[2] = (h[3] + el + ar) | 0; h[3] = (h[4] + al + br) | 0;
+                h[4] = (h[0] + bl + cr) | 0; h[0] = t;
+            }
+            let out = new Uint8Array(20);
+            let outView = new DataView(out.buffer);
+            for(let i=0; i<5; i++) outView.setUint32(i*4, h[i], true);
+            return out;
+        }
+
+        function toBase58(hex) {
+            const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+            const bytes = hex.match(/.{2}/g).map(b => parseInt(b, 16));
+            const digits = [0];
+            for (let i = 0; i < bytes.length; i++) {
+                let carry = bytes[i];
+                for (let j = 0; j < digits.length; j++) {
+                    carry += digits[j] << 8;
+                    digits[j] = carry % 58;
+                    carry = (carry / 58) | 0;
+                }
+                while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0; }
+            }
+            let s = '';
+            for (let i = 0; i < bytes.length && bytes[i] === 0; i++) s += ALPHA[0];
+            for (let i = digits.length - 1; i >= 0; i--) s += ALPHA[digits[i]];
+            return s;
+        }
+
+        // BATCH ENGINE MET JACOBIAN COÖRDINATEN EN HASH160 TARGET VERIFICATIE
+        self.onmessage = function(e) {
+            const data = e.data;
+            if (data.type === "ADDRESS_SCAN") {
+                let currentKey = BigInt("0x" + data.startHex);
+                const endKey = BigInt("0x" + data.endHex);
+                const targetH160 = new Uint8Array(data.targetH160Hex.match(/.{2}/g).map(b => parseInt(b, 16)));
+                const targetAddr = data.targetAddress;
+                const workerId = data.workerId;
+                const BATCH = 5000;
+                
+                let currentPoint = add(null, null);
+                // Bereken startpunt via regulierescalar vermenigvuldiging
+                let base = G, n = currentKey, r = null;
+                while (n > 0n) {
+                    if (n & 1n) r = add(r, base);
+                    base = add(base, base);
+                    n >>= 1n;
+                }
+                currentPoint = r;
+
+                function fastStep() {
+                    let batchCount = 0;
+                    let pX = new Array(BATCH);
+                    let pY = new Array(BATCH);
+                    let pZ = new Array(BATCH);
+                    
+                    let jX = currentPoint.x;
+                    let jY = currentPoint.y;
+                    let jZ = 1n;
+
+                    for (let i = 0; i < BATCH && currentKey + BigInt(i) <= endKey; i++) {
+                        pX[i] = jX; pY[i] = jY; pZ[i] = jZ;
+                        
+                        let Z1Z1 = mod(jZ * jZ);
+                        let U2 = mod(G_x * Z1Z1);
+                        let S2 = mod(G_y * mod(jZ * Z1Z1));
+                        let H = mod(U2 - jX);
+                        let R = mod(S2 - jY);
+                        
+                        let HH = mod(H * H);
+                        let HHH = mod(H * HH);
+                        let V = mod(jX * HH);
+                        
+                        jX = mod(R * R - HHH - 2n * V);
+                        jY = mod(R * (V - jX) - jY * HHH);
+                        jZ = mod(jZ * H);
+                        
+                        batchCount++;
+                    }
+
+                    if (batchCount === 0) {
+                        self.postMessage({ type: "SCAN_DONE", workerId });
+                        return;
+                    }
+                    
+                    let acc = 1n;
+                    let partials = new Array(batchCount);
+                    for(let i=0; i<batchCount; i++) {
+                        partials[i] = acc;
+                        acc = mod(acc * pZ[i]);
+                    }
+                    
+                    let invAcc = inverse(acc);
+                    let invZ = new Array(batchCount);
+                    
+                    for(let i=batchCount-1; i>=0; i--) {
+                        invZ[i] = mod(invAcc * partials[i]);
+                        invAcc = mod(invAcc * pZ[i]);
+                    }
+                    
+                    for (let i = 0; i < batchCount; i++) {
+                        let iz = invZ[i];
+                        let iz2 = mod(iz * iz);
+                        let ax = mod(pX[i] * iz2);
+                        let ay = mod(pY[i] * mod(iz * iz2));
+                        
+                        const bytes = new Uint8Array(33);
+                        bytes[0] = (ay & 1n) === 0n ? 0x02 : 0x03;
+                        let tmp = ax;
+                        for (let b = 32; b >= 1; b--) { bytes[b] = Number(tmp & 0xffn); tmp >>= 8n; }
+                        
+                        const s256 = sha256(bytes);
+                        const r160 = ripemd160(s256);
+
+                        let match = true;
+                        for(let k = 0; k < 20; k++) {
+                            if (r160[k] !== targetH160[k]) { match = false; break; }
+                        }
+
+                        if (match) {
+                            const privHex = (currentKey + BigInt(i)).toString(16).padStart(64, '0');
+                            const payloadBytes = ("80" + privHex + "01").match(/.{2}/g).map(b => parseInt(b, 16));
+                            const doubleSha = sha256(sha256(new Uint8Array(payloadBytes)));
+                            const wif = toBase58("80" + privHex + "01" + Array.from(doubleSha).slice(0, 4).map(b => b.toString(16).padStart(2,'0')).join(''));
+                            self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: targetAddr });
+                            return;
+                        }
+                    }
+                    
+                    currentKey += BigInt(batchCount);
+                    
+                    if (currentKey > endKey) {
+                        self.postMessage({ type: "SCAN_DONE", workerId });
+                        return;
+                    }
+                    
+                    let lastZ = invZ[batchCount-1];
+                    let lastZ2 = mod(lastZ * lastZ);
+                    let lastAX = mod(pX[batchCount-1] * lastZ2);
+                    let lastAY = mod(pY[batchCount-1] * mod(lastZ * lastZ2));
+                    currentPoint = add({x: lastAX, y: lastAY}, G);
+
+                    self.postMessage({ type: "PROGRESS", count: batchCount, workerId });
+                    setTimeout(fastStep, 0);
+                }
+                fastStep();
+            }
+        };
     </script>
 
     <script>
         (function() {
-            let device, computePipeline, bindGroup;
-            let uniformBuffer, resultBuffer, stagingBuffer;
-            let isRunning = false, scanLoopId = null;
-            let currentSliceStart = 0n;
-            let targetLimit = 10000000;
+            let workers = [], totalJumps = 0, cumulativeScanned = 0;
             let currentSliceScanned = 0;
-            let cumulativeScanned = 0;
-            let slicesVisited = 0;
-            let lastUpdateScanned = 0, lastUpdateTime = Date.now();
-            
-            const SLICE_SIZE = 34359738368n;
-            const PUZZLE_71_TOTAL = 1180591620717411303424n;
-            const logBox = document.getElementById('logBox');
+            let slicesVisited = 1;
+            let targetLimit = 10000000;
+            let startTime = 0, isRunning = false;
+            let lastUpdateScanned = 0, lastUpdateTime = 0;
+
+            const SLICE_SIZE = 34359738368n; // 2^35
+            const PUZZLE_71_TOTAL = 1180591620717411303424n; // 2^70 tot 2^71 bereik grootte benadering
+
+            const logBox = document.getElementById('logBox'),
+                  startBtn = document.getElementById('startBtn'),
+                  stopBtn = document.getElementById('stopBtn'),
+                  statusVal = document.getElementById('statusVal'),
+                  progressBar = document.getElementById('progressBar');
 
             function log(msg, cls = '') {
                 const ts = new Date().toLocaleTimeString('nl-NL');
@@ -306,75 +500,99 @@
                 logBox.scrollTop = logBox.scrollHeight;
             }
 
-            function decodeBase58(address) {
-                const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-                let num = 0n;
+            function setStatus(txt, cls = '') {
+                statusVal.textContent = txt;
+                statusVal.className = cls;
+            }
+
+            function killWorkers() {
+                workers.forEach(w => { try { w.terminate(); } catch (_) {} });
+                workers = [];
+            }
+
+            function fromBase58(address) {
+                const ALPHA = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+                if (!address) return '';
+                let bytes = [0];
                 for (let i = 0; i < address.length; i++) {
-                    const charIndex = ALPHABET.indexOf(address[i]);
-                    if (charIndex === -1) throw new Error("Ongeldig Base58 karakter");
-                    num = num * 58n + BigInt(charIndex);
+                    let c = ALPHA.indexOf(address[i]);
+                    if (c < 0) throw new Error('Ongeldig Base58 adres.');
+                    for (let j = 0; j < bytes.length; j++) {
+                        c += bytes[j] * 58; bytes[j] = c & 0xff; c >>= 8;
+                    }
+                    while (c > 0) { bytes.push(c & 0xff); c >>= 8; }
                 }
-                let hex = num.toString(16);
-                if (hex.length % 2 !== 0) hex = '0' + hex;
-                hex = hex.padStart(50, '0');
-                const hash160Hex = hex.substring(2, 42);
-                
-                const hashArray = new Uint32Array(5);
-                for(let i=0; i<5; i++) {
-                    hashArray[i] = parseInt(hash160Hex.substring(i*8, i*8+8), 16);
-                }
-                return { hex: hash160Hex, array: hashArray };
+                let zeros = 0;
+                for (let i = 0; i < address.length && address[i] === '1'; i++) zeros++;
+                while (bytes.length > 0 && bytes[bytes.length - 1] === 0) bytes.pop();
+                for (let i = 0; i < zeros; i++) bytes.push(0);
+                bytes.reverse();
+                return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
             }
 
-            async function initWebGPU() {
-                if (!navigator.gpu) {
-                    log('❌ WebGPU wordt niet ondersteund (Gebruik Chrome/Edge).', 'ev-stop');
-                    return false;
+            function updateTargetH160() {
+                try {
+                    const addr = document.getElementById('btcAddr').value.trim();
+                    const decoded = fromBase58(addr);
+                    const h160Hex = decoded.substring(2, 42);
+                    document.getElementById('targetH160Field').value = h160Hex;
+                    return h160Hex;
+                } catch(e) {
+                    document.getElementById('targetH160Field').value = "Ongeldig adres!";
+                    return null;
                 }
-                const adapter = await navigator.gpu.requestAdapter();
-                if (!adapter) { log('❌ Geen geschikte videokaart gevonden.', 'ev-stop'); return false; }
-                
-                device = await adapter.requestDevice();
-                log(`✅ WebGPU Device geïnitialiseerd: ${adapter.name || 'Hardware GPU'}`);
-
-                const wgslCode = document.getElementById('wgslCode').textContent;
-                const shaderModule = device.createShaderModule({ code: wgslCode });
-
-                computePipeline = device.createComputePipeline({
-                    layout: 'auto',
-                    compute: { module: shaderModule, entryPoint: 'main' }
-                });
-
-                const uniformBufferSize = 64; 
-                uniformBuffer = device.createBuffer({
-                    size: uniformBufferSize,
-                    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-                });
-
-                const resultBufferSize = 48; 
-                resultBuffer = device.createBuffer({
-                    size: resultBufferSize,
-                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
-                });
-
-                stagingBuffer = device.createBuffer({
-                    size: resultBufferSize,
-                    usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-                });
-
-                bindGroup = device.createBindGroup({
-                    layout: computePipeline.getBindGroupLayout(0),
-                    entries: [
-                        { binding: 0, resource: { buffer: uniformBuffer } },
-                        { binding: 1, resource: { buffer: resultBuffer } }
-                    ]
-                });
-
-                return true;
             }
 
-            function updateUI() {
-                targetLimit = parseInt(document.getElementById('keysLimit').value) || 10000000;
+            document.getElementById('btcAddr').addEventListener('input', updateTargetH160);
+            updateTargetH160();
+
+            function generateRandomSlice() {
+                // Puzzel #71 bereik: 0x400000000000000000 tot 0x7fffffffffffffffff
+                const globalStart = BigInt("0x400000000000000000");
+                const globalEnd = BigInt("0x7fffffffffffffffff");
+                const maxOffset = (globalEnd - globalStart + 1n) - SLICE_SIZE;
+                const bytes = new Uint8Array(Math.ceil(maxOffset.toString(2).length / 8));
+                window.crypto.getRandomValues(bytes);
+                const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+                const rand = BigInt("0x" + hex);
+                const offset = rand % maxOffset;
+                const sliceStart = globalStart + offset;
+                const sliceEnd = sliceStart + SLICE_SIZE - 1n;
+
+                document.getElementById('rangeStart').value = sliceStart.toString(16);
+                document.getElementById('rangeEnd').value = sliceEnd.toString(16);
+                log(`🦘 Kangaroo Hopped naar nieuwe willekeurige zone: 0x${sliceStart.toString(16).substring(0,8)}...`, 'ev-hop');
+            }
+
+            function makeWorker() {
+                const code = document.getElementById('workerCode').textContent;
+                const worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
+                worker.onerror = function(e) {
+                    log(`❌ Fout in worker uitvoering.`, 'ev-stop');
+                    setStatus('Gestopt', '');
+                    killWorkers();
+                    setRunning(false);
+                };
+                return worker;
+            }
+
+            function setRunning(v) {
+                isRunning = v;
+                startBtn.disabled = v;
+                stopBtn.disabled = !v;
+            }
+
+            function formatSeconds(seconds) {
+                if (!isFinite(seconds) || seconds <= 0) return '—';
+                if (seconds > 3.15e7) return (seconds / 3.15e7).toFixed(1) + ' jaar';
+                if (seconds > 86400) return (seconds / 86400).toFixed(1) + ' dagen';
+                if (seconds > 3600) return (seconds / 3600).toFixed(1) + ' uur';
+                if (seconds > 60) return (seconds / 60).toFixed(0) + ' min';
+                return seconds.toFixed(0) + ' s';
+            }
+
+            function updateAllStats() {
+                targetLimit = Number(document.getElementById('keysLimit').value) || 10000000;
                 document.getElementById('limitDisplay').textContent = targetLimit.toLocaleString('nl-NL');
                 document.getElementById('slicesVisitedCount').textContent = slicesVisited.toLocaleString('nl-NL');
 
@@ -387,7 +605,6 @@
                 document.getElementById('chanceScientific').innerHTML = `${(hopProgress * 100).toFixed(2)}%`;
 
                 document.getElementById('cmpLottery').textContent = (cumulativeScanned / Number(PUZZLE_71_TOTAL)).toExponential(4);
-                document.getElementById('cmpUniverse').textContent = "2³⁵ keys";
                 document.getElementById('cmpEpochs').textContent = ((Number(SLICE_SIZE) / Number(PUZZLE_71_TOTAL)) * 100).toExponential(6) + '%';
 
                 const now = Date.now();
@@ -396,15 +613,12 @@
                 if (elapsedSec >= 1) { 
                     const currentSpeed = Math.floor((cumulativeScanned - lastUpdateScanned) / elapsedSec);
                     document.getElementById('speed').textContent = currentSpeed.toLocaleString('nl-NL') + ' /s';
-                    document.getElementById('calcGradient').textContent = currentSpeed.toLocaleString('nl-NL') + ' /s';
                     
                     if (currentSpeed > 0) {
                         const remaining = targetLimit - currentSliceScanned;
-                        const seconds = remaining / currentSpeed;
-                        document.getElementById('cmpTime').textContent = 
-                            seconds > 86400 ? (seconds / 86400).toFixed(1) + ' dagen' :
-                            seconds > 3600 ? (seconds / 3600).toFixed(1) + ' uur' :
-                            seconds > 60 ? (seconds / 60).toFixed(0) + ' min' : seconds.toFixed(0) + ' s';
+                        document.getElementById('cmpTime').textContent = formatSeconds(remaining / currentSpeed);
+                        document.getElementById('calcGradient').textContent = currentSpeed.toLocaleString('nl-NL') + ' /s';
+                        document.getElementById('calcPoisson').textContent = (hopProgress * 100).toFixed(2) + ' %';
                     }
                     lastUpdateTime = now; lastUpdateScanned = cumulativeScanned;
                 }
@@ -414,140 +628,68 @@
                 document.getElementById('currentSliceKeys').textContent = currentSliceScanned.toLocaleString('nl-NL');
             }
 
-            function generateRandomSlice() {
-                const globalStart = BigInt("0x400000000000000000");
-                const globalEnd = BigInt("0x7fffffffffffffffff");
-                const maxOffset = (globalEnd - globalStart + 1n) - SLICE_SIZE;
-                const bytes = new Uint8Array(Math.ceil(maxOffset.toString(2).length / 8));
-                window.crypto.getRandomValues(bytes);
-                const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-                const rand = BigInt("0x" + hex);
-                const offset = rand % maxOffset;
-                const sliceStart = globalStart + offset;
-                const sliceEnd = sliceStart + SLICE_SIZE - 1n;
-
-                currentSliceStart = sliceStart;
-                currentSliceScanned = 0;
-                slicesVisited++;
-
-                document.getElementById('rangeStart').value = sliceStart.toString(16);
-                document.getElementById('rangeEnd').value = sliceEnd.toString(16);
-                log(`Zone geladen. Start: ${sliceStart.toString(16).substring(0,8)}...`, 'ev-hop');
-            }
-
-            async function runComputePass() {
-                if (!isRunning) return;
-
-                const workgroups = parseInt(document.getElementById('numW').value) || 2048;
-                const threadsPerGroup = 256;
-                const keysToScan = workgroups * threadsPerGroup;
-
-                const baseKeyHex = (currentSliceStart + BigInt(currentSliceScanned)).toString(16).padStart(64, '0');
-                const uniformData = new Uint32Array(16);
-                
-                for(let i=0; i<8; i++) {
-                    uniformData[7-i] = parseInt(baseKeyHex.substring(64 - (i*8) - 8, 64 - (i*8)), 16);
+            function spawnWorkers() {
+                const targetAddr = document.getElementById('btcAddr').value.trim();
+                const targetH160Hex = updateTargetH160();
+                if (!targetH160Hex || targetH160Hex.length !== 40) { 
+                    log('❌ Ongeldig BTC Adres ingevoerd', 'ev-stop'); setRunning(false); return; 
                 }
 
-                const targetHashArray = window.currentHashTarget || new Uint32Array(5);
-                uniformData.set(targetHashArray, 8);
+                const startBI = BigInt("0x" + document.getElementById('rangeStart').value);
+                const endBI = BigInt("0x" + document.getElementById('rangeEnd').value);
+                const numW = Math.max(1, parseInt(document.getElementById('numW').value) || 4);
                 
-                device.queue.writeBuffer(uniformBuffer, 0, uniformData.buffer);
+                killWorkers();
+                let workersDone = 0;
 
-                const commandEncoder = device.createCommandEncoder();
-                const passEncoder = commandEncoder.beginComputePass();
-                passEncoder.setPipeline(computePipeline);
-                passEncoder.setBindGroup(0, bindGroup);
-                passEncoder.dispatchWorkgroups(workgroups);
-                passEncoder.end();
-
-                commandEncoder.copyBufferToBuffer(resultBuffer, 0, stagingBuffer, 0, 48);
-                device.queue.submit([commandEncoder.finish()]);
-
-                await stagingBuffer.mapAsync(GPUMapMode.READ);
-                const resultData = new Uint32Array(stagingBuffer.getMappedRange());
-                const found = resultData[0];
-                
-                if (found === 1) {
-                    const pkWords = [];
-                    for(let i=0; i<8; i++) {
-                        pkWords.push(resultData[4 + (7-i)].toString(16).padStart(8, '0'));
-                    }
-                    const privHex = pkWords.join('');
+                for (let i = 0; i < numW; i++) {
+                    const worker = makeWorker();
+                    workers.push(worker);
                     
-                    log('🔥 MATCH GEVONDEN! Proces gestopt.', 'ev-found');
-                    document.getElementById('statusVal').textContent = "🎉 GEVONDEN!";
-                    document.getElementById('statusVal').className = "running";
-                    document.getElementById('matchTable').innerHTML = `<tr><td>✅ MATCH</td><td style="font-size:.65rem">${privHex}</td></tr>`;
-                    isRunning = false;
-                } else {
-                    currentSliceScanned += keysToScan;
-                    cumulativeScanned += keysToScan;
-                    
-                    if (currentSliceScanned >= targetLimit) {
-                        generateRandomSlice();
-                    }
-                }
-                
-                stagingBuffer.unmap();
-                updateUI();
+                    const chunkSize = (endBI - startBI + 1n) / BigInt(numW);
+                    const segStart = (startBI + chunkSize * BigInt(i)).toString(16);
+                    const segEnd = (i === numW - 1) ? endBI.toString(16) : (startBI + chunkSize * BigInt(i + 1) - 1n).toString(16);
 
-                if (isRunning) {
-                    scanLoopId = requestAnimationFrame(runComputePass);
+                    worker.onmessage = (ev) => {
+                        if (ev.data.type === "PROGRESS") {
+                            if (!isRunning) return;
+                            totalJumps += ev.data.count; cumulativeScanned += ev.data.count; currentSliceScanned += ev.data.count;
+                            if (currentSliceScanned >= targetLimit) {
+                                killWorkers(); generateRandomSlice(); slicesVisited++; currentSliceScanned = 0;
+                                setTimeout(() => { if (isRunning) spawnWorkers(); }, 50);
+                            }
+                        }
+                        else if (ev.data.type === "SCAN_DONE") {
+                            workersDone++;
+                            if (workersDone === numW) {
+                                killWorkers(); generateRandomSlice(); slicesVisited++; currentSliceScanned = 0;
+                                setTimeout(() => { if (isRunning) spawnWorkers(); }, 50);
+                            }
+                        } else if (ev.data.type === "FOUND") {
+                            setRunning(false); killWorkers(); setStatus('🎉 GEVONDEN!', 'running');
+                            document.getElementById('matchTable').innerHTML = `<tr><td>✅ MATCH</td><td style="font-size:.65rem; color:#00ff99;">${ev.data.wif}</td><td style="font-size:.65rem">${ev.data.privHex}</td></tr>`;
+                            log('🔥 MATCH GEVONDEN! Puzzel opgelost.', 'ev-found');
+                        }
+                    };
+                    worker.postMessage({ type: "ADDRESS_SCAN", startHex: segStart, endHex: segEnd, targetH160Hex, targetAddress: targetAddr, workerId: i });
                 }
             }
 
-            document.getElementById('startBtn').onclick = async () => {
+            function startAddressScan() {
                 if (isRunning) return;
-                
-                const addr = document.getElementById('btcAddr').value;
-                try {
-                    const decoded = decodeBase58(addr);
-                    window.currentHashTarget = decoded.array;
-                    document.getElementById('targetHash160').textContent = "0x" + decoded.hex.substring(0,10) + "...";
-                } catch(e) {
-                    alert("Ongeldig Bitcoin adres!");
-                    return;
-                }
+                startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = cumulativeScanned;
+                setRunning(true);
+                setStatus('🦘 Hopper Actief', 'running');
+                log('Kangaroo Slice Hopper gestart voor Puzzel #71.', 'ev-epoch');
+                spawnWorkers();
+            }
 
-                targetLimit = parseInt(document.getElementById('keysLimit').value) || 10000000;
-                document.getElementById('limitDisplay').textContent = targetLimit.toLocaleString('nl-NL');
-
-                if (!device && !(await initWebGPU())) return;
-
-                const resetData = new Uint32Array(12);
-                device.queue.writeBuffer(resultBuffer, 0, resetData.buffer);
-
-                isRunning = true;
-                document.getElementById('startBtn').disabled = true;
-                document.getElementById('stopBtn').disabled = false;
-                document.getElementById('statusVal').textContent = "⚡ WebGPU Actief";
-                document.getElementById('statusVal').className = "running";
-                
-                if (slicesVisited === 0) generateRandomSlice();
-                lastUpdateTime = Date.now();
-                lastUpdateScanned = cumulativeScanned;
-                log('WebGPU Compute Scan gestart.', 'ev-epoch');
-                runComputePass();
-            };
-
-            document.getElementById('stopBtn').onclick = () => {
-                isRunning = false;
-                if (scanLoopId) cancelAnimationFrame(scanLoopId);
-                document.getElementById('startBtn').disabled = false;
-                document.getElementById('stopBtn').disabled = true;
-                document.getElementById('statusVal').textContent = "Gestopt";
-                document.getElementById('statusVal').className = "";
-                log('Handmatig gestopt.', 'ev-stop');
-            };
-
+            startBtn.onclick = () => { if (!isRunning) startAddressScan(); };
+            stopBtn.onclick = () => { setRunning(false); killWorkers(); setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop'); };
             generateRandomSlice();
-            slicesVisited = 0; // reset counter before start
-            document.getElementById('slicesVisitedCount').textContent = "0";
-            log('Systeem klaar. WebGPU Engine Lokaal geladen.', 'ts');
+            log('Systeem klaar. Hash160 Target en Hopper geladen.', 'ts');
 
             setInterval(() => { if (isRunning) updateAllStats(); }, 800);
-            function updateAllStats() { updateUI(); }
         })();
     </script>
 </body>
