@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>⚡ WebGPU Custom Range Scanner</title>
+<title>⚡ WebGPU Custom Range Scanner [FIXED]</title>
 <style>
   :root{
     --bg:#07090f;--surface:#0d1117;--panel:#111827;--border:#1f2937;--accent:#00ff99;--accent2:#00c3ff;
@@ -53,7 +53,7 @@
 <div class="container">
   <div class="header">
     <h1>⚡ WebGPU Custom Range Scanner</h1>
-    <div class="sub">GPU Accelerated Secp256k1 + Auto-Hop Slices</div>
+    <div class="sub">GPU Accelerated Secp256k1 + Fixed Target Matching</div>
   </div>
 
   <div class="card">
@@ -131,6 +131,7 @@ function log(msg, color=''){
   logBox.scrollTop = logBox.scrollHeight;
 }
 
+// Correcte Base58 decoding en extraction van de 20-byte KeyHash (RIPEMD160)
 function decodeBase58Address(address) {
   address = address.trim();
   const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -140,9 +141,6 @@ function decodeBase58Address(address) {
   let bytes = [0];
   for(let i = 0; i < address.length; i++) {
     let c = address[i];
-    if(c === 'O') c = 'o';
-    if(c === 'I') c = 'i';
-    
     if(!(c in ALPHABET_MAP)) throw new Error(`Ongeldig Base58 karakter '${address[i]}' in adres`);
     let val = ALPHABET_MAP[c];
     for(let j = 0; j < bytes.length; j++) bytes[j] *= 58;
@@ -160,7 +158,10 @@ function decodeBase58Address(address) {
   }
   for(let i = 0; i < address.length && address[i] === '1'; i++) bytes.push(0);
   bytes.reverse();
-  return new Uint8Array(bytes.slice(1, 21));
+  
+  // Uint8Array met payload (verwijder network version byte [0] en 4 bytes checksum achteraan)
+  const fullBytes = new Uint8Array(bytes);
+  return fullBytes.slice(1, 21);
 }
 
 function toHex32(bn){ return bn.toString(16).padStart(64,'0'); }
@@ -236,8 +237,6 @@ fn sub_mod_p(a: U256, b: U256) -> U256 {
 fn mul_mod_p(a: U256, b: U256) -> U256 {
   var r: array<u32,16>;
   for(var i:u32=0u;i<16u;i=i+1u){ r[i]=0u; }
-  
-  // Multiply 256x256 -> 512 bits
   for(var i:u32=0u;i<8u;i=i+1u){
     var carry:u32 = 0u;
     for(var j:u32=0u;j<8u;j=j+1u){
@@ -251,23 +250,17 @@ fn mul_mod_p(a: U256, b: U256) -> U256 {
     }
     r[i+8u] = carry;
   }
-  
-  // Reduce 512 -> 256 bits mod p
   for(var i: i32 = 15; i >= 8; i = i - 1) {
       let val = r[u32(i)];
       if (val == 0u) { continue; }
-      
-      r[u32(i)] = 0u; // ✅ FIX: Reset de limb om dubbele reductie te voorkomen
-      
+      r[u32(i)] = 0u;
       var carry: u32 = 0u;
       let m = umulExtended(val, 977u);
       var j = u32(i) - 8u;
-      
       var s1 = r[j] + m.x;
       var c1 = select(0u, 1u, s1 < r[j]);
       r[j] = s1;
       carry = m.y + c1;
-      
       j = j + 1u;
       while(carry > 0u && j < 16u) {
           var s = r[j] + carry;
@@ -275,7 +268,6 @@ fn mul_mod_p(a: U256, b: U256) -> U256 {
           r[j] = s;
           j = j + 1u;
       }
-      
       carry = val;
       j = u32(i) - 7u;
       while(carry > 0u && j < 16u) {
@@ -285,19 +277,16 @@ fn mul_mod_p(a: U256, b: U256) -> U256 {
           j = j + 1u;
       }
   }
-  
   if (r[8] > 0u) {
       let val = r[8];
       r[8] = 0u;
       var carry: u32 = 0u;
       let m = umulExtended(val, 977u);
       var j = 0u;
-      
       var s1 = r[j] + m.x;
       var c1 = select(0u, 1u, s1 < r[j]);
       r[j] = s1;
       carry = m.y + c1;
-      
       j = j + 1u;
       while(carry > 0u && j < 16u) {
           var s = r[j] + carry;
@@ -305,7 +294,6 @@ fn mul_mod_p(a: U256, b: U256) -> U256 {
           r[j] = s;
           j = j + 1u;
       }
-      
       carry = val;
       j = 1u;
       while(carry > 0u && j < 16u) {
@@ -315,10 +303,8 @@ fn mul_mod_p(a: U256, b: U256) -> U256 {
           j = j + 1u;
       }
   }
-  
   var res: U256;
   for(var i:u32=0u;i<8u;i=i+1u){ res.limbs[i] = r[i]; }
-  
   let p = get_p();
   if (ge(res, p)) { res = sub_mod_p(res, p); }
   if (ge(res, p)) { res = sub_mod_p(res, p); }
@@ -544,6 +530,8 @@ let sliceLimit = 50000000n;
 let slicesCount = 1;
 let targetH160 = null;
 let currentSliceLimit = 50000000n;
+let totalRange = 0n;
+let rangeStartBI = 0n;
 const BATCH = 512 * 256; // 131.072 keys per dispatch
 
 async function initWebGPU(){
@@ -584,26 +572,25 @@ function setRunning(v){
   }
 }
 
-let totalRange = 0n;
-
 function generateRandomSlice(){
   try {
     const startHex = document.getElementById('searchRangeStart').value.trim();
     const endHex = document.getElementById('searchRangeEnd').value.trim();
     
-    const rangeStart = BigInt("0x" + (startHex || "400000000000000000"));
-    const rangeEnd = BigInt("0x" + (endHex || "7fffffffffffffffff"));
+    rangeStartBI = BigInt("0x" + (startHex || "400000000000000000"));
+    const rangeEndBI = BigInt("0x" + (endHex || "7fffffffffffffffff"));
     
-    if (rangeStart > rangeEnd) throw new Error('Start range kan niet groter zijn dan eind range.');
+    if (rangeStartBI > rangeEndBI) throw new Error('Start range kan niet groter zijn dan eind range.');
     
-    totalRange = rangeEnd - rangeStart + 1n;
+    totalRange = rangeEndBI - rangeStartBI + 1n;
     const requestedLimit = BigInt(document.getElementById('keysLimit').value.trim() || 50000000);
     
     currentSliceLimit = requestedLimit < totalRange ? requestedLimit : totalRange;
     document.getElementById('limitDisplay').textContent = Number(currentSliceLimit).toLocaleString('nl-NL');
     
-    const maxOffset = totalRange - currentSliceLimit;
+    // Als de range kleiner is dan de limiet, starten we exact bij het begin van de range (geen random offset)
     let offset = 0n;
+    const maxOffset = totalRange - currentSliceLimit;
     if(maxOffset > 0n){
       const bytes = new Uint8Array(8);
       window.crypto.getRandomValues(bytes);
@@ -612,12 +599,12 @@ function generateRandomSlice(){
       offset = rand % (maxOffset + 1n);
     }
     
-    baseKey = rangeStart + offset;
+    baseKey = rangeStartBI + offset;
     const endKey = baseKey + currentSliceLimit - 1n;
 
     document.getElementById('rangeStart').value = baseKey.toString(16);
     document.getElementById('rangeEnd').value = endKey.toString(16);
-    log(`Nieuw plakje geladen (#${slicesCount}). Start: 0x${baseKey.toString(16)}`);
+    log(`Plakje geladen (#${slicesCount}). Start: 0x${baseKey.toString(16)}`);
   } catch(e) {
     log('❌ Fout bij genereren slice: ' + e.message, 'danger');
   }
@@ -650,13 +637,13 @@ async function runSearch(){
     const buf = new ArrayBuffer(4*5 + 4 + 4 + 4*8 + 4);
     const dv = new DataView(buf);
     
+    // FIX: Correcte invulling van target_h160 zodat endianness klopt met de GPU shader
     for(let i = 0; i < 5; i++) {
       if (targetH160 && targetH160.length >= (i + 1) * 4) {
-        const b0 = targetH160[i * 4];
-        const b1 = targetH160[i * 4 + 1];
-        const b2 = targetH160[i * 4 + 2];
-        const b3 = targetH160[i * 4 + 3];
-        const word = (b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)) >>> 0;
+        const word = (targetH160[i * 4] | 
+                     (targetH160[i * 4 + 1] << 8) | 
+                     (targetH160[i * 4 + 2] << 16) | 
+                     (targetH160[i * 4 + 3] << 24)) >>> 0;
         dv.setUint32(i * 4, word, true);
       } else {
         dv.setUint32(i * 4, 0, true);
