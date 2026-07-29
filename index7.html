@@ -37,22 +37,21 @@
 <body>
 <div class="container">
   <div class="header">
-    <h1>⚡ WebGPU Puzzel 71 Solver</h1>
+    <h1>⚡ WebGPU Puzzel Solver</h1>
   </div>
 
   <div class="card">
     <div class="card-title">① Doelwit Instellen</div>
     <div class="field">
       <label>Doel Bitcoin Adres</label>
-      <!-- Vul hier het specifieke adres van Puzzel 71 in -->
       <input type="text" id="targetAddress" value="1P3CQo27pUKV92FfG9yD4eGzEACmEQX4v3">
     </div>
     <div class="field">
-      <label>Start Hex (2^70)</label>
+      <label>Start Hex (Range)</label>
       <input type="text" id="startHex" value="400000000000000000">
     </div>
     <div class="field">
-      <label>Eind Hex (2^71 - 1)</label>
+      <label>Eind Hex (Range)</label>
       <input type="text" id="endHex" value="7FFFFFFFFFFFFFFFFF">
     </div>
   </div>
@@ -89,7 +88,6 @@ function log(msg){
   logBox.scrollTop = logBox.scrollHeight;
 }
 
-// Converteert een Base58 Bitcoin adres naar de 20-byte Hash160
 function decodeBase58Address(address) {
   const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
   const ALPHABET_MAP = {};
@@ -115,7 +113,6 @@ function decodeBase58Address(address) {
   }
   for(let i = 0; i < address.length && address[i] === '1'; i++) bytes.push(0);
   bytes.reverse();
-  // De payload is bytes 1 tot en met 20 (byte 0 is versie, laatste 4 zijn checksum)
   return new Uint8Array(bytes.slice(1, 21));
 }
 
@@ -445,7 +442,7 @@ let scanned=0n, batchStart=0n, lastTime=0, lastScanned=0n;
 let baseKey = 0n;
 let rangeSize = 0n;
 let targetH160 = null;
-const BATCH = 512*256; // Hoeveelheid keys per frame (pas aan naar wens/hardware)
+const BATCH = 512*256;
 
 async function initWebGPU(){
   if(!navigator.gpu) throw new Error('WebGPU wordt niet ondersteund.');
@@ -487,7 +484,6 @@ async function runSearch(){
     const buf = new ArrayBuffer(4*5+4+4+4*8+4);
     const dv = new DataView(buf);
     
-    // Zet het doel Hash160 in buffer
     for(let i=0;i<5;i++) dv.setUint32(i*4, targetH160.length ? (targetH160[i*4]<<24|targetH160[i*4+1]<<16|targetH160[i*4+2]<<8|targetH160[i*4+3])>>>0 : 0, true);
     dv.setUint32(20, 0, true); 
     dv.setUint32(24, 0, true); 
@@ -499,7 +495,7 @@ async function runSearch(){
     const pass = enc.beginComputePass();
     pass.setPipeline(computePipeline);
     pass.setBindGroup(0,bindGroup);
-    pass.dispatchWorkgroups(512); // Pas eventueel aan op snellere GPU's
+    pass.dispatchWorkgroups(512);
     pass.end();
     enc.copyBufferToBuffer(gpuBuffer,0,readBuffer,0,buf.byteLength);
     gpuDevice.queue.submit([enc.finish()]);
@@ -524,7 +520,6 @@ async function runSearch(){
     
     document.getElementById('scannedVal').textContent = scanned.toLocaleString('nl-NL');
     
-    // Progress berekening
     let prog = 0;
     if (rangeSize > 0n) {
         prog = Math.min(100, Number((scanned * 10000n) / rangeSize) / 100);
@@ -565,7 +560,6 @@ document.getElementById('startBtn').onclick = async () => {
     let sHex = document.getElementById('startHex').value.trim();
     let eHex = document.getElementById('endHex').value.trim();
     
-    // Zet input om in BigInt
     baseKey = BigInt('0x' + sHex);
     let endKey = BigInt('0x' + eHex);
     rangeSize = endKey - baseKey;
