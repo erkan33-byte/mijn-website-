@@ -52,7 +52,7 @@
     </div>
     <div class="field">
       <label>Eind Hex (Range)</label>
-      <input type="text" id="endHex" value="7FFFFFFFFFFFFFFFFF">
+      <input type="text" id="endHex" value="400000000000001000">
     </div>
   </div>
 
@@ -409,7 +409,7 @@ fn add_offset(base: array<u32,8>, offset: u32) -> U256 {
 }
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>){
-  let thread_id = target.batch_start + gid.x;
+  let thread_id = gid.x;
   let priv = add_offset(target.base, thread_id);
   var Gx: U256;
   Gx.limbs[0]=0x16F81798u; Gx.limbs[1]=0x59F2815Bu; Gx.limbs[2]=0x2DCE28D9u; Gx.limbs[3]=0x029BFCDBu;
@@ -438,7 +438,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>){
 `;
 
 let isRunning=false, gpuDevice, computePipeline, gpuBuffer, readBuffer, bindGroup;
-let scanned=0n, batchStart=0n, lastTime=0, lastScanned=0n;
+let scanned=0n, lastTime=0, lastScanned=0n;
 let baseKey = 0n;
 let rangeSize = 0n;
 let targetH160 = null;
@@ -474,17 +474,20 @@ function setRunning(v){
 }
 
 async function runSearch(){
-  const baseLimbs = u256ToLimbs(baseKey);
   document.getElementById('statusVal').textContent = '⚡ GPU actief';
   lastTime = Date.now(); 
   lastScanned = 0n;
 
   async function step(){
     if(!isRunning) return;
+    
+    // Bereken de huidige sleutel voor deze batch
+    const currentKey = baseKey + scanned;
+    const baseLimbs = u256ToLimbs(currentKey);
+
     const buf = new ArrayBuffer(4*5+4+4+4*8+4);
     const dv = new DataView(buf);
     
-    // GECORRIGEERDE ENDIANNESS PACKING VOOR HASH160
     for(let i = 0; i < 5; i++) {
       if (targetH160 && targetH160.length >= (i + 1) * 4) {
         const b0 = targetH160[i * 4];
@@ -501,7 +504,7 @@ async function runSearch(){
     dv.setUint32(20, 0, true); 
     dv.setUint32(24, 0, true); 
     for(let i=0;i<8;i++) dv.setUint32(28+i*4, baseLimbs[i], true);
-    dv.setUint32(60, Number(batchStart), true);
+    dv.setUint32(60, 0, true); // batch_start is 0 omdat baseKey per batch opschuift
     gpuDevice.queue.writeBuffer(gpuBuffer,0,buf);
 
     const enc = gpuDevice.createCommandEncoder();
@@ -517,11 +520,21 @@ async function runSearch(){
     const result = new DataView(readBuffer.getMappedRange().slice(0));
     readBuffer.unmap();
 
-    scanned += BigInt(BATCH);
-    batchStart += BigInt(BATCH);
-
     const foundFlag = result.getUint32(20,true);
     const foundOffset = result.getUint32(24,true);
+
+    if(foundFlag === 1){
+      setRunning(false);
+      document.getElementById('statusVal').textContent = '🎉 GEVONDEN';
+      const foundPriv = currentKey + BigInt(foundOffset);
+      const box = document.getElementById('matchBox');
+      box.style.display = 'block';
+      box.innerHTML = `✅ MATCH GEVONDEN!<br>Privésleutel (HEX): <span class="mono" style="color:var(--warn);font-size:1.1em;">${toHex32(foundPriv)}</span>`;
+      log(`🔥 Match gevonden! Sleutel: ${toHex32(foundPriv)}`);
+      return;
+    }
+
+    scanned += BigInt(BATCH);
 
     const now = Date.now();
     if(now - lastTime > 500){
@@ -539,17 +552,6 @@ async function runSearch(){
     }
     document.getElementById('progVal').textContent = prog.toFixed(2) + '%';
     document.getElementById('progressBar').style.width = prog + '%';
-
-    if(foundFlag === 1){
-      setRunning(false);
-      document.getElementById('statusVal').textContent = '🎉 GEVONDEN';
-      const foundPriv = baseKey + BigInt(foundOffset);
-      const box = document.getElementById('matchBox');
-      box.style.display = 'block';
-      box.innerHTML = `✅ MATCH GEVONDEN!<br>Privésleutel (HEX): <span class="mono" style="color:var(--warn);font-size:1.1em;">${toHex32(foundPriv)}</span>`;
-      log(`🔥 Match gevonden! Offset: ${foundOffset}`);
-      return;
-    }
     
     if(scanned >= rangeSize){
       setRunning(false);
@@ -573,15 +575,15 @@ document.getElementById('startBtn').onclick = async () => {
     let sHex = document.getElementById('startHex').value.trim();
     let eHex = document.getElementById('endHex').value.trim();
     
-    baseKey = BigInt('0x' + sHex);
-    let endKey = BigInt('0x' + eHex);
-    rangeSize = endKey - baseKey;
+    let startKeyVal = BigInt('0x' + sHex);
+    let endKeyVal = BigInt('0x' + eHex);
+    rangeSize = endKeyVal - startKeyVal;
+    baseKey = startKeyVal;
     
     if (rangeSize <= 0n) throw new Error('Eindwaarde moet groter zijn dan startwaarde');
 
     if(!gpuDevice){ log('WebGPU initialiseren...'); await initWebGPU(); }
     
-    batchStart = 0n; 
     scanned = 0n;
     setRunning(true);
     log(`Zoeken gestart naar ${addr}. Range: ${rangeSize.toLocaleString('nl-NL')} sleutels.`);
