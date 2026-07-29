@@ -160,7 +160,7 @@ function decodeBase58Address(address) {
   }
   for(let i = 0; i < address.length && address[i] === '1'; i++) bytes.push(0);
   bytes.reverse();
-  return new Uint8Array(bytes.slice(1, 21)); // Extrahert precies de 20 hash bytes
+  return new Uint8Array(bytes.slice(1, 21));
 }
 
 function toHex32(bn){ return bn.toString(16).padStart(64,'0'); }
@@ -257,7 +257,7 @@ fn mul_mod_p(a: U256, b: U256) -> U256 {
       let val = r[u32(i)];
       if (val == 0u) { continue; }
       
-      r[u32(i)] = 0u; // ✅ FIX: Reset de actuele limb zodat we geen dubbele reductie doen
+      r[u32(i)] = 0u; // ✅ FIX: Reset de limb om dubbele reductie te voorkomen
       
       var carry: u32 = 0u;
       let m = umulExtended(val, 977u);
@@ -286,7 +286,6 @@ fn mul_mod_p(a: U256, b: U256) -> U256 {
       }
   }
   
-  // Vang de laatste eventuele carry overflow op array 'r' af (veiliger dan op res)
   if (r[8] > 0u) {
       let val = r[8];
       r[8] = 0u;
@@ -317,7 +316,6 @@ fn mul_mod_p(a: U256, b: U256) -> U256 {
       }
   }
   
-  // Converteer nu pas naar het eindresultaat U256
   var res: U256;
   for(var i:u32=0u;i<8u;i=i+1u){ res.limbs[i] = r[i]; }
   
@@ -451,7 +449,6 @@ fn bswap(v: u32) -> u32 {
 
 fn ripemd160_of_sha(sha: array<u32,8>) -> array<u32,5> {
   var X=array<u32,16>();
-  // CRITIQUE FIX: SHA256 is Big Endian, RIPEMD160 is Little Endian. Byte-swap is REQUIRED here!
   for(var i:u32=0u;i<8u;i=i+1u){ X[i]=bswap(sha[i]); }
   X[8]=0x80u;
   for(var i:u32=9u;i<14u;i=i+1u){ X[i]=0u; }
@@ -512,7 +509,6 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>){
   let thread_id = gid.x;
   let priv = add_offset(target.base, thread_id);
   
-  // CRITIQUE FIX: De originele code had foute Gx en Gy coördinaten. Hier staan de échte secp256k1 constanten.
   var Gx: U256;
   Gx.limbs[0]=0x16F81798u; Gx.limbs[1]=0x59F2815Bu; Gx.limbs[2]=0x2DCE28D9u; Gx.limbs[3]=0x029BFCDBu;
   Gx.limbs[4]=0xCE870B07u; Gx.limbs[5]=0x55A06295u; Gx.limbs[6]=0xF9DCBBACu; Gx.limbs[7]=0x79BE667Eu;
@@ -635,12 +631,11 @@ async function runSearch(){
     if(!isRunning) return;
     
     if(sliceScanned >= currentSliceLimit){
-      // CRITIQUE FIX: Zorg dat het script correct stopt en niet infinite-loopt als je maar een kleine range test!
       if(currentSliceLimit >= totalRange) {
          setRunning(false);
          document.getElementById('statusVal').textContent = 'Klaar (Geen Match)';
          log('🏁 Volledige range is doorzocht, maar geen match gevonden.', 'warn');
-         return; // verbreek de loop
+         return;
       }
       
       slicesCount++;
