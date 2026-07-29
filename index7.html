@@ -257,6 +257,8 @@ fn mul_mod_p(a: U256, b: U256) -> U256 {
       let val = r[u32(i)];
       if (val == 0u) { continue; }
       
+      r[u32(i)] = 0u; // ✅ FIX: Reset de actuele limb zodat we geen dubbele reductie doen
+      
       var carry: u32 = 0u;
       let m = umulExtended(val, 977u);
       var j = u32(i) - 8u;
@@ -284,37 +286,40 @@ fn mul_mod_p(a: U256, b: U256) -> U256 {
       }
   }
   
-  var res: U256;
-  for(var i:u32=0u;i<8u;i=i+1u){ res.limbs[i] = r[i]; }
-  
+  // Vang de laatste eventuele carry overflow op array 'r' af (veiliger dan op res)
   if (r[8] > 0u) {
       let val = r[8];
+      r[8] = 0u;
       var carry: u32 = 0u;
       let m = umulExtended(val, 977u);
       var j = 0u;
       
-      var s1 = res.limbs[j] + m.x;
-      var c1 = select(0u, 1u, s1 < res.limbs[j]);
-      res.limbs[j] = s1;
+      var s1 = r[j] + m.x;
+      var c1 = select(0u, 1u, s1 < r[j]);
+      r[j] = s1;
       carry = m.y + c1;
       
       j = j + 1u;
-      while(carry > 0u && j < 8u) {
-          var s = res.limbs[j] + carry;
-          carry = select(0u, 1u, s < res.limbs[j]);
-          res.limbs[j] = s;
+      while(carry > 0u && j < 16u) {
+          var s = r[j] + carry;
+          carry = select(0u, 1u, s < r[j]);
+          r[j] = s;
           j = j + 1u;
       }
       
       carry = val;
       j = 1u;
-      while(carry > 0u && j < 8u) {
-          var s = res.limbs[j] + carry;
-          carry = select(0u, 1u, s < res.limbs[j]);
-          res.limbs[j] = s;
+      while(carry > 0u && j < 16u) {
+          var s = r[j] + carry;
+          carry = select(0u, 1u, s < r[j]);
+          r[j] = s;
           j = j + 1u;
       }
   }
+  
+  // Converteer nu pas naar het eindresultaat U256
+  var res: U256;
+  for(var i:u32=0u;i<8u;i=i+1u){ res.limbs[i] = r[i]; }
   
   let p = get_p();
   if (ge(res, p)) { res = sub_mod_p(res, p); }
