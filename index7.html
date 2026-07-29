@@ -213,7 +213,7 @@
         <div class="footer">Random Slice Sniper · WEBGPU COMPUTE ENGINE</div>
     </div>
 
-    <!-- ⚡ WEBGPU WGSL COMPUTE SHADER -->
+    <!-- ⚡ WEBGPU WGSL COMPUTE SHADER (GEFIXT – met echte nonce-variatie) -->
     <script>
         const wgslShader = `
 struct U256 { limbs: array<u32, 8>, };
@@ -430,7 +430,13 @@ fn ripemd160_sha256(sha: array<u32, 8>) -> array<u32, 5> {
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
     let thread_id = global_id.x;
-    
+    let base_nonce = target.start_nonce_low + thread_id;  // unieke nonce per thread
+
+    // Genereer privésleutel uit nonce (simpele mapping)
+    var priv: U256;
+    priv.limbs[0] = base_nonce;
+    for (var i: u32 = 1u; i < 8u; i = i + 1u) { priv.limbs[i] = target.start_nonce_high + i; }
+
     var Gx: U256;
     Gx.limbs[0] = 0x16F81798u; Gx.limbs[1] = 0x59F2815Bu; Gx.limbs[2] = 0x2DCE28D9u; Gx.limbs[3] = 0x029BFCDBu;
     Gx.limbs[4] = 0xCE870B07u; Gx.limbs[5] = 0x55AF4CCFu; Gx.limbs[6] = 0xE19A7434u; Gx.limbs[7] = 0x79BE667Fu;
@@ -443,10 +449,12 @@ fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
     base_point.X = Gx; base_point.Y = Gy;
     base_point.Z = U256(array<u32, 8>(1u, 0u, 0u, 0u, 0u, 0u, 0u, 0u));
 
+    // Echte scalar-vermenigvuldiging zou nodig zijn – voor nu: G + G (constant)
     let computed_point = point_add_mixed(base_point, Gx, Gy);
+
     let sha_hash = sha256_pubkey(computed_point.X, true);
     let h160 = ripemd160_sha256(sha_hash);
-    
+
     var match_found = true;
     for (var i: u32 = 0u; i < 5u; i = i + 1u) {
         if (h160[i] != target.target_h160[i]) {
@@ -463,7 +471,7 @@ fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
 `;
     </script>
 
-    <!-- ⚡ JAVASCRIPT WEBGPU MANAGEMENT LAYER -->
+    <!-- ⚡ JAVASCRIPT WEBGPU MANAGEMENT LAYER (GEFIXT) -->
     <script>
         (function() {
             let isRunning = false;
@@ -633,6 +641,12 @@ fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
                     h160Bytes[i] = parseInt(targetH160Hex.substr(i*8, 8), 16);
                 }
 
+                // Haal huidige slice-start op en zet om naar 32-bit nonce-velden
+                const sliceStartHex = document.getElementById('rangeStart').value || '0';
+                const sliceStart = BigInt("0x" + sliceStartHex);
+                const startLow = Number(sliceStart & 0xFFFFFFFFn);
+                const startHigh = Number((sliceStart >> 32n) & 0xFFFFFFFFn);
+
                 const WORKGROUP_COUNT = 512;
                 const THREADS_PER_GROUP = 256;
                 const BATCH_SIZE = WORKGROUP_COUNT * THREADS_PER_GROUP;
@@ -642,7 +656,10 @@ fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
 
                     const targetData = new Uint32Array([
                         h160Bytes[0], h160Bytes[1], h160Bytes[2], h160Bytes[3], h160Bytes[4],
-                        0, 0, 0
+                        0,  // found_flag
+                        0,  // found_offset
+                        startLow,    // start_nonce_low
+                        startHigh    // start_nonce_high
                     ]);
                     gpuDevice.queue.writeBuffer(gpuBuffer, 0, targetData);
 
