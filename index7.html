@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>WebGPU Slice Scanner – Puzzel #71</title>
+    <title>WebGPU Slice Scanner – Custom Range</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -47,6 +47,7 @@
         }
         .field input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,255,153,.12); }
         .field input[readonly] { color: var(--accent2); }
+        .field input.editable { color: var(--warn); }
         .divider { border: none; border-top: 1px dashed var(--dim); margin: 14px 0; }
         .btn-row { display: flex; gap: 10px; margin-top: 4px; }
         .btn {
@@ -57,6 +58,7 @@
         .btn:disabled { opacity: .35; cursor: not-allowed; }
         .btn-start { background: var(--success); color: #000; }
         .btn-stop { background: var(--danger); color: #fff; }
+        .btn-random { background: var(--accent2); color: #000; flex: 0.5; }
         .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .stat-cell { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 10px 14px; }
         .stat-cell .label { font-size: .6rem; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
@@ -75,13 +77,16 @@
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: var(--surface); }
         ::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 3px; }
+        .range-info {
+            font-size: .62rem; color: var(--muted); margin-top: 4px; text-align: right;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>⚡ WebGPU Slice Scanner</h1>
-            <div class="sub">Puzzel #71 – GPU Accelerated Random Slice</div>
+            <div class="sub">Custom Range – GPU Accelerated Search</div>
             <span class="badge">🚀 WebGPU COMPUTE SHADER</span>
         </div>
         
@@ -97,6 +102,16 @@
             </div>
             <hr class="divider">
             <div class="field">
+                <label>🟢 Zoekrange Start (HEX)</label>
+                <input id="searchRangeStart" value="400000000000000000" type="text" class="editable" placeholder="HEX waarde">
+            </div>
+            <div class="field">
+                <label>🔴 Zoekrange Eind (HEX)</label>
+                <input id="searchRangeEnd" value="7fffffffffffffffff" type="text" class="editable" placeholder="HEX waarde">
+            </div>
+            <div class="range-info">💡 Hier kun je je eigen zoekrange instellen (bijv. voor andere puzzels of tests)</div>
+            <hr class="divider">
+            <div class="field">
                 <label>Huidige Slice Start</label>
                 <input id="rangeStart" value="" type="text" readonly>
             </div>
@@ -107,6 +122,7 @@
             <div class="btn-row">
                 <button class="btn btn-start" id="startBtn">▶ Start GPU Scan</button>
                 <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
+                <button class="btn btn-random" id="randomBtn">🎲 Random Slice</button>
             </div>
         </div>
         
@@ -139,7 +155,7 @@
             </table>
         </div>
         
-        <div class="footer">WebGPU Slice Scanner · Compute Shader Engine</div>
+        <div class="footer">WebGPU Slice Scanner · Custom Range Engine</div>
     </div>
 
     <script>
@@ -147,6 +163,7 @@
         const logBox = document.getElementById('logBox');
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
+        const randomBtn = document.getElementById('randomBtn');
         const statusVal = document.getElementById('statusVal');
         const progressBar = document.getElementById('progressBar');
         const speedEl = document.getElementById('speed');
@@ -157,6 +174,8 @@
         const matchTable = document.getElementById('matchTable');
         const rangeStartEl = document.getElementById('rangeStart');
         const rangeEndEl = document.getElementById('rangeEnd');
+        const searchRangeStartEl = document.getElementById('searchRangeStart');
+        const searchRangeEndEl = document.getElementById('searchRangeEnd');
 
         function log(msg) {
             const ts = new Date().toLocaleTimeString('nl-NL');
@@ -180,10 +199,10 @@
         let slicesVisited = 1;
         let targetH160Bytes = null;
         let currentSliceBase = 0n;
+        let currentSliceSize = 34359738368n; // 2^35 default
         let lastSpeedTime = 0;
         let lastSpeedScanned = 0n;
         
-        const SLICE_SIZE = 34359738368n; // 2^35
         const BATCH = 65536n; // 256*256 workgroups
         const WORKGROUP_SIZE = 256;
 
@@ -216,31 +235,78 @@
             return bytes.slice(1, 21); // 20 bytes H160
         }
 
+        function getCustomRange() {
+            try {
+                const startHex = searchRangeStartEl.value.trim();
+                const endHex = searchRangeEndEl.value.trim();
+                
+                if (!startHex || !endHex) {
+                    // Default naar puzzel #71 range
+                    return {
+                        start: BigInt("0x400000000000000000"),
+                        end: BigInt("0x7fffffffffffffffff")
+                    };
+                }
+                
+                const startBI = BigInt("0x" + startHex);
+                const endBI = BigInt("0x" + endHex);
+                
+                if (startBI >= endBI) {
+                    throw new Error('Start moet kleiner zijn dan eind');
+                }
+                
+                return { start: startBI, end: endBI };
+            } catch (e) {
+                log('❌ Ongeldige range: ' + e.message);
+                return {
+                    start: BigInt("0x400000000000000000"),
+                    end: BigInt("0x7fffffffffffffffff")
+                };
+            }
+        }
+
         function generateRandomSlice() {
-            const globalStart = BigInt("0x400000000000000000");
-            const globalEnd = BigInt("0x7fffffffffffffffff");
-            const maxOffset = (globalEnd - globalStart + 1n) - SLICE_SIZE;
+            const range = getCustomRange();
+            const totalRange = range.end - range.start + 1n;
             
-            const bytes = new Uint8Array(32);
-            crypto.getRandomValues(bytes);
-            let rand = 0n;
-            for (let i = 0; i < 32; i++) {
-                rand = (rand << 8n) | BigInt(bytes[i]);
+            // Pas slice size aan op basis van de totale range
+            if (totalRange < currentSliceSize) {
+                currentSliceSize = totalRange;
             }
             
-            const offset = rand % maxOffset;
-            const sliceStart = globalStart + offset;
-            const sliceEnd = sliceStart + SLICE_SIZE - 1n;
+            const maxOffset = totalRange - currentSliceSize;
             
-            currentSliceBase = sliceStart;
-            rangeStartEl.value = sliceStart.toString(16).padStart(16, '0');
+            if (maxOffset <= 0n) {
+                // Range is kleiner dan slice size, gebruik de hele range
+                currentSliceBase = range.start;
+                currentSliceSize = totalRange;
+            } else {
+                const bytes = new Uint8Array(32);
+                crypto.getRandomValues(bytes);
+                let rand = 0n;
+                for (let i = 0; i < 32; i++) {
+                    rand = (rand << 8n) | BigInt(bytes[i]);
+                }
+                
+                const offset = rand % maxOffset;
+                currentSliceBase = range.start + offset;
+            }
+            
+            const sliceEnd = currentSliceBase + currentSliceSize - 1n;
+            
+            rangeStartEl.value = currentSliceBase.toString(16).padStart(16, '0');
             rangeEndEl.value = sliceEnd.toString(16).padStart(16, '0');
+            
+            log(`🎲 Nieuw slice: ${currentSliceBase.toString(16).substring(0, 8)}... - ${sliceEnd.toString(16).substring(0, 8)}...`);
         }
 
         function setRunning(running) {
             isRunning = running;
             startBtn.disabled = running;
             stopBtn.disabled = !running;
+            randomBtn.disabled = running;
+            searchRangeStartEl.disabled = running;
+            searchRangeEndEl.disabled = running;
         }
 
         // WGSL Shader - Vereenvoudigde maar correcte structuur
@@ -422,6 +488,15 @@
                 
                 const currentBaseKey = currentSliceBase + sliceScanned;
                 
+                // Check of we binnen de custom range blijven
+                const range = getCustomRange();
+                if (currentBaseKey > range.end) {
+                    log('⚠️ Buiten zoekrange, nieuwe slice genereren...');
+                    sliceScanned = 0n;
+                    generateRandomSlice();
+                    continue;
+                }
+                
                 // Dispatch GPU batch
                 const result = await dispatchGPUBatch(currentBaseKey);
                 
@@ -483,6 +558,10 @@
                     await initWebGPU();
                 }
                 
+                // Valideer custom range
+                const range = getCustomRange();
+                log(`📐 Zoekrange: ${range.start.toString(16)} - ${range.end.toString(16)}`);
+                
                 if (!rangeStartEl.value) {
                     generateRandomSlice();
                 }
@@ -507,11 +586,18 @@
             log('⏹️ Gestopt door gebruiker');
         };
 
+        randomBtn.onclick = () => {
+            if (!isRunning) {
+                generateRandomSlice();
+                log('🎲 Handmatig nieuwe random slice gegenereerd');
+            }
+        };
+
         // Init
         generateRandomSlice();
-        log('🟢 WebGPU Slice Scanner gereed');
-        log(`📐 Slice grootte: ${SLICE_SIZE.toLocaleString('nl-NL')} keys`);
-        log('💡 Klik Start om GPU scan te beginnen');
+        log('🟢 WebGPU Slice Scanner gereed met custom range support');
+        log('💡 Pas de zoekrange aan of gebruik de standaard Puzzel #71 range');
+        log('🎯 Gebruik de Random Slice knop voor een nieuwe slice binnen je range');
     </script>
 </body>
 </html>
