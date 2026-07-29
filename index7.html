@@ -69,11 +69,11 @@
     <hr style="border:none;border-top:1px dashed var(--dim);margin:10px 0;">
     <div class="field">
       <label>🟢 Zoekrange Start (HEX)</label>
-      <input type="text" id="searchRangeStart" value="400000000000000000" class="editable">
+      <input type="text" id="searchRangeStart" value="100000" class="editable">
     </div>
     <div class="field">
       <label>🔴 Zoekrange Eind (HEX)</label>
-      <input type="text" id="searchRangeEnd" value="7fffffffffffffffff" class="editable">
+      <input type="text" id="searchRangeEnd" value="1fffff" class="editable">
     </div>
     <div class="range-info">💡 Stel hier je eigen volledige zoekrange in (zonder 0x prefix).</div>
     <hr style="border:none;border-top:1px dashed var(--dim);margin:10px 0;">
@@ -577,8 +577,8 @@ function generateRandomSlice(){
     const startHex = document.getElementById('searchRangeStart').value.trim();
     const endHex = document.getElementById('searchRangeEnd').value.trim();
     
-    rangeStartBI = BigInt("0x" + (startHex || "400000000000000000"));
-    const rangeEndBI = BigInt("0x" + (endHex || "7fffffffffffffffff"));
+    rangeStartBI = BigInt("0x" + (startHex || "100000"));
+    const rangeEndBI = BigInt("0x" + (endHex || "1fffff"));
     
     if (rangeStartBI > rangeEndBI) throw new Error('Start range kan niet groter zijn dan eind range.');
     
@@ -588,23 +588,23 @@ function generateRandomSlice(){
     currentSliceLimit = requestedLimit < totalRange ? requestedLimit : totalRange;
     document.getElementById('limitDisplay').textContent = Number(currentSliceLimit).toLocaleString('nl-NL');
     
-    // Als de range kleiner is dan de limiet, starten we exact bij het begin van de range (geen random offset)
     let offset = 0n;
     const maxOffset = totalRange - currentSliceLimit;
     if(maxOffset > 0n){
-      const bytes = new Uint8Array(8);
-      window.crypto.getRandomValues(bytes);
+      // Cryptographically secure random via Web Crypto API (64-bit)
+      const randomBytes = new Uint8Array(8);
+      window.crypto.getRandomValues(randomBytes);
       let rand = 0n;
-      for(let b of bytes) rand = (rand << 8n) + BigInt(b);
+      for(let b of randomBytes) rand = (rand << 8n) + BigInt(b);
       offset = rand % (maxOffset + 1n);
     }
     
     baseKey = rangeStartBI + offset;
     const endKey = baseKey + currentSliceLimit - 1n;
 
-    document.getElementById('rangeStart').value = baseKey.toString(16);
-    document.getElementById('rangeEnd').value = endKey.toString(16);
-    log(`Plakje geladen (#${slicesCount}). Start: 0x${baseKey.toString(16)}`);
+    document.getElementById('rangeStart').value = baseKey.toString(16).toUpperCase();
+    document.getElementById('rangeEnd').value = endKey.toString(16).toUpperCase();
+    log(`Plakje geladen (#${slicesCount}). Start: 0x${baseKey.toString(16).toUpperCase()}`);
   } catch(e) {
     log('❌ Fout bij genereren slice: ' + e.message, 'danger');
   }
@@ -637,16 +637,17 @@ async function runSearch(){
     const buf = new ArrayBuffer(4*5 + 4 + 4 + 4*8 + 4);
     const dv = new DataView(buf);
     
-    // FIX: Correcte invulling van target_h160 zodat endianness klopt met de GPU shader
-    for(let i = 0; i < 5; i++) {
-      if (targetH160 && targetH160.length >= (i + 1) * 4) {
-        const word = (targetH160[i * 4] | 
-                     (targetH160[i * 4 + 1] << 8) | 
-                     (targetH160[i * 4 + 2] << 16) | 
-                     (targetH160[i * 4 + 3] << 24)) >>> 0;
-        dv.setUint32(i * 4, word, true);
-      } else {
-        dv.setUint32(i * 4, 0, true);
+    // FIX: Correcte LE invulling van target_h160
+    if (targetH160) {
+      const h160Words = new Uint32Array(5);
+      for (let i = 0; i < 20; i += 4) {
+        h160Words[i / 4] = (targetH160[i + 0]       ) |
+                           (targetH160[i + 1] << 8 ) |
+                           (targetH160[i + 2] << 16) |
+                           (targetH160[i + 3] << 24);
+      }
+      for (let i = 0; i < 5; i++) {
+        dv.setUint32(i * 4, h160Words[i], true); // Little-endian
       }
     }
 
@@ -677,8 +678,8 @@ async function runSearch(){
       const foundPriv = currentKey + BigInt(foundOffset);
       const hexKey = toHex32(foundPriv);
       document.getElementById('statusVal').textContent = '🎉 GEVONDEN';
-      document.getElementById('matchTable').innerHTML = `<tr><td>✅ MATCH</td><td style="color:var(--warn); font-weight:bold;">${hexKey}</td></tr>`;
-      log(`🔥 Match gevonden! Privésleutel: ${hexKey}`, 'warn');
+      document.getElementById('matchTable').innerHTML = `<tr><td>✅ MATCH</td><td style="color:var(--warn); font-weight:bold;">${hexKey.toUpperCase()}</td></tr>`;
+      log(`🔥 Match gevonden! Privésleutel: ${hexKey.toUpperCase()}`, 'warn');
       return;
     }
 
