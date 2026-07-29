@@ -213,7 +213,7 @@
         <div class="footer">Random Slice Sniper · WEBGPU COMPUTE ENGINE</div>
     </div>
 
-    <!-- ⚡ WEBGPU WGSL COMPUTE SHADER (GEFIXT – met echte nonce-variatie) -->
+    <!-- ⚡ WEBGPU WGSL COMPUTE SHADER – THEORETISCH CORRECT -->
     <script>
         const wgslShader = `
 struct U256 { limbs: array<u32, 8>, };
@@ -244,7 +244,14 @@ fn get_prime_p() -> U256 {
     return p;
 }
 
-fn add_mod(a: U256, b: U256) -> U256 {
+fn get_prime_n() -> U256 {
+    var n: U256;
+    n.limbs[0] = 0xD0364141u; n.limbs[1] = 0xBFD25E8Cu; n.limbs[2] = 0xAF48A03Bu; n.limbs[3] = 0xBAAEDCE6u;
+    n.limbs[4] = 0xFFFFFFFFu; n.limbs[5] = 0xFFFFFFFFu; n.limbs[6] = 0xFFFFFFFFu; n.limbs[7] = 0xFFFFFFFFu;
+    return n;
+}
+
+fn add_mod_p(a: U256, b: U256) -> U256 {
     var res: U256; var carry: u32 = 0u;
     for (var i: u32 = 0u; i < 8u; i = i + 1u) {
         let sum = a.limbs[i] + b.limbs[i] + carry;
@@ -268,7 +275,7 @@ fn add_mod(a: U256, b: U256) -> U256 {
     return res;
 }
 
-fn sub_mod(a: U256, b: U256) -> U256 {
+fn sub_mod_p(a: U256, b: U256) -> U256 {
     var res: U256; var borrow: u32 = 0u;
     for (var i: u32 = 0u; i < 8u; i = i + 1u) {
         let diff = a.limbs[i] - b.limbs[i] - borrow;
@@ -282,6 +289,30 @@ fn sub_mod(a: U256, b: U256) -> U256 {
             let sum = res.limbs[i] + p.limbs[i] + add_carry;
             add_carry = select(0u, 1u, (sum < res.limbs[i]));
             res.limbs[i] = sum;
+        }
+    }
+    return res;
+}
+
+fn add_mod_n(a: U256, b: U256) -> U256 {
+    var res: U256; var carry: u32 = 0u;
+    for (var i: u32 = 0u; i < 8u; i = i + 1u) {
+        let sum = a.limbs[i] + b.limbs[i] + carry;
+        carry = select(0u, 1u, (sum < a.limbs[i]) || (carry > 0u && sum == a.limbs[i]));
+        res.limbs[i] = sum;
+    }
+    let n = get_prime_n();
+    var ge = true;
+    for (var i: i32 = 7; i >= 0; i = i - 1) {
+        if (res.limbs[u32(i)] > n.limbs[u32(i)]) { break; }
+        if (res.limbs[u32(i)] < n.limbs[u32(i)]) { ge = false; break; }
+    }
+    if (ge || carry > 0u) {
+        var sub_carry: u32 = 0u;
+        for (var i: u32 = 0u; i < 8u; i = i + 1u) {
+            let diff = res.limbs[i] - n.limbs[i] - sub_carry;
+            sub_carry = select(0u, 1u, (res.limbs[i] < n.limbs[i] + sub_carry));
+            res.limbs[i] = diff;
         }
     }
     return res;
@@ -314,32 +345,68 @@ fn mod_p_256(val: U512) -> U256 {
     let h_mul = mul_256(high, c);
     var h_reduced: U256;
     for (var i: u32 = 0u; i < 8u; i = i + 1u) { h_reduced.limbs[i] = h_mul.limbs[i]; }
-    return add_mod(low, h_reduced);
+    return add_mod_p(low, h_reduced);
 }
 
-fn mul_mod(a: U256, b: U256) -> U256 {
+fn mul_mod_p(a: U256, b: U256) -> U256 {
     return mod_p_256(mul_256(a, b));
 }
 
-fn sqr_mod(a: U256) -> U256 { return mul_mod(a, a); }
-fn double_mod(a: U256) -> U256 { return add_mod(a, a); }
-fn triple_mod(a: U256) -> U256 { return add_mod(double_mod(a), a); }
+fn sqr_mod_p(a: U256) -> U256 { return mul_mod_p(a, a); }
+fn double_mod_p(a: U256) -> U256 { return add_mod_p(a, a); }
+fn triple_mod_p(a: U256) -> U256 { return add_mod_p(double_mod_p(a), a); }
 
-fn point_add_mixed(p1: PointJ, x2: U256, y2: U256) -> PointJ {
+fn point_double(p1: PointJ) -> PointJ {
     var res: PointJ;
-    let Z1Sq = sqr_mod(p1.Z);
-    let U2 = mul_mod(x2, Z1Sq);
-    let S2 = mul_mod(y2, mul_mod(p1.Z, Z1Sq));
-    let H = sub_mod(U2, p1.X);
-    let R = sub_mod(S2, p1.Y);
-    let HSq = sqr_mod(H);
-    let HCube = mul_mod(H, HSq);
-    let V = mul_mod(p1.X, HSq);
-    let X3 = sub_mod(sub_mod(sqr_mod(R), HCube), double_mod(V));
-    let Y3 = sub_mod(mul_mod(R, sub_mod(V, X3)), mul_mod(p1.Y, HCube));
-    let Z3 = mul_mod(p1.Z, H);
+    let Z1Sq = sqr_mod_p(p1.Z);
+    let Z1SqSq = sqr_mod_p(Z1Sq);
+    let Y1Sq = sqr_mod_p(p1.Y);
+    let S = mul_mod_p(triple_mod_p(sqr_mod_p(p1.X)), Z1Sq);
+    let T = mul_mod_p(mul_mod_p(p1.X, Y1Sq), 4u);
+    let U = mul_mod_p(mul_mod_p(Y1Sq, Y1Sq), 8u);
+    let X3 = sub_mod_p(sqr_mod_p(S), double_mod_p(T));
+    let Y3 = sub_mod_p(mul_mod_p(S, sub_mod_p(T, X3)), U);
+    let Z3 = mul_mod_p(double_mod_p(p1.Y), p1.Z);
     res.X = X3; res.Y = Y3; res.Z = Z3;
     return res;
+}
+
+fn point_add(p1: PointJ, p2: PointJ) -> PointJ {
+    var res: PointJ;
+    let Z1Sq = sqr_mod_p(p1.Z);
+    let Z2Sq = sqr_mod_p(p2.Z);
+    let U1 = mul_mod_p(p1.X, Z2Sq);
+    let U2 = mul_mod_p(p2.X, Z1Sq);
+    let S1 = mul_mod_p(mul_mod_p(p1.Y, p2.Z), Z2Sq);
+    let S2 = mul_mod_p(mul_mod_p(p2.Y, p1.Z), Z1Sq);
+    let H = sub_mod_p(U2, U1);
+    let R = sub_mod_p(S2, S1);
+    let HSq = sqr_mod_p(H);
+    let HCube = mul_mod_p(H, HSq);
+    let V = mul_mod_p(U1, HSq);
+    let X3 = sub_mod_p(sub_mod_p(sqr_mod_p(R), HCube), double_mod_p(V));
+    let Y3 = sub_mod_p(mul_mod_p(R, sub_mod_p(V, X3)), mul_mod_p(S1, HCube));
+    let Z3 = mul_mod_p(p1.Z, mul_mod_p(p2.Z, H));
+    res.X = X3; res.Y = Y3; res.Z = Z3;
+    return res;
+}
+
+fn scalar_mult(scalar: U256, point: PointJ) -> PointJ {
+    var result: PointJ;
+    result.X = U256(array<u32,8>(0u,0u,0u,0u,0u,0u,0u,0u));
+    result.Y = U256(array<u32,8>(1u,0u,0u,0u,0u,0u,0u,0u));
+    result.Z = U256(array<u32,8>(1u,0u,0u,0u,0u,0u,0u,0u));
+
+    var current = point;
+    var s = scalar;
+    for (var i: u32 = 0u; i < 256u; i = i + 1u) {
+        let bit = (s.limbs[i / 32u] >> (i % 32u)) & 1u;
+        if (bit == 1u) {
+            result = point_add(result, current);
+        }
+        current = point_double(current);
+    }
+    return result;
 }
 
 const K256 = array<u32, 64>(
@@ -430,13 +497,20 @@ fn ripemd160_sha256(sha: array<u32, 8>) -> array<u32, 5> {
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
     let thread_id = global_id.x;
-    let base_nonce = target.start_nonce_low + thread_id;  // unieke nonce per thread
+    let nonce = target.start_nonce_low + thread_id;
 
-    // Genereer privésleutel uit nonce (simpele mapping)
+    // Bouw een privésleutel (256-bit) uit de nonce
     var priv: U256;
-    priv.limbs[0] = base_nonce;
-    for (var i: u32 = 1u; i < 8u; i = i + 1u) { priv.limbs[i] = target.start_nonce_high + i; }
+    priv.limbs[0] = nonce;
+    priv.limbs[1] = target.start_nonce_high;
+    priv.limbs[2] = target.start_nonce_high + 1u;
+    priv.limbs[3] = target.start_nonce_high + 2u;
+    priv.limbs[4] = target.start_nonce_high + 3u;
+    priv.limbs[5] = target.start_nonce_high + 4u;
+    priv.limbs[6] = target.start_nonce_high + 5u;
+    priv.limbs[7] = target.start_nonce_high + 6u;
 
+    // Secp256k1 generator
     var Gx: U256;
     Gx.limbs[0] = 0x16F81798u; Gx.limbs[1] = 0x59F2815Bu; Gx.limbs[2] = 0x2DCE28D9u; Gx.limbs[3] = 0x029BFCDBu;
     Gx.limbs[4] = 0xCE870B07u; Gx.limbs[5] = 0x55AF4CCFu; Gx.limbs[6] = 0xE19A7434u; Gx.limbs[7] = 0x79BE667Fu;
@@ -445,14 +519,17 @@ fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
     Gy.limbs[0] = 0xFB10D4B8u; Gy.limbs[1] = 0x9C47D08Fu; Gy.limbs[2] = 0xA6855419u; Gy.limbs[3] = 0xFD17B448u;
     Gy.limbs[4] = 0x0E1108A8u; Gy.limbs[5] = 0x53BDE4E6u; Gy.limbs[6] = 0x39E36CE3u; Gy.limbs[7] = 0x483ADA77u;
 
-    var base_point: PointJ;
-    base_point.X = Gx; base_point.Y = Gy;
-    base_point.Z = U256(array<u32, 8>(1u, 0u, 0u, 0u, 0u, 0u, 0u, 0u));
+    var G: PointJ;
+    G.X = Gx; G.Y = Gy; G.Z = U256(array<u32, 8>(1u, 0u, 0u, 0u, 0u, 0u, 0u, 0u));
 
-    // Echte scalar-vermenigvuldiging zou nodig zijn – voor nu: G + G (constant)
-    let computed_point = point_add_mixed(base_point, Gx, Gy);
+    // Bereken P = priv * G (scalar-vermenigvuldiging)
+    let P = scalar_mult(priv, G);
 
-    let sha_hash = sha256_pubkey(computed_point.X, true);
+    // Converteer Jacobiaans naar affien (Z = 1)
+    var pubX = P.X;
+    var is_even = (P.Y.limbs[0] & 1u) == 0u;
+
+    let sha_hash = sha256_pubkey(pubX, is_even);
     let h160 = ripemd160_sha256(sha_hash);
 
     var match_found = true;
@@ -471,7 +548,7 @@ fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
 `;
     </script>
 
-    <!-- ⚡ JAVASCRIPT WEBGPU MANAGEMENT LAYER (GEFIXT) -->
+    <!-- ⚡ JAVASCRIPT WEBGPU MANAGEMENT LAYER -->
     <script>
         (function() {
             let isRunning = false;
@@ -641,7 +718,6 @@ fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
                     h160Bytes[i] = parseInt(targetH160Hex.substr(i*8, 8), 16);
                 }
 
-                // Haal huidige slice-start op en zet om naar 32-bit nonce-velden
                 const sliceStartHex = document.getElementById('rangeStart').value || '0';
                 const sliceStart = BigInt("0x" + sliceStartHex);
                 const startLow = Number(sliceStart & 0xFFFFFFFFn);
@@ -656,10 +732,7 @@ fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
 
                     const targetData = new Uint32Array([
                         h160Bytes[0], h160Bytes[1], h160Bytes[2], h160Bytes[3], h160Bytes[4],
-                        0,  // found_flag
-                        0,  // found_offset
-                        startLow,    // start_nonce_low
-                        startHigh    // start_nonce_high
+                        0, 0, startLow, startHigh
                     ]);
                     gpuDevice.queue.writeBuffer(gpuBuffer, 0, targetData);
 
