@@ -161,7 +161,7 @@ function decodeBase58Address(address) {
 
 function toHex32(bn){ return bn.toString(16).padStart(64,'0'); }
 
-// WGSL shader - volledig geoptimaliseerd
+// WGSL shader - met CORRECTE offset verwerking
 const wgslShader = `
 struct U256 { limbs: array<u32,8>, };
 struct PointJ { X: U256, Y: U256, Z: U256, };
@@ -473,9 +473,11 @@ fn ripemd160_of_sha(sha: array<u32,8>) -> array<u32,5> {
   return out;
 }
 fn rotl(v:u32,n:u32)->u32{ return (v<<n)|(v>>(32u-n)); }
-fn add_offset(base: array<u32,8>, offset: u32) -> U256 {
+
+// CORRECTE offset verwerking: voeg batch_start toe aan base
+fn add_offset_with_batch(base: array<u32,8>, batch_start: u32, offset: u32) -> U256 {
   var res: U256;
-  var carry: u32 = offset;
+  var carry: u32 = batch_start + offset;
   for(var i:u32=0u;i<8u;i=i+1u){
     let s = base[i] + carry;
     carry = select(0u, 1u, s < base[i]);
@@ -483,10 +485,11 @@ fn add_offset(base: array<u32,8>, offset: u32) -> U256 {
   }
   return res;
 }
+
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>){
   let thread_id = gid.x;
-  let priv = add_offset(target.base, thread_id);
+  let priv = add_offset_with_batch(target.base, target.batch_start, thread_id);
   
   var Gx: U256;
   Gx.limbs[0]=0x16F81798u; Gx.limbs[1]=0x59F2815Bu; Gx.limbs[2]=0x2DCE28D9u; Gx.limbs[3]=0x029BFCDBu;
@@ -582,7 +585,6 @@ function generateRandomSlice(){
     let offset = 0n;
     const maxOffset = totalRange - currentSliceLimit;
     if(maxOffset > 0n){
-      // Cryptografisch veilige random (Web Crypto API)
       const randomBytes = new Uint8Array(8);
       window.crypto.getRandomValues(randomBytes);
       let rand = 0n;
@@ -623,12 +625,12 @@ async function runSearch(){
     }
 
     const currentKey = baseKey + sliceScanned;
-    const baseLimbs = u256ToLimbs(currentKey);
+    const baseLimbs = u256ToLimbs(baseKey); // Base blijft constant
+    const batchStart = Number(sliceScanned); // Huidige batch start
 
     const buf = new ArrayBuffer(4*5 + 4 + 4 + 4*8 + 4);
     const dv = new DataView(buf);
     
-    // FIX: Juiste LE invulling van target_h160 voor GPU
     if (targetH160) {
       const h160Words = new Uint32Array(5);
       for (let i = 0; i < 20; i += 4) {
@@ -638,14 +640,14 @@ async function runSearch(){
                            (targetH160[i + 3] << 24);
       }
       for (let i = 0; i < 5; i++) {
-        dv.setUint32(i * 4, h160Words[i], true); // Little-endian
+        dv.setUint32(i * 4, h160Words[i], true);
       }
     }
 
     dv.setUint32(20, 0, true); // found_flag
     dv.setUint32(24, 0, true); // found_offset
     for(let i=0; i<8; i++) dv.setUint32(28 + i*4, baseLimbs[i], true);
-    dv.setUint32(60, 0, true); // batch_start
+    dv.setUint32(60, batchStart, true); // batch_start
     gpuDevice.queue.writeBuffer(gpuBuffer, 0, buf);
 
     const enc = gpuDevice.createCommandEncoder();
@@ -666,7 +668,7 @@ async function runSearch(){
 
     if(foundFlag === 1){
       setRunning(false);
-      const foundPriv = currentKey + BigInt(foundOffset);
+      const foundPriv = baseKey + BigInt(batchStart) + BigInt(foundOffset);
       const hexKey = toHex32(foundPriv);
       document.getElementById('statusVal').textContent = '🎉 GEVONDEN';
       document.getElementById('matchTable').innerHTML = `<tr><td>✅ MATCH</td><td style="color:var(--warn); font-weight:bold;">${hexKey.toUpperCase()}</td></tr>`;
@@ -736,7 +738,6 @@ document.getElementById('randomBtn').onclick = () => {
   generateRandomSlice();
 };
 
-// Initialiseer
 generateRandomSlice();
 log('Script is klaar. Vul je gegevens in en klik op Start.');
 </script>
