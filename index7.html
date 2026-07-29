@@ -139,9 +139,18 @@
                 <input id="keysLimit" value="50000000" type="number" min="10000">
             </div>
             <hr class="divider">
+            <div class="field">
+                <label>Meetgebied Start (HEX)</label>
+                <input id="meetStart" value="400000000000000000" type="text" style="color: var(--warn);">
+            </div>
+            <div class="field">
+                <label>Meetgebied Eind (HEX)</label>
+                <input id="meetEnd" value="7fffffffffffffffff" type="text" style="color: var(--warn);">
+            </div>
+            <hr class="divider">
             <div class="field"><label>GPU Batch Size (Keys / Dispatch)</label><input id="gpuBatch" value="1048576" type="number" step="65536"></div>
-            <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);"></div>
-            <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);"></div>
+            <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);" readonly></div>
+            <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);" readonly></div>
             <div style="font-size: 0.65rem; color: var(--muted); margin-top: 6px; text-align: right;">ℹ️ Deze HEX-waarden vernieuwen na het bereiken van je ingestelde key limiet.</div>
             <div class="btn-row">
                 <button class="btn btn-start" id="startBtn">▶ Start WebGPU Scan</button>
@@ -309,13 +318,36 @@
             }
 
             function generateRandomSlice() {
-                const globalStart = BigInt("0x400000000000000000");
-                const globalEnd = BigInt("0x7fffffffffffffffff");
-                const maxOffset = (globalEnd - globalStart + 1n) - SLICE_SIZE;
+                // Haal waardes op uit de nieuwe inputvelden en strip eventuele "0x"
+                let startHex = document.getElementById('meetStart').value.trim();
+                let endHex = document.getElementById('meetEnd').value.trim();
+                
+                if (startHex.startsWith('0x')) startHex = startHex.slice(2);
+                if (endHex.startsWith('0x')) endHex = endHex.slice(2);
+
+                let globalStart, globalEnd;
+                try {
+                    globalStart = BigInt("0x" + (startHex || "400000000000000000"));
+                    globalEnd = BigInt("0x" + (endHex || "7fffffffffffffffff"));
+                } catch (e) {
+                    // Valbeveiliging mocht je een ongeldige HEX intypen
+                    globalStart = BigInt("0x400000000000000000");
+                    globalEnd = BigInt("0x7fffffffffffffffff");
+                }
+
+                // Zorg ervoor dat end altijd groter is dan start
+                if (globalStart >= globalEnd) {
+                    globalEnd = globalStart + SLICE_SIZE;
+                }
+
+                let maxOffset = (globalEnd - globalStart + 1n) - SLICE_SIZE;
+                if (maxOffset < 0n) maxOffset = 1n; // Valbeveiliging als gebied heel klein is
+
                 const bytes = new Uint8Array(Math.ceil(maxOffset.toString(2).length / 8));
                 window.crypto.getRandomValues(bytes);
                 const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-                const rand = BigInt("0x" + hex);
+                const rand = BigInt("0x" + (hex || "0"));
+                
                 const offset = rand % maxOffset;
                 const sliceStart = globalStart + offset;
                 const sliceEnd = sliceStart + SLICE_SIZE - 1n;
@@ -483,6 +515,10 @@
                 log('WebGPU Parallel Scan gestart op videokaart.', 'ev-epoch');
                 runGpuBatch();
             }
+
+            // Luister ook naar handmatige wijzigingen in de velden zodat hij direct hopt!
+            document.getElementById('meetStart').addEventListener('change', generateRandomSlice);
+            document.getElementById('meetEnd').addEventListener('change', generateRandomSlice);
 
             startBtn.onclick = () => { startScan(); };
             stopBtn.onclick = () => { setRunning(false); setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop'); };
