@@ -484,7 +484,20 @@ async function runSearch(){
     const buf = new ArrayBuffer(4*5+4+4+4*8+4);
     const dv = new DataView(buf);
     
-    for(let i=0;i<5;i++) dv.setUint32(i*4, targetH160.length ? (targetH160[i*4]<<24|targetH160[i*4+1]<<16|targetH160[i*4+2]<<8|targetH160[i*4+3])>>>0 : 0, true);
+    // GECORRIGEERDE ENDIANNESS PACKING VOOR HASH160
+    for(let i = 0; i < 5; i++) {
+      if (targetH160 && targetH160.length >= (i + 1) * 4) {
+        const b0 = targetH160[i * 4];
+        const b1 = targetH160[i * 4 + 1];
+        const b2 = targetH160[i * 4 + 2];
+        const b3 = targetH160[i * 4 + 3];
+        const word = (b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)) >>> 0;
+        dv.setUint32(i * 4, word, true);
+      } else {
+        dv.setUint32(i * 4, 0, true);
+      }
+    }
+
     dv.setUint32(20, 0, true); 
     dv.setUint32(24, 0, true); 
     for(let i=0;i<8;i++) dv.setUint32(28+i*4, baseLimbs[i], true);
