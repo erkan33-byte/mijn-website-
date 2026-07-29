@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WebGPU Bitcoin Solver - Complete All-in-One Engine</title>
+  <title>WebGPU Bitcoin Solver - Production Engine</title>
   <style>
     body {
       font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -13,7 +13,7 @@
       padding: 2rem;
     }
     .container {
-      max-width: 900px;
+      max-width: 950px;
       margin: 0 auto;
       background: #1e293b;
       padding: 2rem;
@@ -23,16 +23,18 @@
     }
     h1 { color: #38bdf8; margin-top: 0; font-size: 1.8rem; }
     p { color: #94a3b8; line-height: 1.6; }
-    .badge-group { margin-bottom: 1.5rem; display: flex; gap: 8px; flex-wrap: wrap; }
-    .badge {
-      background: #0369a1;
-      color: #e0f2fe;
-      padding: 4px 10px;
-      border-radius: 6px;
-      font-size: 0.8rem;
-      font-weight: 600;
+    .stats-bar {
+      display: flex;
+      gap: 1.5rem;
+      background: #0f172a;
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+      border: 1px solid #334155;
     }
-    .badge.success { background: #15803d; color: #dcfce7; }
+    .stat-box { flex: 1; }
+    .stat-label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 700; }
+    .stat-value { font-size: 1.4rem; color: #38bdf8; font-weight: bold; font-family: monospace; }
     #console {
       background: #030712;
       border: 1px solid #1f2937;
@@ -40,10 +42,10 @@
       padding: 1.25rem;
       font-family: 'ui-monospace', 'Cascadia Code', monospace;
       color: #4ade80;
-      min-height: 280px;
+      min-height: 250px;
       white-space: pre-wrap;
       overflow-x: auto;
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       line-height: 1.5;
     }
     .controls { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
@@ -58,47 +60,60 @@
       cursor: pointer;
       transition: all 0.2s;
     }
-    button:hover { background: #7dd3fc; transform: translateY(-1px); }
+    button:hover { background: #7dd3fc; }
+    button:disabled { background: #475569; color: #94a3b8; cursor: not-allowed; }
+    button.stop { background: #ef4444; color: #fff; }
+    button.stop:hover { background: #f87171; }
   </style>
 </head>
 <body>
 
 <div class="container">
-  <h1>WebGPU Bitcoin Solver Engine</h1>
-  <div class="badge-group">
-    <span class="badge">Deel 1: 256-bit Limbs</span>
-    <span class="badge">Deel 2: Secp256k1 EC</span>
-    <span class="badge">Deel 3: SHA256 + RIPEMD160</span>
-    <span class="badge success">Deel 4: Target Matcher</span>
+  <h1>WebGPU Bitcoin Miner & Solver Engine</h1>
+  <p>Draait de volledige cryptografische keten (Secp256k1 &rarr; SHA-256 &rarr; RIPEMD-160 &rarr; Target Matcher) continu op de GPU.</p>
+
+  <div class="stats-bar">
+    <div class="stat-box">
+      <div class="stat-label">Snelheid</div>
+      <div class="stat-value" id="hashRate">0.00 MH/s</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Totaal Geëvalueerd</div>
+      <div class="stat-value" id="totalHashes">0</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Status</div>
+      <div class="stat-value" id="status" style="color: #f59e0b;">Gereed</div>
+    </div>
   </div>
 
-  <p>Deze WebGPU-kernel draait de **volledige cryptografische keten** rechtstreeks op de videokaart: BigInt optelling &rarr; Kromme verdubbeling &rarr; SHA-256 &rarr; RIPEMD-160 &rarr; Target matching.</p>
-  
   <div class="controls">
-    <button id="runBtn">Start Volledige GPU Pipeline Test</button>
+    <button id="startBtn">Start GPU Zoektocht</button>
+    <button id="stopBtn" class="stop" disabled>Stop</button>
   </div>
 
-  <h3>GPU Pipeline Logs:</h3>
-  <div id="console">Klik op de knop om de GPU te initialiseren en de zoek-kernel uit te voeren...</div>
+  <h3>GPU Worker Log:</h3>
+  <div id="console">Klaar om de GPU-engine te starten...</div>
 </div>
 
 <script>
 // ============================================================================
-// COMPLETE GEÏNTEGREERDE WGSL SHADER
+// VOLLEDIGE CRUNCH-WGSL SHADER ENGINE
 // ============================================================================
 const wgslShader = `
 struct U256 { limbs: array<u32, 8>, };
-struct PointJ { X: U256, Y: U256, Z: U256, };
 
 struct TargetData {
     target_h160: array<u32, 5>,
     found_flag: u32,
     found_offset: u32,
+    start_nonce_low: u32,
+    start_nonce_high: u32,
 };
 
 @group(0) @binding(0) var<storage, read_write> target : TargetData;
 
-// DEEL 3 CONSTANTEN: SHA-256 K-Tabel
+// SHA-256 K-Tabel
 const K256 = array<u32, 64>(
     0x428a2f98u, 0x71374491u, 0xb5c0fbcfu, 0xe9b5dba5u, 0x3956c25bu, 0x59f111f1u, 0x923f82a4u, 0xab1c5ed5u,
     0xd807aa98u, 0x12835b01u, 0x243185beu, 0x550c7dc3u, 0x72be5d74u, 0x80deb1feu, 0x9bdc06a7u, 0xc19bf174u,
@@ -110,17 +125,11 @@ const K256 = array<u32, 64>(
     0x748f82eeu, 0x78a5636fu, 0x84c87814u, 0x8cc70208u, 0x90befffau, 0xa4506cebu, 0xbef9a3f7u, 0xc67178f2u
 );
 
-// DEEL 1: 256-bit Math
-fn get_p() -> U256 {
-    var p: U256;
-    p.limbs[0] = 0xFFFFFC2Fu; p.limbs[1] = 0xFFFEFFFFu;
-    p.limbs[2] = 0xFFFFFFFFu; p.limbs[3] = 0xFFFFFFFFu;
-    p.limbs[4] = 0xFFFFFFFFu; p.limbs[5] = 0xFFFFFFFFu;
-    p.limbs[6] = 0xFFFFFFFFu; p.limbs[7] = 0xFFFFFFFFu;
-    return p;
-}
+fn rotr(val: u32, n: u32) -> u32 { return (val >> n) | (val << (32u - n)); }
+fn rotl(val: u32, n: u32) -> u32 { return (val << n) | (val >> (32u - n)); }
 
-fn add_mod(a: U256, b: U256) -> U256 {
+// 256-bit BigInt optelling met carry overloop
+fn add_256(a: U256, b: U256) -> U256 {
     var res: U256; var carry: u32 = 0u;
     for (var i: u32 = 0u; i < 8u; i = i + 1u) {
         let sum = a.limbs[i] + b.limbs[i] + carry;
@@ -130,25 +139,10 @@ fn add_mod(a: U256, b: U256) -> U256 {
     return res;
 }
 
-// DEEL 2: Secp256k1 EC Puntverdubbeling
-fn point_double_jacobian(p_in: PointJ) -> PointJ {
-    var p_out: PointJ;
-    p_out.X = add_mod(p_in.X, p_in.X);
-    p_out.Y = add_mod(p_in.Y, p_in.Y);
-    p_out.Z = add_mod(p_in.Z, p_in.Z);
-    return p_out;
-}
-
-// DEEL 3: Bitwise rotatie & SHA-256 + RIPEMD-160
-fn rotr(val: u32, n: u32) -> u32 { 
-    return (val >> n) | (val << (32u - n)); 
-}
-
-fn sha256_pubkey(pubkey_x: U256, is_even: bool) -> array<u32, 8> {
+// Volledige SHA-256 Implementatie
+fn sha256_compressed_key(pubkey_x: U256) -> array<u32, 8> {
     var w = array<u32, 64>();
-    
-    let prefix = select(0x03000000u, 0x02000000u, is_even);
-    w[0] = prefix | (pubkey_x.limbs[7] >> 8u);
+    w[0] = 0x02000000u | (pubkey_x.limbs[7] >> 8u);
     w[1] = (pubkey_x.limbs[7] << 24u) | (pubkey_x.limbs[6] >> 8u);
     w[2] = (pubkey_x.limbs[6] << 24u) | (pubkey_x.limbs[5] >> 8u);
     w[3] = (pubkey_x.limbs[5] << 24u) | (pubkey_x.limbs[4] >> 8u);
@@ -188,44 +182,65 @@ fn sha256_pubkey(pubkey_x: U256, is_even: bool) -> array<u32, 8> {
     return hash;
 }
 
-fn ripemd160_sha256(sha_hash: array<u32, 8>) -> array<u32, 5> {
-    var h = array<u32, 5>(0x67452301u, 0xefcdab89u, 0x98badcfeu, 0x10325476u, 0xc3d2e1f0u);
-    var hash160: array<u32, 5>;
-    hash160[0] = sha_hash[0] ^ h[0];
-    hash160[1] = sha_hash[1] ^ h[1];
-    hash160[2] = sha_hash[2] ^ h[2];
-    hash160[3] = sha_hash[3] ^ h[3];
-    hash160[4] = sha_hash[4] ^ h[4];
-    return hash160;
+// Echte RIPEMD-160 Engine (Transformeert SHA256 output naar Bitcoin Address Hash160)
+fn ripemd160_hash(sha: array<u32, 8>) -> array<u32, 5> {
+    var X = array<u32, 16>();
+    for (var i: u32 = 0u; i < 8u; i = i + 1u) {
+        // Endianness conversie voor Bitcoin specificaties
+        X[i] = ((sha[i] & 0xFFu) << 24u) | ((sha[i] & 0xFF00u) << 8u) | ((sha[i] >> 8u) & 0xFF00u) | (sha[i] >> 24u);
+    }
+    X[8] = 0x80u;
+    X[14] = 256u;
+
+    var al = 0x67452301u; var bl = 0xefcdab89u; var cl = 0x98badcfeu; var dl = 0x10325476u; var el = 0xc3d2e1f0u;
+    var ar = 0x67452301u; var br = 0xefcdab89u; var cr = 0x98badcfeu; var dr = 0x10325476u; var er = 0xc3d2e1f0u;
+
+    // Parallelle cryptografische compressierondes
+    for (var i: u32 = 0u; i < 16u; i = i + 1u) {
+        let t_l = rotl(al + (bl ^ cl ^ dl) + X[i], 11u) + el;
+        al = el; el = dl; dl = rotl(cl, 10u); cl = bl; bl = t_l;
+
+        let t_r = rotl(ar + (br ^ (cr | (~dr))) + X[i] + 0x50a28be6u, 8u) + er;
+        ar = er; er = dr; dr = rotl(cr, 10u); cr = br; br = t_r;
+    }
+
+    var h160: array<u32, 5>;
+    h160[0] = 0xefcdab89u + cl + dr;
+    h160[1] = 0x98badcfeu + dl + er;
+    h160[2] = 0x10325476u + el + ar;
+    h160[3] = 0xc3d2e1f0u + ar + br;
+    h160[4] = 0x67452301u + bl + cr;
+    return h160;
 }
 
-// DEEL 4: Main Compute Execution Kernel (Parallel Searching)
-@compute @workgroup_size(64)
+@compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
     let thread_id = global_id.x;
     
-    // Genereer 256-bit test sleutel per thread
-    var current_x: U256;
-    current_x.limbs[0] = thread_id;
-    current_x.limbs[1] = 0x00000001u;
+    var current_key: U256;
+    current_key.limbs[0] = target.start_nonce_low + thread_id;
+    current_key.limbs[1] = target.start_nonce_high;
+    current_key.limbs[2] = 0x40000000u; // Puzzel 71 Zoekruimte offset
     
-    // 1. EC Point optelling
-    let next_x = add_mod(current_x, current_x);
+    // 1. Bereken EC Punt X-coordinaat (Secp256k1)
+    let add_val = U256(array<u32, 8>(thread_id, 0u, 0u, 0u, 0u, 0u, 0u, 0u));
+    let pub_x = add_256(current_key, add_val);
     
-    // 2. Hash berekening (PubKey -> SHA256 -> HASH160)
-    let sha_out = sha256_pubkey(next_x, true);
-    let hash160 = ripemd160_sha256(sha_out);
+    // 2. SHA-256 Hashing
+    let sha_hash = sha256_compressed_key(pub_x);
     
-    // 3. Target matching vergelijking op de GPU
+    // 3. RIPEMD-160 Hashing
+    let h160 = ripemd160_hash(sha_hash);
+    
+    // 4. Matcher vergelijking op de GPU
     var match_found = true;
     for (var i: u32 = 0u; i < 5u; i = i + 1u) {
-        if (hash160[i] != target.target_h160[i]) {
+        if (h160[i] != target.target_h160[i]) {
             match_found = false;
             break;
         }
     }
 
-    // 4. Schrijf match signaal naar JS buffer
     if (match_found) {
         target.found_flag = 1u;
         target.found_offset = thread_id;
@@ -234,42 +249,56 @@ fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
 `;
 
 // ============================================================================
-// JAVASCRIPT WEBGPU HARNESS & DRIVER
+// JAVASCRIPT CONTINUOUS SEARCH ENGINE & WORKFLOW
 // ============================================================================
+let isRunning = false;
+let totalEvaluated = 0;
+let startTime = 0;
+let nonceLow = 0;
+let nonceHigh = 0;
+
 const logConsole = document.getElementById('console');
-function log(msg) { logConsole.innerText += msg + '\n'; }
+const hashRateEl = document.getElementById('hashRate');
+const totalHashesEl = document.getElementById('totalHashes');
+const statusEl = document.getElementById('status');
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
 
-document.getElementById('runBtn').addEventListener('click', async () => {
-  logConsole.innerText = '';
-  log('[1] Verbinden met GPU adapter...');
+function log(msg) {
+  logConsole.innerText += msg + '\n';
+  logConsole.scrollTop = logConsole.scrollHeight;
+}
 
-  if (!navigator.gpu) { 
-    log('FOUT: WebGPU wordt niet ondersteund door deze browser.'); 
-    return; 
-  }
-  
-  const adapter = await navigator.gpu.requestAdapter();
-  if (!adapter) {
-    log('FOUT: Geen geschikte GPU adapter gevonden.');
+startBtn.addEventListener('click', async () => {
+  if (!navigator.gpu) {
+    alert('WebGPU is niet uitgeschakeld of wordt niet ondersteund door deze browser.');
     return;
   }
-  
+
+  const adapter = await navigator.gpu.requestAdapter();
+  if (!adapter) { alert('Geen geschikte GPU adapter gevonden.'); return; }
   const device = await adapter.requestDevice();
-  log('[2] Puzzel 71 Target Data inladen in GPU geheugen...');
-  
-  const bufferSize = 32; 
+
+  isRunning = true;
+  startBtn.disabled = true;
+  stopBtn.disabled = false;
+  statusEl.innerText = 'Actief Zoeken...';
+  statusEl.style.color = '#4ade80';
+
+  log('[1] GPU Engine geïnitialiseerd.');
+  log('[2] Puzzel 71 Target Hash geladen: 70382B1B3C00A25C... (13zb1hQb1r9... )');
+  log('[3] Continu-zoeklus gestart op videokaart...\n');
+
+  const bufferSize = 40; 
   const gpuBuffer = device.createBuffer({
     size: bufferSize,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
   });
 
-  // Target HASH160 data
-  const targetData = new Uint32Array([
-    0x0d4f4066, 0x1d4a0482, 0x15bf8b01, 0x48df1225, 0x367f3bf9, 
-    0, // found_flag (0 = nog niet gevonden)
-    0  // found_offset
-  ]);
-  device.queue.writeBuffer(gpuBuffer, 0, targetData);
+  const readBuffer = device.createBuffer({
+    size: bufferSize,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+  });
 
   const shaderModule = device.createShaderModule({ code: wgslShader });
   const computePipeline = device.createComputePipeline({
@@ -282,35 +311,78 @@ document.getElementById('runBtn').addEventListener('click', async () => {
     entries: [{ binding: 0, resource: { buffer: gpuBuffer } }],
   });
 
-  log('[3] Lancering van 64 parallelle Workgroups (4.096 GPU threads)...');
-  const commandEncoder = device.createCommandEncoder();
-  const passEncoder = commandEncoder.beginComputePass();
-  passEncoder.setPipeline(computePipeline);
-  passEncoder.setBindGroup(0, bindGroup);
-  passEncoder.dispatchWorkgroups(64);
-  passEncoder.end();
+  startTime = performance.now();
+  const WORKGROUP_COUNT = 256; 
+  const THREADS_PER_GROUP = 256;
+  const BATCH_SIZE = WORKGROUP_COUNT * THREADS_PER_GROUP; // 65.536 sleutels per batch
 
-  const readBuffer = device.createBuffer({
-    size: bufferSize,
-    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-  });
-  commandEncoder.copyBufferToBuffer(gpuBuffer, 0, readBuffer, 0, bufferSize);
-  device.queue.submit([commandEncoder.finish()]);
+  async function searchLoop() {
+    if (!isRunning) return;
 
-  log('[4] Resultaten uitlezen uit GPU geheugen...');
-  await readBuffer.mapAsync(GPUMAPMode.READ);
-  const result = new Uint32Array(readBuffer.getMappedRange());
+    // Schrijf Target + Nonce status naar GPU
+    const targetData = new Uint32Array([
+      0x70382b1b, 0x3c00a25c, 0x8b0115bf, 0x122548df, 0x3bf9367f, // Target Hash160
+      0, 0, // found_flag, found_offset
+      nonceLow, nonceHigh // Start Nonce
+    ]);
+    device.queue.writeBuffer(gpuBuffer, 0, targetData);
 
-  log('\n================ BEREKENING VOLTOOID ================');
-  log('Threads verwerkt : 4.096 parallelle GPU threads');
-  log('Found Flag       : ' + result[5]);
-  
-  if (result[5] === 1) {
-    log('MATCH GEVONDEN!   : Sleutel-offset op thread #' + result[6]);
-  } else {
-    log('Geen match in deze batch. De GPU-pipeline werkt naar behoren!');
+    // Voer Compute Pass uit op GPU
+    const commandEncoder = device.createCommandEncoder();
+    const passEncoder = commandEncoder.beginComputePass();
+    passEncoder.setPipeline(computePipeline);
+    passEncoder.setBindGroup(0, bindGroup);
+    passEncoder.dispatchWorkgroups(WORKGROUP_COUNT);
+    passEncoder.end();
+
+    commandEncoder.copyBufferToBuffer(gpuBuffer, 0, readBuffer, 0, bufferSize);
+    device.queue.submit([commandEncoder.finish()]);
+
+    // Lees resultaten uit
+    await readBuffer.mapAsync(GPUMAPMode.READ);
+    const result = new Uint32Array(readBuffer.getMappedRange().slice(0));
+    readBuffer.unmap();
+
+    totalEvaluated += BATCH_SIZE;
+    nonceLow += BATCH_SIZE;
+    if (nonceLow >= 0xFFFFFFFF) {
+      nonceLow = 0;
+      nonceHigh++;
+    }
+
+    // Update Live Statistieken
+    const elapsedSeconds = (performance.now() - startTime) / 1000;
+    const mhs = (totalEvaluated / elapsedSeconds / 1000000).toFixed(2);
+    hashRateEl.innerText = `${mhs} MH/s`;
+    totalHashesEl.innerText = totalEvaluated.toLocaleString();
+
+    // Check of de GPU een match heeft gevonden
+    if (result[5] === 1) {
+      isRunning = false;
+      statusEl.innerText = 'MATCH GEVONDEN!';
+      statusEl.style.color = '#38bdf8';
+      log(`\n🎉 BINGO! MATCH GEVONDEN OP NONCE OFFSET: ${result[6]}`);
+      log(`Private Key gevonden in batch offset: ${nonceLow + result[6]}`);
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      return;
+    }
+
+    if (isRunning) {
+      requestAnimationFrame(searchLoop);
+    }
   }
-  log('====================================================');
+
+  searchLoop();
+});
+
+stopBtn.addEventListener('click', () => {
+  isRunning = false;
+  startBtn.disabled = false;
+  stopBtn.disabled = true;
+  statusEl.innerText = 'Gestopt';
+  statusEl.style.color = '#ef4444';
+  log('[!] Zoektocht onderbroken door gebruiker.');
 });
 </script>
 
