@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>⚡ WebGPU Custom Range & Slice Scanner</title>
+<title>⚡ WebGPU Custom Range Scanner</title>
 <style>
   :root{
     --bg:#07090f;--surface:#0d1117;--panel:#111827;--border:#1f2937;--accent:#00ff99;--accent2:#00c3ff;
@@ -60,7 +60,7 @@
     <div class="card-title">① Doelwit & Zoekbereik</div>
     <div class="field">
       <label>Target Bitcoin Adres</label>
-      <input type="text" id="targetAddress" value="1PWO3JeB9jrGwfHDNpdGK54CRas7fsVzXU">
+      <input type="text" id="targetAddress" value="1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU">
     </div>
     <div class="field">
       <label>Keys per Plakje (Limit)</label>
@@ -132,6 +132,7 @@ function log(msg, cls=''){
 }
 
 function decodeBase58Address(address) {
+  address = address.trim();
   const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
   const ALPHABET_MAP = {};
   for(let i = 0; i < ALPHABET.length; i++) ALPHABET_MAP[ALPHABET[i]] = i;
@@ -139,7 +140,11 @@ function decodeBase58Address(address) {
   let bytes = [0];
   for(let i = 0; i < address.length; i++) {
     let c = address[i];
-    if(!(c in ALPHABET_MAP)) throw new Error('Ongeldig Base58 karakter in adres');
+    // Automatische correctie voor veelgemaakte typfouten zoals hoofdletter O of I
+    if(c === 'O') c = 'o';
+    if(c === 'I') c = 'i';
+    
+    if(!(c in ALPHABET_MAP)) throw new Error(`Ongeldig Base58 karakter '${address[i]}' in adres`);
     let val = ALPHABET_MAP[c];
     for(let j = 0; j < bytes.length; j++) bytes[j] *= 58;
     bytes[0] += val;
@@ -566,7 +571,6 @@ async function runSearch(){
   async function step(){
     if(!isRunning) return;
     
-    // Check of het huidige plakje vol is
     if(sliceScanned >= currentSliceLimit){
       slicesCount++;
       sliceScanned = 0n;
@@ -688,7 +692,6 @@ document.getElementById('randomBtn').onclick = () => {
   generateRandomSlice();
 };
 
-// Genereer direct een initiële slice bij opstarten
 generateRandomSlice();
 log('Script is klaar. Vul je gegevens in en klik op Start.');
 </script>
