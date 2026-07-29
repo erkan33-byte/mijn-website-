@@ -10,24 +10,20 @@
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   body{font-family:'Courier New',monospace;background:var(--bg);color:var(--text);min-height:100vh;padding:24px 16px 48px;}
-  body::before {
-    content: ''; position: fixed; inset: 0;
-    background: repeating-linear-gradient(transparent 0px, transparent 3px, rgba(0,255,153,.015) 3px, rgba(0,255,153,.015) 4px);
-    pointer-events: none; z-index: 999;
-  }
+  body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(transparent 0px,transparent 3px,rgba(0,255,153,.015) 3px,rgba(0,255,153,.015) 4px);pointer-events:none;z-index:999;}
   .container{max-width:820px;margin:0 auto;position:relative;z-index:1;}
   .header{text-align:center;margin-bottom:24px;}
   .header h1{font-size:1.4rem;letter-spacing:.15em;color:var(--accent);text-shadow:0 0 14px var(--accent);text-transform:uppercase;}
-  .header .sub { font-size: .72rem; color: var(--muted); letter-spacing: .12em; margin-top: 6px; }
+  .header .sub{font-size:.72rem;color:var(--muted);letter-spacing:.12em;margin-top:6px;}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:18px;margin-bottom:16px;}
   .card-title{font-size:.65rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent2);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:14px;}
   .field{display:grid;grid-template-columns:190px 1fr;align-items:center;gap:10px;margin-bottom:10px;}
   .field label{font-size:.72rem;color:var(--muted);letter-spacing:.06em;}
-  .field input, select{background:var(--surface);color:var(--accent);border:1px solid var(--dim);border-radius:3px;padding:7px 10px;font-family:inherit;font-size:.75rem;width:100%;outline:none;}
-  .field input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,255,153,.12); }
-  .field input.editable { color: var(--warn); }
+  .field input,select{background:var(--surface);color:var(--accent);border:1px solid var(--dim);border-radius:3px;padding:7px 10px;font-family:inherit;font-size:.75rem;width:100%;outline:none;}
+  .field input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(0,255,153,.12);}
+  .field input.editable{color:var(--warn);}
   .btn{padding:10px 16px;font-family:inherit;font-size:.78rem;font-weight:bold;letter-spacing:.08em;border:none;border-radius:4px;cursor:pointer;transition:transform .1s;}
-  .btn:active:not(:disabled) { transform: scale(.97); }
+  .btn:active:not(:disabled){transform:scale(.97);}
   .btn:disabled{opacity:.35;cursor:not-allowed;}
   .btn-start{background:var(--success);color:#000;flex:1;}
   .btn-stop{background:var(--danger);color:#fff;flex:1;}
@@ -37,16 +33,16 @@
   .stat-cell{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:10px 14px;}
   .stat-cell .label{font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px;}
   .stat-cell .value{font-size:1rem;font-weight:bold;color:var(--accent);}
-  #statusVal { color: var(--danger); }
-  #statusVal.running { color: var(--success); }
+  #statusVal{color:var(--danger);}
+  #statusVal.running{color:var(--success);}
   .log{background:#000;color:var(--accent);height:150px;overflow-y:scroll;padding:10px 12px;font-size:.72rem;line-height:1.6;border-radius:4px;border:1px solid var(--border);}
   .progress-wrap{height:6px;background:var(--border);border-radius:3px;margin-top:12px;overflow:hidden;}
   .progress-bar{height:100%;width:0%;background:linear-gradient(90deg,var(--accent2),var(--accent));transition:width .3s;}
-  .result-table { width: 100%; border-collapse: collapse; font-size: .72rem; margin-top: 10px; }
-  .result-table th { background: var(--surface); color: var(--accent2); letter-spacing: .1em; font-size: .62rem; text-transform: uppercase; padding: 10px 12px; border: 1px solid var(--border); text-align: left; }
-  .result-table td { border: 1px solid var(--border); padding: 9px 12px; color: var(--text); word-break: break-all; }
-  .footer { text-align: center; font-size: .6rem; color: var(--muted); letter-spacing: .1em; margin-top: 24px; }
-  .range-info { font-size: 0.62rem; color: var(--muted); margin-top: 4px; text-align: right; }
+  .result-table{width:100%;border-collapse:collapse;font-size:.72rem;margin-top:10px;}
+  .result-table th{background:var(--surface);color:var(--accent2);letter-spacing:.1em;font-size:.62rem;text-transform:uppercase;padding:10px 12px;border:1px solid var(--border);text-align:left;}
+  .result-table td{border:1px solid var(--border);padding:9px 12px;color:var(--text);word-break:break-all;}
+  .footer{text-align:center;font-size:.6rem;color:var(--muted);letter-spacing:.1em;margin-top:24px;}
+  .range-info{font-size:0.62rem;color:var(--muted);margin-top:4px;text-align:right;}
 </style>
 </head>
 <body>
@@ -60,7 +56,7 @@
     <div class="card-title">① Doelwit & Zoekbereik</div>
     <div class="field">
       <label>Target Bitcoin Adres</label>
-      <input type="text" id="targetAddress" value="1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU">
+      <input type="text" id="targetAddress" value="14oFNXucftsHiUMY8uctg6N487riuyXs4h">
     </div>
     <div class="field">
       <label>Keys per Plakje (Limit)</label>
@@ -131,7 +127,7 @@ function log(msg, color=''){
   logBox.scrollTop = logBox.scrollHeight;
 }
 
-// Correcte Base58 decoding en extraction van de 20-byte KeyHash (RIPEMD160)
+// Correcte Base58 decoding
 function decodeBase58Address(address) {
   address = address.trim();
   const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -159,13 +155,13 @@ function decodeBase58Address(address) {
   for(let i = 0; i < address.length && address[i] === '1'; i++) bytes.push(0);
   bytes.reverse();
   
-  // Uint8Array met payload (verwijder network version byte [0] en 4 bytes checksum achteraan)
   const fullBytes = new Uint8Array(bytes);
   return fullBytes.slice(1, 21);
 }
 
 function toHex32(bn){ return bn.toString(16).padStart(64,'0'); }
 
+// WGSL shader - volledig geoptimaliseerd
 const wgslShader = `
 struct U256 { limbs: array<u32,8>, };
 struct PointJ { X: U256, Y: U256, Z: U256, };
@@ -419,7 +415,6 @@ fn sha256_pubkey(x: U256, is_even: bool) -> array<u32,8> {
   hash[4]=0x510e527fu+e; hash[5]=0x9b05688cu+f; hash[6]=0x1f83d9abu+g; hash[7]=0x5be0cd19u+h;
   return hash;
 }
-
 fn rmd_f(j:u32,x:u32,y:u32,z:u32)->u32{
   if(j<16u){ return x^y^z; }
   if(j<32u){ return (x&y)|((~x)&z); }
@@ -427,12 +422,10 @@ fn rmd_f(j:u32,x:u32,y:u32,z:u32)->u32{
   if(j<64u){ return (x&z)|(y&(~z)); }
   return x^(y|(~z));
 }
-
 fn bswap(v: u32) -> u32 {
   return ((v & 0xff000000u) >> 24u) | ((v & 0x00ff0000u) >> 8u) |
          ((v & 0x0000ff00u) << 8u)  | ((v & 0x000000ffu) << 24u);
 }
-
 fn ripemd160_of_sha(sha: array<u32,8>) -> array<u32,5> {
   var X=array<u32,16>();
   for(var i:u32=0u;i<8u;i=i+1u){ X[i]=bswap(sha[i]); }
@@ -526,12 +519,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>){
 let isRunning = false, gpuDevice, computePipeline, gpuBuffer, readBuffer, bindGroup;
 let totalScanned = 0n, sliceScanned = 0n, lastTime = 0, lastScanned = 0n;
 let baseKey = 0n;
-let sliceLimit = 50000000n;
 let slicesCount = 1;
 let targetH160 = null;
 let currentSliceLimit = 50000000n;
 let totalRange = 0n;
-let rangeStartBI = 0n;
 const BATCH = 512 * 256; // 131.072 keys per dispatch
 
 async function initWebGPU(){
@@ -577,7 +568,7 @@ function generateRandomSlice(){
     const startHex = document.getElementById('searchRangeStart').value.trim();
     const endHex = document.getElementById('searchRangeEnd').value.trim();
     
-    rangeStartBI = BigInt("0x" + (startHex || "100000"));
+    const rangeStartBI = BigInt("0x" + (startHex || "100000"));
     const rangeEndBI = BigInt("0x" + (endHex || "1fffff"));
     
     if (rangeStartBI > rangeEndBI) throw new Error('Start range kan niet groter zijn dan eind range.');
@@ -591,7 +582,7 @@ function generateRandomSlice(){
     let offset = 0n;
     const maxOffset = totalRange - currentSliceLimit;
     if(maxOffset > 0n){
-      // Cryptographically secure random via Web Crypto API (64-bit)
+      // Cryptografisch veilige random (Web Crypto API)
       const randomBytes = new Uint8Array(8);
       window.crypto.getRandomValues(randomBytes);
       let rand = 0n;
@@ -637,7 +628,7 @@ async function runSearch(){
     const buf = new ArrayBuffer(4*5 + 4 + 4 + 4*8 + 4);
     const dv = new DataView(buf);
     
-    // FIX: Correcte LE invulling van target_h160
+    // FIX: Juiste LE invulling van target_h160 voor GPU
     if (targetH160) {
       const h160Words = new Uint32Array(5);
       for (let i = 0; i < 20; i += 4) {
@@ -651,10 +642,10 @@ async function runSearch(){
       }
     }
 
-    dv.setUint32(20, 0, true); 
-    dv.setUint32(24, 0, true); 
+    dv.setUint32(20, 0, true); // found_flag
+    dv.setUint32(24, 0, true); // found_offset
     for(let i=0; i<8; i++) dv.setUint32(28 + i*4, baseLimbs[i], true);
-    dv.setUint32(60, 0, true); 
+    dv.setUint32(60, 0, true); // batch_start
     gpuDevice.queue.writeBuffer(gpuBuffer, 0, buf);
 
     const enc = gpuDevice.createCommandEncoder();
@@ -712,8 +703,7 @@ document.getElementById('startBtn').onclick = async () => {
     const addr = document.getElementById('targetAddress').value.trim();
     if(!addr) throw new Error('Vul een Bitcoin adres in');
     targetH160 = decodeBase58Address(addr);
-    
-    sliceLimit = BigInt(document.getElementById('keysLimit').value.trim() || 50000000);
+    log(`✅ Target H160: ${Array.from(targetH160).map(b=>b.toString(16).padStart(2,'0')).join('')}`, 'success');
 
     if(!gpuDevice){ 
       log('WebGPU initialiseren...'); 
@@ -746,6 +736,7 @@ document.getElementById('randomBtn').onclick = () => {
   generateRandomSlice();
 };
 
+// Initialiseer
 generateRandomSlice();
 log('Script is klaar. Vul je gegevens in en klik op Start.');
 </script>
