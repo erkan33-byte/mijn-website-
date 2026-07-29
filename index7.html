@@ -414,15 +414,14 @@
         self.onmessage = function(e) {
             const data = e.data;
             if (data.type === "ADDRESS_SCAN") {
-                let currentKey = BigInt("0x" + data.startHex);
+                let baseKey = BigInt("0x" + data.startHex);
                 const endKey = BigInt("0x" + data.endHex);
                 const targetH160 = new Uint8Array(data.targetH160Hex.match(/.{2}/g).map(b => parseInt(b, 16)));
                 const targetAddr = data.targetAddress;
                 const workerId = data.workerId;
                 const BATCH = 5000;
                 
-                // FIX: Gebruik scalar multiplication om het startpunt te berekenen
-                let currentPoint = mul(G, currentKey);
+                let currentPoint = mul(G, baseKey);
 
                 function fastStep() {
                     let batchCount = 0;
@@ -434,7 +433,7 @@
                     let jY = currentPoint.y;
                     let jZ = 1n;
 
-                    for (let i = 0; i < BATCH && currentKey + BigInt(i) <= endKey; i++) {
+                    for (let i = 0; i < BATCH && baseKey + BigInt(i) <= endKey; i++) {
                         pX[i] = jX; pY[i] = jY; pZ[i] = jZ;
                         let Z1Z1 = mod(jZ * jZ);
                         let U2 = mod(G_x * Z1Z1);
@@ -489,7 +488,8 @@
                         }
 
                         if (match) {
-                            const privHex = (currentKey + BigInt(i)).toString(16).padStart(64, '0');
+                            const exactKey = baseKey + BigInt(i);
+                            const privHex = exactKey.toString(16).padStart(64, '0');
                             const payloadBytes = ("80" + privHex + "01").match(/.{2}/g).map(b => parseInt(b, 16));
                             const doubleSha = sha256(sha256(new Uint8Array(payloadBytes)));
                             const wif = toBase58("80" + privHex + "01" + Array.from(doubleSha).slice(0, 4).map(b => b.toString(16).padStart(2,'0')).join(''));
@@ -498,8 +498,8 @@
                         }
                     }
                     
-                    currentKey += BigInt(batchCount);
-                    if (currentKey > endKey) {
+                    baseKey += BigInt(batchCount);
+                    if (baseKey > endKey) {
                         self.postMessage({ type: "SCAN_DONE", workerId });
                         return;
                     }
