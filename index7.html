@@ -508,7 +508,11 @@
                     let lastZ2 = mod(lastZ * lastZ);
                     let lastAX = mod(pX[batchCount-1] * lastZ2);
                     let lastAY = mod(pY[batchCount-1] * mod(lastZ * lastZ2));
-                    currentPoint = {x: lastAX, y: lastAY};
+                    
+                    // FIX: Het laatste punt is van baseKey + 4999.
+                    // Omdat we baseKey ophogen met 5000, moeten we G (1) optellen bij het 
+                    // currentPoint om synchroon te blijven lopen met de volgende batch.
+                    currentPoint = add({x: lastAX, y: lastAY}, G);
 
                     self.postMessage({ type: "PROGRESS", count: batchCount, workerId });
                     setTimeout(fastStep, 0);
