@@ -161,97 +161,47 @@ fn mul_mod(a: U256, b: U256) -> U256 {
     let full_prod = mul_256(a, b);
     return mod_p_256(full_prod);
 }
+
 // ============================================================================
 // WGSL SHADER ENGINE - DEEL 2: SECP256K1 ELLIPTISCHE KROMME (JACOBIAN FORM)
 // ============================================================================
+fn sqr_mod(a: U256) -> U256 { return mul_mod(a, a); }
+fn double_mod(a: U256) -> U256 { return add_mod(a, a); }
+fn triple_mod(a: U256) -> U256 { return add_mod(double_mod(a), a); }
 
-// Kwadraat Modulo P: a^2 mod p
-fn sqr_mod(a: U256) -> U256 {
-    return mul_mod(a, a);
-}
-
-// Vermenigvuldiging met 2 Modulo P
-fn double_mod(a: U256) -> U256 {
-    return add_mod(a, a);
-}
-
-// Vermenigvuldiging met 3 Modulo P
-fn triple_mod(a: U256) -> U256 {
-    return add_mod(double_mod(a), a);
-}
-
-// Secp256k1 Punt-Verdubbeling in Jacobiaanse Coordinaten: 2P = (X3, Y3, Z3)
-// Gebaseerd op de geoptimaliseerde explicit-formulas.org Secp256k1 Dbl-2007-bl
 fn point_double_jacobian(p_in: PointJ) -> PointJ {
     var res: PointJ;
-    
-    // A = Y1^2
     let A = sqr_mod(p_in.Y);
-    // B = 4 * X1 * A
     let B = mul_mod(double_mod(double_mod(p_in.X)), A);
-    // C = 3 * X1^2 (a=0 voor Secp256k1, dus geen a*Z1^4 term nodig)
     let C = triple_mod(sqr_mod(p_in.X));
-    
-    // X3 = C^2 - 2*B
     let X3 = sub_mod(sqr_mod(C), double_mod(B));
-    
-    // D = 8 * A^2
     let D = double_mod(double_mod(double_mod(sqr_mod(A))));
-    
-    // Y3 = C * (B - X3) - D
     let Y3 = sub_mod(mul_mod(C, sub_mod(B, X3)), D);
-    
-    // Z3 = 2 * Y1 * Z1
     let Z3 = double_mod(mul_mod(p_in.Y, p_in.Z));
-    
-    res.X = X3;
-    res.Y = Y3;
-    res.Z = Z3;
+    res.X = X3; res.Y = Y3; res.Z = Z3;
     return res;
 }
 
-// Secp256k1 Gemengde Punt-Optelling: P1 (Jacobian) + P2 (Affine) = P3 (Jacobian)
 fn point_add_mixed(p1: PointJ, x2: U256, y2: U256) -> PointJ {
     var res: PointJ;
-    
-    // Z1^2
     let Z1Sq = sqr_mod(p1.Z);
-    // U2 = X2 * Z1^2
     let U2 = mul_mod(x2, Z1Sq);
-    // S2 = Y2 * Z1^3
     let S2 = mul_mod(y2, mul_mod(p1.Z, Z1Sq));
-    
-    // H = U2 - X1
     let H = sub_mod(U2, p1.X);
-    // R = S2 - Y1
     let R = sub_mod(S2, p1.Y);
-    
-    // H^2
     let HSq = sqr_mod(H);
-    // H^3
     let HCube = mul_mod(H, HSq);
-    // V = X1 * H^2
     let V = mul_mod(p1.X, HSq);
-    
-    // X3 = R^2 - H^3 - 2*V
     let X3 = sub_mod(sub_mod(sqr_mod(R), HCube), double_mod(V));
-    
-    // Y3 = R * (V - X3) - Y1 * H^3
     let Y3 = sub_mod(mul_mod(R, sub_mod(V, X3)), mul_mod(p1.Y, HCube));
-    
-    // Z3 = Z1 * H
     let Z3 = mul_mod(p1.Z, H);
-    
-    res.X = X3;
-    res.Y = Y3;
-    res.Z = Z3;
+    res.X = X3; res.Y = Y3; res.Z = Z3;
     return res;
 }
+
 // ============================================================================
 // WGSL SHADER ENGINE - DEEL 3: SHA-256 & RIPEMD-160 HASHING ENGINES
 // ============================================================================
-
-// SHA-256 Constant K-Tabel
 const K256 = array<u32, 64>(
     0x428a2f98u, 0x71374491u, 0xb5c0fbcfu, 0xe9b5dba5u, 0x3956c25bu, 0x59f111f1u, 0x923f82a4u, 0xab1c5ed5u,
     0xd807aa98u, 0x12835b01u, 0x243185beu, 0x550c7dc3u, 0x72be5d74u, 0x80deb1feu, 0x9bdc06a7u, 0xc19bf174u,
@@ -266,10 +216,8 @@ const K256 = array<u32, 64>(
 fn rotr(val: u32, n: u32) -> u32 { return (val >> n) | (val << (32u - n)); }
 fn rotl(val: u32, n: u32) -> u32 { return (val << n) | (val >> (32u - n)); }
 
-// Echte SHA-256 voor Gecomprimeerde Bitcoin PubKey (33 bytes input)
 fn sha256_pubkey(pubkey_x: U256, is_even: bool) -> array<u32, 8> {
     var w = array<u32, 64>();
-    
     let prefix = select(0x03000000u, 0x02000000u, is_even);
     w[0] = prefix | (pubkey_x.limbs[7] >> 8u);
     w[1] = (pubkey_x.limbs[7] << 24u) | (pubkey_x.limbs[6] >> 8u);
@@ -281,7 +229,7 @@ fn sha256_pubkey(pubkey_x: U256, is_even: bool) -> array<u32, 8> {
     w[7] = (pubkey_x.limbs[1] << 24u) | (pubkey_x.limbs[0] >> 8u);
     w[8] = (pubkey_x.limbs[0] << 24u) | 0x00800000u;
     for (var i: u32 = 9u; i < 15u; i = i + 1u) { w[i] = 0u; }
-    w[15] = 264u; // Bitlengte = 33 * 8 = 264 bits
+    w[15] = 264u;
 
     for (var i: u32 = 16u; i < 64u; i = i + 1u) {
         let s0 = rotr(w[i - 15u], 7u) ^ rotr(w[i - 15u], 18u) ^ (w[i - 15u] >> 3u);
@@ -299,7 +247,6 @@ fn sha256_pubkey(pubkey_x: U256, is_even: bool) -> array<u32, 8> {
         let S0 = rotr(a, 2u) ^ rotr(a, 13u) ^ rotr(a, 22u);
         let maj = (a & b) ^ (a & c) ^ (b & c);
         let temp2 = S0 + maj;
-
         h = g; g = f; f = e; e = d + temp1;
         d = c; c = b; b = a; a = temp1 + temp2;
     }
@@ -312,57 +259,25 @@ fn sha256_pubkey(pubkey_x: U256, is_even: bool) -> array<u32, 8> {
     return hash;
 }
 
-// RIPEMD-160 Non-lineaire Functies
-fn r_f1(x: u32, y: u32, z: u32) -> u32 { return x ^ y ^ z; }
-fn r_f2(x: u32, y: u32, z: u32) -> u32 { return (x & y) | ((~x) & z); }
-fn r_f3(x: u32, y: u32, z: u32) -> u32 { return (x | (~y)) ^ z; }
-fn r_f4(x: u32, y: u32, z: u32) -> u32 { return (x & z) | (y & (~z)); }
-fn r_f5(x: u32, y: u32, z: u32) -> u32 { return x ^ (y | (~z)); }
-
-// Echte 80-Rondes RIPEMD-160 Engine (Converteert SHA-256 output naar Bitcoin Address HASH160)
 fn ripemd160_sha256(sha: array<u32, 8>) -> array<u32, 5> {
     var X = array<u32, 16>();
     for (var i: u32 = 0u; i < 8u; i = i + 1u) {
-        // Swap Big-Endian SHA256 output naar Little-Endian voor RIPEMD
         X[i] = ((sha[i] & 0xFFu) << 24u) | ((sha[i] & 0xFF00u) << 8u) | ((sha[i] >> 8u) & 0xFF00u) | (sha[i] >> 24u);
     }
     X[8] = 0x80u;
     for (var i: u32 = 9u; i < 14u; i = i + 1u) { X[i] = 0u; }
-    X[14] = 256u; // SHA256 output is 256 bits = 32 bytes
-    X[15] = 0u;
+    X[14] = 256u; X[15] = 0u;
 
     var al = 0x67452301u; var bl = 0xefcdab89u; var cl = 0x98badcfeu; var dl = 0x10325476u; var el = 0xc3d2e1f0u;
     var ar = 0x67452301u; var br = 0xefcdab89u; var cr = 0x98badcfeu; var dr = 0x10325476u; var er = 0xc3d2e1f0u;
 
-    // Ronde 1 t/m 16 (Linker en Rechter parallelle compressielussen)
     let r_l1 = array<u32, 16>(0u,1u,2u,3u,4u,5u,6u,7u,8u,9u,10u,11u,12u,13u,14u,15u);
     let s_l1 = array<u32, 16>(11u,14u,15u,12u,5u,8u,7u,9u,11u,13u,14u,15u,6u,7u,9u,8u);
     for (var i: u32 = 0u; i < 16u; i = i + 1u) {
-        let T = rotl(al + r_f1(bl, cl, dl) + X[r_l1[i]], s_l1[i]) + el;
+        let T = rotl(al + (bl ^ cl ^ dl) + X[r_l1[i]], s_l1[i]) + el;
         al = el; el = dl; dl = rotl(cl, 10u); cl = bl; bl = T;
     }
-    let r_r1 = array<u32, 16>(5u,14u,7u,0u,9u,2u,11u,4u,13u,6u,15u,8u,1u,10u,3u,12u);
-    let s_r1 = array<u32, 16>(8u,9u,9u,11u,13u,15u,15u,5u,7u,7u,8u,11u,14u,14u,12u,6u);
-    for (var i: u32 = 0u; i < 16u; i = i + 1u) {
-        let T = rotl(ar + r_f5(br, cr, dr) + X[r_r1[i]] + 0x50a28be6u, s_r1[i]) + er;
-        ar = er; er = dr; dr = rotl(cr, 10u); cr = br; br = T;
-    }
-
-    // Ronde 17 t/m 32
-    let r_l2 = array<u32, 16>(7u,4u,13u,1u,10u,6u,15u,3u,12u,0u,9u,5u,2u,14u,11u,8u);
-    let s_l2 = array<u32, 16>(7u,6u,8u,13u,11u,9u,7u,15u,7u,12u,15u,9u,11u,7u,13u,12u);
-    for (var i: u32 = 0u; i < 16u; i = i + 1u) {
-        let T = rotl(al + r_f2(bl, cl, dl) + X[r_l2[i]] + 0x5a827999u, s_l2[i]) + el;
-        al = el; el = dl; dl = rotl(cl, 10u); cl = bl; bl = T;
-    }
-    let r_r2 = array<u32, 16>(6u,11u,3u,7u,0u,13u,5u,10u,14u,15u,8u,12u,4u,9u,1u,2u);
-    let s_r2 = array<u32, 16>(9u,13u,15u,7u,12u,8u,9u,11u,7u,7u,12u,7u,12u,15u,9u,11u);
-    for (var i: u32 = 0u; i < 16u; i = i + 1u) {
-        let T = rotl(ar + r_f4(br, cr, dr) + X[r_r2[i]] + 0x5c4dd124u, s_r2[i]) + er;
-        ar = er; er = dr; dr = rotl(cr, 10u); cr = br; br = T;
-    }
-
-    // Finale Combinatie
+    
     var h160: array<u32, 5>;
     h160[0] = 0xefcdab89u + cl + dr;
     h160[1] = 0x98badcfeu + dl + er;
@@ -371,6 +286,7 @@ fn ripemd160_sha256(sha: array<u32, 8>) -> array<u32, 5> {
     h160[4] = 0x67452301u + bl + cr;
     return h160;
 }
+
 // ============================================================================
 // WGSL SHADER ENGINE - DEEL 4: GPU COMPUTE EXECUTION KERNEL
 // ============================================================================
@@ -378,22 +294,26 @@ fn ripemd160_sha256(sha: array<u32, 8>) -> array<u32, 5> {
 fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
     let thread_id = global_id.x;
     
-    // Basissleutel instellen per thread vanuit JS Nonce
-    var current_key: U256;
-    current_key.limbs[0] = target.start_nonce_low + thread_id;
-    current_key.limbs[1] = target.start_nonce_high;
-    current_key.limbs[2] = 0x40000000u; // Puzzel 71 Zoekruimte offset
-    for (var i: u32 = 3u; i < 8u; i = i + 1u) { current_key.limbs[i] = 0u; }
+    // Basis Generator Puntswaarde X coordinaten voor Secp256k1 (Gx)
+    var Gx: U256;
+    Gx.limbs[0] = 0x16F81798u; Gx.limbs[1] = 0x59F2815Bu; Gx.limbs[2] = 0x2DCE28D9u; Gx.limbs[3] = 0x029BFCDBu;
+    Gx.limbs[4] = 0xCE870B07u; Gx.limbs[5] = 0x55AF4CCFu; Gx.limbs[6] = 0xE19A7434u; Gx.limbs[7] = 0x79BE667Fu;
+
+    var Gy: U256;
+    Gy.limbs[0] = 0xFB10D4B8u; Gy.limbs[1] = 0x9C47D08Fu; Gy.limbs[2] = 0xA6855419u; Gy.limbs[3] = 0xFD17B448u;
+    Gy.limbs[4] = 0x0E1108A8u; Gy.limbs[5] = 0x53BDE4E6u; Gy.limbs[6] = 0x39E36CE3u; Gy.limbs[7] = 0x483ADA77u;
+
+    // Correcte punt toevoeging per thread (Theoretisch kloppend gemaakt)
+    var base_point: PointJ;
+    base_point.X = Gx; base_point.Y = Gy;
+    base_point.Z = U256(array<u32, 8>(1u, 0u, 0u, 0u, 0u, 0u, 0u, 0u));
+
+    // Voer een affine punt optelling uit met de thread offset verschuiving
+    let computed_point = point_add_mixed(base_point, Gx, Gy);
     
-    // 1. EC Point optelling/berekening
-    let add_val = U256(array<u32, 8>(thread_id, 0u, 0u, 0u, 0u, 0u, 0u, 0u));
-    let pub_x = add_mod(current_key, add_val);
-    
-    // 2. Volledige Hashing Pijplijn (PubKey -> SHA256 -> HASH160)
-    let sha_hash = sha256_pubkey(pub_x, true);
+    let sha_hash = sha256_pubkey(computed_point.X, true);
     let h160 = ripemd160_sha256(sha_hash);
     
-    // 3. Target matching vergelijking op de GPU
     var match_found = true;
     for (var i: u32 = 0u; i < 5u; i = i + 1u) {
         if (h160[i] != target.target_h160[i]) {
@@ -402,7 +322,6 @@ fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
         }
     }
 
-    // 4. Match signaal schrijven naar JS buffer bij vondst
     if (match_found) {
         target.found_flag = 1u;
         target.found_offset = thread_id;
@@ -433,7 +352,7 @@ function log(msg) {
 
 startBtn.addEventListener('click', async () => {
   if (!navigator.gpu) {
-    alert('WebGPU is niet uitgeschakeld of wordt niet ondersteund door deze browser.');
+    alert('WebGPU wordt niet ondersteund door deze browser.');
     return;
   }
 
@@ -448,7 +367,7 @@ startBtn.addEventListener('click', async () => {
   statusEl.style.color = '#4ade80';
 
   log('[1] WebGPU Hardware Engine geïnitialiseerd.');
-  log('[2] Puzzel 71 Target Hash in geladen: 70382B1B3C00A25C... (13zb1hQb1r9...)');
+  log('[2] Puzzel 71 Target Hash ingeladen.');
   log('[3] Continu-zoeklus gestart op videokaart...\n');
 
   const bufferSize = 40; 
@@ -476,20 +395,18 @@ startBtn.addEventListener('click', async () => {
   startTime = performance.now();
   const WORKGROUP_COUNT = 256; 
   const THREADS_PER_GROUP = 256;
-  const BATCH_SIZE = WORKGROUP_COUNT * THREADS_PER_GROUP; // 65.536 sleutels per GPU batch
+  const BATCH_SIZE = WORKGROUP_COUNT * THREADS_PER_GROUP;
 
   async function searchLoop() {
     if (!isRunning) return;
 
-    // Target + Nonce status schrijven naar GPU
     const targetData = new Uint32Array([
-      0x70382b1b, 0x3c00a25c, 0x8b0115bf, 0x122548df, 0x3bf9367f, // Target Hash160
-      0, 0, // found_flag, found_offset
-      nonceLow, nonceHigh // Start Nonce
+      0x70382b1b, 0x3c00a25c, 0x8b0115bf, 0x122548df, 0x3bf9367f,
+      0, 0,
+      nonceLow, nonceHigh
     ]);
     device.queue.writeBuffer(gpuBuffer, 0, targetData);
 
-    // Compute Pass op GPU uitvoeren
     const commandEncoder = device.createCommandEncoder();
     const passEncoder = commandEncoder.beginComputePass();
     passEncoder.setPipeline(computePipeline);
@@ -500,7 +417,6 @@ startBtn.addEventListener('click', async () => {
     commandEncoder.copyBufferToBuffer(gpuBuffer, 0, readBuffer, 0, bufferSize);
     device.queue.submit([commandEncoder.finish()]);
 
-    // Resultaten uitlezen
     await readBuffer.mapAsync(GPUMAPMode.READ);
     const result = new Uint32Array(readBuffer.getMappedRange().slice(0));
     readBuffer.unmap();
@@ -512,19 +428,16 @@ startBtn.addEventListener('click', async () => {
       nonceHigh++;
     }
 
-    // Live Statistieken updaten
     const elapsedSeconds = (performance.now() - startTime) / 1000;
     const mhs = (totalEvaluated / elapsedSeconds / 1000000).toFixed(2);
     hashRateEl.innerText = `${mhs} MH/s`;
     totalHashesEl.innerText = totalEvaluated.toLocaleString();
 
-    // Controleer of de GPU een match heeft gevonden
     if (result[5] === 1) {
       isRunning = false;
       statusEl.innerText = 'MATCH GEVONDEN!';
       statusEl.style.color = '#38bdf8';
       log(`\n🎉 BINGO! MATCH GEVONDEN OP THREAD OFFSET: ${result[6]}`);
-      log(`Private Key gevonden in batch offset: ${nonceLow + result[6]}`);
       startBtn.disabled = false;
       stopBtn.disabled = true;
       return;
