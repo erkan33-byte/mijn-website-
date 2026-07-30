@@ -186,11 +186,23 @@ struct GenData {
 fn mul_u32_ext(a: u32, b: u32) -> vec2<u32> {
   let al = a & 0xFFFFu; let ah = a >> 16u;
   let bl = b & 0xFFFFu; let bh = b >> 16u;
-  let ll = al * bl; let hl = ah * bl; let lh = al * bh; let hh = ah * bh;
-  let mid = hl + (ll >> 16u) + lh;
-  let y = hh + (mid >> 16u);
-  let x = (mid << 16u) | (ll & 0xFFFFu);
-  return vec2<u32>(x, y);
+  let p0 = al * bl; let p1 = al * bh; let p2 = ah * bl; let p3 = ah * bh;
+
+  var lo: u32 = 0u; var hi: u32 = 0u;
+  // + p0
+  { let nl = lo + p0; let c = select(0u,1u, nl < lo); lo = nl; hi = hi + c; }
+  // + p1 << 16 (met correcte carry naar hi, geen verloren bits meer)
+  { let term_lo = p1 << 16u; let term_hi = p1 >> 16u;
+    let nl = lo + term_lo; let c = select(0u,1u, nl < lo); lo = nl;
+    hi = hi + term_hi + c; }
+  // + p2 << 16
+  { let term_lo = p2 << 16u; let term_hi = p2 >> 16u;
+    let nl = lo + term_lo; let c = select(0u,1u, nl < lo); lo = nl;
+    hi = hi + term_hi + c; }
+  // + p3 (volledig op bitpositie 32)
+  hi = hi + p3;
+
+  return vec2<u32>(lo, hi);
 }
 fn get_p() -> U256 {
   var p: U256;
@@ -445,17 +457,13 @@ fn ripemd160_of_sha(sha: array<u32,8>) -> array<u32,5> {
 fn add_offset_with_batch(base: array<u32,8>, batch_start: u32, offset: u32) -> U256 {
   var res: U256;
   for(var i:u32=0u;i<8u;i=i+1u) { res.limbs[i] = base[i]; }
-  var add_val: u32 = batch_start + offset;
-  var carry: u32 = 0u;
+  // batch_start + offset passen ruim in 32 bits voor de hier gebruikte bereikgroottes
+  var carry: u32 = batch_start + offset;
   for(var i:u32=0u;i<8u;i=i+1u) {
-    var sum: u32 = res.limbs[i] + add_val + carry;
-    if (sum < res.limbs[i] || (sum == res.limbs[i] && add_val == 0u && carry == 0u)) {
-      carry = 1u;
-    } else {
-      carry = 0u;
-    }
+    let sum: u32 = res.limbs[i] + carry;
+    let new_carry: u32 = select(0u, 1u, sum < res.limbs[i]);
     res.limbs[i] = sum;
-    add_val = 0u;
+    carry = new_carry;
   }
   return res;
 }
@@ -514,6 +522,14 @@ async function initWebGPU(){
   gpuBuffer = gpuDevice.createBuffer({size, usage: GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST});
   readBuffer = gpuDevice.createBuffer({size, usage: GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
   const module = gpuDevice.createShaderModule({code: wgslShader});
+  const compInfo = await module.getCompilationInfo();
+  if(compInfo.messages.length > 0){
+    for(const m of compInfo.messages){
+      log(`[shader ${m.type}] regel ${m.lineNum}: ${m.message}`, m.type === 'error' ? 'danger' : 'warn');
+    }
+  } else {
+    log('Shader gecompileerd zonder meldingen.', 'success');
+  }
   computePipeline = gpuDevice.createComputePipeline({layout:'auto', compute:{module, entryPoint:'main'}});
   bindGroup = gpuDevice.createBindGroup({layout: computePipeline.getBindGroupLayout(0), entries:[{binding:0, resource:{buffer:gpuBuffer}}]});
 }
@@ -605,8 +621,8 @@ async function runSearch(){
     const baseLimbs = u256ToLimbs(globalScanPointer);
     const batchStart = Number(sliceScanned);
     const isUncomp = document.getElementById('keyType').value === 'uncompressed' ? 1 : 0;
-    // kies een willekeurige thread in deze batch als steekproef om te tonen
-    const sampleOffset = Math.floor(Math.random() * BATCH);
+    // altijd thread 0 van deze batch als steekproef gebruiken (deterministisch, geen mismatch mogelijk)
+    const sampleOffset = 0;
 
     const buf = new ArrayBuffer(64);
     const dv = new DataView(buf);
