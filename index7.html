@@ -446,14 +446,29 @@ fn ripemd160_of_sha(sha: array<u32,8>) -> array<u32,5> {
   return array<u32,5>(h0,h1,h2,h3,h4);
 }
 
+// GECORRIGEERDE VERSIE VAN add_offset_with_batch
 fn add_offset_with_batch(base: array<u32,8>, batch_start: u32, offset: u32) -> U256 {
   var res: U256;
-  var carry: u32 = batch_start + offset;
-  for(var i:u32=0u;i<8u;i=i+1u){
-    let s = base[i] + carry;
-    carry = select(0u, 1u, s < base[i]);
-    res.limbs[i] = s;
+  // Start met de base waarde
+  for(var i:u32=0u;i<8u;i=i+1u) {
+    res.limbs[i] = base[i];
   }
+  
+  // Voeg batch_start + offset toe als een enkele waarde
+  var add_val: u32 = batch_start + offset;
+  var carry: u32 = 0u;
+  
+  for(var i:u32=0u;i<8u;i=i+1u) {
+    var sum: u32 = res.limbs[i] + add_val + carry;
+    if (sum < res.limbs[i] || (sum == res.limbs[i] && add_val == 0u && carry == 0u)) {
+      carry = 1u; // overflow
+    } else {
+      carry = 0u;
+    }
+    res.limbs[i] = sum;
+    add_val = 0u; // alleen eerste keer toevoegen
+  }
+  
   return res;
 }
 
