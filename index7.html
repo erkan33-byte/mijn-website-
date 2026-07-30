@@ -43,6 +43,7 @@
   .result-table td{border:1px solid var(--border);padding:9px 12px;color:var(--text);word-break:break-all;}
   .footer{text-align:center;font-size:.6rem;color:var(--muted);letter-spacing:.1em;margin-top:24px;}
   .range-info{font-size:0.62rem;color:var(--muted);margin-top:4px;text-align:right;}
+  .badge { background: var(--warn); color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.6rem; }
 </style>
 </head>
 <body>
@@ -55,8 +56,9 @@
   <div class="card">
     <div class="card-title">① Doelwit & Zoekbereik</div>
     <div class="field">
-      <label>Target Bitcoin Adres</label>
-      <input type="text" id="targetAddress" value="14oFNXucftsHiUMY8uctg6N487riuyXs4h">
+      <label>Target Adres <span class="badge">COMPRESSED</span></label>
+      <!-- Standaard ingesteld op test-adres voor sleutel 0x1 om de engine te bewijzen -->
+      <input type="text" id="targetAddress" value="1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH">
     </div>
     <div class="field">
       <label>Keys per Plakje (Limit)</label>
@@ -65,13 +67,13 @@
     <hr style="border:none;border-top:1px dashed var(--dim);margin:10px 0;">
     <div class="field">
       <label>🟢 Zoekrange Start (HEX)</label>
-      <input type="text" id="searchRangeStart" value="100000" class="editable">
+      <input type="text" id="searchRangeStart" value="1" class="editable">
     </div>
     <div class="field">
       <label>🔴 Zoekrange Eind (HEX)</label>
-      <input type="text" id="searchRangeEnd" value="1fffff" class="editable">
+      <input type="text" id="searchRangeEnd" value="1000" class="editable">
     </div>
-    <div class="range-info">💡 Stel hier je eigen volledige zoekrange in (zonder 0x prefix).</div>
+    <div class="range-info">💡 Let op: Deze scanner werkt uitsluitend met Compressed (gecomprimeerde) adressen.</div>
     <hr style="border:none;border-top:1px dashed var(--dim);margin:10px 0;">
     <div class="field">
       <label>Actueel Plakje Start</label>
@@ -96,7 +98,7 @@
       <div class="stat-cell"><div class="label">Snelheid</div><div class="value" id="speedVal">0 /s</div></div>
       <div class="stat-cell"><div class="label">Plakjes Bezocht</div><div class="value" id="slicesVisited">1</div></div>
     </div>
-    <div style="margin-top:10px;font-size:.7rem;color:var(--muted);">In dit plakje: <span id="currentSliceKeys">0</span> / <span id="limitDisplay">50.000.000</span></div>
+    <div style="margin-top:10px;font-size:.7rem;color:var(--muted);">In dit plakje: <span id="currentSliceKeys">0</span> / <span id="limitDisplay">0</span></div>
     <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
   </div>
 
@@ -127,7 +129,6 @@ function log(msg, color=''){
   logBox.scrollTop = logBox.scrollHeight;
 }
 
-// Correcte Base58 decoding
 function decodeBase58Address(address) {
   address = address.trim();
   const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -161,7 +162,6 @@ function decodeBase58Address(address) {
 
 function toHex32(bn){ return bn.toString(16).padStart(64,'0'); }
 
-// WGSL shader - met CORRECTE offset verwerking
 const wgslShader = `
 struct U256 { limbs: array<u32,8>, };
 struct PointJ { X: U256, Y: U256, Z: U256, };
@@ -474,7 +474,6 @@ fn ripemd160_of_sha(sha: array<u32,8>) -> array<u32,5> {
 }
 fn rotl(v:u32,n:u32)->u32{ return (v<<n)|(v>>(32u-n)); }
 
-// CORRECTE offset verwerking: voeg batch_start toe aan base
 fn add_offset_with_batch(base: array<u32,8>, batch_start: u32, offset: u32) -> U256 {
   var res: U256;
   var carry: u32 = batch_start + offset;
@@ -526,7 +525,7 @@ let slicesCount = 1;
 let targetH160 = null;
 let currentSliceLimit = 50000000n;
 let totalRange = 0n;
-const BATCH = 512 * 256; // 131.072 keys per dispatch
+const BATCH = 512 * 256; 
 
 async function initWebGPU(){
   if(!navigator.gpu) throw new Error('WebGPU wordt niet ondersteund in deze browser.');
@@ -571,7 +570,7 @@ function generateRandomSlice(){
     const startHex = document.getElementById('searchRangeStart').value.trim();
     const endHex = document.getElementById('searchRangeEnd').value.trim();
     
-    const rangeStartBI = BigInt("0x" + (startHex || "100000"));
+    const rangeStartBI = BigInt("0x" + (startHex || "1"));
     const rangeEndBI = BigInt("0x" + (endHex || "1fffff"));
     
     if (rangeStartBI > rangeEndBI) throw new Error('Start range kan niet groter zijn dan eind range.');
@@ -614,7 +613,7 @@ async function runSearch(){
       if(currentSliceLimit >= totalRange) {
          setRunning(false);
          document.getElementById('statusVal').textContent = 'Klaar (Geen Match)';
-         log('🏁 Volledige range is doorzocht, maar geen match gevonden.', 'warn');
+         log('🏁 Volledige range is doorzocht, maar geen match gevonden. Ligt het juiste antwoord wel in deze range?', 'warn');
          return;
       }
       
@@ -625,8 +624,8 @@ async function runSearch(){
     }
 
     const currentKey = baseKey + sliceScanned;
-    const baseLimbs = u256ToLimbs(baseKey); // Base blijft constant
-    const batchStart = Number(sliceScanned); // Huidige batch start
+    const baseLimbs = u256ToLimbs(baseKey); 
+    const batchStart = Number(sliceScanned);
 
     const buf = new ArrayBuffer(4*5 + 4 + 4 + 4*8 + 4);
     const dv = new DataView(buf);
@@ -644,10 +643,10 @@ async function runSearch(){
       }
     }
 
-    dv.setUint32(20, 0, true); // found_flag
-    dv.setUint32(24, 0, true); // found_offset
+    dv.setUint32(20, 0, true); 
+    dv.setUint32(24, 0, true); 
     for(let i=0; i<8; i++) dv.setUint32(28 + i*4, baseLimbs[i], true);
-    dv.setUint32(60, batchStart, true); // batch_start
+    dv.setUint32(60, batchStart, true); 
     gpuDevice.queue.writeBuffer(gpuBuffer, 0, buf);
 
     const enc = gpuDevice.createCommandEncoder();
@@ -739,7 +738,7 @@ document.getElementById('randomBtn').onclick = () => {
 };
 
 generateRandomSlice();
-log('Script is klaar. Vul je gegevens in en klik op Start.');
+log('Script ingeladen. Druk op Start Scan om te testen!');
 </script>
 </body>
 </html>
