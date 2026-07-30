@@ -104,7 +104,7 @@
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
             <div class="sub">Puzzel #71 – WebGPU Parallel Edition</div>
-            <span class="badge">🚀 OPTIE 4: WEBGPU MASSIVE MULTITHREADING</span>
+            <span class="badge">🚀 OPTIE 1: MACRO-BATCHING (MINDER PRATEN)</span>
         </div>
         <div class="card">
             <div class="card-title">⚙ Actieve Plakje Configuratie</div>
@@ -120,9 +120,14 @@
                 </select>
             </div>
             <div class="field">
-                <label>Keys per Hop (Slice)</label>
-                <!-- 131.072 is 1 WebGPU dispatch batch, we doen er standaard 100x -->
-                <input id="keysLimit" value="13107200" type="number" min="131072" step="131072">
+                <label>Keys per Hop (Slice limit)</label>
+                <!-- Standaard 1000 batches = 131.072.000 keys. Zodat hij minder snel hopt. -->
+                <input id="keysLimit" value="131072000" type="number" min="131072" step="131072">
+            </div>
+            <div class="field">
+                <label>Batches per CPU Check</label>
+                <!-- GPU doet X aantal batches (a 131.072) stilzwijgend op de achtergrond. -->
+                <input id="batchesPerCheck" value="100" type="number" min="1" step="1">
             </div>
             <hr class="divider">
             <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" readonly style="color: var(--warn);"></div>
@@ -146,7 +151,7 @@
                 <div class="chance-info">
                     <div class="big-number" id="chanceScientific">0.00%</div>
                     <div class="label-small">tot volgende willekeurige sprong</div>
-                    <div class="kans-uitleg" id="chanceUitleg">GPU berekent duizenden Jacobian Points parallel en zoekt naar een specifieke Hash160 match.</div>
+                    <div class="kans-uitleg" id="chanceUitleg">GPU berekent miljoenen Jacobian Points in gigantische macro-batches zonder CPU interrupties.</div>
                 </div>
             </div>
         </div>
@@ -194,8 +199,6 @@ function base58DecodeToH160(address) {
     let hex = num.toString(16);
     if(hex.length % 2 !== 0) hex = '0' + hex;
     hex = hex.padStart(50, '0');
-    // Adres structuur is: [1 byte versie] [20 bytes hash160] [4 bytes checksum]
-    // 25 bytes totaal = 50 hex karakters.
     return hex.substring(2, 42); 
 }
 
@@ -204,7 +207,6 @@ function getRandomBigInt256() {
     crypto.getRandomValues(bytes);
     let res = 0n;
     for(let i=0; i<32; i++) { res = (res << 8n) | BigInt(bytes[i]); }
-    // Modulo P (secp256k1 order limit om veilige keys te genereren)
     const P = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
     return (res % (P - 2n)) + 1n;
 }
@@ -217,7 +219,7 @@ function u256ToLimbs(bn){
     return limbs;
 }
 
-// === WGSL Shader (WebGPU) - NU MET MATCHING LOGIC ===
+// === WGSL Shader (WebGPU) - MET MACRO BATCHING (ATOMIC U32) ===
 const wgslShader = `
 struct U256 { limbs: array<u32,8>, };
 struct PointJ { X: U256, Y: U256, Z: U256, };
@@ -225,10 +227,10 @@ struct GenData {
   out_h160: array<u32,5>,
   target_h160: array<u32,5>,
   base: array<u32,8>,
-  batch_start: u32,
+  batch_start: u32, // Bevat nu de locale batch offset binnen een macro-loop
   is_uncompressed: u32,
   sample_offset: u32,
-  found_index: atomic<i32>,
+  found_index: atomic<u32>, // Aangepast naar u32 voor directe offset opslag
 };
 @group(0) @binding(0) var<storage, read_write> gdata: GenData;
 
@@ -479,7 +481,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>){
   // MATCHING LOGICA TEGEN HET INGESTELDE DOEL ADRES!
   if(h160[0] == gdata.target_h160[0] && h160[1] == gdata.target_h160[1] &&
      h160[2] == gdata.target_h160[2] && h160[3] == gdata.target_h160[3] && h160[4] == gdata.target_h160[4]) {
-      atomicStore(&gdata.found_index, i32(thread_id));
+      
+      // We slaan de exacte offset (binnen deze macro-loop) op in de atomic u32!
+      atomicStore(&gdata.found_index, gdata.batch_start + thread_id);
   }
 }
 `;
@@ -488,8 +492,8 @@ let isRunning = false, gpuDevice, computePipeline, gpuBuffer, readBuffer, bindGr
 let totalScanned = 0n, sliceScanned = 0n, lastTime = 0, lastScanned = 0n;
 let globalScanPointer = 0n;
 let slicesCount = 0;
-let currentSliceLimit = 1000000n;
-const BATCH = 512 * 256; // 131.072 keys per dispatch
+let currentSliceLimit = 131072000n;
+const BATCH = 512 * 256; // 131.072 keys per WebGPU dispatch (1 workgroup)
 
 async function initWebGPU(){
   if(!navigator.gpu) throw new Error('WebGPU wordt niet ondersteund.');
@@ -552,53 +556,82 @@ async function runSearch(){
 
     if(sliceScanned >= currentSliceLimit) { doSniperHop(); }
 
-    const baseLimbs = u256ToLimbs(globalScanPointer);
-    const batchStart = Number(sliceScanned);
+    const batchesPerCheck = parseInt(document.getElementById('batchesPerCheck').value) || 100;
+    
+    // We updaten de base direct op de start van deze macro-loop.
+    // Dit voorkomt dat "batch_start" de limiet van 4.29 miljard (u32) overschrijdt, 
+    // want batch_start is nu simpelweg een lokale offset binnen deze cpu frame!
+    const startSliceForThisFrame = sliceScanned;
+    const macroBase = globalScanPointer + startSliceForThisFrame;
+    const baseLimbs = u256ToLimbs(macroBase);
     const isUncomp = document.getElementById('keyType').value === 'uncompressed' ? 1 : 0;
     
     const buf = new ArrayBuffer(88);
     const dv = new DataView(buf);
     
-    // Offset 20: Target H160. Parse als Little Endian zoals WebGPU dat verwacht
     for(let i=0; i<5; i++) dv.setUint32(20 + i*4, targetDv.getUint32(i*4, true), true); 
-    // Offset 40: Base
     for(let i=0; i<8; i++) dv.setUint32(40 + i*4, baseLimbs[i], true);
-    dv.setUint32(72, batchStart, true);
+    // batch_start (offset 72) wordt pas in de loop gezet
     dv.setUint32(76, isUncomp, true);
-    dv.setUint32(80, 0, true); // sample
-    dv.setInt32(84, -1, true); // found_index = -1
+    dv.setUint32(80, 0, true); 
+    dv.setUint32(84, 0xFFFFFFFF, true); // reset atomic u32 found_index naar 4294967295
 
+    // Schrijf de vaste basis data van deze frame 1x naar de GPU
     gpuDevice.queue.writeBuffer(gpuBuffer, 0, buf);
-    const enc = gpuDevice.createCommandEncoder();
-    const pass = enc.beginComputePass();
-    pass.setPipeline(computePipeline);
-    pass.setBindGroup(0, bindGroup);
-    pass.dispatchWorkgroups(512);
-    pass.end();
-    enc.copyBufferToBuffer(gpuBuffer, 0, readBuffer, 0, 88);
-    gpuDevice.queue.submit([enc.finish()]);
 
+    let loopsThisFrame = 0;
+    
+    // 🔥 MACRO BATCHING LOOP 🔥
+    // Hier zetten we N batches achter elkaar in de wachtrij op de GPU, zonder de buffer te mappen!
+    while(loopsThisFrame < batchesPerCheck && sliceScanned < currentSliceLimit) {
+        
+        const localOffset = loopsThisFrame * BATCH; 
+        
+        // Alleen de locale offset_start (4 bytes) updaten in de GPU buffer
+        const offsetBuf = new Uint32Array([localOffset]);
+        gpuDevice.queue.writeBuffer(gpuBuffer, 72, offsetBuf);
+
+        const enc = gpuDevice.createCommandEncoder();
+        const pass = enc.beginComputePass();
+        pass.setPipeline(computePipeline);
+        pass.setBindGroup(0, bindGroup);
+        pass.dispatchWorkgroups(512); // Dispatched weer 131.072 threads in deze ronde
+        pass.end();
+
+        loopsThisFrame++;
+        const isLast = (loopsThisFrame === batchesPerCheck || (sliceScanned + BigInt(BATCH)) >= currentSliceLimit);
+
+        // Alleen bij de állerlaatste run in deze loop laten we de GPU z'n resultaat kopiëren naar de readBuffer
+        if (isLast) {
+            enc.copyBufferToBuffer(gpuBuffer, 0, readBuffer, 0, 88);
+        }
+        
+        // Pomp de opdracht direct naar de GPU queue
+        gpuDevice.queue.submit([enc.finish()]);
+
+        sliceScanned += BigInt(BATCH);
+        totalScanned += BigInt(BATCH);
+    }
+
+    // PAS HIER: Wachten we tot de GPU écht klaar is met alle X opdrachten
     await readBuffer.mapAsync(GPUMapMode.READ);
     const result = new DataView(readBuffer.getMappedRange().slice(0));
-    const foundIndex = result.getInt32(84, true);
+    const foundLocalOffset = result.getUint32(84, true);
     readBuffer.unmap();
 
-    if(foundIndex !== -1) {
-        // MATCH GEVONDEN!
-        const matchPriv = globalScanPointer + BigInt(batchStart) + BigInt(foundIndex);
+    if(foundLocalOffset !== 0xFFFFFFFF) {
+        // MATCH GEVONDEN ergens binnen in de macro-batch!
+        const matchPriv = macroBase + BigInt(foundLocalOffset);
         const hexKey = toHex32(matchPriv).toUpperCase();
         log(`🔥 BINGO! Sleutel gevonden in zone ${slicesCount}: ${hexKey}`, 'ev-found');
         addResultRow(hexKey, document.getElementById('btcAddr').value.trim());
         document.getElementById('statusVal').textContent = 'Gevonden!';
         isRunning = false;
         updateUI();
-        return;
+        return; // Stop the engine
     }
 
-    const batchSizeBI = BigInt(BATCH);
-    sliceScanned += batchSizeBI;
-    totalScanned += batchSizeBI;
-
+    // Update UI Stats af en toe
     const now = Date.now();
     if(now - lastTime > 300){
       const speed = Number(totalScanned - lastScanned) / ((now - lastTime) / 1000);
@@ -625,7 +658,7 @@ async function runSearch(){
 document.getElementById('startBtn').onclick = async () => {
   if(isRunning) return;
   try {
-    if(!gpuDevice){ log('WebGPU compileren (Massive Parallelism)...'); await initWebGPU(); log('WebGPU Ready!', 'success'); }
+    if(!gpuDevice){ log('WebGPU compileren (Massive Batching)...'); await initWebGPU(); log('WebGPU Ready!', 'success'); }
     isRunning = true; updateUI(); doSniperHop(); runSearch();
   } catch(err) { log('❌ Fout: ' + err.message, 'danger'); }
 };
