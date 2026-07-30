@@ -27,7 +27,6 @@
   .btn:disabled{opacity:.35;cursor:not-allowed;}
   .btn-start{background:var(--success);color:#000;flex:1;}
   .btn-stop{background:var(--danger);color:#fff;flex:1;}
-  .btn-random{background:var(--accent2);color:#000;flex:1;}
   .btn-row{display:flex;gap:10px;margin-top:12px;}
   .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
   .stat-cell{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:10px 14px;}
@@ -43,7 +42,6 @@
   .result-table td{border:1px solid var(--border);padding:9px 12px;color:var(--text);word-break:break-all;}
   .footer{text-align:center;font-size:.6rem;color:var(--muted);letter-spacing:.1em;margin-top:24px;}
   .range-info{font-size:0.62rem;color:var(--muted);margin-top:4px;text-align:right;}
-  .badge { background: var(--warn); color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.6rem; }
 </style>
 </head>
 <body>
@@ -56,9 +54,15 @@
   <div class="card">
     <div class="card-title">① Doelwit & Zoekbereik</div>
     <div class="field">
-      <label>Target Adres <span class="badge">COMPRESSED</span></label>
-      <!-- Standaard ingesteld op test-adres voor sleutel 0x1 om de engine te bewijzen -->
-      <input type="text" id="targetAddress" value="1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH">
+      <label>Target Bitcoin Adres</label>
+      <input type="text" id="targetAddress" value="14oFNXucftsHiUMY8uctg6N487riuyXs4h">
+    </div>
+    <div class="field">
+      <label>Adres Type (Belangrijk!)</label>
+      <select id="keyType">
+        <option value="uncompressed">Uncompressed (Vroege puzzles & oudere adressen)</option>
+        <option value="compressed">Compressed (Modernere adressen)</option>
+      </select>
     </div>
     <div class="field">
       <label>Keys per Plakje (Limit)</label>
@@ -67,13 +71,13 @@
     <hr style="border:none;border-top:1px dashed var(--dim);margin:10px 0;">
     <div class="field">
       <label>🟢 Zoekrange Start (HEX)</label>
-      <input type="text" id="searchRangeStart" value="1" class="editable">
+      <input type="text" id="searchRangeStart" value="100000" class="editable">
     </div>
     <div class="field">
       <label>🔴 Zoekrange Eind (HEX)</label>
-      <input type="text" id="searchRangeEnd" value="1000" class="editable">
+      <input type="text" id="searchRangeEnd" value="1fffff" class="editable">
     </div>
-    <div class="range-info">💡 Let op: Deze scanner werkt uitsluitend met Compressed (gecomprimeerde) adressen.</div>
+    <div class="range-info">💡 Script scant nu strak op volgorde van Start naar Eind.</div>
     <hr style="border:none;border-top:1px dashed var(--dim);margin:10px 0;">
     <div class="field">
       <label>Actueel Plakje Start</label>
@@ -90,13 +94,12 @@
     <div class="btn-row">
       <button class="btn btn-start" id="startBtn">▶ Start Scan</button>
       <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
-      <button class="btn btn-random" id="randomBtn">🎲 Nieuw Plakje</button>
     </div>
     <div class="stats-grid" style="margin-top:14px;">
       <div class="stat-cell"><div class="label">Status</div><div class="value" id="statusVal">Gestopt</div></div>
       <div class="stat-cell"><div class="label">Totaal Gescand</div><div class="value" id="scannedVal">0</div></div>
       <div class="stat-cell"><div class="label">Snelheid</div><div class="value" id="speedVal">0 /s</div></div>
-      <div class="stat-cell"><div class="label">Plakjes Bezocht</div><div class="value" id="slicesVisited">1</div></div>
+      <div class="stat-cell"><div class="label">Plakjes Bezocht</div><div class="value" id="slicesVisited">0</div></div>
     </div>
     <div style="margin-top:10px;font-size:.7rem;color:var(--muted);">In dit plakje: <span id="currentSliceKeys">0</span> / <span id="limitDisplay">0</span></div>
     <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
@@ -115,7 +118,7 @@
     <div class="log" id="logBox"></div>
   </div>
   
-  <div class="footer">WebGPU Custom Range Scanner · High Performance Engine</div>
+  <div class="footer">WebGPU Custom Range Scanner · Fixed & Optimized</div>
 </div>
 
 <script>
@@ -138,7 +141,7 @@ function decodeBase58Address(address) {
   let bytes = [0];
   for(let i = 0; i < address.length; i++) {
     let c = address[i];
-    if(!(c in ALPHABET_MAP)) throw new Error(`Ongeldig Base58 karakter '${address[i]}' in adres`);
+    if(!(c in ALPHABET_MAP)) throw new Error(`Ongeldig Base58 karakter '${address[i]}'`);
     let val = ALPHABET_MAP[c];
     for(let j = 0; j < bytes.length; j++) bytes[j] *= 58;
     bytes[0] += val;
@@ -155,7 +158,6 @@ function decodeBase58Address(address) {
   }
   for(let i = 0; i < address.length && address[i] === '1'; i++) bytes.push(0);
   bytes.reverse();
-  
   const fullBytes = new Uint8Array(bytes);
   return fullBytes.slice(1, 21);
 }
@@ -171,8 +173,20 @@ struct TargetData {
   found_offset: atomic<u32>,
   base: array<u32,8>,
   batch_start: u32,
+  is_uncompressed: u32,
 };
 @group(0) @binding(0) var<storage, read_write> target: TargetData;
+
+// Polyfill voor umulExtended (veiliger voor diverse browsers)
+fn mul_u32_ext(a: u32, b: u32) -> vec2<u32> {
+  let al = a & 0xFFFFu; let ah = a >> 16u;
+  let bl = b & 0xFFFFu; let bh = b >> 16u;
+  let ll = al * bl; let hl = ah * bl; let lh = al * bh; let hh = ah * bh;
+  let mid = hl + (ll >> 16u) + lh;
+  let y = hh + (mid >> 16u);
+  let x = (mid << 16u) | (ll & 0xFFFFu);
+  return vec2<u32>(x, y);
+}
 
 fn get_p() -> U256 {
   var p: U256;
@@ -190,20 +204,16 @@ fn ge(a: U256, b: U256) -> bool {
 fn add_mod_p(a: U256, b: U256) -> U256 {
   var res: U256; var carry: u32=0u;
   for(var i:u32=0u;i<8u;i=i+1u){
-    let s1=a.limbs[i]+b.limbs[i];
-    let c1=select(0u,1u,s1<a.limbs[i]);
-    let s2=s1+carry;
-    let c2=select(0u,1u,s2<s1);
+    let s1=a.limbs[i]+b.limbs[i]; let c1=select(0u,1u,s1<a.limbs[i]);
+    let s2=s1+carry; let c2=select(0u,1u,s2<s1);
     res.limbs[i]=s2; carry=c1+c2;
   }
   let p=get_p();
   if(ge(res,p) || carry>0u){
     var borrow:u32=0u;
     for(var i:u32=0u;i<8u;i=i+1u){
-      let d1=res.limbs[i]-p.limbs[i];
-      let b1=select(0u,1u,res.limbs[i]<p.limbs[i]);
-      let d2=d1-borrow;
-      let b2=select(0u,1u,d1<borrow);
+      let d1=res.limbs[i]-p.limbs[i]; let b1=select(0u,1u,res.limbs[i]<p.limbs[i]);
+      let d2=d1-borrow; let b2=select(0u,1u,d1<borrow);
       res.limbs[i]=d2; borrow=b1+b2;
     }
   }
@@ -212,19 +222,15 @@ fn add_mod_p(a: U256, b: U256) -> U256 {
 fn sub_mod_p(a: U256, b: U256) -> U256 {
   var res: U256; var borrow: u32=0u;
   for(var i:u32=0u;i<8u;i=i+1u){
-    let d1=a.limbs[i]-b.limbs[i];
-    let b1=select(0u,1u,a.limbs[i]<b.limbs[i]);
-    let d2=d1-borrow;
-    let b2=select(0u,1u,d1<borrow);
+    let d1=a.limbs[i]-b.limbs[i]; let b1=select(0u,1u,a.limbs[i]<b.limbs[i]);
+    let d2=d1-borrow; let b2=select(0u,1u,d1<borrow);
     res.limbs[i]=d2; borrow=b1+b2;
   }
   if(borrow>0u){
     let p=get_p(); var carry:u32=0u;
     for(var i:u32=0u;i<8u;i=i+1u){
-      let s1=res.limbs[i]+p.limbs[i];
-      let c1=select(0u,1u,s1<res.limbs[i]);
-      let s2=s1+carry;
-      let c2=select(0u,1u,s2<s1);
+      let s1=res.limbs[i]+p.limbs[i]; let c1=select(0u,1u,s1<res.limbs[i]);
+      let s2=s1+carry; let c2=select(0u,1u,s2<s1);
       res.limbs[i]=s2; carry=c1+c2;
     }
   }
@@ -236,71 +242,43 @@ fn mul_mod_p(a: U256, b: U256) -> U256 {
   for(var i:u32=0u;i<8u;i=i+1u){
     var carry:u32 = 0u;
     for(var j:u32=0u;j<8u;j=j+1u){
-      let prod = umulExtended(a.limbs[i], b.limbs[j]);
-      var s1 = prod.x + r[i+j];
-      var c1 = select(0u, 1u, s1 < prod.x);
-      var s2 = s1 + carry;
-      var c2 = select(0u, 1u, s2 < s1);
-      r[i+j] = s2;
-      carry = prod.y + c1 + c2;
+      let prod = mul_u32_ext(a.limbs[i], b.limbs[j]);
+      var s1 = prod.x + r[i+j]; var c1 = select(0u, 1u, s1 < prod.x);
+      var s2 = s1 + carry; var c2 = select(0u, 1u, s2 < s1);
+      r[i+j] = s2; carry = prod.y + c1 + c2;
     }
     r[i+8u] = carry;
   }
   for(var i: i32 = 15; i >= 8; i = i - 1) {
       let val = r[u32(i)];
       if (val == 0u) { continue; }
-      r[u32(i)] = 0u;
-      var carry: u32 = 0u;
-      let m = umulExtended(val, 977u);
+      r[u32(i)] = 0u; var carry: u32 = 0u;
+      let m = mul_u32_ext(val, 977u);
       var j = u32(i) - 8u;
-      var s1 = r[j] + m.x;
-      var c1 = select(0u, 1u, s1 < r[j]);
-      r[j] = s1;
-      carry = m.y + c1;
-      j = j + 1u;
+      var s1 = r[j] + m.x; var c1 = select(0u, 1u, s1 < r[j]);
+      r[j] = s1; carry = m.y + c1; j = j + 1u;
       while(carry > 0u && j < 16u) {
-          var s = r[j] + carry;
-          carry = select(0u, 1u, s < r[j]);
-          r[j] = s;
-          j = j + 1u;
+          var s = r[j] + carry; carry = select(0u, 1u, s < r[j]); r[j] = s; j = j + 1u;
       }
-      carry = val;
-      j = u32(i) - 7u;
+      carry = val; j = u32(i) - 7u;
       while(carry > 0u && j < 16u) {
-          var s = r[j] + carry;
-          carry = select(0u, 1u, s < r[j]);
-          r[j] = s;
-          j = j + 1u;
+          var s = r[j] + carry; carry = select(0u, 1u, s < r[j]); r[j] = s; j = j + 1u;
       }
   }
   if (r[8] > 0u) {
-      let val = r[8];
-      r[8] = 0u;
-      var carry: u32 = 0u;
-      let m = umulExtended(val, 977u);
-      var j = 0u;
-      var s1 = r[j] + m.x;
-      var c1 = select(0u, 1u, s1 < r[j]);
-      r[j] = s1;
-      carry = m.y + c1;
-      j = j + 1u;
+      let val = r[8]; r[8] = 0u; var carry: u32 = 0u;
+      let m = mul_u32_ext(val, 977u);
+      var j = 0u; var s1 = r[j] + m.x; var c1 = select(0u, 1u, s1 < r[j]);
+      r[j] = s1; carry = m.y + c1; j = j + 1u;
       while(carry > 0u && j < 16u) {
-          var s = r[j] + carry;
-          carry = select(0u, 1u, s < r[j]);
-          r[j] = s;
-          j = j + 1u;
+          var s = r[j] + carry; carry = select(0u, 1u, s < r[j]); r[j] = s; j = j + 1u;
       }
-      carry = val;
-      j = 1u;
+      carry = val; j = 1u;
       while(carry > 0u && j < 16u) {
-          var s = r[j] + carry;
-          carry = select(0u, 1u, s < r[j]);
-          r[j] = s;
-          j = j + 1u;
+          var s = r[j] + carry; carry = select(0u, 1u, s < r[j]); r[j] = s; j = j + 1u;
       }
   }
-  var res: U256;
-  for(var i:u32=0u;i<8u;i=i+1u){ res.limbs[i] = r[i]; }
+  var res: U256; for(var i:u32=0u;i<8u;i=i+1u){ res.limbs[i] = r[i]; }
   let p = get_p();
   if (ge(res, p)) { res = sub_mod_p(res, p); }
   if (ge(res, p)) { res = sub_mod_p(res, p); }
@@ -310,9 +288,7 @@ fn sqr_mod_p(a: U256) -> U256 { return mul_mod_p(a,a); }
 fn double_mod_p(a: U256) -> U256 { return add_mod_p(a,a); }
 fn triple_mod_p(a: U256) -> U256 { return add_mod_p(double_mod_p(a),a); }
 fn from_u32(v: u32) -> U256 {
-  var r: U256; r.limbs[0]=v;
-  for(var i:u32=1u;i<8u;i=i+1u){ r.limbs[i]=0u; }
-  return r;
+  var r: U256; r.limbs[0]=v; for(var i:u32=1u;i<8u;i=i+1u){ r.limbs[i]=0u; } return r;
 }
 fn point_double(p1: PointJ) -> PointJ {
   var res: PointJ;
@@ -323,8 +299,7 @@ fn point_double(p1: PointJ) -> PointJ {
   let X3 = sub_mod_p(sqr_mod_p(M), double_mod_p(S));
   let Y3 = sub_mod_p(mul_mod_p(M, sub_mod_p(S,X3)), T);
   let Z3 = mul_mod_p(double_mod_p(p1.Y), p1.Z);
-  res.X=X3; res.Y=Y3; res.Z=Z3;
-  return res;
+  res.X=X3; res.Y=Y3; res.Z=Z3; return res;
 }
 fn point_add(p1: PointJ, p2: PointJ) -> PointJ {
   let Z1Sq=sqr_mod_p(p1.Z); let Z2Sq=sqr_mod_p(p2.Z);
@@ -340,8 +315,7 @@ fn point_add(p1: PointJ, p2: PointJ) -> PointJ {
   let X3=sub_mod_p(sub_mod_p(sqr_mod_p(R),HCube),double_mod_p(V));
   let Y3=sub_mod_p(mul_mod_p(R,sub_mod_p(V,X3)),mul_mod_p(S1,HCube));
   let Z3=mul_mod_p(p1.Z,mul_mod_p(p2.Z,H));
-  res.X=X3; res.Y=Y3; res.Z=Z3;
-  return res;
+  res.X=X3; res.Y=Y3; res.Z=Z3; return res;
 }
 fn scalar_mult(scalar: U256, point: PointJ) -> PointJ {
   var result: PointJ;
@@ -357,11 +331,8 @@ fn scalar_mult(scalar: U256, point: PointJ) -> PointJ {
   return result;
 }
 fn modinv_p(a: U256) -> U256 {
-  let p=get_p();
-  var exp: U256 = p;
-  var res: U256 = from_u32(1u);
-  var base: U256 = a;
-  var e: U256 = sub_mod_p(exp, from_u32(2u));
+  let p=get_p(); var exp: U256 = p; var res: U256 = from_u32(1u);
+  var base: U256 = a; var e: U256 = sub_mod_p(exp, from_u32(2u));
   for(var i:u32=0u;i<256u;i=i+1u){
     let bit=(e.limbs[i/32u] >> (i%32u)) & 1u;
     if(bit==1u){ res=mul_mod_p(res,base); }
@@ -369,6 +340,7 @@ fn modinv_p(a: U256) -> U256 {
   }
   return res;
 }
+
 const K256=array<u32,64>(
 0x428a2f98u,0x71374491u,0xb5c0fbcfu,0xe9b5dba5u,0x3956c25bu,0x59f111f1u,0x923f82a4u,0xab1c5ed5u,
 0xd807aa98u,0x12835b01u,0x243185beu,0x550c7dc3u,0x72be5d74u,0x80deb1feu,0x9bdc06a7u,0xc19bf174u,
@@ -378,43 +350,68 @@ const K256=array<u32,64>(
 0xa2bfe8a1u,0xa81a664bu,0xc24b8b70u,0xc76c51a3u,0xd192e819u,0xd6990624u,0xf40e3585u,0x106aa070u,
 0x19a4c116u,0x1e376c08u,0x2748774cu,0x34b0bcb5u,0x391c0cb3u,0x4ed8aa4au,0x5b9cca4fu,0x682e6ff3u,
 0x748f82eeu,0x78a5636fu,0x84c87814u,0x8cc70208u,0x90befffau,0xa4506cebu,0xbef9a3f7u,0xc67178f2u);
-fn rotr(v:u32,n:u32)->u32{ return (v>>n)|(v<<(32u-n)); }
 
-fn sha256_pubkey(x: U256, is_even: bool) -> array<u32,8> {
-  var w=array<u32,64>();
-  let prefix=select(0x03000000u,0x02000000u,is_even);
-  w[0]=prefix|(x.limbs[7]>>8u);
-  w[1]=(x.limbs[7]<<24u)|(x.limbs[6]>>8u);
-  w[2]=(x.limbs[6]<<24u)|(x.limbs[5]>>8u);
-  w[3]=(x.limbs[5]<<24u)|(x.limbs[4]>>8u);
-  w[4]=(x.limbs[4]<<24u)|(x.limbs[3]>>8u);
-  w[5]=(x.limbs[3]<<24u)|(x.limbs[2]>>8u);
-  w[6]=(x.limbs[2]<<24u)|(x.limbs[1]>>8u);
-  w[7]=(x.limbs[1]<<24u)|(x.limbs[0]>>8u);
-  w[8]=(x.limbs[0]<<24u)|0x00800000u;
-  for(var i:u32=9u;i<15u;i=i+1u){ w[i]=0u; }
-  w[15]=264u;
+fn rotr(v:u32,n:u32)->u32{ return (v>>n)|(v<<(32u-n)); }
+fn rotl(v:u32,n:u32)->u32{ return (v<<n)|(v>>(32u-n)); }
+
+fn sha256_block(win: array<u32,64>, state: array<u32,8>) -> array<u32,8> {
+  var w = win;
   for(var i:u32=16u;i<64u;i=i+1u){
     let s0=rotr(w[i-15u],7u)^rotr(w[i-15u],18u)^(w[i-15u]>>3u);
     let s1=rotr(w[i-2u],17u)^rotr(w[i-2u],19u)^(w[i-2u]>>10u);
     w[i]=w[i-16u]+s0+w[i-7u]+s1;
   }
-  var a=0x6a09e667u;var b=0xbb67ae85u;var c=0x3c6ef372u;var d=0xa54ff53au;
-  var e=0x510e527fu;var f=0x9b05688cu;var g=0x1f83d9abu;var h=0x5be0cd19u;
+  var a=state[0]; var b=state[1]; var c=state[2]; var d=state[3];
+  var e=state[4]; var f=state[5]; var g=state[6]; var h=state[7];
   for(var i:u32=0u;i<64u;i=i+1u){
     let S1=rotr(e,6u)^rotr(e,11u)^rotr(e,25u);
-    let ch=(e&f)^((~e)&g);
-    let t1=h+S1+ch+K256[i]+w[i];
+    let ch=(e&f)^((~e)&g); let t1=h+S1+ch+K256[i]+w[i];
     let S0=rotr(a,2u)^rotr(a,13u)^rotr(a,22u);
-    let maj=(a&b)^(a&c)^(b&c);
-    let t2=S0+maj;
+    let maj=(a&b)^(a&c)^(b&c); let t2=S0+maj;
     h=g; g=f; f=e; e=d+t1; d=c; c=b; b=a; a=t1+t2;
   }
-  var hash=array<u32,8>();
-  hash[0]=0x6a09e667u+a; hash[1]=0xbb67ae85u+b; hash[2]=0x3c6ef372u+c; hash[3]=0xa54ff53au+d;
-  hash[4]=0x510e527fu+e; hash[5]=0x9b05688cu+f; hash[6]=0x1f83d9abu+g; hash[7]=0x5be0cd19u+h;
-  return hash;
+  return array<u32,8>(state[0]+a, state[1]+b, state[2]+c, state[3]+d, state[4]+e, state[5]+f, state[6]+g, state[7]+h);
 }
+
+// ----------------------------------------------------
+// VERBETERDE HASH FUNCTIES (Compressed én Uncompressed)
+// ----------------------------------------------------
+fn sha256_pubkey_compressed(x: U256, is_even: bool) -> array<u32,8> {
+  var w=array<u32,64>();
+  let prefix=select(0x03000000u,0x02000000u,is_even);
+  w[0]=prefix|(x.limbs[7]>>8u);
+  w[1]=(x.limbs[7]<<24u)|(x.limbs[6]>>8u); w[2]=(x.limbs[6]<<24u)|(x.limbs[5]>>8u);
+  w[3]=(x.limbs[5]<<24u)|(x.limbs[4]>>8u); w[4]=(x.limbs[4]<<24u)|(x.limbs[3]>>8u);
+  w[5]=(x.limbs[3]<<24u)|(x.limbs[2]>>8u); w[6]=(x.limbs[2]<<24u)|(x.limbs[1]>>8u);
+  w[7]=(x.limbs[1]<<24u)|(x.limbs[0]>>8u);
+  w[8]=(x.limbs[0]<<24u)|0x00800000u;
+  for(var i:u32=9u;i<15u;i=i+1u){ w[i]=0u; }
+  w[15]=264u; // 33 bytes * 8 bits = 264 bits
+  return sha256_block(w, array<u32,8>(0x6a09e667u,0xbb67ae85u,0x3c6ef372u,0xa54ff53au,0x510e527fu,0x9b05688cu,0x1f83d9abu,0x5be0cd19u));
+}
+
+fn sha256_pubkey_uncompressed(x: U256, y: U256) -> array<u32,8> {
+  var w=array<u32,64>();
+  // Blok 1 (64 bytes): Prefix(0x04) + 32 bytes X + 31 bytes Y
+  w[0] = 0x04000000u | (x.limbs[7] >> 8u);
+  w[1] = (x.limbs[7] << 24u) | (x.limbs[6] >> 8u); w[2] = (x.limbs[6] << 24u) | (x.limbs[5] >> 8u);
+  w[3] = (x.limbs[5] << 24u) | (x.limbs[4] >> 8u); w[4] = (x.limbs[4] << 24u) | (x.limbs[3] >> 8u);
+  w[5] = (x.limbs[3] << 24u) | (x.limbs[2] >> 8u); w[6] = (x.limbs[2] << 24u) | (x.limbs[1] >> 8u);
+  w[7] = (x.limbs[1] << 24u) | (x.limbs[0] >> 8u);
+  w[8] = (x.limbs[0] << 24u) | (y.limbs[7] >> 8u); w[9] = (y.limbs[7] << 24u) | (y.limbs[6] >> 8u);
+  w[10] = (y.limbs[6] << 24u) | (y.limbs[5] >> 8u); w[11] = (y.limbs[5] << 24u) | (y.limbs[4] >> 8u);
+  w[12] = (y.limbs[4] << 24u) | (y.limbs[3] >> 8u); w[13] = (y.limbs[3] << 24u) | (y.limbs[2] >> 8u);
+  w[14] = (y.limbs[2] << 24u) | (y.limbs[1] >> 8u); w[15] = (y.limbs[1] << 24u) | (y.limbs[0] >> 8u);
+  
+  var state = sha256_block(w, array<u32,8>(0x6a09e667u,0xbb67ae85u,0x3c6ef372u,0xa54ff53au,0x510e527fu,0x9b05688cu,0x1f83d9abu,0x5be0cd19u));
+  
+  // Blok 2: Laatste byte Y + padding
+  w[0] = (y.limbs[0] << 24u) | 0x00800000u;
+  for(var i:u32=1u;i<15u;i=i+1u){ w[i] = 0u; }
+  w[15] = 520u; // 65 bytes * 8 bits = 520 bits
+  return sha256_block(w, state);
+}
+
 fn rmd_f(j:u32,x:u32,y:u32,z:u32)->u32{
   if(j<16u){ return x^y^z; }
   if(j<32u){ return (x&y)|((~x)&z); }
@@ -423,8 +420,7 @@ fn rmd_f(j:u32,x:u32,y:u32,z:u32)->u32{
   return x^(y|(~z));
 }
 fn bswap(v: u32) -> u32 {
-  return ((v & 0xff000000u) >> 24u) | ((v & 0x00ff0000u) >> 8u) |
-         ((v & 0x0000ff00u) << 8u)  | ((v & 0x000000ffu) << 24u);
+  return ((v & 0xff000000u) >> 24u) | ((v & 0x00ff0000u) >> 8u) | ((v & 0x0000ff00u) << 8u) | ((v & 0x000000ffu) << 24u);
 }
 fn ripemd160_of_sha(sha: array<u32,8>) -> array<u32,5> {
   var X=array<u32,16>();
@@ -432,47 +428,23 @@ fn ripemd160_of_sha(sha: array<u32,8>) -> array<u32,5> {
   X[8]=0x80u;
   for(var i:u32=9u;i<14u;i=i+1u){ X[i]=0u; }
   X[14]=256u; X[15]=0u;
-  let zl=array<u32,80>(0u,1u,2u,3u,4u,5u,6u,7u,8u,9u,10u,11u,12u,13u,14u,15u,
-    7u,4u,13u,1u,10u,6u,15u,3u,12u,0u,9u,5u,2u,14u,11u,8u,
-    3u,10u,14u,4u,9u,15u,8u,1u,2u,7u,0u,6u,13u,11u,5u,12u,
-    1u,9u,11u,10u,0u,8u,12u,4u,13u,3u,7u,15u,14u,5u,6u,2u,
-    4u,0u,5u,9u,7u,12u,2u,10u,14u,1u,3u,8u,11u,6u,15u,13u);
-  let zr=array<u32,80>(5u,14u,7u,0u,9u,2u,11u,4u,13u,6u,15u,8u,1u,10u,3u,12u,
-    6u,11u,3u,7u,0u,13u,5u,10u,14u,15u,8u,12u,4u,9u,1u,2u,
-    15u,5u,1u,3u,7u,14u,6u,9u,11u,8u,12u,2u,10u,0u,4u,13u,
-    8u,6u,4u,1u,3u,11u,15u,0u,5u,12u,2u,13u,9u,7u,10u,14u,
-    12u,15u,10u,4u,1u,5u,8u,7u,6u,2u,13u,14u,0u,3u,9u,11u);
-  let sl=array<u32,80>(11u,14u,15u,12u,5u,8u,7u,9u,11u,13u,14u,15u,6u,7u,9u,8u,
-    7u,6u,8u,13u,11u,9u,7u,15u,7u,12u,15u,9u,11u,7u,13u,12u,
-    11u,13u,6u,7u,14u,9u,13u,15u,14u,8u,13u,6u,5u,12u,7u,5u,
-    11u,12u,14u,15u,14u,15u,9u,8u,9u,14u,5u,6u,8u,6u,5u,12u,
-    9u,15u,5u,11u,6u,8u,13u,12u,5u,12u,13u,14u,11u,8u,5u,6u);
-  let sr=array<u32,80>(8u,9u,9u,11u,13u,15u,15u,5u,7u,7u,8u,11u,14u,14u,12u,6u,
-    9u,13u,15u,7u,12u,8u,9u,11u,7u,7u,12u,7u,6u,15u,13u,11u,
-    9u,7u,15u,11u,8u,6u,6u,14u,12u,13u,5u,14u,13u,13u,7u,5u,
-    15u,5u,8u,11u,14u,14u,6u,14u,6u,9u,12u,9u,12u,5u,15u,8u,
-    8u,5u,12u,9u,12u,5u,14u,6u,8u,13u,6u,5u,15u,13u,11u,11u);
+  let zl=array<u32,80>(0u,1u,2u,3u,4u,5u,6u,7u,8u,9u,10u,11u,12u,13u,14u,15u,7u,4u,13u,1u,10u,6u,15u,3u,12u,0u,9u,5u,2u,14u,11u,8u,3u,10u,14u,4u,9u,15u,8u,1u,2u,7u,0u,6u,13u,11u,5u,12u,1u,9u,11u,10u,0u,8u,12u,4u,13u,3u,7u,15u,14u,5u,6u,2u,4u,0u,5u,9u,7u,12u,2u,10u,14u,1u,3u,8u,11u,6u,15u,13u);
+  let zr=array<u32,80>(5u,14u,7u,0u,9u,2u,11u,4u,13u,6u,15u,8u,1u,10u,3u,12u,6u,11u,3u,7u,0u,13u,5u,10u,14u,15u,8u,12u,4u,9u,1u,2u,15u,5u,1u,3u,7u,14u,6u,9u,11u,8u,12u,2u,10u,0u,4u,13u,8u,6u,4u,1u,3u,11u,15u,0u,5u,12u,2u,13u,9u,7u,10u,14u,12u,15u,10u,4u,1u,5u,8u,7u,6u,2u,13u,14u,0u,3u,9u,11u);
+  let sl=array<u32,80>(11u,14u,15u,12u,5u,8u,7u,9u,11u,13u,14u,15u,6u,7u,9u,8u,7u,6u,8u,13u,11u,9u,7u,15u,7u,12u,15u,9u,11u,7u,13u,12u,11u,13u,6u,7u,14u,9u,13u,15u,14u,8u,13u,6u,5u,12u,7u,5u,11u,12u,14u,15u,14u,15u,9u,8u,9u,14u,5u,6u,8u,6u,5u,12u,9u,15u,5u,11u,6u,8u,13u,12u,5u,12u,13u,14u,11u,8u,5u,6u);
+  let sr=array<u32,80>(8u,9u,9u,11u,13u,15u,15u,5u,7u,7u,8u,11u,14u,14u,12u,6u,9u,13u,15u,7u,12u,8u,9u,11u,7u,7u,12u,7u,6u,15u,13u,11u,9u,7u,15u,11u,8u,6u,6u,14u,12u,13u,5u,14u,13u,13u,7u,5u,15u,5u,8u,11u,14u,14u,6u,14u,6u,9u,12u,9u,12u,5u,15u,8u,8u,5u,12u,9u,12u,5u,14u,6u,8u,13u,6u,5u,15u,13u,11u,11u);
   let KL=array<u32,5>(0x00000000u,0x5A827999u,0x6ED9EBA1u,0x8F1BBCDCu,0xA953FD4Eu);
   let KR=array<u32,5>(0x50A28BE6u,0x5C4DD124u,0x6D703EF3u,0x7A6D76E9u,0x00000000u);
   var h0=0x67452301u;var h1=0xEFCDAB89u;var h2=0x98BADCFEu;var h3=0x10325476u;var h4=0xC3D2E1F0u;
-  var A=h0;var B=h1;var C=h2;var D=h3;var E=h4;
-  var Ap=h0;var Bp=h1;var Cp=h2;var Dp=h3;var Ep=h4;
+  var A=h0;var B=h1;var C=h2;var D=h3;var E=h4; var Ap=h0;var Bp=h1;var Cp=h2;var Dp=h3;var Ep=h4;
   for(var j:u32=0u;j<80u;j=j+1u){
     let t=rotl(A+rmd_f(j,B,C,D)+X[zl[j]]+KL[j/16u], sl[j])+E;
     A=E; E=D; D=rotl(C,10u); C=B; B=t;
     let tp=rotl(Ap+rmd_f(79u-j,Bp,Cp,Dp)+X[zr[j]]+KR[j/16u], sr[j])+Ep;
     Ap=Ep; Ep=Dp; Dp=rotl(Cp,10u); Cp=Bp; Bp=tp;
   }
-  let T=h1+C+Dp;
-  h1=h2+D+Ep;
-  h2=h3+E+Ap;
-  h3=h4+A+Bp;
-  h4=h0+B+Cp;
-  h0=T;
-  var out=array<u32,5>(h0,h1,h2,h3,h4);
-  return out;
+  let T=h1+C+Dp; h1=h2+D+Ep; h2=h3+E+Ap; h3=h4+A+Bp; h4=h0+B+Cp; h0=T;
+  return array<u32,5>(h0,h1,h2,h3,h4);
 }
-fn rotl(v:u32,n:u32)->u32{ return (v<<n)|(v>>(32u-n)); }
 
 fn add_offset_with_batch(base: array<u32,8>, batch_start: u32, offset: u32) -> U256 {
   var res: U256;
@@ -497,16 +469,22 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>){
   Gy.limbs[0]=0xFB10D4B8u; Gy.limbs[1]=0x9C47D08Fu; Gy.limbs[2]=0xA6855419u; Gy.limbs[3]=0xFD17B448u;
   Gy.limbs[4]=0x0E1108A8u; Gy.limbs[5]=0x5DA4FBFCu; Gy.limbs[6]=0x26A3C465u; Gy.limbs[7]=0x483ADA77u;
   
-  var G: PointJ;
-  G.X=Gx; G.Y=Gy; G.Z=from_u32(1u);
+  var G: PointJ; G.X=Gx; G.Y=Gy; G.Z=from_u32(1u);
   let Pt = scalar_mult(priv, G);
   let zinv = modinv_p(Pt.Z);
   let zinv2 = sqr_mod_p(zinv);
   let x_affine = mul_mod_p(Pt.X, zinv2);
   let zinv3 = mul_mod_p(zinv2, zinv);
   let y_affine = mul_mod_p(Pt.Y, zinv3);
-  let is_even = (y_affine.limbs[0] & 1u) == 0u;
-  let sha = sha256_pubkey(x_affine, is_even);
+  
+  var sha: array<u32,8>;
+  if (target.is_uncompressed == 1u) {
+      sha = sha256_pubkey_uncompressed(x_affine, y_affine);
+  } else {
+      let is_even = (y_affine.limbs[0] & 1u) == 0u;
+      sha = sha256_pubkey_compressed(x_affine, is_even);
+  }
+  
   let h160 = ripemd160_of_sha(sha);
   
   var m = true;
@@ -520,19 +498,19 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>){
 
 let isRunning = false, gpuDevice, computePipeline, gpuBuffer, readBuffer, bindGroup;
 let totalScanned = 0n, sliceScanned = 0n, lastTime = 0, lastScanned = 0n;
-let baseKey = 0n;
-let slicesCount = 1;
+let globalScanPointer = 0n;
+let slicesCount = 0;
 let targetH160 = null;
 let currentSliceLimit = 50000000n;
-let totalRange = 0n;
-const BATCH = 512 * 256; 
+const BATCH = 512 * 256; // 131.072 keys per dispatch
 
 async function initWebGPU(){
-  if(!navigator.gpu) throw new Error('WebGPU wordt niet ondersteund in deze browser.');
+  if(!navigator.gpu) throw new Error('WebGPU wordt niet ondersteund.');
   const adapter = await navigator.gpu.requestAdapter();
-  if(!adapter) throw new Error('Geen geschikte WebGPU adapter gevonden.');
+  if(!adapter) throw new Error('Geen WebGPU adapter.');
   gpuDevice = await adapter.requestDevice();
-  const size = 4*5 + 4 + 4 + 4*8 + 4; 
+  // 68 bytes = 20 (target) + 4 (flag) + 4 (offset) + 32 (base) + 4 (batch) + 4 (uncompressed_flag)
+  const size = 68; 
   gpuBuffer = gpuDevice.createBuffer({size, usage: GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST});
   readBuffer = gpuDevice.createBuffer({size, usage: GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
   const module = gpuDevice.createShaderModule({code: wgslShader});
@@ -553,6 +531,7 @@ function setRunning(v){
   document.getElementById('stopBtn').disabled = !v;
   document.getElementById('keysLimit').disabled = v;
   document.getElementById('targetAddress').disabled = v;
+  document.getElementById('keyType').disabled = v;
   document.getElementById('searchRangeStart').disabled = v;
   document.getElementById('searchRangeEnd').disabled = v;
   const statusEl = document.getElementById('statusVal');
@@ -565,40 +544,29 @@ function setRunning(v){
   }
 }
 
-function generateRandomSlice(){
+function loadSequentialSlice(){
   try {
-    const startHex = document.getElementById('searchRangeStart').value.trim();
     const endHex = document.getElementById('searchRangeEnd').value.trim();
-    
-    const rangeStartBI = BigInt("0x" + (startHex || "1"));
     const rangeEndBI = BigInt("0x" + (endHex || "1fffff"));
     
-    if (rangeStartBI > rangeEndBI) throw new Error('Start range kan niet groter zijn dan eind range.');
+    if (globalScanPointer > rangeEndBI) return false;
     
-    totalRange = rangeEndBI - rangeStartBI + 1n;
-    const requestedLimit = BigInt(document.getElementById('keysLimit').value.trim() || 50000000);
+    let limit = BigInt(document.getElementById('keysLimit').value.trim() || 50000000);
+    const remaining = rangeEndBI - globalScanPointer + 1n;
+    if (limit > remaining) limit = remaining;
     
-    currentSliceLimit = requestedLimit < totalRange ? requestedLimit : totalRange;
-    document.getElementById('limitDisplay').textContent = Number(currentSliceLimit).toLocaleString('nl-NL');
+    currentSliceLimit = limit;
+    document.getElementById('limitDisplay').textContent = Number(limit).toLocaleString('nl-NL');
     
-    let offset = 0n;
-    const maxOffset = totalRange - currentSliceLimit;
-    if(maxOffset > 0n){
-      const randomBytes = new Uint8Array(8);
-      window.crypto.getRandomValues(randomBytes);
-      let rand = 0n;
-      for(let b of randomBytes) rand = (rand << 8n) + BigInt(b);
-      offset = rand % (maxOffset + 1n);
-    }
-    
-    baseKey = rangeStartBI + offset;
-    const endKey = baseKey + currentSliceLimit - 1n;
-
-    document.getElementById('rangeStart').value = baseKey.toString(16).toUpperCase();
+    const endKey = globalScanPointer + limit - 1n;
+    document.getElementById('rangeStart').value = globalScanPointer.toString(16).toUpperCase();
     document.getElementById('rangeEnd').value = endKey.toString(16).toUpperCase();
-    log(`Plakje geladen (#${slicesCount}). Start: 0x${baseKey.toString(16).toUpperCase()}`);
+    
+    log(`Nieuw sequentieel plakje (#${slicesCount + 1}). Start: 0x${globalScanPointer.toString(16).toUpperCase()}`);
+    return true;
   } catch(e) {
-    log('❌ Fout bij genereren slice: ' + e.message, 'danger');
+    log('❌ Fout bij laden slice: ' + e.message, 'danger');
+    return false;
   }
 }
 
@@ -610,24 +578,25 @@ async function runSearch(){
     if(!isRunning) return;
     
     if(sliceScanned >= currentSliceLimit){
-      if(currentSliceLimit >= totalRange) {
+      globalScanPointer += currentSliceLimit;
+      slicesCount++;
+      document.getElementById('slicesVisited').textContent = slicesCount;
+      
+      const hasMore = loadSequentialSlice();
+      if (!hasMore) {
          setRunning(false);
          document.getElementById('statusVal').textContent = 'Klaar (Geen Match)';
-         log('🏁 Volledige range is doorzocht, maar geen match gevonden. Ligt het juiste antwoord wel in deze range?', 'warn');
+         log('🏁 Volledige range is sequentieel doorzocht, maar geen match gevonden.', 'warn');
          return;
       }
-      
-      slicesCount++;
       sliceScanned = 0n;
-      document.getElementById('slicesVisited').textContent = slicesCount;
-      generateRandomSlice();
     }
 
-    const currentKey = baseKey + sliceScanned;
-    const baseLimbs = u256ToLimbs(baseKey); 
+    const baseLimbs = u256ToLimbs(globalScanPointer);
     const batchStart = Number(sliceScanned);
+    const isUncomp = document.getElementById('keyType').value === 'uncompressed' ? 1 : 0;
 
-    const buf = new ArrayBuffer(4*5 + 4 + 4 + 4*8 + 4);
+    const buf = new ArrayBuffer(68);
     const dv = new DataView(buf);
     
     if (targetH160) {
@@ -638,15 +607,15 @@ async function runSearch(){
                            (targetH160[i + 2] << 16) |
                            (targetH160[i + 3] << 24);
       }
-      for (let i = 0; i < 5; i++) {
-        dv.setUint32(i * 4, h160Words[i], true);
-      }
+      for (let i = 0; i < 5; i++) dv.setUint32(i * 4, h160Words[i], true);
     }
 
-    dv.setUint32(20, 0, true); 
-    dv.setUint32(24, 0, true); 
+    dv.setUint32(20, 0, true);
+    dv.setUint32(24, 0, true);
     for(let i=0; i<8; i++) dv.setUint32(28 + i*4, baseLimbs[i], true);
-    dv.setUint32(60, batchStart, true); 
+    dv.setUint32(60, batchStart, true);
+    dv.setUint32(64, isUncomp, true); 
+    
     gpuDevice.queue.writeBuffer(gpuBuffer, 0, buf);
 
     const enc = gpuDevice.createCommandEncoder();
@@ -655,19 +624,17 @@ async function runSearch(){
     pass.setBindGroup(0, bindGroup);
     pass.dispatchWorkgroups(512);
     pass.end();
-    enc.copyBufferToBuffer(gpuBuffer, 0, readBuffer, 0, buf.byteLength);
+    enc.copyBufferToBuffer(gpuBuffer, 0, readBuffer, 0, 68);
     gpuDevice.queue.submit([enc.finish()]);
 
     await readBuffer.mapAsync(GPUMapMode.READ);
     const result = new DataView(readBuffer.getMappedRange().slice(0));
     readBuffer.unmap();
 
-    const foundFlag = result.getUint32(20, true);
-    const foundOffset = result.getUint32(24, true);
-
-    if(foundFlag === 1){
+    if(result.getUint32(20, true) === 1){
       setRunning(false);
-      const foundPriv = baseKey + BigInt(batchStart) + BigInt(foundOffset);
+      const foundOffset = result.getUint32(24, true);
+      const foundPriv = globalScanPointer + BigInt(batchStart) + BigInt(foundOffset);
       const hexKey = toHex32(foundPriv);
       document.getElementById('statusVal').textContent = '🎉 GEVONDEN';
       document.getElementById('matchTable').innerHTML = `<tr><td>✅ MATCH</td><td style="color:var(--warn); font-weight:bold;">${hexKey.toUpperCase()}</td></tr>`;
@@ -689,7 +656,6 @@ async function runSearch(){
     
     document.getElementById('scannedVal').textContent = totalScanned.toLocaleString('nl-NL');
     document.getElementById('currentSliceKeys').textContent = sliceScanned.toLocaleString('nl-NL');
-    
     const prog = Math.min(100, Number((sliceScanned * 100n) / currentSliceLimit));
     document.getElementById('progressBar').style.width = prog + '%';
     
@@ -702,9 +668,10 @@ document.getElementById('startBtn').onclick = async () => {
   if(isRunning) return;
   try {
     const addr = document.getElementById('targetAddress').value.trim();
-    if(!addr) throw new Error('Vul een Bitcoin adres in');
+    if(!addr) throw new Error('Vul een adres in');
     targetH160 = decodeBase58Address(addr);
-    log(`✅ Target H160: ${Array.from(targetH160).map(b=>b.toString(16).padStart(2,'0')).join('')}`, 'success');
+    const type = document.getElementById('keyType').value;
+    log(`✅ Doeladres: ${addr} (${type})`, 'success');
 
     if(!gpuDevice){ 
       log('WebGPU initialiseren...'); 
@@ -712,15 +679,16 @@ document.getElementById('startBtn').onclick = async () => {
       log('WebGPU succesvol gestart.', 'success');
     }
     
+    const startHex = document.getElementById('searchRangeStart').value.trim();
+    globalScanPointer = BigInt("0x" + (startHex || "1"));
+    
     totalScanned = 0n;
     sliceScanned = 0n;
-    slicesCount = 1;
-    document.getElementById('slicesVisited').textContent = slicesCount;
+    slicesCount = 0;
     
-    generateRandomSlice();
+    if(!loadSequentialSlice()) throw new Error("Startwaarde is groter dan eindwaarde.");
+    
     setRunning(true);
-    log(`Zoekopdracht gestart naar adres ${addr}.`);
-    
     runSearch();
   } catch(err) {
     log('❌ Fout: ' + err.message, 'danger');
@@ -731,14 +699,6 @@ document.getElementById('stopBtn').onclick = () => {
   setRunning(false); 
   log('Gestopt door gebruiker.', 'danger'); 
 };
-
-document.getElementById('randomBtn').onclick = () => {
-  if(isRunning) return;
-  generateRandomSlice();
-};
-
-generateRandomSlice();
-log('Script ingeladen. Druk op Start Scan om te testen!');
 </script>
 </body>
 </html>
