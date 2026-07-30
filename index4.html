@@ -129,7 +129,7 @@ function log(msg, color=''){
   logBox.scrollTop = logBox.scrollHeight;
 }
 
-// ---------- Base58Check ENCODING (voor het tonen van adressen) ----------
+// ---------- Base58Check ENCODING ----------
 const B58ALPHA = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 async function sha256Bytes(bytes){
   const digest = await crypto.subtle.digest('SHA-256', bytes);
@@ -168,7 +168,7 @@ async function hash160ToAddress(h160bytes){
 
 function toHex32(bn){ return bn.toString(16).padStart(64,'0'); }
 
-// ---------- WGSL: genereert key -> pubkey -> hash160 (GEEN target-vergelijking) ----------
+// ---------- WGSL Shader ----------
 const wgslShader = `
 struct U256 { limbs: array<u32,8>, };
 struct PointJ { X: U256, Y: U256, Z: U256, };
@@ -451,12 +451,12 @@ fn ripemd160_of_sha(sha: array<u32,8>) -> array<u32,5> {
 fn add_offset_with_batch(base: array<u32,8>, batch_start: u32, offset: u32) -> U256 {
   var res: U256;
   for(var i:u32=0u;i<8u;i=i+1u) { res.limbs[i] = base[i]; }
-  var carry: u32 = batch_start + offset;
+  let carry_in = batch_start + offset;
+  var carry: u64 = u64(carry_in);
   for(var i:u32=0u;i<8u;i=i+1u) {
-    let sum: u32 = res.limbs[i] + carry;
-    let new_carry: u32 = select(0u, 1u, sum < res.limbs[i]);
-    res.limbs[i] = sum;
-    carry = new_carry;
+    let sum: u64 = u64(res.limbs[i]) + carry;
+    res.limbs[i] = u32(sum & 0xFFFFFFFFu);
+    carry = sum >> 32u;
   }
   return res;
 }
@@ -464,6 +464,9 @@ fn add_offset_with_batch(base: array<u32,8>, batch_start: u32, offset: u32) -> U
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>){
   let thread_id = gid.x;
+  // Zorg dat we alleen binnen de geladen batch (256 * 512 = 131072) draaien per dispatch
+  if (thread_id >= 131072u) { return; }
+
   let priv = add_offset_with_batch(gdata.base, gdata.batch_start, thread_id);
 
   var Gx: U256;
@@ -634,9 +637,7 @@ async function runSearch(){
 
     await readBuffer.mapAsync(GPUMapMode.READ);
     const result = new DataView(readBuffer.getMappedRange().slice(0));
-    readBuffer.unmap();
-
-    // Correcte Endianness mapping voor RIPEMD-160 resultaat uit de GPU array<u32, 5>
+    
     const h160bytes = new Uint8Array(20);
     for(let i = 0; i < 5; i++){
       const w = result.getUint32(i * 4, true);
@@ -645,6 +646,7 @@ async function runSearch(){
       h160bytes[i * 4 + 2] = (w >>> 16) & 0xff;
       h160bytes[i * 4 + 3] = (w >>> 24) & 0xff;
     }
+    readBuffer.unmap();
 
     const samplePriv = globalScanPointer + BigInt(batchStart) + BigInt(sampleOffset);
     const hexKey = toHex32(samplePriv).toUpperCase();
