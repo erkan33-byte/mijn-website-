@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>⚡ WebGPU Custom Range Scanner [FIXED]</title>
+<title>⚡ WebGPU Key & Address Explorer (Educatief)</title>
 <style>
   :root{
     --bg:#07090f;--surface:#0d1117;--panel:#111827;--border:#1f2937;--accent:#00ff99;--accent2:#00c3ff;
@@ -15,6 +15,7 @@
   .header{text-align:center;margin-bottom:24px;}
   .header h1{font-size:1.4rem;letter-spacing:.15em;color:var(--accent);text-shadow:0 0 14px var(--accent);text-transform:uppercase;}
   .header .sub{font-size:.72rem;color:var(--muted);letter-spacing:.12em;margin-top:6px;}
+  .badge{display:inline-block;margin-top:10px;font-size:.62rem;letter-spacing:.08em;background:rgba(0,195,255,.1);border:1px solid var(--accent2);color:var(--accent2);padding:4px 10px;border-radius:20px;}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:18px;margin-bottom:16px;}
   .card-title{font-size:.65rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent2);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:14px;}
   .field{display:grid;grid-template-columns:190px 1fr;align-items:center;gap:10px;margin-bottom:10px;}
@@ -32,14 +33,13 @@
   .stat-cell{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:10px 14px;}
   .stat-cell .label{font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px;}
   .stat-cell .value{font-size:1rem;font-weight:bold;color:var(--accent);}
-  #statusVal{color:var(--danger);}
   #statusVal.running{color:var(--success);}
   .log{background:#000;color:var(--accent);height:150px;overflow-y:scroll;padding:10px 12px;font-size:.72rem;line-height:1.6;border-radius:4px;border:1px solid var(--border);}
   .progress-wrap{height:6px;background:var(--border);border-radius:3px;margin-top:12px;overflow:hidden;}
   .progress-bar{height:100%;width:0%;background:linear-gradient(90deg,var(--accent2),var(--accent));transition:width .3s;}
-  .result-table{width:100%;border-collapse:collapse;font-size:.72rem;margin-top:10px;}
-  .result-table th{background:var(--surface);color:var(--accent2);letter-spacing:.1em;font-size:.62rem;text-transform:uppercase;padding:10px 12px;border:1px solid var(--border);text-align:left;}
-  .result-table td{border:1px solid var(--border);padding:9px 12px;color:var(--text);word-break:break-all;}
+  .result-table{width:100%;border-collapse:collapse;font-size:.68rem;margin-top:10px;}
+  .result-table th{background:var(--surface);color:var(--accent2);letter-spacing:.1em;font-size:.6rem;text-transform:uppercase;padding:8px 10px;border:1px solid var(--border);text-align:left;}
+  .result-table td{border:1px solid var(--border);padding:7px 10px;color:var(--text);word-break:break-all;}
   .footer{text-align:center;font-size:.6rem;color:var(--muted);letter-spacing:.1em;margin-top:24px;}
   .range-info{font-size:0.62rem;color:var(--muted);margin-top:4px;text-align:right;}
 </style>
@@ -47,37 +47,34 @@
 <body>
 <div class="container">
   <div class="header">
-    <h1>⚡ WebGPU Custom Range Scanner</h1>
-    <div class="sub">GPU Accelerated Secp256k1 + Fixed Target Matching</div>
+    <h1>⚡ WebGPU Key & Address Explorer</h1>
+    <div class="sub">GPU Accelerated Secp256k1 — Key/Adres generatie binnen een bereik</div>
+    <div class="badge">Educatief · genereert eigen sleutels, matcht NIET tegen een bestaand adres</div>
   </div>
 
   <div class="card">
-    <div class="card-title">① Doelwit & Zoekbereik</div>
+    <div class="card-title">① Bereik & Instellingen</div>
     <div class="field">
-      <label>Target Bitcoin Adres</label>
-      <input type="text" id="targetAddress" value="14oFNXucftsHiUMY8uctg6N487riuyXs4h">
-    </div>
-    <div class="field">
-      <label>Adres Type (Belangrijk!)</label>
+      <label>Adres Type</label>
       <select id="keyType">
-        <option value="uncompressed">Uncompressed (Vroege puzzles & oudere adressen)</option>
-        <option value="compressed">Compressed (Modernere adressen)</option>
+        <option value="compressed">Compressed (modern)</option>
+        <option value="uncompressed">Uncompressed (klassiek)</option>
       </select>
     </div>
     <div class="field">
-      <label>Keys per Plakje (Limit)</label>
-      <input type="number" id="keysLimit" value="50000000" min="131072" step="131072">
+      <label>Keys per Plakje</label>
+      <input type="number" id="keysLimit" value="1000000" min="131072" step="131072">
     </div>
     <hr style="border:none;border-top:1px dashed var(--dim);margin:10px 0;">
     <div class="field">
-      <label>🟢 Zoekrange Start (HEX)</label>
+      <label>🟢 Bereik Start (HEX)</label>
       <input type="text" id="searchRangeStart" value="100000" class="editable">
     </div>
     <div class="field">
-      <label>🔴 Zoekrange Eind (HEX)</label>
+      <label>🔴 Bereik Eind (HEX)</label>
       <input type="text" id="searchRangeEnd" value="1fffff" class="editable">
     </div>
-    <div class="range-info">💡 Script scant nu strak op volgorde van Start naar Eind.</div>
+    <div class="range-info">💡 Elke private key in dit bereik wordt gebruikt om zijn éigen publieke sleutel en adres te berekenen.</div>
     <hr style="border:none;border-top:1px dashed var(--dim);margin:10px 0;">
     <div class="field">
       <label>Actueel Plakje Start</label>
@@ -92,12 +89,12 @@
   <div class="card">
     <div class="card-title">② Besturing & Statistieken</div>
     <div class="btn-row">
-      <button class="btn btn-start" id="startBtn">▶ Start Scan</button>
+      <button class="btn btn-start" id="startBtn">▶ Start</button>
       <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
     </div>
     <div class="stats-grid" style="margin-top:14px;">
       <div class="stat-cell"><div class="label">Status</div><div class="value" id="statusVal">Gestopt</div></div>
-      <div class="stat-cell"><div class="label">Totaal Gescand</div><div class="value" id="scannedVal">0</div></div>
+      <div class="stat-cell"><div class="label">Totaal Gegenereerd</div><div class="value" id="scannedVal">0</div></div>
       <div class="stat-cell"><div class="label">Snelheid</div><div class="value" id="speedVal">0 /s</div></div>
       <div class="stat-cell"><div class="label">Plakjes Bezocht</div><div class="value" id="slicesVisited">0</div></div>
     </div>
@@ -106,10 +103,10 @@
   </div>
 
   <div class="card">
-    <div class="card-title">🎯 Resultaten</div>
+    <div class="card-title">🎯 Gegenereerde Sleutels & Adressen (steekproef)</div>
     <table class="result-table">
-      <thead><tr><th>Type</th><th>Privésleutel (HEX)</th></tr></thead>
-      <tbody id="matchTable"><tr class="empty-row"><td colspan="2">Nog geen match gevonden...</td></tr></tbody>
+      <thead><tr><th>Privésleutel (HEX)</th><th>Bitcoin Adres</th></tr></thead>
+      <tbody id="matchTable"><tr class="empty-row"><td colspan="2">Nog niets gegenereerd...</td></tr></tbody>
     </table>
   </div>
 
@@ -117,8 +114,8 @@
     <div class="card-title">📋 Log</div>
     <div class="log" id="logBox"></div>
   </div>
-  
-  <div class="footer">WebGPU Custom Range Scanner · Fixed & Optimized</div>
+
+  <div class="footer">WebGPU Key & Address Explorer · Educatief</div>
 </div>
 
 <script>
@@ -128,56 +125,64 @@ function log(msg, color=''){
   const d = document.createElement('div');
   d.innerHTML = `<span style="color:var(--muted)">[${ts}]</span> ${msg}`;
   if(color) d.style.color = `var(--${color})`;
-  logBox.appendChild(d); 
+  logBox.appendChild(d);
   logBox.scrollTop = logBox.scrollHeight;
 }
 
-function decodeBase58Address(address) {
-  address = address.trim();
-  const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-  const ALPHABET_MAP = {};
-  for(let i = 0; i < ALPHABET.length; i++) ALPHABET_MAP[ALPHABET[i]] = i;
-  
-  let bytes = [0];
-  for(let i = 0; i < address.length; i++) {
-    let c = address[i];
-    if(!(c in ALPHABET_MAP)) throw new Error(`Ongeldig Base58 karakter '${address[i]}'`);
-    let val = ALPHABET_MAP[c];
-    for(let j = 0; j < bytes.length; j++) bytes[j] *= 58;
-    bytes[0] += val;
-    let carry = 0;
-    for(let j = 0; j < bytes.length; j++) {
-      bytes[j] += carry;
-      carry = bytes[j] >> 8;
-      bytes[j] &= 0xff;
-    }
-    while(carry) {
-      bytes.push(carry & 0xff);
-      carry >>= 8;
-    }
+// ---------- Base58Check ENCODING (voor het tonen van adressen) ----------
+const B58ALPHA = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+async function sha256Bytes(bytes){
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return new Uint8Array(digest);
+}
+function bytesToBigInt(bytes){
+  let v = 0n;
+  for(const b of bytes) v = (v << 8n) | BigInt(b);
+  return v;
+}
+async function base58CheckEncode(payloadBytes){
+  // payloadBytes = version(1) + hash160(20)
+  const checksum1 = await sha256Bytes(payloadBytes);
+  const checksum2 = await sha256Bytes(checksum1);
+  const full = new Uint8Array(payloadBytes.length + 4);
+  full.set(payloadBytes, 0);
+  full.set(checksum2.slice(0,4), payloadBytes.length);
+
+  let num = bytesToBigInt(full);
+  let out = '';
+  const base = 58n;
+  if(num === 0n) out = '1';
+  while(num > 0n){
+    const rem = num % base;
+    num = num / base;
+    out = B58ALPHA[Number(rem)] + out;
   }
-  for(let i = 0; i < address.length && address[i] === '1'; i++) bytes.push(0);
-  bytes.reverse();
-  const fullBytes = new Uint8Array(bytes);
-  return fullBytes.slice(1, 21);
+  // leading zero bytes -> leading '1's
+  for(let i=0;i<full.length && full[i]===0;i++) out = '1' + out;
+  return out;
+}
+async function hash160ToAddress(h160bytes){
+  const payload = new Uint8Array(21);
+  payload[0] = 0x00; // mainnet P2PKH version byte
+  payload.set(h160bytes, 1);
+  return await base58CheckEncode(payload);
 }
 
 function toHex32(bn){ return bn.toString(16).padStart(64,'0'); }
 
+// ---------- WGSL: genereert key -> pubkey -> hash160 (GEEN target-vergelijking) ----------
 const wgslShader = `
 struct U256 { limbs: array<u32,8>, };
 struct PointJ { X: U256, Y: U256, Z: U256, };
-struct TargetData {
-  target_h160: array<u32,5>,
-  found_flag: atomic<u32>,
-  found_offset: atomic<u32>,
+struct GenData {
+  out_h160: array<u32,5>,
   base: array<u32,8>,
   batch_start: u32,
   is_uncompressed: u32,
+  sample_offset: u32,
 };
-@group(0) @binding(0) var<storage, read_write> target: TargetData;
+@group(0) @binding(0) var<storage, read_write> gdata: GenData;
 
-// Polyfill voor umulExtended (veiliger voor diverse browsers)
 fn mul_u32_ext(a: u32, b: u32) -> vec2<u32> {
   let al = a & 0xFFFFu; let ah = a >> 16u;
   let bl = b & 0xFFFFu; let bh = b >> 16u;
@@ -187,7 +192,6 @@ fn mul_u32_ext(a: u32, b: u32) -> vec2<u32> {
   let x = (mid << 16u) | (ll & 0xFFFFu);
   return vec2<u32>(x, y);
 }
-
 fn get_p() -> U256 {
   var p: U256;
   p.limbs[0]=0xFFFFFC2Fu; p.limbs[1]=0xFFFFFFFEu; p.limbs[2]=0xFFFFFFFFu; p.limbs[3]=0xFFFFFFFFu;
@@ -331,8 +335,8 @@ fn scalar_mult(scalar: U256, point: PointJ) -> PointJ {
   return result;
 }
 fn modinv_p(a: U256) -> U256 {
-  let p=get_p(); var exp: U256 = p; var res: U256 = from_u32(1u);
-  var base: U256 = a; var e: U256 = sub_mod_p(exp, from_u32(2u));
+  let p=get_p(); var res: U256 = from_u32(1u);
+  var base: U256 = a; var e: U256 = sub_mod_p(p, from_u32(2u));
   for(var i:u32=0u;i<256u;i=i+1u){
     let bit=(e.limbs[i/32u] >> (i%32u)) & 1u;
     if(bit==1u){ res=mul_mod_p(res,base); }
@@ -373,9 +377,6 @@ fn sha256_block(win: array<u32,64>, state: array<u32,8>) -> array<u32,8> {
   return array<u32,8>(state[0]+a, state[1]+b, state[2]+c, state[3]+d, state[4]+e, state[5]+f, state[6]+g, state[7]+h);
 }
 
-// ----------------------------------------------------
-// VERBETERDE HASH FUNCTIES (Compressed én Uncompressed)
-// ----------------------------------------------------
 fn sha256_pubkey_compressed(x: U256, is_even: bool) -> array<u32,8> {
   var w=array<u32,64>();
   let prefix=select(0x03000000u,0x02000000u,is_even);
@@ -386,13 +387,11 @@ fn sha256_pubkey_compressed(x: U256, is_even: bool) -> array<u32,8> {
   w[7]=(x.limbs[1]<<24u)|(x.limbs[0]>>8u);
   w[8]=(x.limbs[0]<<24u)|0x00800000u;
   for(var i:u32=9u;i<15u;i=i+1u){ w[i]=0u; }
-  w[15]=264u; // 33 bytes * 8 bits = 264 bits
+  w[15]=264u;
   return sha256_block(w, array<u32,8>(0x6a09e667u,0xbb67ae85u,0x3c6ef372u,0xa54ff53au,0x510e527fu,0x9b05688cu,0x1f83d9abu,0x5be0cd19u));
 }
-
 fn sha256_pubkey_uncompressed(x: U256, y: U256) -> array<u32,8> {
   var w=array<u32,64>();
-  // Blok 1 (64 bytes): Prefix(0x04) + 32 bytes X + 31 bytes Y
   w[0] = 0x04000000u | (x.limbs[7] >> 8u);
   w[1] = (x.limbs[7] << 24u) | (x.limbs[6] >> 8u); w[2] = (x.limbs[6] << 24u) | (x.limbs[5] >> 8u);
   w[3] = (x.limbs[5] << 24u) | (x.limbs[4] >> 8u); w[4] = (x.limbs[4] << 24u) | (x.limbs[3] >> 8u);
@@ -402,13 +401,10 @@ fn sha256_pubkey_uncompressed(x: U256, y: U256) -> array<u32,8> {
   w[10] = (y.limbs[6] << 24u) | (y.limbs[5] >> 8u); w[11] = (y.limbs[5] << 24u) | (y.limbs[4] >> 8u);
   w[12] = (y.limbs[4] << 24u) | (y.limbs[3] >> 8u); w[13] = (y.limbs[3] << 24u) | (y.limbs[2] >> 8u);
   w[14] = (y.limbs[2] << 24u) | (y.limbs[1] >> 8u); w[15] = (y.limbs[1] << 24u) | (y.limbs[0] >> 8u);
-  
   var state = sha256_block(w, array<u32,8>(0x6a09e667u,0xbb67ae85u,0x3c6ef372u,0xa54ff53au,0x510e527fu,0x9b05688cu,0x1f83d9abu,0x5be0cd19u));
-  
-  // Blok 2: Laatste byte Y + padding
   w[0] = (y.limbs[0] << 24u) | 0x00800000u;
   for(var i:u32=1u;i<15u;i=i+1u){ w[i] = 0u; }
-  w[15] = 520u; // 65 bytes * 8 bits = 520 bits
+  w[15] = 520u;
   return sha256_block(w, state);
 }
 
@@ -446,44 +442,36 @@ fn ripemd160_of_sha(sha: array<u32,8>) -> array<u32,5> {
   return array<u32,5>(h0,h1,h2,h3,h4);
 }
 
-// GECORRIGEERDE VERSIE VAN add_offset_with_batch
 fn add_offset_with_batch(base: array<u32,8>, batch_start: u32, offset: u32) -> U256 {
   var res: U256;
-  // Start met de base waarde
-  for(var i:u32=0u;i<8u;i=i+1u) {
-    res.limbs[i] = base[i];
-  }
-  
-  // Voeg batch_start + offset toe als een enkele waarde
+  for(var i:u32=0u;i<8u;i=i+1u) { res.limbs[i] = base[i]; }
   var add_val: u32 = batch_start + offset;
   var carry: u32 = 0u;
-  
   for(var i:u32=0u;i<8u;i=i+1u) {
     var sum: u32 = res.limbs[i] + add_val + carry;
     if (sum < res.limbs[i] || (sum == res.limbs[i] && add_val == 0u && carry == 0u)) {
-      carry = 1u; // overflow
+      carry = 1u;
     } else {
       carry = 0u;
     }
     res.limbs[i] = sum;
-    add_val = 0u; // alleen eerste keer toevoegen
+    add_val = 0u;
   }
-  
   return res;
 }
 
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>){
   let thread_id = gid.x;
-  let priv = add_offset_with_batch(target.base, target.batch_start, thread_id);
-  
+  let priv = add_offset_with_batch(gdata.base, gdata.batch_start, thread_id);
+
   var Gx: U256;
   Gx.limbs[0]=0x16F81798u; Gx.limbs[1]=0x59F2815Bu; Gx.limbs[2]=0x2DCE28D9u; Gx.limbs[3]=0x029BFCDBu;
   Gx.limbs[4]=0xCE870B07u; Gx.limbs[5]=0x55A06295u; Gx.limbs[6]=0xF9DCBBACu; Gx.limbs[7]=0x79BE667Eu;
   var Gy: U256;
   Gy.limbs[0]=0xFB10D4B8u; Gy.limbs[1]=0x9C47D08Fu; Gy.limbs[2]=0xA6855419u; Gy.limbs[3]=0xFD17B448u;
   Gy.limbs[4]=0x0E1108A8u; Gy.limbs[5]=0x5DA4FBFCu; Gy.limbs[6]=0x26A3C465u; Gy.limbs[7]=0x483ADA77u;
-  
+
   var G: PointJ; G.X=Gx; G.Y=Gy; G.Z=from_u32(1u);
   let Pt = scalar_mult(priv, G);
   let zinv = modinv_p(Pt.Z);
@@ -491,22 +479,20 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>){
   let x_affine = mul_mod_p(Pt.X, zinv2);
   let zinv3 = mul_mod_p(zinv2, zinv);
   let y_affine = mul_mod_p(Pt.Y, zinv3);
-  
+
   var sha: array<u32,8>;
-  if (target.is_uncompressed == 1u) {
+  if (gdata.is_uncompressed == 1u) {
       sha = sha256_pubkey_uncompressed(x_affine, y_affine);
   } else {
       let is_even = (y_affine.limbs[0] & 1u) == 0u;
       sha = sha256_pubkey_compressed(x_affine, is_even);
   }
-  
+
   let h160 = ripemd160_of_sha(sha);
-  
-  var m = true;
-  for(var i:u32=0u;i<5u;i=i+1u){ if(h160[i]!=target.target_h160[i]){ m=false; } }
-  if(m){
-    atomicStore(&target.found_flag, 1u);
-    atomicStore(&target.found_offset, thread_id);
+
+  // Alleen het steekproef-thread (sample_offset) schrijft zijn hash160 weg voor weergave
+  if(thread_id == gdata.sample_offset){
+    for(var i:u32=0u;i<5u;i=i+1u){ gdata.out_h160[i] = h160[i]; }
   }
 }
 `;
@@ -515,17 +501,16 @@ let isRunning = false, gpuDevice, computePipeline, gpuBuffer, readBuffer, bindGr
 let totalScanned = 0n, sliceScanned = 0n, lastTime = 0, lastScanned = 0n;
 let globalScanPointer = 0n;
 let slicesCount = 0;
-let targetH160 = null;
-let currentSliceLimit = 50000000n;
+let currentSliceLimit = 1000000n;
 const BATCH = 512 * 256; // 131.072 keys per dispatch
 
 async function initWebGPU(){
-  if(!navigator.gpu) throw new Error('WebGPU wordt niet ondersteund.');
+  if(!navigator.gpu) throw new Error('WebGPU wordt niet ondersteund in deze browser.');
   const adapter = await navigator.gpu.requestAdapter();
-  if(!adapter) throw new Error('Geen WebGPU adapter.');
+  if(!adapter) throw new Error('Geen WebGPU adapter gevonden.');
   gpuDevice = await adapter.requestDevice();
-  // 68 bytes = 20 (target) + 4 (flag) + 4 (offset) + 32 (base) + 4 (batch) + 4 (uncompressed_flag)
-  const size = 68; 
+  // 20 (h160) + 32 (base) + 4 (batch_start) + 4 (uncompressed) + 4 (sample_offset) = 64 bytes
+  const size = 64;
   gpuBuffer = gpuDevice.createBuffer({size, usage: GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST});
   readBuffer = gpuDevice.createBuffer({size, usage: GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
   const module = gpuDevice.createShaderModule({code: wgslShader});
@@ -545,7 +530,6 @@ function setRunning(v){
   document.getElementById('startBtn').disabled = v;
   document.getElementById('stopBtn').disabled = !v;
   document.getElementById('keysLimit').disabled = v;
-  document.getElementById('targetAddress').disabled = v;
   document.getElementById('keyType').disabled = v;
   document.getElementById('searchRangeStart').disabled = v;
   document.getElementById('searchRangeEnd').disabled = v;
@@ -553,7 +537,7 @@ function setRunning(v){
   if (v) {
     statusEl.textContent = '⚡ WebGPU Actief';
     statusEl.className = 'running';
-  } else if (statusEl.textContent !== '🎉 GEVONDEN' && !statusEl.textContent.includes('Klaar')) {
+  } else if (!statusEl.textContent.includes('Klaar')) {
     statusEl.textContent = 'Gestopt';
     statusEl.className = '';
   }
@@ -563,45 +547,56 @@ function loadSequentialSlice(){
   try {
     const endHex = document.getElementById('searchRangeEnd').value.trim();
     const rangeEndBI = BigInt("0x" + (endHex || "1fffff"));
-    
+
     if (globalScanPointer > rangeEndBI) return false;
-    
-    let limit = BigInt(document.getElementById('keysLimit').value.trim() || 50000000);
+
+    let limit = BigInt(document.getElementById('keysLimit').value.trim() || 1000000);
     const remaining = rangeEndBI - globalScanPointer + 1n;
     if (limit > remaining) limit = remaining;
-    
+
     currentSliceLimit = limit;
     document.getElementById('limitDisplay').textContent = Number(limit).toLocaleString('nl-NL');
-    
+
     const endKey = globalScanPointer + limit - 1n;
     document.getElementById('rangeStart').value = globalScanPointer.toString(16).toUpperCase();
     document.getElementById('rangeEnd').value = endKey.toString(16).toUpperCase();
-    
-    log(`Nieuw sequentieel plakje (#${slicesCount + 1}). Start: 0x${globalScanPointer.toString(16).toUpperCase()}`);
+
+    log(`Nieuw plakje (#${slicesCount + 1}). Start: 0x${globalScanPointer.toString(16).toUpperCase()}`);
     return true;
   } catch(e) {
-    log('❌ Fout bij laden slice: ' + e.message, 'danger');
+    log('❌ Fout bij laden plakje: ' + e.message, 'danger');
     return false;
   }
 }
 
+function addResultRow(hexKey, address){
+  const tbody = document.getElementById('matchTable');
+  const emptyRow = tbody.querySelector('.empty-row');
+  if(emptyRow) emptyRow.remove();
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>${hexKey}</td><td style="color:var(--accent2);">${address}</td>`;
+  tbody.insertBefore(tr, tbody.firstChild);
+  // houd de tabel beperkt tot 25 rijen
+  while(tbody.rows.length > 25) tbody.deleteRow(tbody.rows.length - 1);
+}
+
 async function runSearch(){
-  lastTime = Date.now(); 
+  lastTime = Date.now();
   lastScanned = 0n;
 
   async function step(){
     if(!isRunning) return;
-    
+
     if(sliceScanned >= currentSliceLimit){
       globalScanPointer += currentSliceLimit;
       slicesCount++;
       document.getElementById('slicesVisited').textContent = slicesCount;
-      
+
       const hasMore = loadSequentialSlice();
       if (!hasMore) {
          setRunning(false);
-         document.getElementById('statusVal').textContent = 'Klaar (Geen Match)';
-         log('🏁 Volledige range is sequentieel doorzocht, maar geen match gevonden.', 'warn');
+         document.getElementById('statusVal').textContent = 'Klaar';
+         log('🏁 Volledige bereik doorlopen.', 'warn');
          return;
       }
       sliceScanned = 0n;
@@ -610,27 +605,17 @@ async function runSearch(){
     const baseLimbs = u256ToLimbs(globalScanPointer);
     const batchStart = Number(sliceScanned);
     const isUncomp = document.getElementById('keyType').value === 'uncompressed' ? 1 : 0;
+    // kies een willekeurige thread in deze batch als steekproef om te tonen
+    const sampleOffset = Math.floor(Math.random() * BATCH);
 
-    const buf = new ArrayBuffer(68);
+    const buf = new ArrayBuffer(64);
     const dv = new DataView(buf);
-    
-    if (targetH160) {
-      const h160Words = new Uint32Array(5);
-      for (let i = 0; i < 20; i += 4) {
-        h160Words[i / 4] = (targetH160[i + 0]       ) |
-                           (targetH160[i + 1] << 8 ) |
-                           (targetH160[i + 2] << 16) |
-                           (targetH160[i + 3] << 24);
-      }
-      for (let i = 0; i < 5; i++) dv.setUint32(i * 4, h160Words[i], true);
-    }
+    for(let i=0;i<5;i++) dv.setUint32(i*4, 0, true); // out_h160 leegmaken
+    for(let i=0; i<8; i++) dv.setUint32(20 + i*4, baseLimbs[i], true);
+    dv.setUint32(52, batchStart, true);
+    dv.setUint32(56, isUncomp, true);
+    dv.setUint32(60, sampleOffset, true);
 
-    dv.setUint32(20, 0, true);
-    dv.setUint32(24, 0, true);
-    for(let i=0; i<8; i++) dv.setUint32(28 + i*4, baseLimbs[i], true);
-    dv.setUint32(60, batchStart, true);
-    dv.setUint32(64, isUncomp, true); 
-    
     gpuDevice.queue.writeBuffer(gpuBuffer, 0, buf);
 
     const enc = gpuDevice.createCommandEncoder();
@@ -639,23 +624,26 @@ async function runSearch(){
     pass.setBindGroup(0, bindGroup);
     pass.dispatchWorkgroups(512);
     pass.end();
-    enc.copyBufferToBuffer(gpuBuffer, 0, readBuffer, 0, 68);
+    enc.copyBufferToBuffer(gpuBuffer, 0, readBuffer, 0, 64);
     gpuDevice.queue.submit([enc.finish()]);
 
     await readBuffer.mapAsync(GPUMapMode.READ);
     const result = new DataView(readBuffer.getMappedRange().slice(0));
     readBuffer.unmap();
 
-    if(result.getUint32(20, true) === 1){
-      setRunning(false);
-      const foundOffset = result.getUint32(24, true);
-      const foundPriv = globalScanPointer + BigInt(batchStart) + BigInt(foundOffset);
-      const hexKey = toHex32(foundPriv);
-      document.getElementById('statusVal').textContent = '🎉 GEVONDEN';
-      document.getElementById('matchTable').innerHTML = `<tr><td>✅ MATCH</td><td style="color:var(--warn); font-weight:bold;">${hexKey.toUpperCase()}</td></tr>`;
-      log(`🔥 Match gevonden! Privésleutel: ${hexKey.toUpperCase()}`, 'warn');
-      return;
+    // toon de steekproefsleutel + adres
+    const h160bytes = new Uint8Array(20);
+    for(let i=0;i<5;i++){
+      const w = result.getUint32(i*4, true);
+      h160bytes[i*4+0] = w & 0xff;
+      h160bytes[i*4+1] = (w>>8) & 0xff;
+      h160bytes[i*4+2] = (w>>16) & 0xff;
+      h160bytes[i*4+3] = (w>>24) & 0xff;
     }
+    const samplePriv = globalScanPointer + BigInt(batchStart) + BigInt(sampleOffset);
+    const hexKey = toHex32(samplePriv).toUpperCase();
+    const address = await hash160ToAddress(h160bytes);
+    addResultRow(hexKey, address);
 
     const batchSizeBI = BigInt(BATCH);
     sliceScanned += batchSizeBI;
@@ -665,15 +653,15 @@ async function runSearch(){
     if(now - lastTime > 400){
       const speed = Number(totalScanned - lastScanned) / ((now - lastTime) / 1000);
       document.getElementById('speedVal').textContent = Math.floor(speed).toLocaleString('nl-NL') + ' /s';
-      lastTime = now; 
+      lastTime = now;
       lastScanned = totalScanned;
     }
-    
+
     document.getElementById('scannedVal').textContent = totalScanned.toLocaleString('nl-NL');
     document.getElementById('currentSliceKeys').textContent = sliceScanned.toLocaleString('nl-NL');
     const prog = Math.min(100, Number((sliceScanned * 100n) / currentSliceLimit));
     document.getElementById('progressBar').style.width = prog + '%';
-    
+
     requestAnimationFrame(step);
   }
   step();
@@ -682,27 +670,24 @@ async function runSearch(){
 document.getElementById('startBtn').onclick = async () => {
   if(isRunning) return;
   try {
-    const addr = document.getElementById('targetAddress').value.trim();
-    if(!addr) throw new Error('Vul een adres in');
-    targetH160 = decodeBase58Address(addr);
     const type = document.getElementById('keyType').value;
-    log(`✅ Doeladres: ${addr} (${type})`, 'success');
+    log(`✅ Gestart (${type})`, 'success');
 
-    if(!gpuDevice){ 
-      log('WebGPU initialiseren...'); 
-      await initWebGPU(); 
+    if(!gpuDevice){
+      log('WebGPU initialiseren...');
+      await initWebGPU();
       log('WebGPU succesvol gestart.', 'success');
     }
-    
+
     const startHex = document.getElementById('searchRangeStart').value.trim();
     globalScanPointer = BigInt("0x" + (startHex || "1"));
-    
+
     totalScanned = 0n;
     sliceScanned = 0n;
     slicesCount = 0;
-    
+
     if(!loadSequentialSlice()) throw new Error("Startwaarde is groter dan eindwaarde.");
-    
+
     setRunning(true);
     runSearch();
   } catch(err) {
@@ -710,9 +695,9 @@ document.getElementById('startBtn').onclick = async () => {
   }
 };
 
-document.getElementById('stopBtn').onclick = () => { 
-  setRunning(false); 
-  log('Gestopt door gebruiker.', 'danger'); 
+document.getElementById('stopBtn').onclick = () => {
+  setRunning(false);
+  log('Gestopt door gebruiker.', 'danger');
 };
 </script>
 </body>
