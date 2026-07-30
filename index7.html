@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #71 – Random Slice Sniper (GLV + NATIVE TURBO v3) ⚡</title>
+    <title>Puzzel #71 – Random Slice Sniper (wNAF GLV + TURBO v4) ⚡</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -119,8 +119,8 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – Native JS Turbo v3 (Geen Netwerk nodig)</div>
-            <span class="badge">🚀 OPTIE 4: GLV ENDOMORPHISM + JACOBIAN BATCH</span>
+            <div class="sub">Puzzel #71 – Native JS Turbo v4 (Geen Netwerk nodig)</div>
+            <span class="badge">🚀 OPTIE 5: wNAF + GLV ENDOMORPHISM + JACOBIAN BATCH</span>
         </div>
         <div class="card">
             <div class="card-title">⚙ Actieve Plakje Configuratie</div>
@@ -131,7 +131,7 @@
             <div class="field">
                 <label>Scan methode</label>
                 <select id="scanMethod">
-                    <option value="glv" selected>📏 GLV-Accelerated Jacobian Batch (Hyper-Speed v3)</option>
+                    <option value="glv" selected>🌌 wNAF-GLV Jacobian Batch (Hyper-Speed v4)</option>
                 </select>
             </div>
             <div class="field">
@@ -161,7 +161,7 @@
                 </div>
             </div>
             <div class="formula-box" style="background:rgba(0,0,0,0.5); border-left:3px solid var(--accent2); padding:10px; font-size:.75rem; color:#bfe4ff; line-height:1.5;">
-                Engine: GLV (Gallant-Lambert-Vanstone) + Jacobian Mixed Addition + Batch Z-Inversion (N=10000, GC-Optimized)
+                Engine: wNAF (Windowed Non-Adjacent Form) + GLV + Jacobian Mixed Add + Batch Z-Inversion
             </div>
         </div>
         <div class="chance-card">
@@ -211,19 +211,19 @@
                 <tbody id="matchTable"><tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Random Slice Sniper · GLV + JACOBIAN BATCH ENGINE v3</div>
+        <div class="footer">Random Slice Sniper · wNAF GLV + JACOBIAN BATCH ENGINE v4</div>
     </div>
 
-    <!-- ⚡ GLV + OPTIMIZED WORKER ENGINE -->
+    <!-- ⚡ wNAF + GLV + OPTIMIZED WORKER ENGINE -->
     <script id="workerCode" type="javascript/worker">
         self.onerror = function(e) {
             self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
         };
 
         const P = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
-        const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n; // Curve Order
-        const LAMBDA = 0x5363ad4cc05c30e0a5261c028812645a122e22ea20816678df02967c1b23bd72n; // secp256k1 lambda
-        const BETA = 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501een; // secp256k1 beta
+        const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n; 
+        const LAMBDA = 0x5363ad4cc05c30e0a5261c028812645a122e22ea20816678df02967c1b23bd72n; 
+        const BETA = 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501een; 
 
         const G_x = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n;
         const G_y = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n;
@@ -240,10 +240,15 @@
             return t < 0n ? t + n : t;
         }
 
-        // Q is het endomorfisme punt (Beta * G_x, G_y)
         const Q_x = mod(G_x * BETA, P);
         const Q_y = G_y;
         const Q = { x: Q_x, y: Q_y };
+
+        // Negatief punt - Nodig voor NAF
+        function neg(p) {
+            if (!p) return null;
+            return { x: p.x, y: mod(-p.y) };
+        }
 
         function add(p, q) {
             if (!p) return q; if (!q) return p;
@@ -258,53 +263,89 @@
             return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
         }
 
-        // GLV Split voor K
         function splitGLV(k) {
             k = k % N;
             const k1 = k % LAMBDA;
-            const k2 = k / LAMBDA; // integer divisie
+            const k2 = k / LAMBDA; 
             return { k1, k2 };
         }
 
-        // Shamir's Trick voor simultane vermenigvuldiging (k1*P1 + k2*P2)
-        function shamirMul(k1, k2, P1, P2) {
-            let P12 = add(P1, P2);
-            let result = null;
+        // ==========================================
+        // ⚡ wNAF (Windowed Non-Adjacent Form) LOGICA
+        // ==========================================
+        function getWNAF(k, w = 4) {
+            let n = BigInt(k);
+            let naf = [];
+            const modW = 1n << BigInt(w);
+            const mid = 1n << BigInt(w - 1);
             
-            let maxBits1 = k1.toString(2).length;
-            let maxBits2 = k2.toString(2).length;
-            let maxBits = maxBits1 > maxBits2 ? maxBits1 : maxBits2;
-            
-            for (let i = maxBits - 1; i >= 0; i--) {
-                if (result) result = add(result, result); // Double
-                
-                let bit1 = (k1 >> BigInt(i)) & 1n;
-                let bit2 = (k2 >> BigInt(i)) & 1n;
-                
-                if (bit1 === 1n && bit2 === 1n) {
-                    result = add(result, P12);
-                } else if (bit1 === 1n) {
-                    result = add(result, P1);
-                } else if (bit2 === 1n) {
-                    result = add(result, P2);
+            while (n > 0n) {
+                if (n & 1n) {
+                    let mods = n % modW;
+                    if (mods >= mid) mods -= modW;
+                    naf.push(Number(mods)); // Push b.v. 1, 3, -1, -5 etc.
+                    n -= mods;
+                } else {
+                    naf.push(0);
                 }
+                n >>= 1n;
             }
-            return result;
+            return naf;
         }
 
-        // Hoofd puntvermenigvuldiging - gebruikt GLV indien base point G is
+        function precomputeWNAF(basePoint) {
+            let pre = {};
+            let doubleP = add(basePoint, basePoint);
+            let curr = basePoint;
+            
+            // Precompute +1, -1
+            pre[1] = curr; pre[-1] = neg(curr);
+            // Precompute +3, -3
+            curr = add(curr, doubleP); pre[3] = curr; pre[-3] = neg(curr);
+            // Precompute +5, -5
+            curr = add(curr, doubleP); pre[5] = curr; pre[-5] = neg(curr);
+            // Precompute +7, -7
+            curr = add(curr, doubleP); pre[7] = curr; pre[-7] = neg(curr);
+            
+            return pre;
+        }
+
+        // Geoptimaliseerde wNAF-GLV Vermenigvuldiging
         function mul(p, n) {
             if (p.x === G.x && p.y === G.y) {
+                // Splits in k1 en k2 via GLV
                 const { k1, k2 } = splitGLV(n);
-                return shamirMul(k1, k2, G, Q);
+                
+                // Genereer wNAF Arrays voor beide sub-keys
+                let naf1 = getWNAF(k1, 4);
+                let naf2 = getWNAF(k2, 4);
+                
+                // Haal precomputed tabellen op (1P, 3P, 5P, 7P)
+                let pre1 = precomputeWNAF(G);
+                let pre2 = precomputeWNAF(Q);
+                
+                let maxLen = Math.max(naf1.length, naf2.length);
+                let result = null;
+                
+                for (let i = maxLen - 1; i >= 0; i--) {
+                    if (result) result = add(result, result); // Double
+                    
+                    let n1 = i < naf1.length ? naf1[i] : 0;
+                    let n2 = i < naf2.length ? naf2[i] : 0;
+                    
+                    if (n1 !== 0) result = add(result, pre1[n1]); // Add 
+                    if (n2 !== 0) result = add(result, pre2[n2]); // Add
+                }
+                return result;
             }
-            // Fallback (standaard double and add)
-            let r = null, base = p;
-            let n_tmp = n;
-            while (n_tmp > 0n) {
-                if (n_tmp & 1n) r = add(r, base);
-                base = add(base, base);
-                n_tmp >>= 1n;
+            
+            // Standaard wNAF fallback voor niet-G punten
+            let naf = getWNAF(n, 4);
+            let pre = precomputeWNAF(p);
+            let r = null;
+            for (let i = naf.length - 1; i >= 0; i--) {
+                if (r) r = add(r, r);
+                if (naf[i] !== 0) r = add(r, pre[naf[i]]);
             }
             return r;
         }
@@ -413,9 +454,6 @@
             return s;
         }
 
-        // ==========================================
-        // ⚡ GEOPTIMALISEERDE BATCH ENGINE v3 met GLV
-        // ==========================================
         self.onmessage = function(e) {
             const data = e.data;
             if (data.type === "ADDRESS_SCAN") {
@@ -426,7 +464,7 @@
                 const workerId = data.workerId;
                 const BATCH = 10000;
                 
-                // 🔥 HIER WORDT NU DE GLV-ACCELERATIE INGEZET!
+                // 🔥 INITIALISATIE MET wNAF + GLV! (Super snelle instap)
                 let currentPoint = mul(G, currentKey);
 
                 let pX = new Array(BATCH);
@@ -722,15 +760,15 @@
                 if (isRunning) return;
                 startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = cumulativeScanned;
                 setRunning(true);
-                setStatus('⚡ GLV + Batch v3', 'running');
-                log('GLV Jacobian Batch Scan v3 gestart.', 'ev-epoch');
+                setStatus('⚡ wNAF + Batch v4', 'running');
+                log('wNAF-GLV Jacobian Batch Scan v4 gestart.', 'ev-epoch');
                 spawnWorkers();
             }
 
             startBtn.onclick = () => { if (!isRunning) startAddressScan(); };
             stopBtn.onclick = () => { setRunning(false); killWorkers(); setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop'); };
             generateRandomSlice();
-            log('Systeem klaar. GLV + Jacobian Engine v3 geladen.', 'ts');
+            log('Systeem klaar. wNAF-GLV + Batch Engine v4 geladen.', 'ts');
 
             setInterval(() => { if (isRunning) updateAllStats(); }, 800);
         })();
