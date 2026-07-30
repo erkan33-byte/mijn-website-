@@ -141,7 +141,6 @@ function bytesToBigInt(bytes){
   return v;
 }
 async function base58CheckEncode(payloadBytes){
-  // payloadBytes = version(1) + hash160(20)
   const checksum1 = await sha256Bytes(payloadBytes);
   const checksum2 = await sha256Bytes(checksum1);
   const full = new Uint8Array(payloadBytes.length + 4);
@@ -157,7 +156,6 @@ async function base58CheckEncode(payloadBytes){
     num = num / base;
     out = B58ALPHA[Number(rem)] + out;
   }
-  // leading zero bytes -> leading '1's
   for(let i=0;i<full.length && full[i]===0;i++) out = '1' + out;
   return out;
 }
@@ -189,17 +187,13 @@ fn mul_u32_ext(a: u32, b: u32) -> vec2<u32> {
   let p0 = al * bl; let p1 = al * bh; let p2 = ah * bl; let p3 = ah * bh;
 
   var lo: u32 = 0u; var hi: u32 = 0u;
-  // + p0
   { let nl = lo + p0; let c = select(0u,1u, nl < lo); lo = nl; hi = hi + c; }
-  // + p1 << 16 (met correcte carry naar hi, geen verloren bits meer)
   { let term_lo = p1 << 16u; let term_hi = p1 >> 16u;
     let nl = lo + term_lo; let c = select(0u,1u, nl < lo); lo = nl;
     hi = hi + term_hi + c; }
-  // + p2 << 16
   { let term_lo = p2 << 16u; let term_hi = p2 >> 16u;
     let nl = lo + term_lo; let c = select(0u,1u, nl < lo); lo = nl;
     hi = hi + term_hi + c; }
-  // + p3 (volledig op bitpositie 32)
   hi = hi + p3;
 
   return vec2<u32>(lo, hi);
@@ -642,14 +636,14 @@ async function runSearch(){
     const result = new DataView(readBuffer.getMappedRange().slice(0));
     readBuffer.unmap();
 
-    // Correcte Little Endian naar Big Endian mapping voor RIPEMD-160 resultaat
+    // Correcte Endianness mapping voor RIPEMD-160 resultaat uit de GPU array<u32, 5>
     const h160bytes = new Uint8Array(20);
     for(let i = 0; i < 5; i++){
       const w = result.getUint32(i * 4, true);
-      h160bytes[i * 4 + 0] = (w >>> 24) & 0xff;
-      h160bytes[i * 4 + 1] = (w >>> 16) & 0xff;
-      h160bytes[i * 4 + 2] = (w >>> 8) & 0xff;
-      h160bytes[i * 4 + 3] = w & 0xff;
+      h160bytes[i * 4 + 0] = (w >>> 0) & 0xff;
+      h160bytes[i * 4 + 1] = (w >>> 8) & 0xff;
+      h160bytes[i * 4 + 2] = (w >>> 16) & 0xff;
+      h160bytes[i * 4 + 3] = (w >>> 24) & 0xff;
     }
 
     const samplePriv = globalScanPointer + BigInt(batchStart) + BigInt(sampleOffset);
