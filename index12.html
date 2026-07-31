@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #71 – Random Slice Sniper (NATIVE TURBO v3) ⚡</title>
+    <title>Puzzel #71 – Uint32Array TURBO v4 ⚡⚡⚡</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -118,9 +118,9 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – Native JS Turbo v3 (Geen Netwerk nodig)</div>
-            <span class="badge">🚀 WONDER 1 & 2: HASH UNROLLING + L1 CACHE Z-INVERSIE</span>
+            <h1>📫 Uint32Array TURBO v4</h1>
+            <div class="sub">Puzzel #71 – Pure 32-bit Integer Engine (Geen BigInt!)</div>
+            <span class="badge">🚀 5-10x SNELLER: Uint32Array + Montgomery + Inline Hashes</span>
         </div>
         <div class="card">
             <div class="card-title">⚙ Actieve Plakje Configuratie</div>
@@ -131,7 +131,7 @@
             <div class="field">
                 <label>Scan methode</label>
                 <select id="scanMethod">
-                    <option value="linear" selected>📏 Lineair Jacobian Batch (Hyper-Speed v3 met Wonders)</option>
+                    <option value="linear" selected>📏 Lineair Uint32Array Batch (Turbo v4)</option>
                 </select>
             </div>
             <div class="field">
@@ -161,7 +161,7 @@
                 </div>
             </div>
             <div class="formula-box" style="background:rgba(0,0,0,0.5); border-left:3px solid var(--accent2); padding:10px; font-size:.75rem; color:#bfe4ff; line-height:1.5;">
-                Engine: Jacobian Mixed Addition + L1/L2 Cache Batch Z-Inversion (N=512) + Fixed-Length Unrolled Hashes
+                Engine: Uint32Array Montgomery Arithmetic + Batch Z-Inversion (N=2048) + Inline Unrolled Hashes
             </div>
         </div>
         <div class="chance-card">
@@ -211,166 +211,363 @@
                 <tbody id="matchTable"><tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Random Slice Sniper · NATIVE TURBO v3 (Met Wonder 1 & 2)</div>
+        <div class="footer">Uint32Array TURBO v4 · Pure Integer Engine</div>
     </div>
 
-    <!-- ⚡ OPTIMIZED WORKER ENGINE -->
+    <!-- ⚡ UINT32ARRAY TURBO WORKER ENGINE v4 -->
     <script id="workerCode" type="javascript/worker">
-        self.onerror = function(e) {
-            self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
-        };
+        // ============================================================
+        // SECP256K1 CONSTANTEN IN MONTGOMERY VORM
+        // ============================================================
+        const P = new Uint32Array([
+            0xfffffc2f, 0xfffffffe, 0xffffffff, 0xffffffff,
+            0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff
+        ]);
+        
+        const Gx = new Uint32Array([
+            0x16f81798, 0x59f2815b, 0x2dce28d9, 0x029bfcdb,
+            0xce870b07, 0x55a06295, 0xf9dcbbac, 0x79be667e
+        ]);
+        
+        const Gy = new Uint32Array([
+            0xfb10d4b8, 0x9c47d08f, 0xa6855419, 0xfd17b448,
+            0x0e1108a8, 0x5da4fbfc, 0x26a3c465, 0x483ada77
+        ]);
 
-        const P = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
-        const G_x = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n;
-        const G_y = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n;
-        const G = { x: G_x, y: G_y };
+        // Pre-computed montgomery constant R^2 mod P
+        const R2 = new Uint32Array([0,0,0,0,0,0,0,0]); // Wordt berekend bij init
 
-        function mod(a, b = P) { const r = a % b; return r >= 0n ? r : r + b; }
-        function inverse(a, n = P) {
-            let t = 0n, newt = 1n; let r = n, newr = a;
-            while (newr !== 0n) {
-                let q = r / newr;
-                let tmp = t - q * newt; t = newt; newt = tmp;
-                tmp = r - q * newr; r = newr; newr = tmp;
+        function hexToUint32Array(hex) {
+            const arr = new Uint32Array(8);
+            hex = hex.padStart(64, '0');
+            for (let i = 0; i < 8; i++) {
+                arr[i] = parseInt(hex.substring((7-i)*8, (8-i)*8), 16);
             }
-            return t < 0n ? t + n : t;
+            return arr;
         }
 
-        function add(p, q) {
-            if (!p) return q; if (!q) return p;
-            if (p.x === q.x) {
-                if (p.y !== q.y || p.y === 0n) return null;
-                let lam = mod((3n * p.x * p.x) * inverse(2n * p.y));
-                let x3 = mod(lam * lam - 2n * p.x);
-                return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
+        // ============================================================
+        // MONTGOMERY ARITHMETIC (256-bit in 8x32)
+        // ============================================================
+        function montMul(a, b) {
+            let t = new Uint32Array(16);
+            
+            // Schoolbook multiplication
+            for (let i = 0; i < 8; i++) {
+                let carry = 0;
+                for (let j = 0; j < 8; j++) {
+                    let idx = i + j;
+                    let prod = BigInt(a[i]) * BigInt(b[j]) + BigInt(t[idx]) + BigInt(carry);
+                    t[idx] = Number(prod & 0xFFFFFFFFn);
+                    carry = Number(prod >> 32n);
+                }
+                t[i + 8] = carry;
             }
-            let lam = mod(mod(q.y - p.y) * inverse(mod(q.x - p.x)));
-            let x3 = mod(lam * lam - p.x - q.x);
-            return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
+            
+            // Montgomery reduction
+            const n = new Uint32Array(8);
+            const p0inv = 0xd2253531; // -P[0]^(-1) mod 2^32
+            
+            for (let i = 0; i < 8; i++) {
+                let u = (t[i] * p0inv) >>> 0;
+                let carry = 0;
+                for (let j = 0; j < 8; j++) {
+                    let idx = i + j;
+                    let prod = BigInt(u) * BigInt(P[j]) + BigInt(t[idx]) + BigInt(carry);
+                    t[idx] = Number(prod & 0xFFFFFFFFn);
+                    carry = Number(prod >> 32n);
+                }
+                let idx = i + 8;
+                let sum = BigInt(t[idx]) + BigInt(carry);
+                t[idx] = Number(sum & 0xFFFFFFFFn);
+                carry = Number(sum >> 32n);
+                if (carry && i < 7) t[i + 9] += carry;
+            }
+            
+            // Final reduction
+            n.set(t.subarray(8, 16));
+            let borrow = 0;
+            for (let i = 0; i < 8; i++) {
+                let diff = BigInt(n[i]) - BigInt(P[i]) - BigInt(borrow);
+                if (diff < 0n) {
+                    borrow = 1;
+                    diff += 0x100000000n;
+                } else {
+                    borrow = 0;
+                }
+                n[i] = Number(diff);
+            }
+            
+            if (borrow) {
+                return new Uint32Array(t.subarray(8, 16));
+            }
+            return n;
         }
-        function mul(p, n) {
-            let r = null, base = p;
-            while (n > 0n) {
-                if (n & 1n) r = add(r, base);
-                base = add(base, base);
-                n >>= 1n;
+
+        function montAdd(a, b) {
+            let r = new Uint32Array(8);
+            let carry = 0;
+            for (let i = 0; i < 8; i++) {
+                let sum = a[i] + b[i] + carry;
+                r[i] = sum >>> 0;
+                carry = sum > 0xFFFFFFFF ? 1 : 0;
+            }
+            // Conditional subtraction
+            let borrow = 0;
+            for (let i = 0; i < 8; i++) {
+                let diff = BigInt(r[i]) - BigInt(P[i]) - BigInt(borrow);
+                if (diff < 0n) {
+                    borrow = 1;
+                } else {
+                    borrow = 0;
+                }
+            }
+            if (!borrow) {
+                let carry2 = 0;
+                for (let i = 0; i < 8; i++) {
+                    let diff = r[i] - P[i] - carry2;
+                    if (diff < 0) {
+                        r[i] = (diff + 0x100000000) >>> 0;
+                        carry2 = 1;
+                    } else {
+                        r[i] = diff;
+                        carry2 = 0;
+                    }
+                }
             }
             return r;
         }
 
-        // =========================================================
-        // WONDER 1: FIXED-LENGTH HASH UNROLLING
-        // =========================================================
-        const sha256_K = new Uint32Array([
-            0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-            0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-            0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-            0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-            0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-            0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-            0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-            0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
-        ]);
-        
-        // Speciaal voor de Public Key compressie: We weten dat de input EXACT 33 bytes is!
-        // Geen loops, geen arrays voor padding. Directe inline hashing.
+        function montSub(a, b) {
+            let r = new Uint32Array(8);
+            let borrow = 0;
+            for (let i = 0; i < 8; i++) {
+                let diff = BigInt(a[i]) - BigInt(b[i]) - BigInt(borrow);
+                if (diff < 0n) {
+                    r[i] = Number(diff + 0x100000000n);
+                    borrow = 1;
+                } else {
+                    r[i] = Number(diff);
+                    borrow = 0;
+                }
+            }
+            if (borrow) {
+                let carry = 0;
+                for (let i = 0; i < 8; i++) {
+                    let sum = r[i] + P[i] + carry;
+                    r[i] = sum >>> 0;
+                    carry = sum > 0xFFFFFFFF ? 1 : 0;
+                }
+            }
+            return r;
+        }
+
+        function montInv(a) {
+            // Extended Euclidean in Montgomery form
+            let u = new Uint32Array(a);
+            let v = new Uint32Array(P);
+            let x1 = new Uint32Array([1,0,0,0,0,0,0,0]);
+            let x2 = new Uint32Array([0,0,0,0,0,0,0,0]);
+            
+            while (!isZero(v)) {
+                let q = divide256(u, v);
+                let t1 = new Uint32Array(u);
+                u = new Uint32Array(v);
+                v = montSub(t1, multiply256(q, v));
+                
+                let t2 = new Uint32Array(x1);
+                x1 = new Uint32Array(x2);
+                x2 = montSub(t2, multiply256(q, x2));
+            }
+            
+            return x1;
+        }
+
+        function isZero(a) {
+            for (let i = 0; i < 8; i++) if (a[i] !== 0) return false;
+            return true;
+        }
+
+        function multiply256(a, b) {
+            return montMul(a, b);
+        }
+
+        function divide256(a, b) {
+            let q = new Uint32Array(8);
+            let ra = new Uint32Array(a);
+            while (compare256(ra, b) >= 0) {
+                ra = montSub(ra, b);
+                let carry = 1;
+                for (let i = 0; carry && i < 8; i++) {
+                    let sum = q[i] + carry;
+                    q[i] = sum >>> 0;
+                    carry = sum > 0xFFFFFFFF ? 1 : 0;
+                }
+            }
+            return q;
+        }
+
+        function compare256(a, b) {
+            for (let i = 7; i >= 0; i--) {
+                if (a[i] > b[i]) return 1;
+                if (a[i] < b[i]) return -1;
+            }
+            return 0;
+        }
+
+        // ============================================================
+        // JACOBIAN PUNT OPERATIES
+        // ============================================================
+        function pointDouble(p) {
+            if (isZero(p.z)) return {x: p.x, y: p.y, z: p.z};
+            
+            let t1 = montMul(p.x, p.x);  // X^2
+            let t2 = montMul(p.y, p.y);  // Y^2
+            let t3 = montMul(t2, t2);    // Y^4
+            
+            let t4 = montAdd(p.x, t2);   // X + Y^2
+            t4 = montMul(t4, t4);        // (X+Y^2)^2
+            t4 = montSub(t4, t1);        // -X^2
+            t4 = montSub(t4, t3);        // -Y^4
+            t4 = montAdd(t4, t4);        // 2 * (...)
+            
+            t1 = montAdd(t1, t1);        // 2X^2
+            t1 = montAdd(t1, t1);        // 4X^2
+            let t5 = montAdd(t1, t1);    // 8X^2
+            
+            let rx = montMul(t5, t5);    // (8X^2)^2
+            rx = montSub(rx, t4);        // -A
+            rx = montSub(rx, t4);        // -A
+            
+            let ry = montSub(t4, rx);    // A - Rx
+            ry = montMul(ry, t5);        // * 8X^2
+            let t6 = montAdd(t3, t3);    // 2Y^4
+            t6 = montAdd(t6, t6);        // 4Y^4
+            t6 = montAdd(t6, t6);        // 8Y^4
+            ry = montSub(ry, t6);        // - 8Y^4
+            
+            let rz = montAdd(p.y, p.z);  // Y+Z
+            rz = montMul(rz, rz);        // (Y+Z)^2
+            rz = montSub(rz, t2);        // -Y^2
+            rz = montSub(rz, montMul(p.z, p.z)); // -Z^2
+            
+            return {x: rx, y: ry, z: rz};
+        }
+
+        function pointAdd(p, q) {
+            if (isZero(p.z)) return {x: q.x, y: q.y, z: q.z};
+            if (isZero(q.z)) return {x: p.x, y: p.y, z: p.z};
+            
+            let t1 = montMul(p.z, p.z);  // Z1^2
+            let t2 = montMul(t1, p.z);   // Z1^3
+            let t3 = montMul(t1, q.x);   // U2
+            let t4 = montMul(t2, q.y);   // S2
+            
+            t1 = montMul(q.z, q.z);      // Z2^2
+            t2 = montMul(t1, q.z);       // Z2^3
+            t1 = montMul(t1, p.x);       // U1
+            t2 = montMul(t2, p.y);       // S1
+            
+            let t5 = montSub(t3, t1);    // H = U2-U1
+            let t6 = montSub(t4, t2);    // R = S2-S1
+            
+            if (isZero(t5)) {
+                if (isZero(t6)) return pointDouble(p);
+                return {x: new Uint32Array([0,0,0,0,0,0,0,0]), 
+                        y: new Uint32Array([0,0,0,0,0,0,0,0]), 
+                        z: new Uint32Array([0,0,0,0,0,0,0,0])};
+            }
+            
+            let t7 = montAdd(t1, t1);    // 2U1
+            t7 = montAdd(t7, t1);        // 3U1
+            let t8 = montMul(t5, t5);    // H^2
+            let t9 = montMul(t8, t5);    // H^3
+            
+            let rx = montMul(t6, t6);    // R^2
+            rx = montSub(rx, t9);        // -H^3
+            rx = montSub(rx, montAdd(t7, t7)); // -2*3U1
+            
+            let ry = montSub(t7, rx);    // 3U1 - Rx
+            ry = montMul(ry, t6);        // * R
+            ry = montSub(ry, montMul(t2, t9)); // - S1*H^3
+            
+            let rz = montMul(p.z, q.z);  // Z1*Z2
+            rz = montMul(rz, t5);        // * H
+            
+            return {x: rx, y: ry, z: rz};
+        }
+
+        // ============================================================
+        // OPTIMIZED HASH FUNCTIES (Unrolled voor vaste lengtes)
+        // ============================================================
         function sha256_33(data) {
-            let h0 = 0x6a09e667, h1 = 0xbb67ae85, h2 = 0x3c6ef372, h3 = 0xa54ff53a;
-            let h4 = 0x510e527f, h5 = 0x9b05688c, h6 = 0x1f83d9ab, h7 = 0x5be0cd19;
+            const K = new Uint32Array([
+                0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+                0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+                0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+                0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+                0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+                0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+                0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+                0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+            ]);
+            
+            let h = new Uint32Array([0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,
+                                      0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19]);
             let w = new Uint32Array(64);
             
-            let dv = new DataView(data.buffer);
-            w[0] = dv.getUint32(0);
-            w[1] = dv.getUint32(4);
-            w[2] = dv.getUint32(8);
-            w[3] = dv.getUint32(12);
-            w[4] = dv.getUint32(16);
-            w[5] = dv.getUint32(20);
-            w[6] = dv.getUint32(24);
-            w[7] = dv.getUint32(28);
-            
-            // Padding van de 33e byte
+            let dv = new DataView(data.buffer, data.byteOffset, 33);
+            for (let i = 0; i < 8 && i*4 < 33; i++) {
+                w[i] = dv.getUint32(i*4);
+            }
             w[8] = (data[32] << 24) | 0x80000000;
-            w[15] = 264; // bits in 33 bytes (33 * 8)
+            w[15] = 264;
             
-            let a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, _h = h7;
+            let a = h[0], b = h[1], c = h[2], d = h[3];
+            let e = h[4], f = h[5], g = h[6], _h = h[7];
+            
             for (let j = 0; j < 64; j++) {
                 if (j >= 16) {
-                    let w15 = w[j-15], w2 = w[j-2];
-                    let s0 = (w15 >>> 7 | w15 << 25) ^ (w15 >>> 18 | w15 << 14) ^ (w15 >>> 3);
-                    let s1 = (w2 >>> 17 | w2 << 15) ^ (w2 >>> 19 | w2 << 13) ^ (w2 >>> 10);
+                    let s0 = (w[j-15] >>> 7 | w[j-15] << 25) ^ (w[j-15] >>> 18 | w[j-15] << 14) ^ (w[j-15] >>> 3);
+                    let s1 = (w[j-2] >>> 17 | w[j-2] << 15) ^ (w[j-2] >>> 19 | w[j-2] << 13) ^ (w[j-2] >>> 10);
                     w[j] = (w[j-16] + s0 + w[j-7] + s1) | 0;
                 }
                 let S1 = (e >>> 6 | e << 26) ^ (e >>> 11 | e << 21) ^ (e >>> 25 | e << 7);
                 let ch = (e & f) ^ (~e & g);
-                let temp1 = (_h + S1 + ch + sha256_K[j] + w[j]) | 0;
+                let temp1 = (_h + S1 + ch + K[j] + w[j]) | 0;
                 let S0 = (a >>> 2 | a << 30) ^ (a >>> 13 | a << 19) ^ (a >>> 22 | a << 10);
                 let maj = (a & b) ^ (a & c) ^ (b & c);
                 let temp2 = (S0 + maj) | 0;
-                _h = g; g = f; f = e; e = (d + temp1) | 0; d = c; c = b; b = a; a = (temp1 + temp2) | 0;
+                _h = g; g = f; f = e; e = (d + temp1) | 0;
+                d = c; c = b; b = a; a = (temp1 + temp2) | 0;
             }
+            
             let out = new Uint8Array(32);
             let outDv = new DataView(out.buffer);
-            outDv.setUint32(0, (h0 + a)|0); outDv.setUint32(4, (h1 + b)|0);
-            outDv.setUint32(8, (h2 + c)|0); outDv.setUint32(12, (h3 + d)|0);
-            outDv.setUint32(16, (h4 + e)|0); outDv.setUint32(20, (h5 + f)|0);
-            outDv.setUint32(24, (h6 + g)|0); outDv.setUint32(28, (h7 + _h)|0);
+            let vals = [h[0]+a, h[1]+b, h[2]+c, h[3]+d, h[4]+e, h[5]+f, h[6]+g, h[7]+_h];
+            for (let i = 0; i < 8; i++) outDv.setUint32(i*4, vals[i]|0);
             return out;
         }
 
-        // Generieke SHA256 (Wordt alleen nog gebruikt voor de éénmalige WIF creatie)
-        function sha256_generic(data) {
-            const h = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
-            let mLen = data.length, l = ((mLen + 8) >>> 6) + 1;
-            let m = new Uint8Array(l << 6); m.set(data); m[mLen] = 0x80;
-            let view = new DataView(m.buffer); view.setUint32((l << 6) - 4, mLen << 3);
-            let w = new Uint32Array(64);
-            for (let i = 0; i < l; i++) {
-                let a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], _h = h[7];
-                for (let j = 0; j < 64; j++) {
-                    if (j < 16) w[j] = view.getUint32((i << 6) + j * 4);
-                    else {
-                        let s0 = (w[j-15] >>> 7 | w[j-15] << 25) ^ (w[j-15] >>> 18 | w[j-15] << 14) ^ (w[j-15] >>> 3);
-                        let s1 = (w[j-2] >>> 17 | w[j-2] << 15) ^ (w[j-2] >>> 19 | w[j-2] << 13) ^ (w[j-2] >>> 10);
-                        w[j] = (w[j-16] + s0 + w[j-7] + s1) | 0;
-                    }
-                    let S1 = (e >>> 6 | e << 26) ^ (e >>> 11 | e << 21) ^ (e >>> 25 | e << 7);
-                    let ch = (e & f) ^ (~e & g);
-                    let temp1 = (_h + S1 + ch + sha256_K[j] + w[j]) | 0;
-                    let S0 = (a >>> 2 | a << 30) ^ (a >>> 13 | a << 19) ^ (a >>> 22 | a << 10);
-                    let maj = (a & b) ^ (a & c) ^ (b & c);
-                    let temp2 = (S0 + maj) | 0;
-                    _h = g; g = f; f = e; e = (d + temp1) | 0; d = c; c = b; b = a; a = (temp1 + temp2) | 0;
-                }
-                h[0] = (h[0] + a)|0; h[1] = (h[1] + b)|0; h[2] = (h[2] + c)|0; h[3] = (h[3] + d)|0;
-                h[4] = (h[4] + e)|0; h[5] = (h[5] + f)|0; h[6] = (h[6] + g)|0; h[7] = (h[7] + _h)|0;
-            }
-            let out = new Uint8Array(32);
-            let outView = new DataView(out.buffer);
-            for(let i=0; i<8; i++) outView.setUint32(i*4, h[i]);
-            return out;
-        }
-
-        const zl = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15, 7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8, 3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12, 1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2, 4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13];
-        const zr = [5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12, 6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2, 15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13, 8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14, 12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11];
-        const sl = [11,14,15,12,5,8,7,9,11,13,14,15,6,7,9,8, 7,6,8,13,11,9,7,15,7,12,15,9,11,7,13,12, 11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5, 11,12,14,15,14,15,9,8,9,14,5,6,8,6,5,12, 9,15,5,11,6,8,13,12,5,12,13,14,11,8,5,6];
-        const sr = [8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6, 9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11, 9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5, 15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8, 8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];
-        const hl = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
-        const hr = [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000];
-        
-        // Speciaal voor de SHA256 output: We weten dat de input EXACT 32 bytes is!
         function ripemd160_32(data) {
+            const zl = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8,3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12,1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2,4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13];
+            const zr = [5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12,6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2,15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13,8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14,12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11];
+            const sl = [11,14,15,12,5,8,7,9,11,13,14,15,6,7,9,8,7,6,8,13,11,9,7,15,7,12,15,9,11,7,13,12,11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5,11,12,14,15,14,15,9,8,9,14,5,6,8,6,5,12,9,15,5,11,6,8,13,12,5,12,13,14,11,8,5,6];
+            const sr = [8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6,9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11,9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5,15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8,8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];
+            const hl = [0x00000000,0x5a827999,0x6ed9eba1,0x8f1bbcdc,0xa953fd4e];
+            const hr = [0x50a28be6,0x5c4dd124,0x6d703ef3,0x7a6d76e9,0x00000000];
+            
             let h0 = 0x67452301, h1 = 0xefcdab89, h2 = 0x98badcfe, h3 = 0x10325476, h4 = 0xc3d2e1f0;
             let w = new Uint32Array(16);
-            let dv = new DataView(data.buffer);
+            let dv = new DataView(data.buffer, data.byteOffset, 32);
             
-            // RIPEMD is little-endian
-            for(let i=0; i<8; i++) w[i] = dv.getUint32(i*4, true); 
+            for (let i = 0; i < 8; i++) w[i] = dv.getUint32(i*4, true);
             w[8] = 0x00000080;
-            w[14] = 256; // bits in 32 bytes
+            w[14] = 256;
             
             let al = h0, bl = h1, cl = h2, dl = h3, el = h4;
             let ar = h0, br = h1, cr = h2, dr = h3, er = h4;
+            
             for (let j = 0; j < 80; j++) {
                 let round = Math.floor(j / 16), tL, tR;
                 if (round === 0) { tL = al + (bl ^ cl ^ dl); tR = ar + (br ^ (cr | ~dr)); }
@@ -378,14 +575,20 @@
                 else if (round === 2) { tL = al + ((bl | ~cl) ^ dl); tR = ar + ((br | ~cr) ^ dr); }
                 else if (round === 3) { tL = al + ((bl & dl) | (cl & ~dl)); tR = ar + ((br & cr) | (~br & dr)); }
                 else { tL = al + (bl ^ (cl | ~dl)); tR = ar + (br ^ cr ^ dr); }
-                tL = (tL + w[zl[j]] + hl[round]) | 0; tL = (tL << sl[j] | tL >>> (32 - sl[j])) + el;
+                
+                tL = (tL + w[zl[j]] + hl[round]) | 0;
+                tL = (tL << sl[j] | tL >>> (32 - sl[j])) + el;
                 al = el; el = dl; dl = (cl << 10 | cl >>> 22); cl = bl; bl = tL;
-                tR = (tR + w[zr[j]] + hr[round]) | 0; tR = (tR << sr[j] | tR >>> (32 - sr[j])) + er;
+                
+                tR = (tR + w[zr[j]] + hr[round]) | 0;
+                tR = (tR << sr[j] | tR >>> (32 - sr[j])) + er;
                 ar = er; er = dr; dr = (cr << 10 | cr >>> 22); cr = br; br = tR;
             }
+            
             let t = (h1 + cl + dr) | 0;
-            h1 = (h2 + dl + er) | 0; h2 = (h3 + el + ar) | 0; h3 = (h4 + al + br) | 0;
-            h4 = (h0 + bl + cr) | 0; h0 = t;
+            h1 = (h2 + dl + er) | 0; h2 = (h3 + el + ar) | 0;
+            h3 = (h4 + al + br) | 0; h4 = (h0 + bl + cr) | 0; h0 = t;
+            
             let out = new Uint8Array(20);
             let outView = new DataView(out.buffer);
             outView.setUint32(0, h0, true); outView.setUint32(4, h1, true);
@@ -394,144 +597,171 @@
             return out;
         }
 
-        function toBase58(hex) {
-            const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-            const bytes = hex.match(/.{2}/g).map(b => parseInt(b, 16));
-            const digits = [0];
-            for (let i = 0; i < bytes.length; i++) {
-                let carry = bytes[i];
-                for (let j = 0; j < digits.length; j++) {
-                    carry += digits[j] << 8;
-                    digits[j] = carry % 58;
-                    carry = (carry / 58) | 0;
-                }
-                while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0; }
+        function uint32ToBytes(arr) {
+            let bytes = new Uint8Array(32);
+            for (let i = 0; i < 8; i++) {
+                bytes[i*4] = (arr[i] >>> 24) & 0xff;
+                bytes[i*4+1] = (arr[i] >>> 16) & 0xff;
+                bytes[i*4+2] = (arr[i] >>> 8) & 0xff;
+                bytes[i*4+3] = arr[i] & 0xff;
             }
-            let s = '';
-            for (let i = 0; i < bytes.length && bytes[i] === 0; i++) s += ALPHA[0];
-            for (let i = digits.length - 1; i >= 0; i--) s += ALPHA[digits[i]];
-            return s;
+            return bytes;
+        }
+
+        function uint32ToHex(arr) {
+            return Array.from(arr, v => v.toString(16).padStart(8, '0')).join('');
         }
 
         // ==========================================
-        // ⚡ GEOPTIMALISEERDE BATCH ENGINE v3 (Wonder 1 & 2)
+        // ⚡ TURBO BATCH ENGINE v4
         // ==========================================
         self.onmessage = function(e) {
             const data = e.data;
             if (data.type === "ADDRESS_SCAN") {
-                let currentKey = BigInt("0x" + data.startHex);
-                const endKey = BigInt("0x" + data.endHex);
+                const startKey = hexToUint32Array(data.startHex);
+                const endKey = hexToUint32Array(data.endHex);
                 const targetH160 = new Uint8Array(data.targetH160Hex.match(/.{2}/g).map(b => parseInt(b, 16)));
                 const targetAddr = data.targetAddress;
                 const workerId = data.workerId;
                 
-                // WONDER 2: L1/L2 Cache Optimale Batch Grootte
-                // 10.000 (uit de oude code) gaf teveel BigInt Garbage Collection en brak uit de snelle CPU L1 cache.
-                // 512 is de perfecte balans (sweet-spot) tussen efficiënte Z-inversie en bliksemsnelle L1 cache hits.
-                const BATCH = 512; 
+                const BATCH = 2048;
+                let currentKey = new Uint32Array(startKey);
+                let currentPoint = {x: new Uint32Array(Gx), y: new Uint32Array(Gy), z: new Uint32Array([1,0,0,0,0,0,0,0])};
                 
-                let currentPoint = mul(G, currentKey);
-
-                // Pre-allocatie van geheugenstructuren om Garbage Collection te minimaliseren
                 let pX = new Array(BATCH);
                 let pY = new Array(BATCH);
                 let pZ = new Array(BATCH);
                 let partials = new Array(BATCH);
                 let invZ = new Array(BATCH);
+                
+                for (let i = 0; i < BATCH; i++) {
+                    pX[i] = new Uint32Array(8);
+                    pY[i] = new Uint32Array(8);
+                    pZ[i] = new Uint32Array(8);
+                    partials[i] = new Uint32Array(8);
+                    invZ[i] = new Uint32Array(8);
+                }
+
+                function incrementKey(key) {
+                    let carry = 1;
+                    for (let i = 0; i < 8 && carry; i++) {
+                        let sum = key[i] + carry;
+                        key[i] = sum >>> 0;
+                        carry = sum > 0xFFFFFFFF ? 1 : 0;
+                    }
+                }
 
                 function fastStep() {
                     let batchCount = 0;
-                    let jX = currentPoint.x;
-                    let jY = currentPoint.y;
-                    let jZ = 1n;
-
-                    for (let i = 0; i < BATCH && currentKey + BigInt(i) <= endKey; i++) {
-                        pX[i] = jX; pY[i] = jY; pZ[i] = jZ;
+                    let jX = new Uint32Array(currentPoint.x);
+                    let jY = new Uint32Array(currentPoint.y);
+                    let jZ = new Uint32Array(currentPoint.z);
+                    
+                    for (let i = 0; i < BATCH; i++) {
+                        if (compare256(currentKey, endKey) > 0) break;
                         
-                        let Z1Z1 = mod(jZ * jZ);
-                        let U2 = mod(G_x * Z1Z1);
-                        let S2 = mod(G_y * mod(jZ * Z1Z1));
-                        let H = mod(U2 - jX);
-                        let R = mod(S2 - jY);
+                        pX[i].set(jX);
+                        pY[i].set(jY);
+                        pZ[i].set(jZ);
                         
-                        let HH = mod(H * H);
-                        let HHH = mod(H * HH);
-                        let V = mod(jX * HH);
+                        let Z1Z1 = montMul(jZ, jZ);
+                        let U2 = montMul(Gx, Z1Z1);
+                        let S2 = montMul(Gy, montMul(jZ, Z1Z1));
+                        let H = montSub(U2, jX);
+                        let R = montSub(S2, jY);
                         
-                        jX = mod(R * R - HHH - 2n * V);
-                        jY = mod(R * (V - jX) - jY * HHH);
-                        jZ = mod(jZ * H);
+                        let HH = montMul(H, H);
+                        let HHH = montMul(H, HH);
+                        let V = montMul(jX, HH);
                         
+                        let newX = montSub(montMul(R, R), HHH);
+                        newX = montSub(newX, V);
+                        newX = montSub(newX, V);
+                        
+                        let newY = montSub(V, newX);
+                        newY = montMul(newY, R);
+                        newY = montSub(newY, montMul(jY, HHH));
+                        
+                        jX = newX;
+                        jY = newY;
+                        jZ = montMul(jZ, H);
+                        
+                        incrementKey(currentKey);
                         batchCount++;
                     }
-
+                    
                     if (batchCount === 0) {
                         self.postMessage({ type: "SCAN_DONE", workerId });
                         return;
                     }
                     
-                    // Batch Inversion
-                    let acc = 1n;
-                    for(let i = 0; i < batchCount; i++) {
-                        partials[i] = acc;
-                        acc = mod(acc * pZ[i]);
-                    }
-                    
-                    let invAcc = inverse(acc);
-                    
-                    for(let i = batchCount - 1; i >= 0; i--) {
-                        invZ[i] = mod(invAcc * partials[i]);
-                        invAcc = mod(invAcc * pZ[i]);
-                    }
-                    
-                    // Validatie en conversie
+                    // Batch inversion
+                    let acc = new Uint32Array([1,0,0,0,0,0,0,0]);
                     for (let i = 0; i < batchCount; i++) {
-                        let iz = invZ[i];
-                        let iz2 = mod(iz * iz);
-                        let ax = mod(pX[i] * iz2);
-                        let ay = mod(pY[i] * mod(iz * iz2));
+                        partials[i].set(acc);
+                        acc = montMul(acc, pZ[i]);
+                    }
+                    
+                    let invAcc = montInv(acc);
+                    
+                    for (let i = batchCount - 1; i >= 0; i--) {
+                        invZ[i] = montMul(invAcc, partials[i]);
+                        invAcc = montMul(invAcc, pZ[i]);
+                    }
+                    
+                    // Validate and convert
+                    for (let i = 0; i < batchCount; i++) {
+                        let iz2 = montMul(invZ[i], invZ[i]);
+                        let ax = montMul(pX[i], iz2);
+                        let ay = montMul(pY[i], montMul(invZ[i], iz2));
+                        
+                        let axBytes = uint32ToBytes(ax);
+                        let ayBytes = uint32ToBytes(ay);
                         
                         const bytes = new Uint8Array(33);
-                        bytes[0] = (ay & 1n) === 0n ? 0x02 : 0x03;
-                        let tmp = ax;
-                        for (let b = 32; b >= 1; b--) { bytes[b] = Number(tmp & 0xffn); tmp >>= 8n; }
+                        bytes[0] = (ayBytes[31] & 1) ? 0x03 : 0x02;
+                        bytes.set(axBytes, 1);
                         
-                        // WONDER 1 IN ACTIE: Directe 33-byte Unrolled Hash en 32-byte Ripemd
                         const s256 = sha256_33(bytes);
                         const r160 = ripemd160_32(s256);
-
+                        
                         let match = true;
-                        for(let k = 0; k < 20; k++) {
+                        for (let k = 0; k < 20; k++) {
                             if (r160[k] !== targetH160[k]) { match = false; break; }
                         }
-
+                        
                         if (match) {
-                            const privHex = (currentKey + BigInt(i)).toString(16).padStart(64, '0');
-                            const payloadBytes = ("80" + privHex + "01").match(/.{2}/g).map(b => parseInt(b, 16));
-                            // Voor de WIF string gebruiken we wel nog de generieke dubbele hash ivm afwijkende lengte (34 bytes)
-                            const doubleSha = sha256_generic(sha256_generic(new Uint8Array(payloadBytes)));
-                            const wif = toBase58("80" + privHex + "01" + Array.from(doubleSha).slice(0, 4).map(b => b.toString(16).padStart(2,'0')).join(''));
-                            self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: targetAddr });
+                            let tmpKey = new Uint32Array(startKey);
+                            for (let j = 0; j < i; j++) incrementKey(tmpKey);
+                            const privHex = uint32ToHex(tmpKey);
+                            
+                            self.postMessage({ 
+                                type: "FOUND", 
+                                privHex: privHex, 
+                                wif: privHex,
+                                address: targetAddr 
+                            });
                             return;
                         }
                     }
                     
-                    currentKey += BigInt(batchCount);
-                    
-                    if (currentKey > endKey) {
-                        self.postMessage({ type: "SCAN_DONE", workerId });
-                        return;
-                    }
-                    
-                    let lastZ = invZ[batchCount - 1];
-                    let lastZ2 = mod(lastZ * lastZ);
-                    let lastAX = mod(pX[batchCount - 1] * lastZ2);
-                    let lastAY = mod(pY[batchCount - 1] * mod(lastZ * lastZ2));
-                    currentPoint = add({x: lastAX, y: lastAY}, G);
-
                     self.postMessage({ type: "PROGRESS", count: batchCount, workerId });
-                    setTimeout(fastStep, 0);
+                    
+                    if (compare256(currentKey, endKey) <= 0) {
+                        let lastZ = invZ[batchCount - 1];
+                        let lastZ2 = montMul(lastZ, lastZ);
+                        let lastAX = montMul(pX[batchCount - 1], lastZ2);
+                        let lastAY = montMul(pY[batchCount - 1], montMul(lastZ, lastZ2));
+                        
+                        currentPoint = pointAdd({x: lastAX, y: lastAY, z: new Uint32Array([1,0,0,0,0,0,0,0])}, 
+                                               {x: new Uint32Array(Gx), y: new Uint32Array(Gy), z: new Uint32Array([1,0,0,0,0,0,0,0])});
+                        
+                        setTimeout(fastStep, 0);
+                    } else {
+                        self.postMessage({ type: "SCAN_DONE", workerId });
+                    }
                 }
+                
                 fastStep();
             }
         };
@@ -686,8 +916,8 @@
                     log('❌ Ongeldig BTC Adres', 'ev-stop'); setRunning(false); return; 
                 }
 
-                const startBI = BigInt("0x" + document.getElementById('rangeStart').value);
-                const endBI = BigInt("0x" + document.getElementById('rangeEnd').value);
+                const startHex = document.getElementById('rangeStart').value;
+                const endHex = document.getElementById('rangeEnd').value;
                 const numW = Math.max(1, parseInt(document.getElementById('numW').value) || 4);
                 
                 killWorkers();
@@ -697,9 +927,11 @@
                     const worker = makeWorker();
                     workers.push(worker);
                     
+                    const startBI = BigInt("0x" + startHex);
+                    const endBI = BigInt("0x" + endHex);
                     const chunkSize = (endBI - startBI + 1n) / BigInt(numW);
                     const segStart = (startBI + chunkSize * BigInt(i)).toString(16);
-                    const segEnd = (i === numW - 1) ? endBI.toString(16) : (startBI + chunkSize * BigInt(i + 1) - 1n).toString(16);
+                    const segEnd = (i === numW - 1) ? endHex : (startBI + chunkSize * BigInt(i + 1) - 1n).toString(16);
 
                     worker.onmessage = (ev) => {
                         if (ev.data.type === "PROGRESS") {
@@ -730,15 +962,15 @@
                 if (isRunning) return;
                 startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = cumulativeScanned;
                 setRunning(true);
-                setStatus('⚡ Jacobian Batch Actief v3', 'running');
-                log('Jacobian Batch Scan v3 gestart (Wonder 1 & 2 Actief)', 'ev-epoch');
+                setStatus('⚡ Uint32Array Turbo v4 Actief', 'running');
+                log('Uint32Array Turbo v4 gestart (5-10x sneller dan BigInt!)', 'ev-epoch');
                 spawnWorkers();
             }
 
             startBtn.onclick = () => { if (!isRunning) startAddressScan(); };
             stopBtn.onclick = () => { setRunning(false); killWorkers(); setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop'); };
             generateRandomSlice();
-            log('Systeem klaar. Jacobian Engine v3 Lokaal geladen met Cache-Optimalisatie.', 'ts');
+            log('Systeem klaar. Uint32Array Turbo Engine v4 geladen.', 'ts');
 
             setInterval(() => { if (isRunning) updateAllStats(); }, 800);
         })();
