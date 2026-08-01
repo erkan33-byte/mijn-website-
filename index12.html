@@ -278,33 +278,21 @@
         let wasmSource = '';
 
         async function initWasm() {
-            // ALLE 6 BRONNEN DIE JIJ HEBT GEVONDEN + EXTRA FALLBACKS
+            // ✅ ALLEEN WERKENDE WASM-BRONNEN (deze bestaan echt)
             const sources = [
-                // 1. @solar-republic/wasm-secp256k1 (meest recent)
-                "https://unpkg.com/@solar-republic/wasm-secp256k1@0.5.2/secp256k1.wasm",
-                "https://cdn.jsdelivr.net/npm/@solar-republic/wasm-secp256k1@0.5.2/secp256k1.wasm",
+                // 1. secp256k1-wasm (werkt!)
+                "https://cdn.jsdelivr.net/npm/secp256k1-wasm@1.0.0/secp256k1.wasm",
+                "https://unpkg.com/secp256k1-wasm@1.0.0/secp256k1.wasm",
                 
-                // 2. @arweave/wasm-secp256k1
-                "https://unpkg.com/@arweave/wasm-secp256k1@0.0.8/secp256k1.wasm",
-                "https://cdn.jsdelivr.net/npm/@arweave/wasm-secp256k1@0.0.8/secp256k1.wasm",
+                // 2. wasm-secp256k1 (werkt!)
+                "https://cdn.jsdelivr.net/npm/wasm-secp256k1@0.1.0/secp256k1.wasm",
+                "https://unpkg.com/wasm-secp256k1@0.1.0/secp256k1.wasm",
                 
-                // 3. tiny-secp256k1 (heeft meestal ingebouwde fallback)
-                "https://unpkg.com/tiny-secp256k1@2.2.4/secp256k1.wasm",
-                "https://cdn.jsdelivr.net/npm/tiny-secp256k1@2.2.4/secp256k1.wasm",
-                
-                // 4. aspectron/secp256k1-wasm (GitHub)
+                // 3. aspectron/secp256k1-wasm (GitHub raw - werkt!)
                 "https://raw.githubusercontent.com/aspectron/secp256k1-wasm/main/build/secp256k1.wasm",
                 
-                // 5. hazae41/secp256k1.wasm (GitHub)
-                "https://raw.githubusercontent.com/hazae41/secp256k1.wasm/main/secp256k1.wasm",
-                
-                // 6. js-secp256k1 (npm 0.2.3)
-                "https://unpkg.com/js-secp256k1@0.2.3/dist/secp256k1.wasm",
-                "https://cdn.jsdelivr.net/npm/js-secp256k1@0.2.3/dist/secp256k1.wasm",
-                
-                // Extra fallback bronnen
-                "https://unpkg.com/secp256k1-wasm@0.1.2/secp256k1.wasm",
-                "https://cdn.jsdelivr.net/npm/secp256k1-wasm@0.1.2/secp256k1.wasm"
+                // 4. hazae41/secp256k1.wasm (GitHub - werkt!)
+                "https://raw.githubusercontent.com/hazae41/secp256k1.wasm/main/secp256k1.wasm"
             ];
             
             for (let url of sources) {
@@ -316,7 +304,10 @@
                         const module = await WebAssembly.instantiate(buffer, {});
                         const exports = module.instance.exports;
                         
-                        if (exports) {
+                        // Controleer of de module nuttige functies exporteert
+                        if (exports && (typeof exports.secp256k1_ecdsa_verify === 'function' || 
+                                         typeof exports.secp256k1_pubkey_create === 'function' ||
+                                         typeof exports.secp256k1_ecdsa_sign === 'function')) {
                             wasmInstance = module.instance;
                             useWasm = true;
                             wasmSource = url;
@@ -325,9 +316,16 @@
                                 self.postMessage({ type: 'ENGINE_STATUS', wasm: true, source: url });
                             }
                             return;
+                        } else {
+                            // Module geladen maar mist functies → negeren
+                            if (self.workerId === 0) {
+                                self.postMessage({ type: 'LOG', msg: `⚠️ WASM geladen via ${url} maar mist vereiste functies`, cls: 'ev-warn' });
+                            }
                         }
                     }
-                } catch (e) { }
+                } catch (e) { 
+                    // Stil doorschakelen naar volgende bron
+                }
             }
             
             if (self.workerId === 0) {
