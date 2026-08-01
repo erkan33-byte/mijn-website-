@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #71 – Random Slice Sniper (WASM CDN Turbo) ⚡</title>
+    <title>Puzzel #71 – Random Slice Sniper (WASM Multi-Source) ⚡</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -28,11 +28,12 @@
             text-shadow: 0 0 18px rgba(0,255,153,0.4); text-transform: uppercase; }
         .header .sub { font-size: .72rem; color: var(--muted); letter-spacing: .12em; margin-top: 6px; }
         
-        .badges-container { display: flex; justify-content: center; gap: 10px; margin-top: 12px; }
+        .badges-container { display: flex; justify-content: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
         .badge { display: inline-block; background: linear-gradient(90deg,#1a2a1a,#0d2010);
             border: 1px solid var(--accent); color: var(--accent); font-size: .62rem;
             letter-spacing: .15em; padding: 4px 12px; border-radius: 4px; box-shadow: 0 0 8px rgba(0,255,153,0.1); }
         .badge-status { border-color: var(--warn); color: var(--warn); background: linear-gradient(90deg,#2a2010,#1a1005); transition: all 0.3s ease; }
+        .badge-success { border-color: var(--success); color: var(--success); background: linear-gradient(90deg,#102a10,#051a05); }
 
         .card, .calc-card, .chance-card {
             background: var(--panel); border: 1px solid var(--border);
@@ -147,10 +148,11 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – WASM CDN Turbo (Multi-Source met Fallback)</div>
+            <div class="sub">Puzzel #71 – WASM Multi-Source Parallel Loader ⚡</div>
             <div class="badges-container">
                 <span class="badge">🚀 WASM-SIMD READY</span>
                 <span id="engineBadge" class="badge badge-status">⚡ ENGINE: WACHTEND</span>
+                <span id="sourceBadge" class="badge badge-status">📦 BRON: —</span>
             </div>
         </div>
         
@@ -165,7 +167,7 @@
             <div class="field">
                 <label>Scan methode</label>
                 <select id="scanMethod">
-                    <option value="wasm" selected>🔷 WASM CDN & Auto-JS Fallback</option>
+                    <option value="wasm" selected>🔷 WASM Multi-Source & Auto-JS Fallback</option>
                 </select>
             </div>
             <div class="field">
@@ -196,7 +198,7 @@
                 </div>
             </div>
             <div class="formula-box" style="background:rgba(0,0,0,0.5); border-left:3px solid var(--accent2); padding:10px; font-size:.75rem; color:#bfe4ff; line-height:1.5; font-family: monospace;">
-                Engine: Multi-Source WASM Loader → Fallback: JS-SIMD + Jacobian Batch
+                Engine: Parallel Multi-Source WASM Loader → Fallback: JS-SIMD + Jacobian Batch
             </div>
         </div>
 
@@ -262,10 +264,10 @@
             </table>
         </div>
         
-        <div class="footer">Random Slice Sniper · Multi-CDN & JS Fallback Engine v2.1</div>
+        <div class="footer">Random Slice Sniper · Multi-Source WASM Loader & JS Fallback v3.0</div>
     </div>
 
-    <!-- ⚡ OPTIMIZED WORKER ENGINE (WASM + JS FALLBACK) -->
+    <!-- ⚡ OPTIMIZED WORKER ENGINE (WASM MULTI-SOURCE + JS FALLBACK) -->
     <script id="workerCode" type="javascript/worker">
         self.onerror = function(e) {
             self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
@@ -273,14 +275,36 @@
 
         let useWasm = false;
         let wasmInstance = null;
+        let wasmSource = '';
 
         async function initWasm() {
-            // Uitgebreide lijst met alternatieve cdn bronnen voor secp256k1 wasm
+            // ALLE 6 BRONNEN DIE JIJ HEBT GEVONDEN + EXTRA FALLBACKS
             const sources = [
-                "https://unpkg.com/secp256k1-wasm@0.1.2/secp256k1.wasm",
-                "https://cdn.jsdelivr.net/npm/secp256k1-wasm@0.1.2/secp256k1.wasm",
+                // 1. @solar-republic/wasm-secp256k1 (meest recent)
+                "https://unpkg.com/@solar-republic/wasm-secp256k1@0.5.2/secp256k1.wasm",
+                "https://cdn.jsdelivr.net/npm/@solar-republic/wasm-secp256k1@0.5.2/secp256k1.wasm",
+                
+                // 2. @arweave/wasm-secp256k1
+                "https://unpkg.com/@arweave/wasm-secp256k1@0.0.8/secp256k1.wasm",
+                "https://cdn.jsdelivr.net/npm/@arweave/wasm-secp256k1@0.0.8/secp256k1.wasm",
+                
+                // 3. tiny-secp256k1 (heeft meestal ingebouwde fallback)
+                "https://unpkg.com/tiny-secp256k1@2.2.4/secp256k1.wasm",
+                "https://cdn.jsdelivr.net/npm/tiny-secp256k1@2.2.4/secp256k1.wasm",
+                
+                // 4. aspectron/secp256k1-wasm (GitHub)
+                "https://raw.githubusercontent.com/aspectron/secp256k1-wasm/main/build/secp256k1.wasm",
+                
+                // 5. hazae41/secp256k1.wasm (GitHub)
+                "https://raw.githubusercontent.com/hazae41/secp256k1.wasm/main/secp256k1.wasm",
+                
+                // 6. js-secp256k1 (npm 0.2.3)
+                "https://unpkg.com/js-secp256k1@0.2.3/dist/secp256k1.wasm",
                 "https://cdn.jsdelivr.net/npm/js-secp256k1@0.2.3/dist/secp256k1.wasm",
-                "https://unpkg.com/js-secp256k1@0.2.3/dist/secp256k1.wasm"
+                
+                // Extra fallback bronnen
+                "https://unpkg.com/secp256k1-wasm@0.1.2/secp256k1.wasm",
+                "https://cdn.jsdelivr.net/npm/secp256k1-wasm@0.1.2/secp256k1.wasm"
             ];
             
             for (let url of sources) {
@@ -295,9 +319,10 @@
                         if (exports) {
                             wasmInstance = module.instance;
                             useWasm = true;
+                            wasmSource = url;
                             if (self.workerId === 0) {
                                 self.postMessage({ type: 'LOG', msg: `✅ WASM succesvol geladen via ${url}`, cls: 'ev-epoch' });
-                                self.postMessage({ type: 'ENGINE_STATUS', wasm: true });
+                                self.postMessage({ type: 'ENGINE_STATUS', wasm: true, source: url });
                             }
                             return;
                         }
@@ -307,7 +332,7 @@
             
             if (self.workerId === 0) {
                 self.postMessage({ type: 'LOG', msg: '⚠️ Geen enkele WASM bron bereikbaar → Schakelt over op JS-SIMD + Jacobian Batch', cls: 'ev-warn' });
-                self.postMessage({ type: 'ENGINE_STATUS', wasm: false });
+                self.postMessage({ type: 'ENGINE_STATUS', wasm: false, source: 'JS-FALLBACK' });
             }
             useWasm = false;
         }
@@ -496,7 +521,6 @@
                 const endKey = BigInt("0x" + data.endHex);
                 const targetH160 = new Uint8Array(data.targetH160Hex.match(/.{2}/g).map(b => parseInt(b, 16)));
                 const targetAddr = data.targetAddress;
-                const workerId = data.workerId;
                 const BATCH = 5000;
                 
                 let currentPoint = mulG(currentKey);
@@ -621,7 +645,8 @@
                   progressBar = document.getElementById('progressBar'),
                   clearLogBtn = document.getElementById('clearLogBtn'),
                   exportBtn = document.getElementById('exportBtn'),
-                  engineBadge = document.getElementById('engineBadge');
+                  engineBadge = document.getElementById('engineBadge'),
+                  sourceBadge = document.getElementById('sourceBadge');
 
             clearLogBtn.onclick = () => { logBox.innerHTML = ''; log('Log gewist.', 'ev-muted'); };
 
@@ -793,12 +818,14 @@
                         else if (ev.data.type === "ENGINE_STATUS") {
                             if (ev.data.wasm) {
                                 engineBadge.textContent = "⚡ ENGINE: WASM SIMD";
-                                engineBadge.style.color = "var(--success)";
-                                engineBadge.style.borderColor = "var(--success)";
+                                engineBadge.className = "badge badge-success";
+                                sourceBadge.textContent = "📦 BRON: " + ev.data.source.substring(0, 60) + "...";
+                                sourceBadge.className = "badge badge-success";
                             } else {
                                 engineBadge.textContent = "⚡ ENGINE: JS FALLBACK";
-                                engineBadge.style.color = "var(--warn)";
-                                engineBadge.style.borderColor = "var(--warn)";
+                                engineBadge.className = "badge badge-status";
+                                sourceBadge.textContent = "📦 BRON: JS-FALLBACK";
+                                sourceBadge.className = "badge badge-status";
                             }
                         }
                         else if (ev.data.type === "PROGRESS") {
@@ -832,10 +859,11 @@
                 startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = cumulativeScanned;
                 setRunning(true);
                 setStatus('⚡ Initialisatie WASM/Turbo', 'running');
-                log('Scan Initialisatie: Controleer CDN voor WASM...', 'ev-epoch');
+                log('Scan Initialisatie: Controleer 6+ CDN bronnen voor WASM...', 'ev-epoch');
                 engineBadge.textContent = "⚡ ENGINE: CONTROLEREN...";
-                engineBadge.style.color = "var(--accent)";
-                engineBadge.style.borderColor = "var(--accent)";
+                engineBadge.className = "badge badge-status";
+                sourceBadge.textContent = "📦 BRON: CONTROLEREN...";
+                sourceBadge.className = "badge badge-status";
                 spawnWorkers();
             }
 
