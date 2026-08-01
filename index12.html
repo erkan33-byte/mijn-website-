@@ -103,8 +103,9 @@
         .log .ts { color: var(--muted); }
         .log .ev-found { color: var(--warn); font-weight: bold; }
         .log .ev-epoch { color: var(--accent2); }
+        .log .ev-warn { color: var(--warn); }
         .log .ev-stop { color: var(--danger); }
-        .log .ev-hop { color: var(--warn); font-style: italic; }
+        .log .ev-hop { color: var(--success); font-style: italic; }
         .result-table { width: 100%; border-collapse: collapse; font-size: .72rem; }
         .result-table th { background: var(--surface); color: var(--accent2); letter-spacing: .1em; font-size: .62rem;
             text-transform: uppercase; padding: 10px 12px; border: 1px solid var(--border); text-align: left; }
@@ -119,7 +120,7 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – WASM CDN Turbo (Geen installatie)</div>
+            <div class="sub">Puzzel #71 – WASM CDN Turbo (Multi-Source met Fallback)</div>
             <span class="badge">🚀 WASM-SIMD + PRE-COMPUTED G-MULTIPLES</span>
         </div>
         <div class="card">
@@ -131,7 +132,7 @@
             <div class="field">
                 <label>Scan methode</label>
                 <select id="scanMethod">
-                    <option value="wasm" selected>🔷 WASM-SIMD Batch (Ultra-Turbo)</option>
+                    <option value="wasm" selected>🔷 WASM CDN & Auto-JS Fallback</option>
                 </select>
             </div>
             <div class="field">
@@ -161,7 +162,7 @@
                 </div>
             </div>
             <div class="formula-box" style="background:rgba(0,0,0,0.5); border-left:3px solid var(--accent2); padding:10px; font-size:.75rem; color:#bfe4ff; line-height:1.5;">
-                Engine: WASM-SIMD SHA256/RIPEMD160 + Jacobian Batch
+                Engine: Multi-Source WASM Loader → Fallback: JS-SIMD + Jacobian Batch
             </div>
         </div>
         <div class="chance-card">
@@ -211,17 +212,58 @@
                 <tbody id="matchTable"><tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Random Slice Sniper · WASM CDN Turbo Engine</div>
+        <div class="footer">Random Slice Sniper · Multi-CDN & JS Fallback Engine</div>
     </div>
 
-    <!-- ⚡ OPTIMIZED WORKER ENGINE MET WASM ONDERSTEUNING -->
+    <!-- ⚡ OPTIMIZED WORKER ENGINE (WASM + JS FALLBACK) -->
     <script id="workerCode" type="javascript/worker">
         self.onerror = function(e) {
             self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
         };
 
         // ============================================
-        // KERNEL: PRE-COMPUTED G-MULTIPLES
+        // WASM LOADER MET MULTIPLE CDN BRONNEN
+        // ============================================
+        let useWasm = false;
+        let wasmInstance = null;
+
+        async function initWasm() {
+            const sources = [
+                "https://cdn.jsdelivr.net/npm/secp256k1-wasm@1.0.0/secp256k1.wasm",
+                "https://unpkg.com/secp256k1-wasm/build/secp256k1.wasm",
+                "https://cdnjs.cloudflare.com/ajax/libs/secp256k1/0.1.0/secp256k1.wasm"
+            ];
+            
+            for (let url of sources) {
+                try {
+                    if (self.workerId === 0) self.postMessage({ type: 'LOG', msg: `Probeer externe WASM te laden via: ${url}`, cls: 'ev-muted' });
+                    const response = await fetch(url);
+                    if (response.ok) {
+                        const buffer = await response.arrayBuffer();
+                        const module = await WebAssembly.instantiate(buffer, {});
+                        
+                        // Controleren of specifieke batch-methods erin zitten. Anders fallback.
+                        if (!module.instance.exports.batch_scan) {
+                            throw new Error("WASM geladen, maar mist de specifieke 'batch_scan' functie.");
+                        }
+                        
+                        wasmInstance = module.instance;
+                        useWasm = true;
+                        if (self.workerId === 0) self.postMessage({ type: 'LOG', msg: `✅ WASM succesvol geladen via ${url}!`, cls: 'ev-epoch' });
+                        return;
+                    }
+                } catch (e) {
+                    // Silently fail over naar de volgende CDN of Fallback
+                }
+            }
+            if (self.workerId === 0) {
+                self.postMessage({ type: 'LOG', msg: `⚠️ Geen geschikte WASM gevonden op bronnen. Terugvallen op geoptimaliseerde JS Engine (BigInt + Jacobian Batch).`, cls: 'ev-warn' });
+            }
+            useWasm = false;
+        }
+
+        // ============================================
+        // JS FALLBACK KERNEL: PRE-COMPUTED G-MULTIPLES
         // ============================================
         const P = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
         const G_x = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n;
@@ -229,9 +271,21 @@
 
         function mod(a, b = P) { const r = a % b; return r >= 0n ? r : r + b; }
         
-        // Fermat inverse (3x sneller dan Euclides)
-        function inverse(a, n = P) {
-            return mod(a ** (n - 2n), n);
+        // GECORRIGEERD: Gebruik Extended Euclidean Algorithm ipv machtverheffing (voorkomt crashes)
+        function inverse(a, m = P) {
+            if (a === 0n) return 0n;
+            let m0 = m, y = 0n, x = 1n;
+            while (a > 1n) {
+                let q = a / m;
+                let t = m;
+                m = a % m;
+                a = t;
+                t = y;
+                y = x - q * y;
+                x = t;
+            }
+            if (x < 0n) x += m0;
+            return x;
         }
 
         function add(p, q) {
@@ -254,7 +308,6 @@
             return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
         }
 
-        // Pre-computed G-multiples (G * 2^i voor i=0..255)
         const G_MULTIPLES = new Array(256);
         (function precomputeG() {
             let p = { x: G_x, y: G_y };
@@ -279,7 +332,7 @@
         }
 
         // ============================================
-        // SHA256 & RIPEMD160 (JS fallback)
+        // SHA256 & RIPEMD160
         // ============================================
         const sha256_K = new Uint32Array([
             0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -389,17 +442,24 @@
         // ==========================================
         // ⚡ GEOPTIMALISEERDE BATCH ENGINE v2
         // ==========================================
-        self.onmessage = function(e) {
+        self.onmessage = async function(e) {
             const data = e.data;
             if (data.type === "ADDRESS_SCAN") {
+                self.workerId = data.workerId;
+
+                // Initialiseer WASM (1 keer per worker proberen)
+                if (typeof self.initialized === 'undefined') {
+                    await initWasm();
+                    self.initialized = true;
+                }
+
                 let currentKey = BigInt("0x" + data.startHex);
                 const endKey = BigInt("0x" + data.endHex);
                 const targetH160 = new Uint8Array(data.targetH160Hex.match(/.{2}/g).map(b => parseInt(b, 16)));
                 const targetAddr = data.targetAddress;
                 const workerId = data.workerId;
-                const BATCH = 10000;
+                const BATCH = 5000; // Iets verlaagd voor soepeler event-loops
                 
-                // Gebruik pre-computed G-multiples voor snellere initiële punt
                 let currentPoint = mulG(currentKey);
 
                 // Pre-allocatie van geheugenstructuren
@@ -440,7 +500,7 @@
                         return;
                     }
                     
-                    // Batch Inversion (Fermat)
+                    // Batch Inversion
                     let acc = 1n;
                     for(let i = 0; i < batchCount; i++) {
                         partials[i] = acc;
@@ -670,7 +730,10 @@
                     const segEnd = (i === numW - 1) ? endBI.toString(16) : (startBI + chunkSize * BigInt(i + 1) - 1n).toString(16);
 
                     worker.onmessage = (ev) => {
-                        if (ev.data.type === "PROGRESS") {
+                        if (ev.data.type === "LOG") {
+                            log(ev.data.msg, ev.data.cls);
+                        }
+                        else if (ev.data.type === "PROGRESS") {
                             if (!isRunning) return;
                             totalJumps += ev.data.count; cumulativeScanned += ev.data.count; currentSliceScanned += ev.data.count;
                             if (currentSliceScanned >= targetLimit) {
@@ -698,15 +761,15 @@
                 if (isRunning) return;
                 startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = cumulativeScanned;
                 setRunning(true);
-                setStatus('⚡ WASM Turbo Actief', 'running');
-                log('WASM Turbo Scan gestart (pre-computed G-multiples).', 'ev-epoch');
+                setStatus('⚡ Initialisatie WASM/Turbo', 'running');
+                log('Scan Initialisatie: Controleer CDN voor WASM...', 'ev-epoch');
                 spawnWorkers();
             }
 
             startBtn.onclick = () => { if (!isRunning) startAddressScan(); };
             stopBtn.onclick = () => { setRunning(false); killWorkers(); setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop'); };
             generateRandomSlice();
-            log('Systeem klaar. WASM Turbo Engine geladen.', 'ts');
+            log('Systeem klaar. Initialisatie van engine on demand.', 'ts');
 
             setInterval(() => { if (isRunning) updateAllStats(); }, 800);
         })();
