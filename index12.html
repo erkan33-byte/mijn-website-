@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #71 – Random Slice Sniper (WASM Multi-Source) ⚡</title>
+    <title>Puzzel #71 – Random Slice Sniper (WASM Multi-Source + CORS) ⚡</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -148,9 +148,9 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – WASM Multi-Source Parallel Loader ⚡</div>
+            <div class="sub">Puzzel #71 – WASM Multi-Source + CORS Proxies ⚡</div>
             <div class="badges-container">
-                <span class="badge">🚀 WASM-SIMD READY</span>
+                <span class="badge">🚀 WASM-SIMD + CORS</span>
                 <span id="engineBadge" class="badge badge-status">⚡ ENGINE: WACHTEND</span>
                 <span id="sourceBadge" class="badge badge-status">📦 BRON: —</span>
             </div>
@@ -167,7 +167,7 @@
             <div class="field">
                 <label>Scan methode</label>
                 <select id="scanMethod">
-                    <option value="wasm" selected>🔷 WASM Multi-Source & Auto-JS Fallback</option>
+                    <option value="wasm" selected>🔷 WASM Multi-Source Proxy & Auto-JS Fallback</option>
                 </select>
             </div>
             <div class="field">
@@ -198,7 +198,7 @@
                 </div>
             </div>
             <div class="formula-box" style="background:rgba(0,0,0,0.5); border-left:3px solid var(--accent2); padding:10px; font-size:.75rem; color:#bfe4ff; line-height:1.5; font-family: monospace;">
-                Engine: Parallel Multi-Source WASM Loader → Fallback: JS-SIMD + Jacobian Batch
+                Engine: CORS Proxy Loader → corsproxy.io / allorigins.win → Fallback: JS-SIMD
             </div>
         </div>
 
@@ -264,10 +264,10 @@
             </table>
         </div>
         
-        <div class="footer">Random Slice Sniper · Multi-Source WASM Loader & JS Fallback v3.0</div>
+        <div class="footer">Random Slice Sniper · CORS Proxy WASM Loader & JS Fallback v3.1</div>
     </div>
 
-    <!-- ⚡ OPTIMIZED WORKER ENGINE (WASM MULTI-SOURCE + JS FALLBACK) -->
+    <!-- ⚡ WORKER ENGINE MET CORS-PROXIES (corsproxy.io & allorigins.win) -->
     <script id="workerCode" type="javascript/worker">
         self.onerror = function(e) {
             self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
@@ -278,52 +278,50 @@
         let wasmSource = '';
 
         async function initWasm() {
-            // ✅ Uitgebreide lijst met WASM-bronnen inclusief @solar-republic en tiny-secp256k1
-            const sources = [
-                // 1. Solar Republic WASM secp256k1
+            // Doelbestanden voor WASM secp256k1
+            const targetUrls = [
                 "https://cdn.jsdelivr.net/npm/@solar-republic/wasm-secp256k1@0.5.2/public/out/secp256k1.wasm",
-                "https://unpkg.com/@solar-republic/wasm-secp256k1@0.5.2/public/out/secp256k1.wasm",
-                
-                // 2. Tiny secp256k1 WASM
                 "https://cdn.jsdelivr.net/npm/tiny-secp256k1@2.2.4/lib/secp256k1.wasm",
-                "https://unpkg.com/tiny-secp256k1@2.2.4/lib/secp256k1.wasm",
-
-                // 3. Eerdere fallback bronnen
-                "https://cdn.jsdelivr.net/npm/secp256k1-wasm@1.0.0/secp256k1.wasm",
-                "https://unpkg.com/secp256k1-wasm@1.0.0/secp256k1.wasm",
-                "https://cdn.jsdelivr.net/npm/wasm-secp256k1@0.1.0/secp256k1.wasm",
-                "https://unpkg.com/wasm-secp256k1@0.1.0/secp256k1.wasm",
-                "https://raw.githubusercontent.com/aspectron/secp256k1-wasm/main/build/secp256k1.wasm",
-                "https://raw.githubusercontent.com/hazae41/secp256k1.wasm/main/secp256k1.wasm"
+                "https://cdn.jsdelivr.net/npm/secp256k1-wasm@1.0.0/secp256k1.wasm"
             ];
-            
-            for (let url of sources) {
-                try {
-                    if (self.workerId === 0) self.postMessage({ type: 'LOG', msg: `🔍 WASM proberen te laden via: ${url}`, cls: 'ev-muted' });
-                    const response = await fetch(url);
-                    if (response.ok) {
-                        const buffer = await response.arrayBuffer();
-                        const module = await WebAssembly.instantiate(buffer, {});
-                        const exports = module.instance.exports;
-                        
-                        if (exports) {
-                            wasmInstance = module.instance;
-                            useWasm = true;
-                            wasmSource = url;
-                            if (self.workerId === 0) {
-                                self.postMessage({ type: 'LOG', msg: `✅ WASM succesvol geladen via ${url}`, cls: 'ev-epoch' });
-                                self.postMessage({ type: 'ENGINE_STATUS', wasm: true, source: url });
-                            }
-                            return;
+
+            for (let rawUrl of targetUrls) {
+                // Constructeer proxy varianten (corsproxy.io en allorigins.win)
+                const proxies = [
+                    `https://corsproxy.io/?${encodeURIComponent(rawUrl)}`,
+                    `https://api.allorigins.win/raw?url=${encodeURIComponent(rawUrl)}`
+                ];
+
+                for (let url of proxies) {
+                    try {
+                        if (self.workerId === 0) {
+                            self.postMessage({ type: 'LOG', msg: `🔍 WASM laden via proxy: ${url.substring(0, 45)}...`, cls: 'ev-muted' });
                         }
+                        const response = await fetch(url);
+                        if (response.ok) {
+                            const buffer = await response.arrayBuffer();
+                            const module = await WebAssembly.instantiate(buffer, {});
+                            const exports = module.instance.exports;
+                            
+                            if (exports) {
+                                wasmInstance = module.instance;
+                                useWasm = true;
+                                wasmSource = url;
+                                if (self.workerId === 0) {
+                                    self.postMessage({ type: 'LOG', msg: `✅ WASM succesvol geladen via proxy!`, cls: 'ev-epoch' });
+                                    self.postMessage({ type: 'ENGINE_STATUS', wasm: true, source: url });
+                                }
+                                return;
+                            }
+                        }
+                    } catch (e) {
+                        // Probeer volgende proxy
                     }
-                } catch (e) { 
-                    // Stil doorschakelen naar volgende bron
                 }
             }
             
             if (self.workerId === 0) {
-                self.postMessage({ type: 'LOG', msg: '⚠️ Geen enkele WASM bron bereikbaar → Schakelt over op JS-SIMD + Jacobian Batch', cls: 'ev-warn' });
+                self.postMessage({ type: 'LOG', msg: '⚠️ Alle CORS-proxies mislukt → Schakelt over op JS-SIMD + Jacobian Batch', cls: 'ev-warn' });
                 self.postMessage({ type: 'ENGINE_STATUS', wasm: false, source: 'JS-FALLBACK' });
             }
             useWasm = false;
@@ -380,19 +378,6 @@
                 G_MULTIPLES[i] = p;
             }
         })();
-
-        function mulG(n) {
-            let result = null;
-            let i = 0;
-            while (n > 0n) {
-                if (n & 1n) {
-                    result = add(result, G_MULTIPLES[i]);
-                }
-                n >>= 1n;
-                i++;
-            }
-            return result;
-        }
 
         const sha256_K = new Uint32Array([
             0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -809,9 +794,9 @@
                         }
                         else if (ev.data.type === "ENGINE_STATUS") {
                             if (ev.data.wasm) {
-                                engineBadge.textContent = "⚡ ENGINE: WASM SIMD";
+                                engineBadge.textContent = "⚡ ENGINE: WASM CORS PROXY";
                                 engineBadge.className = "badge badge-success";
-                                sourceBadge.textContent = "📦 BRON: " + ev.data.source.substring(0, 60) + "...";
+                                sourceBadge.textContent = "📦 BRON: " + ev.data.source.substring(0, 50) + "...";
                                 sourceBadge.className = "badge badge-success";
                             } else {
                                 engineBadge.textContent = "⚡ ENGINE: JS FALLBACK";
@@ -850,8 +835,8 @@
                 if (isRunning) return;
                 startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = cumulativeScanned;
                 setRunning(true);
-                setStatus('⚡ Initialisatie WASM/Turbo', 'running');
-                log('Scan Initialisatie: Controleer CDN bronnen voor WASM...', 'ev-epoch');
+                setStatus('⚡ Initialisatie WASM / CORS Proxy', 'running');
+                log('Scan Initialisatie: Verbinding maken via CORS proxies...', 'ev-epoch');
                 engineBadge.textContent = "⚡ ENGINE: CONTROLEREN...";
                 engineBadge.className = "badge badge-status";
                 sourceBadge.textContent = "📦 BRON: CONTROLEREN...";
@@ -862,7 +847,7 @@
             startBtn.onclick = () => { if (!isRunning) startAddressScan(); };
             stopBtn.onclick = () => { setRunning(false); killWorkers(); setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop'); };
             generateRandomSlice();
-            log('Systeem klaar. Initialisatie van engine on demand.', 'ts');
+            log('Systeem klaar. Initialisatie van CORS-proxies on demand.', 'ts');
 
             setInterval(() => { if (isRunning) updateAllStats(); }, 800);
         })();
