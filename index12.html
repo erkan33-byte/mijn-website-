@@ -228,10 +228,10 @@
         let wasmInstance = null;
 
         async function initWasm() {
-            // ✅ WERKENDE WASM-BRONNEN voor secp256k1
+            // ✅ WERKENDE WASM-BRONNEN - secp256k1-wasm package
             const sources = [
-                "https://unpkg.com/secp256k1@4.0.3/build/secp256k1.wasm",
-                "https://cdn.jsdelivr.net/npm/secp256k1@4.0.3/build/secp256k1.wasm"
+                "https://unpkg.com/secp256k1-wasm@0.1.2/secp256k1.wasm",
+                "https://cdn.jsdelivr.net/npm/secp256k1-wasm@0.1.2/secp256k1.wasm"
             ];
             
             for (let url of sources) {
@@ -241,9 +241,9 @@
                     if (response.ok) {
                         const buffer = await response.arrayBuffer();
                         const module = await WebAssembly.instantiate(buffer, {});
+                        const exports = module.instance.exports;
                         
                         // Controleer of de module de juiste functies exporteert
-                        const exports = module.instance.exports;
                         if (typeof exports.secp256k1_ecdsa_verify === 'function' || 
                             typeof exports.secp256k1_pubkey_create === 'function') {
                             wasmInstance = module.instance;
@@ -335,7 +335,7 @@
         }
 
         // ============================================
-        // SHA256 & RIPEMD160
+        // SHA256 & RIPEMD160 (Pure JS implementaties)
         // ============================================
         const sha256_K = new Uint32Array([
             0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
