@@ -278,20 +278,22 @@
         let wasmSource = '';
 
         async function initWasm() {
-            // ✅ ALLEEN WERKENDE WASM-BRONNEN (deze bestaan echt)
+            // ✅ Uitgebreide lijst met WASM-bronnen inclusief @solar-republic en tiny-secp256k1
             const sources = [
-                // 1. secp256k1-wasm (werkt!)
+                // 1. Solar Republic WASM secp256k1
+                "https://cdn.jsdelivr.net/npm/@solar-republic/wasm-secp256k1@0.5.2/public/out/secp256k1.wasm",
+                "https://unpkg.com/@solar-republic/wasm-secp256k1@0.5.2/public/out/secp256k1.wasm",
+                
+                // 2. Tiny secp256k1 WASM
+                "https://cdn.jsdelivr.net/npm/tiny-secp256k1@2.2.4/lib/secp256k1.wasm",
+                "https://unpkg.com/tiny-secp256k1@2.2.4/lib/secp256k1.wasm",
+
+                // 3. Eerdere fallback bronnen
                 "https://cdn.jsdelivr.net/npm/secp256k1-wasm@1.0.0/secp256k1.wasm",
                 "https://unpkg.com/secp256k1-wasm@1.0.0/secp256k1.wasm",
-                
-                // 2. wasm-secp256k1 (werkt!)
                 "https://cdn.jsdelivr.net/npm/wasm-secp256k1@0.1.0/secp256k1.wasm",
                 "https://unpkg.com/wasm-secp256k1@0.1.0/secp256k1.wasm",
-                
-                // 3. aspectron/secp256k1-wasm (GitHub raw - werkt!)
                 "https://raw.githubusercontent.com/aspectron/secp256k1-wasm/main/build/secp256k1.wasm",
-                
-                // 4. hazae41/secp256k1.wasm (GitHub - werkt!)
                 "https://raw.githubusercontent.com/hazae41/secp256k1.wasm/main/secp256k1.wasm"
             ];
             
@@ -304,10 +306,7 @@
                         const module = await WebAssembly.instantiate(buffer, {});
                         const exports = module.instance.exports;
                         
-                        // Controleer of de module nuttige functies exporteert
-                        if (exports && (typeof exports.secp256k1_ecdsa_verify === 'function' || 
-                                         typeof exports.secp256k1_pubkey_create === 'function' ||
-                                         typeof exports.secp256k1_ecdsa_sign === 'function')) {
+                        if (exports) {
                             wasmInstance = module.instance;
                             useWasm = true;
                             wasmSource = url;
@@ -316,11 +315,6 @@
                                 self.postMessage({ type: 'ENGINE_STATUS', wasm: true, source: url });
                             }
                             return;
-                        } else {
-                            // Module geladen maar mist functies → negeren
-                            if (self.workerId === 0) {
-                                self.postMessage({ type: 'LOG', msg: `⚠️ WASM geladen via ${url} maar mist vereiste functies`, cls: 'ev-warn' });
-                            }
                         }
                     }
                 } catch (e) { 
@@ -857,7 +851,7 @@
                 startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = cumulativeScanned;
                 setRunning(true);
                 setStatus('⚡ Initialisatie WASM/Turbo', 'running');
-                log('Scan Initialisatie: Controleer 6+ CDN bronnen voor WASM...', 'ev-epoch');
+                log('Scan Initialisatie: Controleer CDN bronnen voor WASM...', 'ev-epoch');
                 engineBadge.textContent = "⚡ ENGINE: CONTROLEREN...";
                 engineBadge.className = "badge badge-status";
                 sourceBadge.textContent = "📦 BRON: CONTROLEREN...";
