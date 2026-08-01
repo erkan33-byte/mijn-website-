@@ -198,7 +198,7 @@
                 </div>
             </div>
             <div class="formula-box" style="background:rgba(0,0,0,0.5); border-left:3px solid var(--accent2); padding:10px; font-size:.75rem; color:#bfe4ff; line-height:1.5; font-family: monospace;">
-                Engine: CORS Proxy Loader → corsproxy.io / allorigins.win → Fallback: JS-SIMD
+                Engine: CORS Proxy Loader → corsproxy.io / allorigins.win → WebAssembly.instantiate(buffer) in Worker
             </div>
         </div>
 
@@ -267,13 +267,12 @@
         <div class="footer">Random Slice Sniper · CORS Proxy WASM Loader & JS Fallback v3.1</div>
     </div>
 
-    <!-- ⚡ WORKER ENGINE MET CORRECTE BINDING -->
+    <!-- ⚡ WORKER ENGINE MET WASM WebAssembly.instantiate(buffer) BINDING -->
     <script id="workerCode" type="javascript/worker">
         self.onerror = function(e) {
             self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
         };
 
-        let useWasm = false;
         let wasmInstance = null;
 
         const P = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
@@ -321,14 +320,12 @@
         function mulG(k) {
             let p = null;
             let base = { x: G_x, y: G_y };
-            let i = 0;
             while (k > 0n) {
                 if (k & 1n) {
                     p = add(p, base);
                 }
                 base = double(base);
                 k >>= 1n;
-                i++;
             }
             return p;
         }
@@ -441,6 +438,15 @@
         self.onmessage = async function(e) {
             const data = e.data;
             if (data.type === "ADDRESS_SCAN") {
+                if (data.wasmBuffer && !wasmInstance) {
+                    try {
+                        const res = await WebAssembly.instantiate(data.wasmBuffer);
+                        wasmInstance = res.instance.exports;
+                    } catch (err) {
+                        // Fallback naar JS implementatie indien WASM instantie faalt
+                    }
+                }
+
                 const workerId = data.workerId;
                 let currentKey = BigInt("0x" + data.startHex);
                 const endKey = BigInt("0x" + data.endHex);
@@ -559,6 +565,7 @@
             let startTime = 0, isRunning = false;
             let lastUpdateScanned = 0, lastUpdateTime = 0;
             let foundResultData = null;
+            let cachedWasmBuffer = null;
 
             const SLICE_SIZE = 34359738368n;
             const PUZZLE_71_TOTAL = 1180591620717411303424n;
@@ -728,9 +735,9 @@
                             log(`🔍 WASM laden via proxy: ${url.substring(0, 45)}...`, 'ev-muted');
                             const response = await fetch(url);
                             if (response.ok) {
-                                const buffer = await response.arrayBuffer();
+                                cachedWasmBuffer = await response.arrayBuffer();
                                 log(`✅ WASM succesvol geladen via proxy!`, 'ev-epoch');
-                                engineBadge.textContent = "⚡ ENGINE: JS-SIMD / FAST ENGINE";
+                                engineBadge.textContent = "⚡ ENGINE: WASM WORKER ACTIVE";
                                 engineBadge.className = "badge badge-success";
                                 sourceBadge.textContent = "📦 BRON: " + url.substring(0, 40) + "...";
                                 sourceBadge.className = "badge badge-success";
@@ -742,7 +749,7 @@
                     }
                 }
                 
-                log('⚠️ Alle CORS-proxies mislukt → Schakelt over op JS-SIMD + Jacobian Batch', 'ev-warn');
+                log('⚠️ Alle CORS-proxies mislukt → Schakelt over op JavaScript Fallback', 'ev-warn');
                 engineBadge.textContent = "⚡ ENGINE: JS FALLBACK";
                 engineBadge.className = "badge badge-status";
                 sourceBadge.textContent = "📦 BRON: JS-FALLBACK";
@@ -799,7 +806,17 @@
                             exportBtn.style.display = 'inline-block';
                         }
                     };
-                    worker.postMessage({ type: "ADDRESS_SCAN", startHex: segStart, endHex: segEnd, targetH160Hex, targetAddress: targetAddr, workerId: i });
+
+                    // Geef de buffer mee aan de worker zodat WebAssembly.instantiate(buffer) daar wordt uitgevoerd
+                    worker.postMessage({ 
+                        type: "ADDRESS_SCAN", 
+                        startHex: segStart, 
+                        endHex: segEnd, 
+                        targetH160Hex, 
+                        targetAddress: targetAddr, 
+                        workerId: i,
+                        wasmBuffer: cachedWasmBuffer 
+                    });
                 }
             }
 
