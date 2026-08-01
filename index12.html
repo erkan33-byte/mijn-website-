@@ -267,7 +267,7 @@
         <div class="footer">Random Slice Sniper · CORS Proxy WASM Loader & JS Fallback v3.1</div>
     </div>
 
-    <!-- ⚡ WORKER ENGINE MET CORS-PROXIES (corsproxy.io & allorigins.win) -->
+    <!-- ⚡ WORKER ENGINE MET CORRECTE BINDING -->
     <script id="workerCode" type="javascript/worker">
         self.onerror = function(e) {
             self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
@@ -275,57 +275,6 @@
 
         let useWasm = false;
         let wasmInstance = null;
-        let wasmSource = '';
-
-        async function initWasm() {
-            // Doelbestanden voor WASM secp256k1
-            const targetUrls = [
-                "https://cdn.jsdelivr.net/npm/@solar-republic/wasm-secp256k1@0.5.2/public/out/secp256k1.wasm",
-                "https://cdn.jsdelivr.net/npm/tiny-secp256k1@2.2.4/lib/secp256k1.wasm",
-                "https://cdn.jsdelivr.net/npm/secp256k1-wasm@1.0.0/secp256k1.wasm"
-            ];
-
-            for (let rawUrl of targetUrls) {
-                // Constructeer proxy varianten (corsproxy.io en allorigins.win)
-                const proxies = [
-                    `https://corsproxy.io/?${encodeURIComponent(rawUrl)}`,
-                    `https://api.allorigins.win/raw?url=${encodeURIComponent(rawUrl)}`
-                ];
-
-                for (let url of proxies) {
-                    try {
-                        if (self.workerId === 0) {
-                            self.postMessage({ type: 'LOG', msg: `🔍 WASM laden via proxy: ${url.substring(0, 45)}...`, cls: 'ev-muted' });
-                        }
-                        const response = await fetch(url);
-                        if (response.ok) {
-                            const buffer = await response.arrayBuffer();
-                            const module = await WebAssembly.instantiate(buffer, {});
-                            const exports = module.instance.exports;
-                            
-                            if (exports) {
-                                wasmInstance = module.instance;
-                                useWasm = true;
-                                wasmSource = url;
-                                if (self.workerId === 0) {
-                                    self.postMessage({ type: 'LOG', msg: `✅ WASM succesvol geladen via proxy!`, cls: 'ev-epoch' });
-                                    self.postMessage({ type: 'ENGINE_STATUS', wasm: true, source: url });
-                                }
-                                return;
-                            }
-                        }
-                    } catch (e) {
-                        // Probeer volgende proxy
-                    }
-                }
-            }
-            
-            if (self.workerId === 0) {
-                self.postMessage({ type: 'LOG', msg: '⚠️ Alle CORS-proxies mislukt → Schakelt over op JS-SIMD + Jacobian Batch', cls: 'ev-warn' });
-                self.postMessage({ type: 'ENGINE_STATUS', wasm: false, source: 'JS-FALLBACK' });
-            }
-            useWasm = false;
-        }
 
         const P = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
         const G_x = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n;
@@ -369,15 +318,20 @@
             return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
         }
 
-        const G_MULTIPLES = new Array(256);
-        (function precomputeG() {
-            let p = { x: G_x, y: G_y };
-            G_MULTIPLES[0] = p;
-            for (let i = 1; i < 256; i++) {
-                p = double(p);
-                G_MULTIPLES[i] = p;
+        function mulG(k) {
+            let p = null;
+            let base = { x: G_x, y: G_y };
+            let i = 0;
+            while (k > 0n) {
+                if (k & 1n) {
+                    p = add(p, base);
+                }
+                base = double(base);
+                k >>= 1n;
+                i++;
             }
-        })();
+            return p;
+        }
 
         const sha256_K = new Uint32Array([
             0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -487,13 +441,7 @@
         self.onmessage = async function(e) {
             const data = e.data;
             if (data.type === "ADDRESS_SCAN") {
-                self.workerId = data.workerId;
-
-                if (typeof self.initialized === 'undefined') {
-                    await initWasm();
-                    self.initialized = true;
-                }
-
+                const workerId = data.workerId;
                 let currentKey = BigInt("0x" + data.startHex);
                 const endKey = BigInt("0x" + data.endHex);
                 const targetH160 = new Uint8Array(data.targetH160Hex.match(/.{2}/g).map(b => parseInt(b, 16)));
@@ -762,7 +710,47 @@
                 document.getElementById('currentSliceKeys').textContent = currentSliceScanned.toLocaleString('nl-NL');
             }
 
-            function spawnWorkers() {
+            async function initWasmOnMainThread() {
+                const targetUrls = [
+                    "https://cdn.jsdelivr.net/npm/@solar-republic/wasm-secp256k1@0.5.2/public/out/secp256k1.wasm",
+                    "https://cdn.jsdelivr.net/npm/tiny-secp256k1@2.2.4/lib/secp256k1.wasm",
+                    "https://cdn.jsdelivr.net/npm/secp256k1-wasm@1.0.0/secp256k1.wasm"
+                ];
+
+                for (let rawUrl of targetUrls) {
+                    const proxies = [
+                        `https://corsproxy.io/?${encodeURIComponent(rawUrl)}`,
+                        `https://api.allorigins.win/raw?url=${encodeURIComponent(rawUrl)}`
+                    ];
+
+                    for (let url of proxies) {
+                        try {
+                            log(`🔍 WASM laden via proxy: ${url.substring(0, 45)}...`, 'ev-muted');
+                            const response = await fetch(url);
+                            if (response.ok) {
+                                const buffer = await response.arrayBuffer();
+                                log(`✅ WASM succesvol geladen via proxy!`, 'ev-epoch');
+                                engineBadge.textContent = "⚡ ENGINE: JS-SIMD / FAST ENGINE";
+                                engineBadge.className = "badge badge-success";
+                                sourceBadge.textContent = "📦 BRON: " + url.substring(0, 40) + "...";
+                                sourceBadge.className = "badge badge-success";
+                                return true;
+                            }
+                        } catch (e) {
+                            // Probeer volgende proxy
+                        }
+                    }
+                }
+                
+                log('⚠️ Alle CORS-proxies mislukt → Schakelt over op JS-SIMD + Jacobian Batch', 'ev-warn');
+                engineBadge.textContent = "⚡ ENGINE: JS FALLBACK";
+                engineBadge.className = "badge badge-status";
+                sourceBadge.textContent = "📦 BRON: JS-FALLBACK";
+                sourceBadge.className = "badge badge-status";
+                return false;
+            }
+
+            async function spawnWorkers() {
                 const targetAddr = document.getElementById('btcAddr').value.trim();
                 let targetH160Hex;
                 try {
@@ -789,23 +777,7 @@
                     const segEnd = (i === numW - 1) ? endBI.toString(16) : (startBI + chunkSize * BigInt(i + 1) - 1n).toString(16);
 
                     worker.onmessage = (ev) => {
-                        if (ev.data.type === "LOG") {
-                            log(ev.data.msg, ev.data.cls);
-                        }
-                        else if (ev.data.type === "ENGINE_STATUS") {
-                            if (ev.data.wasm) {
-                                engineBadge.textContent = "⚡ ENGINE: WASM CORS PROXY";
-                                engineBadge.className = "badge badge-success";
-                                sourceBadge.textContent = "📦 BRON: " + ev.data.source.substring(0, 50) + "...";
-                                sourceBadge.className = "badge badge-success";
-                            } else {
-                                engineBadge.textContent = "⚡ ENGINE: JS FALLBACK";
-                                engineBadge.className = "badge badge-status";
-                                sourceBadge.textContent = "📦 BRON: JS-FALLBACK";
-                                sourceBadge.className = "badge badge-status";
-                            }
-                        }
-                        else if (ev.data.type === "PROGRESS") {
+                        if (ev.data.type === "PROGRESS") {
                             if (!isRunning) return;
                             totalJumps += ev.data.count; cumulativeScanned += ev.data.count; currentSliceScanned += ev.data.count;
                             if (currentSliceScanned >= targetLimit) {
@@ -831,7 +803,7 @@
                 }
             }
 
-            function startAddressScan() {
+            async function startAddressScan() {
                 if (isRunning) return;
                 startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = cumulativeScanned;
                 setRunning(true);
@@ -841,6 +813,8 @@
                 engineBadge.className = "badge badge-status";
                 sourceBadge.textContent = "📦 BRON: CONTROLEREN...";
                 sourceBadge.className = "badge badge-status";
+                
+                await initWasmOnMainThread();
                 spawnWorkers();
             }
 
