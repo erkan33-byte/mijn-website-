@@ -222,42 +222,46 @@
         };
 
         // ============================================
-        // WASM LOADER MET MULTIPLE CDN BRONNEN
+        // WASM LOADER MET CORRECTE CDN BRONNEN
         // ============================================
         let useWasm = false;
         let wasmInstance = null;
 
         async function initWasm() {
+            // ✅ WERKENDE WASM-BRONNEN voor secp256k1
             const sources = [
-                "https://cdn.jsdelivr.net/npm/secp256k1-wasm@1.0.0/secp256k1.wasm",
-                "https://unpkg.com/secp256k1-wasm/build/secp256k1.wasm",
-                "https://cdnjs.cloudflare.com/ajax/libs/secp256k1/0.1.0/secp256k1.wasm"
+                "https://unpkg.com/secp256k1@4.0.3/build/secp256k1.wasm",
+                "https://cdn.jsdelivr.net/npm/secp256k1@4.0.3/build/secp256k1.wasm"
             ];
             
             for (let url of sources) {
                 try {
-                    if (self.workerId === 0) self.postMessage({ type: 'LOG', msg: `Probeer externe WASM te laden via: ${url}`, cls: 'ev-muted' });
+                    if (self.workerId === 0) self.postMessage({ type: 'LOG', msg: `🔍 WASM laden via: ${url}`, cls: 'ev-muted' });
                     const response = await fetch(url);
                     if (response.ok) {
                         const buffer = await response.arrayBuffer();
                         const module = await WebAssembly.instantiate(buffer, {});
                         
-                        // Controleren of specifieke batch-methods erin zitten. Anders fallback.
-                        if (!module.instance.exports.batch_scan) {
-                            throw new Error("WASM geladen, maar mist de specifieke 'batch_scan' functie.");
+                        // Controleer of de module de juiste functies exporteert
+                        const exports = module.instance.exports;
+                        if (typeof exports.secp256k1_ecdsa_verify === 'function' || 
+                            typeof exports.secp256k1_pubkey_create === 'function') {
+                            wasmInstance = module.instance;
+                            useWasm = true;
+                            if (self.workerId === 0) self.postMessage({ type: 'LOG', msg: `✅ WASM geladen via ${url}`, cls: 'ev-epoch' });
+                            return;
+                        } else {
+                            throw new Error("WASM mist vereiste functies");
                         }
-                        
-                        wasmInstance = module.instance;
-                        useWasm = true;
-                        if (self.workerId === 0) self.postMessage({ type: 'LOG', msg: `✅ WASM succesvol geladen via ${url}!`, cls: 'ev-epoch' });
-                        return;
                     }
                 } catch (e) {
-                    // Silently fail over naar de volgende CDN of Fallback
+                    // Stil doorschakelen naar volgende bron
                 }
             }
+            
+            // Als WASM niet werkt → JS Fallback
             if (self.workerId === 0) {
-                self.postMessage({ type: 'LOG', msg: `⚠️ Geen geschikte WASM gevonden op bronnen. Terugvallen op geoptimaliseerde JS Engine (BigInt + Jacobian Batch).`, cls: 'ev-warn' });
+                self.postMessage({ type: 'LOG', msg: '⚠️ WASM niet beschikbaar → JS Fallback (BigInt + Jacobian)', cls: 'ev-warn' });
             }
             useWasm = false;
         }
@@ -271,7 +275,6 @@
 
         function mod(a, b = P) { const r = a % b; return r >= 0n ? r : r + b; }
         
-        // GECORRIGEERD: Gebruik Extended Euclidean Algorithm ipv machtverheffing (voorkomt crashes)
         function inverse(a, m = P) {
             if (a === 0n) return 0n;
             let m0 = m, y = 0n, x = 1n;
