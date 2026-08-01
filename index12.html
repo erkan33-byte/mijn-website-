@@ -264,7 +264,7 @@
             </table>
         </div>
         
-        <div class="footer">Random Slice Sniper · CORS Proxy WASM Loader & JS Fallback v3.1</div>
+        <div class="footer">Random Slice Sniper · CORS Proxy WASM Loader & JS Fallback v3.2 (Optimized Memory)</div>
     </div>
 
     <!-- ⚡ WORKER ENGINE MET GEÏNTEGREERDE WASM / JS ENGINE -->
@@ -274,6 +274,7 @@
         };
 
         let wasmInstance = null;
+        let wasmMemory = null; // Voor echte WASM pointers
 
         const P = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
         const G_x = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n;
@@ -318,11 +319,21 @@
         }
 
         function mulG(k) {
-            // Als WASM beschikbaar is, gebruik dan de WASM-implementatie
-            if (wasmInstance && wasmInstance.secp256k1_ec_pubkey_create) {
-                // Hier roepen we de werkelijke WASM functies aan indien gekoppeld aan de specifieke export
+            // FIX: Je oude code checkte op wasm, maar deed vervolgens niks.
+            // Als je een ECHTE wasm module gebruikt, moet je de private key in memory schrijven
+            // en het resultaat teruglezen. JS BigInts kunnen niet direct naar C++ functies.
+            
+            if (wasmInstance && wasmInstance.secp256k1_ec_pubkey_create && wasmMemory) {
+                /* VOORBEELD HOE DIT WERKT MET WASM BINDINGS:
+                const privKeyPtr = wasmInstance.malloc(32);
+                const pubKeyPtr = wasmInstance.malloc(65);
+                // Schrijf k naar privKeyPtr in wasmMemory...
+                const success = wasmInstance.secp256k1_ec_pubkey_create(wasmInstance.ctx, pubKeyPtr, privKeyPtr);
+                // Lees x en y van pubKeyPtr...
+                */
             }
             
+            // FALLBACK: Pure JavaScript 
             let p = null;
             let base = { x: G_x, y: G_y };
             while (k > 0n) {
@@ -335,6 +346,7 @@
             return p;
         }
 
+        // OPTIMALISATIE: Hash constanten globaal maken = geen Garbage Collection bottlenecks!
         const sha256_K = new Uint32Array([
             0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
             0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -345,39 +357,43 @@
             0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
             0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
         ]);
+        const w_sha = new Uint32Array(64); // Global array allocation for performance
+        const h_sha = new Uint32Array(8);
 
         function sha256(data) {
-            const h = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
+            h_sha[0]=0x6a09e667; h_sha[1]=0xbb67ae85; h_sha[2]=0x3c6ef372; h_sha[3]=0xa54ff53a;
+            h_sha[4]=0x510e527f; h_sha[5]=0x9b05688c; h_sha[6]=0x1f83d9ab; h_sha[7]=0x5be0cd19;
+            
             let mLen = data.length;
             let l = ((mLen + 8) >>> 6) + 1;
             let m = new Uint8Array(l << 6);
             m.set(data); m[mLen] = 0x80;
             let view = new DataView(m.buffer);
             view.setUint32((l << 6) - 4, mLen << 3);
-            let w = new Uint32Array(64);
+            
             for (let i = 0; i < l; i++) {
-                let a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], _h = h[7];
+                let a = h_sha[0], b = h_sha[1], c = h_sha[2], d = h_sha[3], e = h_sha[4], f = h_sha[5], g = h_sha[6], _h = h_sha[7];
                 for (let j = 0; j < 64; j++) {
-                    if (j < 16) w[j] = view.getUint32((i << 6) + j * 4);
+                    if (j < 16) w_sha[j] = view.getUint32((i << 6) + j * 4);
                     else {
-                        let s0 = (w[j-15] >>> 7 | w[j-15] << 25) ^ (w[j-15] >>> 18 | w[j-15] << 14) ^ (w[j-15] >>> 3);
-                        let s1 = (w[j-2] >>> 17 | w[j-2] << 15) ^ (w[j-2] >>> 19 | w[j-2] << 13) ^ (w[j-2] >>> 10);
-                        w[j] = (w[j-16] + s0 + w[j-7] + s1) | 0;
+                        let s0 = (w_sha[j-15] >>> 7 | w_sha[j-15] << 25) ^ (w_sha[j-15] >>> 18 | w_sha[j-15] << 14) ^ (w_sha[j-15] >>> 3);
+                        let s1 = (w_sha[j-2] >>> 17 | w_sha[j-2] << 15) ^ (w_sha[j-2] >>> 19 | w_sha[j-2] << 13) ^ (w_sha[j-2] >>> 10);
+                        w_sha[j] = (w_sha[j-16] + s0 + w_sha[j-7] + s1) | 0;
                     }
                     let S1 = (e >>> 6 | e << 26) ^ (e >>> 11 | e << 21) ^ (e >>> 25 | e << 7);
                     let ch = (e & f) ^ (~e & g);
-                    let temp1 = (_h + S1 + ch + sha256_K[j] + w[j]) | 0;
+                    let temp1 = (_h + S1 + ch + sha256_K[j] + w_sha[j]) | 0;
                     let S0 = (a >>> 2 | a << 30) ^ (a >>> 13 | a << 19) ^ (a >>> 22 | a << 10);
                     let maj = (a & b) ^ (a & c) ^ (b & c);
                     let temp2 = (S0 + maj) | 0;
                     _h = g; g = f; f = e; e = (d + temp1) | 0; d = c; c = b; b = a; a = (temp1 + temp2) | 0;
                 }
-                h[0] = (h[0] + a)|0; h[1] = (h[1] + b)|0; h[2] = (h[2] + c)|0; h[3] = (h[3] + d)|0;
-                h[4] = (h[4] + e)|0; h[5] = (h[5] + f)|0; h[6] = (h[6] + g)|0; h[7] = (h[7] + _h)|0;
+                h_sha[0] = (h_sha[0] + a)|0; h_sha[1] = (h_sha[1] + b)|0; h_sha[2] = (h_sha[2] + c)|0; h_sha[3] = (h_sha[3] + d)|0;
+                h_sha[4] = (h_sha[4] + e)|0; h_sha[5] = (h_sha[5] + f)|0; h_sha[6] = (h_sha[6] + g)|0; h_sha[7] = (h_sha[7] + _h)|0;
             }
             let out = new Uint8Array(32);
             let outView = new DataView(out.buffer);
-            for(let i=0; i<8; i++) outView.setUint32(i*4, h[i]);
+            for(let i=0; i<8; i++) outView.setUint32(i*4, h_sha[i]);
             return out;
         }
 
@@ -387,18 +403,20 @@
         const sr = [8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6, 9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11, 9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5, 15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8, 8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];
         const hl = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
         const hr = [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000];
+        const w_rmd = new Uint32Array(16); // Global for performance
+        const h_rmd = new Uint32Array(5);
 
         function ripemd160(msg) {
             let mLen = msg.length, l = ((mLen + 8) >> 6) + 1;
             let m = new Uint8Array(l << 6); m.set(msg); m[mLen] = 0x80;
             let view = new DataView(m.buffer);
             view.setUint32((l << 6) - 8, mLen << 3, true);
-            let h = new Uint32Array([0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0]);
-            let w = new Uint32Array(16);
+            h_rmd[0]=0x67452301; h_rmd[1]=0xefcdab89; h_rmd[2]=0x98badcfe; h_rmd[3]=0x10325476; h_rmd[4]=0xc3d2e1f0;
+            
             for (let i = 0; i < l; i++) {
-                for (let j = 0; j < 16; j++) w[j] = view.getUint32((i << 6) + (j << 2), true);
-                let al = h[0], bl = h[1], cl = h[2], dl = h[3], el = h[4];
-                let ar = h[0], br = h[1], cr = h[2], dr = h[3], er = h[4];
+                for (let j = 0; j < 16; j++) w_rmd[j] = view.getUint32((i << 6) + (j << 2), true);
+                let al = h_rmd[0], bl = h_rmd[1], cl = h_rmd[2], dl = h_rmd[3], el = h_rmd[4];
+                let ar = h_rmd[0], br = h_rmd[1], cr = h_rmd[2], dr = h_rmd[3], er = h_rmd[4];
                 for (let j = 0; j < 80; j++) {
                     let round = Math.floor(j / 16), tL, tR;
                     if (round === 0) { tL = al + (bl ^ cl ^ dl); tR = ar + (br ^ (cr | ~dr)); }
@@ -406,18 +424,18 @@
                     else if (round === 2) { tL = al + ((bl | ~cl) ^ dl); tR = ar + ((br | ~cr) ^ dr); }
                     else if (round === 3) { tL = al + ((bl & dl) | (cl & ~dl)); tR = ar + ((br & cr) | (~br & dr)); }
                     else { tL = al + (bl ^ (cl | ~dl)); tR = ar + (br ^ cr ^ dr); }
-                    tL = (tL + w[zl[j]] + hl[round]) | 0; tL = (tL << sl[j] | tL >>> (32 - sl[j])) + el;
+                    tL = (tL + w_rmd[zl[j]] + hl[round]) | 0; tL = (tL << sl[j] | tL >>> (32 - sl[j])) + el;
                     al = el; el = dl; dl = (cl << 10 | cl >>> 22); cl = bl; bl = tL;
-                    tR = (tR + w[zr[j]] + hr[round]) | 0; tR = (tR << sr[j] | tR >>> (32 - sr[j])) + er;
+                    tR = (tR + w_rmd[zr[j]] + hr[round]) | 0; tR = (tR << sr[j] | tR >>> (32 - sr[j])) + er;
                     ar = er; er = dr; dr = (cr << 10 | cr >>> 22); cr = br; br = tR;
                 }
-                let t = (h[1] + cl + dr) | 0;
-                h[1] = (h[2] + dl + er) | 0; h[2] = (h[3] + el + ar) | 0; h[3] = (h[4] + al + br) | 0;
-                h[4] = (h[0] + bl + cr) | 0; h[0] = t;
+                let t = (h_rmd[1] + cl + dr) | 0;
+                h_rmd[1] = (h_rmd[2] + dl + er) | 0; h_rmd[2] = (h_rmd[3] + el + ar) | 0; h_rmd[3] = (h_rmd[4] + al + br) | 0;
+                h_rmd[4] = (h_rmd[0] + bl + cr) | 0; h_rmd[0] = t;
             }
             let out = new Uint8Array(20);
             let outView = new DataView(out.buffer);
-            for(let i=0; i<5; i++) outView.setUint32(i*4, h[i], true);
+            for(let i=0; i<5; i++) outView.setUint32(i*4, h_rmd[i], true);
             return out;
         }
 
@@ -447,6 +465,7 @@
                     try {
                         const res = await WebAssembly.instantiate(data.wasmBuffer);
                         wasmInstance = res.instance.exports;
+                        if(wasmInstance.memory) wasmMemory = new Uint8Array(wasmInstance.memory.buffer);
                     } catch (err) {
                         // Fallback actief als instantiatie faalt
                     }
@@ -466,6 +485,9 @@
                 let pZ = new Array(BATCH);
                 let partials = new Array(BATCH);
                 let invZ = new Array(BATCH);
+                
+                // OPTIMALISATIE: Re-use byte buffer ipv new allocatie elke iteratie
+                const pubKeyBytes = new Uint8Array(33);
 
                 function fastStep() {
                     let batchCount = 0;
@@ -517,12 +539,11 @@
                         let ax = mod(pX[i] * iz2);
                         let ay = mod(pY[i] * mod(iz * iz2));
                         
-                        const bytes = new Uint8Array(33);
-                        bytes[0] = (ay & 1n) === 0n ? 0x02 : 0x03;
+                        pubKeyBytes[0] = (ay & 1n) === 0n ? 0x02 : 0x03;
                         let tmp = ax;
-                        for (let b = 32; b >= 1; b--) { bytes[b] = Number(tmp & 0xffn); tmp >>= 8n; }
+                        for (let b = 32; b >= 1; b--) { pubKeyBytes[b] = Number(tmp & 0xffn); tmp >>= 8n; }
                         
-                        const s256 = sha256(bytes);
+                        const s256 = sha256(pubKeyBytes);
                         const r160 = ripemd160(s256);
 
                         let match = true;
@@ -742,7 +763,7 @@
                             if (response.ok) {
                                 cachedWasmBuffer = await response.arrayBuffer();
                                 log(`✅ WASM succesvol geladen via proxy!`, 'ev-epoch');
-                                engineBadge.textContent = "⚡ ENGINE: WASM WORKER ACTIVE";
+                                engineBadge.textContent = "⚡ ENGINE: WASM GELADEN (FALLBACK RUNNING)";
                                 engineBadge.className = "badge badge-success";
                                 sourceBadge.textContent = "📦 BRON: " + url.substring(0, 40) + "...";
                                 sourceBadge.className = "badge badge-success";
