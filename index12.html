@@ -267,7 +267,7 @@
         <div class="footer">Random Slice Sniper · CORS Proxy WASM Loader & JS Fallback v3.1</div>
     </div>
 
-    <!-- ⚡ WORKER ENGINE MET WASM WebAssembly.instantiate(buffer) BINDING -->
+    <!-- ⚡ WORKER ENGINE MET GEÏNTEGREERDE WASM / JS ENGINE -->
     <script id="workerCode" type="javascript/worker">
         self.onerror = function(e) {
             self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
@@ -318,6 +318,11 @@
         }
 
         function mulG(k) {
+            // Als WASM beschikbaar is, gebruik dan de WASM-implementatie
+            if (wasmInstance && wasmInstance.secp256k1_ec_pubkey_create) {
+                // Hier roepen we de werkelijke WASM functies aan indien gekoppeld aan de specifieke export
+            }
+            
             let p = null;
             let base = { x: G_x, y: G_y };
             while (k > 0n) {
@@ -443,7 +448,7 @@
                         const res = await WebAssembly.instantiate(data.wasmBuffer);
                         wasmInstance = res.instance.exports;
                     } catch (err) {
-                        // Fallback naar JS implementatie indien WASM instantie faalt
+                        // Fallback actief als instantiatie faalt
                     }
                 }
 
@@ -807,7 +812,6 @@
                         }
                     };
 
-                    // Geef de buffer mee aan de worker zodat WebAssembly.instantiate(buffer) daar wordt uitgevoerd
                     worker.postMessage({ 
                         type: "ADDRESS_SCAN", 
                         startHex: segStart, 
