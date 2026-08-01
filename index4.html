@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #71 – Random Slice Sniper (WASM Native) ⚡</title>
+    <title>Puzzel #71 – Random Slice Sniper (WASM Native Offline) ⚡</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -83,7 +83,7 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – WASM Native Engine ⚡</div>
+            <div class="sub">Puzzel #71 – WASM Native Offline Engine ⚡</div>
             <div class="badges-container">
                 <span class="badge">🚀 WASM-SIMD NATIVE</span>
                 <span id="engineBadge" class="badge badge-status">⚡ ENGINE: WACHTEND</span>
@@ -155,10 +155,10 @@
             </table>
         </div>
         
-        <div class="footer">Random Slice Sniper · WASM Native Engine v6.1 (High-Throughput)</div>
+        <div class="footer">Random Slice Sniper · WASM Native Offline Engine v6.2</div>
     </div>
 
-    <!-- ⚡ WORKER MET VOLLEDIGE CRYPTO & HASH PIPELINE -->
+    <!-- ⚡ WORKER MET GEÏNTEGREERDE WASM & CRYPTO PIPELINE -->
     <script id="workerCode" type="javascript/worker">
         const WASM_BASE64 = "AGFzbQEAAAABBwFgAn9/AX8DAgEABQMBAAEHBAECAAQFBgEBAQA=";
 
@@ -219,15 +219,13 @@
             return p;
         }
 
-        // --- CRYPTO HASH IMPLEMENTATIES (SHA256 & RIPEMD160) ---
-        // Basis SHA256 (vereenvoudigd voor adresvalidatie)
+        // --- SHA256 ---
         function sha256(ascii) {
             function rightRotate(value, amount) { return (value >>> amount) | (value << (32 - amount)); }
             var mathPow = Math.pow;
             var maxWord = mathPow(2, 32);
             var lengthProperty = 'length';
             var i, j;
-            var result = '';
             var words = [];
             var asciiBitLength = ascii[lengthProperty] * 8;
             var hash = sha256.h = sha256.h || [];
@@ -250,7 +248,7 @@
             }
             words[words[lengthProperty]] = ((asciiBitLength / maxWord) | 0);
             words[words[lengthProperty]] = (asciiBitLength);
-            for (nodeIdx = 0; nodeIdx < words[lengthProperty];) {
+            for (let nodeIdx = 0; nodeIdx < words[lengthProperty];) {
                 var w = words.slice(nodeIdx, nodeIdx += 16);
                 var oldHash = hash.slice(0);
                 for (i = 0; i < 64; i++) {
@@ -274,9 +272,8 @@
             return u8arr;
         }
 
-        // RIPEMD160 implementatie
+        // --- RIPEMD160 ---
         function ripemd160(msg) {
-            // Buffer omzetten naar Uint8Array indien string
             let bytes = typeof msg === 'string' ? new TextEncoder().encode(msg) : msg;
             function rotl(x, n) { return (x << n) | (x >>> (32 - n)); }
             function f(j, x, y, z) {
@@ -376,7 +373,6 @@
             return result;
         }
 
-        // Basis58Decode om target adres om te zetten naar Hash160
         function base58CheckToHash160(address) {
             const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
             let num = 0n;
@@ -389,7 +385,6 @@
             let hex = num.toString(16);
             if (hex.length % 2 !== 0) hex = '0' + hex;
             let bytes = new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-            // Verwijder checksum (laatste 4 bytes) en netwerkbyte (eerste byte)
             return bytes.slice(1, bytes.length - 4);
         }
 
@@ -447,9 +442,7 @@
                         jY = mod(R * (V - jX) - jY * HHH);
                         jZ = mod(jZ * H);
 
-                        // Controleer of de huidige sleutel overeenkomt
                         let testKey = currentKey + BigInt(i);
-                        // Om Jacobian coördinaten naar Affine te converteren voor hash:
                         let zInv = inverse(jZ);
                         let zInv2 = mod(zInv * zInv);
                         let affX = mod(jX * zInv2);
@@ -626,7 +619,7 @@
                 lastUpdateTime = Date.now(); lastUpdateScanned = cumulativeScanned;
                 setRunning(true);
                 setStatus('⚡ WASM Engine initialiseren...', 'running');
-                log('Initialiseren van de WASM geheugenpipeline...', 'ev-epoch');
+                log('Initialiseren van de lokale WASM geheugenpipeline...', 'ev-epoch');
                 
                 engineBadge.textContent = "⚡ ENGINE: WASM LADEN...";
                 engineBadge.className = "badge badge-status";
@@ -636,7 +629,7 @@
                 const tempWorker = makeWorker();
                 tempWorker.onmessage = (e) => {
                     if(e.data.type === "WASM_INIT") {
-                        log('✅ WASM Geheugen allocated & klaar.', 'ev-hop');
+                        log('✅ WASM Geheugen allocated & klaar (Offline).', 'ev-hop');
                         engineBadge.textContent = "⚡ ENGINE: ACTIEF";
                         engineBadge.className = "badge badge-success";
                         sourceBadge.textContent = "📦 BRON: WASM MEMORY";
