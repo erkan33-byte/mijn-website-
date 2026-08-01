@@ -176,6 +176,11 @@
             </div>
             <hr class="divider">
             <div class="field"><label>Workers (CPU Cores)</label><input id="numW" value="4" type="number" min="1" max="32"></div>
+            
+            <!-- Toegevoegde velden om de Globale Range in te stellen -->
+            <div class="field"><label>Globale Range Start</label><input id="globalStartInput" value="400000000000000000" type="text" style="color: var(--accent2);"></div>
+            <div class="field"><label>Globale Range Eind</label><input id="globalEndInput" value="7fffffffffffffffff" type="text" style="color: var(--accent2);"></div>
+            
             <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);"></div>
             <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);"></div>
             <div style="font-size: 0.65rem; color: var(--muted); margin-top: 6px; text-align: right;">ℹ️ Deze HEX-waarden vernieuwen na het bereiken van je ingestelde key limiet.</div>
@@ -530,9 +535,19 @@
             }
 
             function generateRandomSlice() {
-                const globalStart = BigInt("0x400000000000000000");
-                const globalEnd = BigInt("0x7fffffffffffffffff");
+                let globalStart, globalEnd;
+                try {
+                    globalStart = BigInt("0x" + document.getElementById('globalStartInput').value.trim());
+                    globalEnd = BigInt("0x" + document.getElementById('globalEndInput').value.trim());
+                } catch(e) {
+                    globalStart = BigInt("0x400000000000000000");
+                    globalEnd = BigInt("0x7fffffffffffffffff");
+                }
                 const maxOffset = (globalEnd - globalStart + 1n) - SLICE_SIZE;
+                if (maxOffset <= 0n) {
+                    log('❌ Globale range is te klein voor de plakjesgrootte!', 'ev-stop');
+                    return;
+                }
                 const bytes = new Uint8Array(Math.ceil(maxOffset.toString(2).length / 8));
                 window.crypto.getRandomValues(bytes);
                 const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
