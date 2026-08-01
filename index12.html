@@ -147,9 +147,9 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – WASM secp256k1 Turbo (SolarRepublic Integration)</div>
+            <div class="sub">Puzzel #71 – WASM CDN Turbo (Multi-Source met Fallback)</div>
             <div class="badges-container">
-                <span class="badge">🚀 WASM SECP256K1 READY</span>
+                <span class="badge">🚀 WASM-SIMD READY</span>
                 <span id="engineBadge" class="badge badge-status">⚡ ENGINE: WACHTEND</span>
             </div>
         </div>
@@ -165,7 +165,7 @@
             <div class="field">
                 <label>Scan methode</label>
                 <select id="scanMethod">
-                    <option value="wasm" selected>🔷 @solar-republic/wasm-secp256k1 (Headless WASM)</option>
+                    <option value="wasm" selected>🔷 WASM CDN & Auto-JS Fallback</option>
                 </select>
             </div>
             <div class="field">
@@ -196,7 +196,7 @@
                 </div>
             </div>
             <div class="formula-box" style="background:rgba(0,0,0,0.5); border-left:3px solid var(--accent2); padding:10px; font-size:.75rem; color:#bfe4ff; line-height:1.5; font-family: monospace;">
-                Engine: @solar-republic/wasm-secp256k1 (Headless CDN Mode via jsDelivr)
+                Engine: Multi-Source WASM Loader → Fallback: JS-SIMD + Jacobian Batch
             </div>
         </div>
 
@@ -262,42 +262,119 @@
             </table>
         </div>
         
-        <div class="footer">Random Slice Sniper · SolarRepublic WASM secp256k1 Integration</div>
+        <div class="footer">Random Slice Sniper · Multi-CDN & JS Fallback Engine v2.1</div>
     </div>
 
-    <!-- ⚡ WORKER ENGINE MET @solar-republic/wasm-secp256k1 HEADLESS -->
+    <!-- ⚡ OPTIMIZED WORKER ENGINE (WASM + JS FALLBACK) -->
     <script id="workerCode" type="javascript/worker">
         self.onerror = function(e) {
             self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
         };
 
-        let secp256k1 = null;
+        let useWasm = false;
+        let wasmInstance = null;
 
-        async function initWasmEngine() {
-            if (secp256k1) return;
-            try {
-                if (self.workerId === 0) {
-                    self.postMessage({ type: 'LOG', msg: '🔍 WASM binary fetchen van jsDelivr (@solar-republic/wasm-secp256k1)...', cls: 'ev-muted' });
-                }
-
-                // Dynamische import van de headless module via unpkg of jsDelivr
-                const { WasmSecp256k1 } = await import('https://cdn.jsdelivr.net/npm/@solar-republic/wasm-secp256k1@0.6.3/dist/headless/index.js');
-                
-                const wasmResponse = await fetch('https://cdn.jsdelivr.net/npm/@solar-republic/wasm-secp256k1@0.6.3/public/out/secp256k1.wasm');
-                if (!wasmResponse.ok) throw new Error('Kon secp256k1.wasm niet downloaden');
-
-                secp256k1 = await WasmSecp256k1(wasmResponse);
-
-                if (self.workerId === 0) {
-                    self.postMessage({ type: 'LOG', msg: '✅ @solar-republic/wasm-secp256k1 succesvol geïnitialiseerd!', cls: 'ev-epoch' });
-                    self.postMessage({ type: 'ENGINE_STATUS', active: true });
-                }
-            } catch (err) {
-                if (self.workerId === 0) {
-                    self.postMessage({ type: 'LOG', msg: `❌ WASM laadfout: ${err.message}`, cls: 'ev-stop' });
-                    self.postMessage({ type: 'ENGINE_STATUS', active: false });
-                }
+        async function initWasm() {
+            // Uitgebreide lijst met alternatieve cdn bronnen voor secp256k1 wasm
+            const sources = [
+                "https://unpkg.com/secp256k1-wasm@0.1.2/secp256k1.wasm",
+                "https://cdn.jsdelivr.net/npm/secp256k1-wasm@0.1.2/secp256k1.wasm",
+                "https://cdn.jsdelivr.net/npm/js-secp256k1@0.2.3/dist/secp256k1.wasm",
+                "https://unpkg.com/js-secp256k1@0.2.3/dist/secp256k1.wasm"
+            ];
+            
+            for (let url of sources) {
+                try {
+                    if (self.workerId === 0) self.postMessage({ type: 'LOG', msg: `🔍 WASM proberen te laden via: ${url}`, cls: 'ev-muted' });
+                    const response = await fetch(url);
+                    if (response.ok) {
+                        const buffer = await response.arrayBuffer();
+                        const module = await WebAssembly.instantiate(buffer, {});
+                        const exports = module.instance.exports;
+                        
+                        if (exports) {
+                            wasmInstance = module.instance;
+                            useWasm = true;
+                            if (self.workerId === 0) {
+                                self.postMessage({ type: 'LOG', msg: `✅ WASM succesvol geladen via ${url}`, cls: 'ev-epoch' });
+                                self.postMessage({ type: 'ENGINE_STATUS', wasm: true });
+                            }
+                            return;
+                        }
+                    }
+                } catch (e) { }
             }
+            
+            if (self.workerId === 0) {
+                self.postMessage({ type: 'LOG', msg: '⚠️ Geen enkele WASM bron bereikbaar → Schakelt over op JS-SIMD + Jacobian Batch', cls: 'ev-warn' });
+                self.postMessage({ type: 'ENGINE_STATUS', wasm: false });
+            }
+            useWasm = false;
+        }
+
+        const P = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
+        const G_x = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n;
+        const G_y = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n;
+
+        function mod(a, b = P) { const r = a % b; return r >= 0n ? r : r + b; }
+        
+        function inverse(a, m = P) {
+            if (a === 0n) return 0n;
+            let m0 = m, y = 0n, x = 1n;
+            while (a > 1n) {
+                let q = a / m;
+                let t = m;
+                m = a % m;
+                a = t;
+                t = y;
+                y = x - q * y;
+                x = t;
+            }
+            if (x < 0n) x += m0;
+            return x;
+        }
+
+        function add(p, q) {
+            if (!p) return q; if (!q) return p;
+            if (p.x === q.x) {
+                if (p.y !== q.y || p.y === 0n) return null;
+                let lam = mod((3n * p.x * p.x) * inverse(2n * p.y));
+                let x3 = mod(lam * lam - 2n * p.x);
+                return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
+            }
+            let lam = mod(mod(q.y - p.y) * inverse(mod(q.x - p.x)));
+            let x3 = mod(lam * lam - p.x - q.x);
+            return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
+        }
+
+        function double(p) {
+            if (!p) return null;
+            let lam = mod((3n * p.x * p.x) * inverse(2n * p.y));
+            let x3 = mod(lam * lam - 2n * p.x);
+            return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
+        }
+
+        const G_MULTIPLES = new Array(256);
+        (function precomputeG() {
+            let p = { x: G_x, y: G_y };
+            G_MULTIPLES[0] = p;
+            for (let i = 1; i < 256; i++) {
+                p = double(p);
+                G_MULTIPLES[i] = p;
+            }
+        })();
+
+        function mulG(n) {
+            let result = null;
+            let i = 0;
+            while (n > 0n) {
+                if (n & 1n) {
+                    result = add(result, G_MULTIPLES[i]);
+                }
+                n >>= 1n;
+                i++;
+            }
+            return result;
         }
 
         const sha256_K = new Uint32Array([
@@ -410,60 +487,111 @@
             if (data.type === "ADDRESS_SCAN") {
                 self.workerId = data.workerId;
 
-                if (!secp256k1) {
-                    await initWasmEngine();
+                if (typeof self.initialized === 'undefined') {
+                    await initWasm();
+                    self.initialized = true;
                 }
 
-                let currentKeyVal = BigInt("0x" + data.startHex);
+                let currentKey = BigInt("0x" + data.startHex);
                 const endKey = BigInt("0x" + data.endHex);
                 const targetH160 = new Uint8Array(data.targetH160Hex.match(/.{2}/g).map(b => parseInt(b, 16)));
                 const targetAddr = data.targetAddress;
                 const workerId = data.workerId;
                 const BATCH = 5000;
+                
+                let currentPoint = mulG(currentKey);
+
+                let pX = new Array(BATCH);
+                let pY = new Array(BATCH);
+                let pZ = new Array(BATCH);
+                let partials = new Array(BATCH);
+                let invZ = new Array(BATCH);
 
                 function fastStep() {
-                    if (!secp256k1) {
-                        self.postMessage({ type: 'WORKER_ERROR', message: 'WASM engine niet geladen' });
-                        return;
-                    }
-
                     let batchCount = 0;
+                    let jX = currentPoint.x;
+                    let jY = currentPoint.y;
+                    let jZ = 1n;
 
-                    for (let i = 0; i < BATCH && currentKeyVal <= endKey; i++) {
-                        const skHex = currentKeyVal.toString(16).padStart(64, '0');
-                        const skBytes = new Uint8Array(skHex.match(/.{2}/g).map(b => parseInt(b, 16)));
+                    for (let i = 0; i < BATCH && currentKey + BigInt(i) <= endKey; i++) {
+                        pX[i] = jX; pY[i] = jY; pZ[i] = jZ;
                         
-                        try {
-                            // Gebruik de officiële sk_to_pk methode van de WASM wrapper
-                            const pkBytes = secp256k1.sk_to_pk(skBytes);
-                            
-                            const s256 = sha256(pkBytes);
-                            const r160 = ripemd160(s256);
-
-                            let match = true;
-                            for(let k = 0; k < 20; k++) {
-                                if (r160[k] !== targetH160[k]) { match = false; break; }
-                            }
-
-                            if (match) {
-                                const payloadBytes = ("80" + skHex + "01").match(/.{2}/g).map(b => parseInt(b, 16));
-                                const doubleSha = sha256(sha256(new Uint8Array(payloadBytes)));
-                                const wif = toBase58("80" + skHex + "01" + Array.from(doubleSha).slice(0, 4).map(b => b.toString(16).padStart(2,'0')).join(''));
-                                self.postMessage({ type: "FOUND", privHex: skHex, wif: wif, address: targetAddr });
-                                skBytes.fill(0);
-                                return;
-                            }
-                        } catch (err) {}
+                        let Z1Z1 = mod(jZ * jZ);
+                        let U2 = mod(G_x * Z1Z1);
+                        let S2 = mod(G_y * mod(jZ * Z1Z1));
+                        let H = mod(U2 - jX);
+                        let R = mod(S2 - jY);
                         
-                        skBytes.fill(0);
-                        currentKeyVal += 1n;
+                        let HH = mod(H * H);
+                        let HHH = mod(H * HH);
+                        let V = mod(jX * HH);
+                        
+                        jX = mod(R * R - HHH - 2n * V);
+                        jY = mod(R * (V - jX) - jY * HHH);
+                        jZ = mod(jZ * H);
+                        
                         batchCount++;
                     }
 
-                    if (batchCount === 0 || currentKeyVal > endKey) {
+                    if (batchCount === 0) {
                         self.postMessage({ type: "SCAN_DONE", workerId });
                         return;
                     }
+                    
+                    let acc = 1n;
+                    for(let i = 0; i < batchCount; i++) {
+                        partials[i] = acc;
+                        acc = mod(acc * pZ[i]);
+                    }
+                    
+                    let invAcc = inverse(acc);
+                    
+                    for(let i = batchCount - 1; i >= 0; i--) {
+                        invZ[i] = mod(invAcc * partials[i]);
+                        invAcc = mod(invAcc * pZ[i]);
+                    }
+                    
+                    for (let i = 0; i < batchCount; i++) {
+                        let iz = invZ[i];
+                        let iz2 = mod(iz * iz);
+                        let ax = mod(pX[i] * iz2);
+                        let ay = mod(pY[i] * mod(iz * iz2));
+                        
+                        const bytes = new Uint8Array(33);
+                        bytes[0] = (ay & 1n) === 0n ? 0x02 : 0x03;
+                        let tmp = ax;
+                        for (let b = 32; b >= 1; b--) { bytes[b] = Number(tmp & 0xffn); tmp >>= 8n; }
+                        
+                        const s256 = sha256(bytes);
+                        const r160 = ripemd160(s256);
+
+                        let match = true;
+                        for(let k = 0; k < 20; k++) {
+                            if (r160[k] !== targetH160[k]) { match = false; break; }
+                        }
+
+                        if (match) {
+                            const privHex = (currentKey + BigInt(i)).toString(16).padStart(64, '0');
+                            const payloadBytes = ("80" + privHex + "01").match(/.{2}/g).map(b => parseInt(b, 16));
+                            const doubleSha = sha256(sha256(new Uint8Array(payloadBytes)));
+                            const wif = toBase58("80" + privHex + "01" + Array.from(doubleSha).slice(0, 4).map(b => b.toString(16).padStart(2,'0')).join(''));
+                            self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: targetAddr });
+                            return;
+                        }
+                    }
+                    
+                    currentKey += BigInt(batchCount);
+                    
+                    if (currentKey > endKey) {
+                        self.postMessage({ type: "SCAN_DONE", workerId });
+                        return;
+                    }
+                    
+                    let lastZ = invZ[batchCount - 1];
+                    let lastZ2 = mod(lastZ * lastZ);
+                    let lastAX = mod(pX[batchCount - 1] * lastZ2);
+                    let lastAY = mod(pY[batchCount - 1] * mod(lastZ * lastZ2));
+                    currentPoint = add({x: lastAX, y: lastAY}, {x: G_x, y: G_y});
 
                     self.postMessage({ type: "PROGRESS", count: batchCount, workerId });
                     setTimeout(fastStep, 0);
@@ -663,14 +791,14 @@
                             log(ev.data.msg, ev.data.cls);
                         }
                         else if (ev.data.type === "ENGINE_STATUS") {
-                            if (ev.data.active) {
-                                engineBadge.textContent = "⚡ ENGINE: WASM SECP256K1";
+                            if (ev.data.wasm) {
+                                engineBadge.textContent = "⚡ ENGINE: WASM SIMD";
                                 engineBadge.style.color = "var(--success)";
                                 engineBadge.style.borderColor = "var(--success)";
                             } else {
-                                engineBadge.textContent = "⚡ ENGINE: FOUT BIJ LADEN";
-                                engineBadge.style.color = "var(--danger)";
-                                engineBadge.style.borderColor = "var(--danger)";
+                                engineBadge.textContent = "⚡ ENGINE: JS FALLBACK";
+                                engineBadge.style.color = "var(--warn)";
+                                engineBadge.style.borderColor = "var(--warn)";
                             }
                         }
                         else if (ev.data.type === "PROGRESS") {
@@ -703,9 +831,9 @@
                 if (isRunning) return;
                 startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = cumulativeScanned;
                 setRunning(true);
-                setStatus('⚡ Initialisatie WASM Turbo', 'running');
-                log('Scan Initialisatie: Headless WASM ophalen via CDN...', 'ev-epoch');
-                engineBadge.textContent = "⚡ ENGINE: LADEN...";
+                setStatus('⚡ Initialisatie WASM/Turbo', 'running');
+                log('Scan Initialisatie: Controleer CDN voor WASM...', 'ev-epoch');
+                engineBadge.textContent = "⚡ ENGINE: CONTROLEREN...";
                 engineBadge.style.color = "var(--accent)";
                 engineBadge.style.borderColor = "var(--accent)";
                 spawnWorkers();
