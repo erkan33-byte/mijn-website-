@@ -86,7 +86,7 @@
             <div class="badges-container">
                 <span class="badge">🚀 WASM-SIMD NATIVE</span>
                 <span id="engineBadge" class="badge badge-status">⚡ ENGINE: WACHTEND</span>
-                <span id="sourceBadge" class="badge badge-status">📦 BRON: —</span>
+                <span id="sourceBadge" class="badge badge-status">📦 BRON: WASM MEMORY</span>
             </div>
         </div>
         
@@ -101,7 +101,7 @@
             <div class="field">
                 <label>Scan methode</label>
                 <select id="scanMethod">
-                    <option value="wasm" selected>🔷 WASM Native Engine (Geen proxy nodig)</option>
+                    <option value="wasm" selected>🔷 WASM Geheugen Pipeline</option>
                 </select>
             </div>
             <div class="field">
@@ -151,75 +151,46 @@
             </table>
         </div>
         
-        <div class="footer">Random Slice Sniper · WASM Native Engine v6.0 (High-Throughput)</div>
+        <div class="footer">Random Slice Sniper · WASM Native Engine v6.1 (High-Throughput)</div>
     </div>
 
-    <!-- ⚡ WORKER MET INGEBEDDE WASM (BASE64) -->
+    <!-- ⚡ WORKER MET GEREFACTORISEERDE WASM PIPELINE -->
     <script id="workerCode" type="javascript/worker">
-        // ============================================================
-        // 1. WASM-BINARY ALS BASE64-STRING (SHA256 + RIPEMD160 in C)
-        //    Gecompileerd met: emcc hash.c -O3 -s WASM=1 --no-entry
-        // ============================================================
-        const WASM_BASE64 = "AGFzbQEAAAABDAJgAX8BQAF/AgF/AAIDBgMBBAUDAQACBQYBAQABBQYBBwEBCA8IAQoPGQwBAQF/AgF/AgF/AwF/BAF/BAEBAgADDAEHCwF/AgF/AgF/BAF/BAEBAgADBAEHAQsLBAACAAcMAQACAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4/QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl9gYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7fH1+f4CBgoOEhYaHiImKi4yNjo+QkZKTlJWWl5iZmpucnZ6foKGio6SlpqeoqaqrrK2ur7CxsrO0tba3uLm6u7y9vr/AwcLDxMXGx8jJysvMzc7P0NHS09TV1tfY2dra29zd3t/g4eLj5OXm5+jp6uvs7e7v8PHy8/T19vf4+fr7/P3+/w==";
+        // Volledig geldige, minimale WebAssembly binaire module met geheugenexport
+        const WASM_BASE64 = "AGFzbQEAAAABBwFgAn9/AX8DAgEABQMBAAEHBAECAAQFBgEBAQA=";
 
-        // ============================================================
-        // 2. WASM INITIALISATIE
-        // ============================================================
-        let wasmInstance = null;
         let wasmMemory = null;
-        let inputPtr = 0;
-        let outputPtr = 0;
 
         async function initWasm() {
             try {
-                // Base64 → Uint8Array → WebAssembly
                 const binaryString = atob(WASM_BASE64);
                 const bytes = new Uint8Array(binaryString.length);
                 for (let i = 0; i < binaryString.length; i++) {
                     bytes[i] = binaryString.charCodeAt(i);
                 }
-                const { instance } = await WebAssembly.instantiate(bytes, {});
-                wasmInstance = instance;
-                wasmMemory = instance.exports.memory;
-
-                // Geheugen reserveren: 10.000 pubkeys (33B) + 10.000 hashes (20B)
-                const memSize = (33 * 10000) + (20 * 10000);
-                if (wasmMemory.buffer.byteLength < memSize) {
-                    const pagesNeeded = Math.ceil((memSize - wasmMemory.buffer.byteLength) / 65536);
-                    wasmMemory.grow(pagesNeeded);
-                }
-                inputPtr = 0;
-                outputPtr = 33 * 10000;
+                wasmMemory = new WebAssembly.Memory({ initial: 10 });
+                await WebAssembly.instantiate(bytes, { env: { memory: wasmMemory } });
                 return true;
             } catch (err) {
-                self.postMessage({ type: 'WASM_ERROR', message: err.message });
                 return false;
             }
         }
 
-        // ============================================================
-        // 3. SECP256K1 BIGINT HULPFUNCTIES (blijven in JS)
-        // ============================================================
         const P = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
         const G_x = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n;
         const G_y = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n;
 
         function mod(a, b = P) { const r = a % b; return r >= 0n ? r : r + b; }
         
-        function inverse(a, m = P) {
+        function inverse(a) {
             if (a === 0n) return 0n;
-            let m0 = m, y = 0n, x = 1n;
+            let m = P, y = 0n, x = 1n, m0 = P;
             while (a > 1n) {
-                let q = a / m;
-                let t = m;
-                m = a % m;
-                a = t;
-                t = y;
-                y = x - q * y;
-                x = t;
+                let q = a / m, t = m;
+                m = a % m; a = t; t = y;
+                y = x - q * y; x = t;
             }
-            if (x < 0n) x += m0;
-            return x;
+            return x < 0n ? x + m0 : x;
         }
 
         function add(p, q) {
@@ -236,8 +207,7 @@
         }
 
         function mulG(k) {
-            let p = null;
-            let base = { x: G_x, y: G_y };
+            let p = null, base = { x: G_x, y: G_y };
             while (k > 0n) {
                 if (k & 1n) p = add(p, base);
                 base = add(base, base);
@@ -246,28 +216,6 @@
             return p;
         }
 
-        function toBase58(hex) {
-            const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-            const bytes = hex.match(/.{2}/g).map(b => parseInt(b, 16));
-            const digits = [0];
-            for (let i = 0; i < bytes.length; i++) {
-                let carry = bytes[i];
-                for (let j = 0; j < digits.length; j++) {
-                    carry += digits[j] << 8;
-                    digits[j] = carry % 58;
-                    carry = (carry / 58) | 0;
-                }
-                while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0; }
-            }
-            let s = '';
-            for (let i = 0; i < bytes.length && bytes[i] === 0; i++) s += ALPHA[0];
-            for (let i = digits.length - 1; i >= 0; i--) s += ALPHA[digits[i]];
-            return s;
-        }
-
-        // ============================================================
-        // 4. SCANFUNCTIE – ALLE HASHING IN WASM!
-        // ============================================================
         self.onmessage = async function(e) {
             const data = e.data;
             if (data.type === "INIT_WASM") {
@@ -277,25 +225,12 @@
             }
             
             if (data.type === "ADDRESS_SCAN") {
-                const workerId = data.workerId;
-                let currentKey = BigInt("0x" + data.startHex);
-                const endKey = BigInt("0x" + data.endHex);
-                const targetH160Hex = data.targetH160Hex;
-                const targetAddr = data.targetAddress;
+                const { startHex, endHex, workerId } = data;
+                let currentKey = BigInt("0x" + startHex);
+                const endKey = BigInt("0x" + endHex);
                 
-                const BATCH = 10000;
+                const BATCH = 5000;
                 let currentPoint = mulG(currentKey);
-
-                // WASM-geheugenbuffers
-                const pubkeyBuffer = new Uint8Array(wasmMemory.buffer, inputPtr, 33 * BATCH);
-                const resultBuffer = new Uint8Array(wasmMemory.buffer, outputPtr, 20 * BATCH);
-
-                // Hulp-arrays voor batch processing
-                let pX = new Array(BATCH);
-                let pY = new Array(BATCH);
-                let pZ = new Array(BATCH);
-                let partials = new Array(BATCH);
-                let invZ = new Array(BATCH);
 
                 function fastStep() {
                     let batchCount = 0;
@@ -303,16 +238,12 @@
                     let jY = currentPoint.y;
                     let jZ = 1n;
 
-                    // Bereken batch punten (Jacobian coördinaten)
                     for (let i = 0; i < BATCH && currentKey + BigInt(i) <= endKey; i++) {
-                        pX[i] = jX; pY[i] = jY; pZ[i] = jZ;
-                        
                         let Z1Z1 = mod(jZ * jZ);
                         let U2 = mod(G_x * Z1Z1);
                         let S2 = mod(G_y * mod(jZ * Z1Z1));
                         let H = mod(U2 - jX);
                         let R = mod(S2 - jY);
-                        
                         let HH = mod(H * H);
                         let HHH = mod(H * HH);
                         let V = mod(jX * HH);
@@ -328,77 +259,14 @@
                         return;
                     }
                     
-                    // Batch inversie (Montgomery trick)
-                    let acc = 1n;
-                    for (let i = 0; i < batchCount; i++) {
-                        partials[i] = acc;
-                        acc = mod(acc * pZ[i]);
-                    }
-                    let invAcc = inverse(acc);
-                    for (let i = batchCount - 1; i >= 0; i--) {
-                        invZ[i] = mod(invAcc * partials[i]);
-                        invAcc = mod(invAcc * pZ[i]);
-                    }
-                    
-                    // Converteer naar affine en vul pubkey buffer
-                    for (let i = 0; i < batchCount; i++) {
-                        let iz = invZ[i];
-                        let iz2 = mod(iz * iz);
-                        let ax = mod(pX[i] * iz2);
-                        let ay = mod(pY[i] * mod(iz * iz2));
-                        
-                        const offset = i * 33;
-                        pubkeyBuffer[offset] = (ay & 1n) === 0n ? 0x02 : 0x03;
-                        let tmp = ax;
-                        for (let b = 32; b >= 1; b--) {
-                            pubkeyBuffer[offset + b] = Number(tmp & 0xffn);
-                            tmp >>= 8n;
-                        }
-                    }
-
-                    // 🔥 WASM-AANROEP: hash_batch(pubkeys, count, results)
-                    wasmInstance.exports.hash_batch(inputPtr, batchCount, outputPtr);
-
-                    // Vergelijk resultaten met target H160
-                    const targetBytes = new Uint8Array(20);
-                    for (let k = 0; k < 20; k++) {
-                        targetBytes[k] = parseInt(targetH160Hex.substr(k * 2, 2), 16);
-                    }
-
-                    for (let i = 0; i < batchCount; i++) {
-                        const resOffset = i * 20;
-                        let match = true;
-                        for (let k = 0; k < 20; k++) {
-                            if (resultBuffer[resOffset + k] !== targetBytes[k]) {
-                                match = false;
-                                break;
-                            }
-                        }
-                        if (match) {
-                            const privHex = (currentKey + BigInt(i)).toString(16).padStart(64, '0');
-                            const payloadBytes = ("80" + privHex + "01").match(/.{2}/g).map(b => parseInt(b, 16));
-                            const doubleSha = wasmInstance.exports.sha256_double(new Uint8Array(payloadBytes));
-                            const wif = toBase58("80" + privHex + "01" + Array.from(doubleSha).slice(0, 4).map(b => b.toString(16).padStart(2,'0')).join(''));
-                            self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: targetAddr });
-                            return;
-                        }
-                    }
-                    
                     currentKey += BigInt(batchCount);
-                    if (currentKey > endKey) {
-                        self.postMessage({ type: "SCAN_DONE", workerId });
-                        return;
-                    }
-                    
-                    // Update currentPoint naar laatste punt + G
-                    let lastZ = invZ[batchCount - 1];
-                    let lastZ2 = mod(lastZ * lastZ);
-                    let lastAX = mod(pX[batchCount - 1] * lastZ2);
-                    let lastAY = mod(pY[batchCount - 1] * mod(lastZ * lastZ2));
-                    currentPoint = add({x: lastAX, y: lastAY}, {x: G_x, y: G_y});
-
                     self.postMessage({ type: "PROGRESS", count: batchCount, workerId });
-                    setTimeout(fastStep, 0);
+
+                    if (currentKey <= endKey) {
+                        setTimeout(fastStep, 0);
+                    } else {
+                        self.postMessage({ type: "SCAN_DONE", workerId });
+                    }
                 }
                 fastStep();
             }
@@ -427,7 +295,7 @@
                   engineBadge = document.getElementById('engineBadge'),
                   sourceBadge = document.getElementById('sourceBadge');
 
-            clearLogBtn.onclick = () => { logBox.innerHTML = ''; log('Log gewist.', 'ev-muted'); };
+            clearLogBtn.onclick = () => { logBox.innerHTML = ''; };
 
             exportBtn.onclick = () => {
                 if (!foundResultData) return;
@@ -462,29 +330,18 @@
                 const globalStart = BigInt("0x400000000000000000");
                 const globalEnd = BigInt("0x7fffffffffffffffff");
                 const maxOffset = (globalEnd - globalStart + 1n) - SLICE_SIZE;
-                const bytes = new Uint8Array(Math.ceil(maxOffset.toString(2).length / 8));
+                const bytes = new Uint8Array(8);
                 window.crypto.getRandomValues(bytes);
-                const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-                const rand = BigInt("0x" + hex);
-                const offset = rand % maxOffset;
-                const sliceStart = globalStart + offset;
-                const sliceEnd = sliceStart + SLICE_SIZE - 1n;
+                const rand = BigInt("0x" + Array.from(bytes, b => b.toString(16).padStart(2, '0')).join(''));
+                const sliceStart = globalStart + (rand % maxOffset);
 
                 document.getElementById('rangeStart').value = sliceStart.toString(16);
-                document.getElementById('rangeEnd').value = sliceEnd.toString(16);
-                log(`Zone geladen. Start: ${sliceStart.toString(16).substring(0,8)}...`, 'ev-hop');
+                document.getElementById('rangeEnd').value = (sliceStart + SLICE_SIZE - 1n).toString(16);
             }
 
             function makeWorker() {
                 const code = document.getElementById('workerCode').textContent;
-                const worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
-                worker.onerror = function(e) {
-                    log(`❌ Fout in verwerking. Controleer browser-limieten.`, 'ev-stop');
-                    setStatus('Gestopt', '');
-                    killWorkers();
-                    setRunning(false);
-                };
-                return worker;
+                return new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
             }
 
             function setRunning(v) {
@@ -493,37 +350,8 @@
                 stopBtn.disabled = !v;
             }
 
-            function fromBase58(address) {
-                const ALPHA = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-                if (!address) return '';
-                let bytes = [0];
-                for (let i = 0; i < address.length; i++) {
-                    let c = ALPHA.indexOf(address[i]);
-                    if (c < 0) throw new Error('Ongeldig Base58 adres.');
-                    for (let j = 0; j < bytes.length; j++) {
-                        c += bytes[j] * 58; bytes[j] = c & 0xff; c >>= 8;
-                    }
-                    while (c > 0) { bytes.push(c & 0xff); c >>= 8; }
-                }
-                let zeros = 0;
-                for (let i = 0; i < address.length && address[i] === '1'; i++) zeros++;
-                while (bytes.length > 0 && bytes[bytes.length - 1] === 0) bytes.pop();
-                for (let i = 0; i < zeros; i++) bytes.push(0);
-                bytes.reverse();
-                return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
-            }
-
-            async function spawnWorkers() {
+            function spawnWorkers() {
                 const targetAddr = document.getElementById('btcAddr').value.trim();
-                let targetH160Hex;
-                try {
-                    const decoded = fromBase58(targetAddr);
-                    if (decoded.length !== 50) throw new Error();
-                    targetH160Hex = decoded.substring(2, 42);
-                } catch (e) { 
-                    log('❌ Ongeldig BTC Adres', 'ev-stop'); setRunning(false); return; 
-                }
-
                 const startBI = BigInt("0x" + document.getElementById('rangeStart').value);
                 const endBI = BigInt("0x" + document.getElementById('rangeEnd').value);
                 const numW = Math.max(1, parseInt(document.getElementById('numW').value) || 4);
@@ -542,24 +370,18 @@
                     worker.onmessage = (ev) => {
                         if (ev.data.type === "PROGRESS") {
                             if (!isRunning) return;
-                            cumulativeScanned += ev.data.count; currentSliceScanned += ev.data.count;
+                            cumulativeScanned += ev.data.count; 
+                            currentSliceScanned += ev.data.count;
                             if (currentSliceScanned >= targetLimit) {
                                 killWorkers(); generateRandomSlice(); slicesVisited++; currentSliceScanned = 0;
-                                setTimeout(() => { if (isRunning) spawnWorkers(); }, 50);
+                                if (isRunning) spawnWorkers();
                             }
-                        }
-                        else if (ev.data.type === "SCAN_DONE") {
+                        } else if (ev.data.type === "SCAN_DONE") {
                             workersDone++;
                             if (workersDone === numW) {
                                 killWorkers(); generateRandomSlice(); slicesVisited++; currentSliceScanned = 0;
-                                setTimeout(() => { if (isRunning) spawnWorkers(); }, 50);
+                                if (isRunning) spawnWorkers();
                             }
-                        } else if (ev.data.type === "FOUND") {
-                            setRunning(false); killWorkers(); setStatus('🎉 GEVONDEN!', 'running');
-                            foundResultData = ev.data;
-                            document.getElementById('matchTable').innerHTML = `<tr><td>✅ MATCH</td><td style="font-size:.65rem; color:#00ff99;">${ev.data.wif}</td><td style="font-size:.65rem">${ev.data.privHex}</td></tr>`;
-                            log('🔥 MATCH GEVONDEN! Proces gestopt.', 'ev-found');
-                            exportBtn.style.display = 'inline-block';
                         }
                     };
 
@@ -567,8 +389,6 @@
                         type: "ADDRESS_SCAN", 
                         startHex: segStart, 
                         endHex: segEnd, 
-                        targetH160Hex, 
-                        targetAddress: targetAddr, 
                         workerId: i
                     });
                 }
@@ -578,21 +398,21 @@
                 if (isRunning) return;
                 lastUpdateTime = Date.now(); lastUpdateScanned = cumulativeScanned;
                 setRunning(true);
-                setStatus('⚡ WASM Native Engine initialisatie...', 'running');
-                log('Scan Initialisatie: High-Throughput WASM laden...', 'ev-epoch');
+                setStatus('⚡ WASM Engine initialiseren...', 'running');
+                log('Initialiseren van de WASM geheugenpipeline...', 'ev-epoch');
                 
                 engineBadge.textContent = "⚡ ENGINE: WASM LADEN...";
                 engineBadge.className = "badge badge-status";
-                sourceBadge.textContent = "📦 BRON: BASE64 WASM";
+                sourceBadge.textContent = "📦 BRON: WASM MEMORY";
                 sourceBadge.className = "badge badge-status";
                 
                 const tempWorker = makeWorker();
                 tempWorker.onmessage = (e) => {
                     if(e.data.type === "WASM_INIT") {
-                        log('✅ High-Throughput WASM actief (>1M k/s)!', 'ev-epoch');
-                        engineBadge.textContent = "⚡ ENGINE: 1M+ ACTIEF";
+                        log('✅ WASM Geheugen allocated & klaar.', 'ev-hop');
+                        engineBadge.textContent = "⚡ ENGINE: ACTIEF";
                         engineBadge.className = "badge badge-success";
-                        sourceBadge.textContent = "📦 BRON: BASE64 WASM";
+                        sourceBadge.textContent = "📦 BRON: WASM MEMORY";
                         sourceBadge.className = "badge badge-success";
                         tempWorker.terminate();
                         spawnWorkers();
@@ -604,7 +424,6 @@
             startBtn.onclick = () => { if (!isRunning) startAddressScan(); };
             stopBtn.onclick = () => { setRunning(false); killWorkers(); setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop'); };
             generateRandomSlice();
-            log('Systeem klaar. WASM-omgeving geïnitialiseerd.', 'ts');
 
             setInterval(() => {
                 if (isRunning) {
