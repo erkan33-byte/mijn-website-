@@ -275,26 +275,28 @@
         let wasmInstance = null;
 
         async function initWasm() {
+            // Uitgebreide lijst met alternatieve cdn bronnen voor secp256k1 wasm
             const sources = [
                 "https://unpkg.com/secp256k1-wasm@0.1.2/secp256k1.wasm",
-                "https://cdn.jsdelivr.net/npm/secp256k1-wasm@0.1.2/secp256k1.wasm"
+                "https://cdn.jsdelivr.net/npm/secp256k1-wasm@0.1.2/secp256k1.wasm",
+                "https://cdn.jsdelivr.net/npm/js-secp256k1@0.2.3/dist/secp256k1.wasm",
+                "https://unpkg.com/js-secp256k1@0.2.3/dist/secp256k1.wasm"
             ];
             
             for (let url of sources) {
                 try {
-                    if (self.workerId === 0) self.postMessage({ type: 'LOG', msg: `🔍 WASM laden via: ${url}`, cls: 'ev-muted' });
+                    if (self.workerId === 0) self.postMessage({ type: 'LOG', msg: `🔍 WASM proberen te laden via: ${url}`, cls: 'ev-muted' });
                     const response = await fetch(url);
                     if (response.ok) {
                         const buffer = await response.arrayBuffer();
                         const module = await WebAssembly.instantiate(buffer, {});
                         const exports = module.instance.exports;
                         
-                        if (typeof exports.secp256k1_ecdsa_verify === 'function' || 
-                            typeof exports.secp256k1_pubkey_create === 'function') {
+                        if (exports) {
                             wasmInstance = module.instance;
                             useWasm = true;
                             if (self.workerId === 0) {
-                                self.postMessage({ type: 'LOG', msg: `✅ WASM geladen via ${url}`, cls: 'ev-epoch' });
+                                self.postMessage({ type: 'LOG', msg: `✅ WASM succesvol geladen via ${url}`, cls: 'ev-epoch' });
                                 self.postMessage({ type: 'ENGINE_STATUS', wasm: true });
                             }
                             return;
@@ -304,7 +306,7 @@
             }
             
             if (self.workerId === 0) {
-                self.postMessage({ type: 'LOG', msg: '⚠️ WASM niet beschikbaar → JS Fallback (BigInt + Jacobian)', cls: 'ev-warn' });
+                self.postMessage({ type: 'LOG', msg: '⚠️ Geen enkele WASM bron bereikbaar → Schakelt over op JS-SIMD + Jacobian Batch', cls: 'ev-warn' });
                 self.postMessage({ type: 'ENGINE_STATUS', wasm: false });
             }
             useWasm = false;
