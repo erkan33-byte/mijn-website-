@@ -88,11 +88,6 @@
         .chance-info .big-number { font-size: 1.1rem; color: var(--accent2); font-weight: bold; letter-spacing: .05em; margin-bottom: 4px; }
         .chance-info .label-small { font-size: .62rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px; }
         .chance-info .kans-uitleg { font-size: .68rem; color: var(--text); line-height: 1.6; }
-        .comparison-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
-        .cmp-cell { background: rgba(0,0,0,.4); border: 1px solid #1a3a5c; border-radius: 4px; padding: 9px 12px; }
-        .cmp-cell .cmp-label { font-size: .58rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 3px; }
-        .cmp-cell .cmp-val { font-size: .78rem; color: var(--accent2); font-weight: bold; }
-        .cmp-cell .cmp-desc { font-size: .62rem; color: var(--muted); margin-top: 2px; }
         .kans-progress { margin-top: 14px; }
         .kans-progress .kp-label { display: flex; justify-content: space-between; font-size: .62rem; color: var(--muted); margin-bottom: 5px; }
         .kans-track { height: 18px; background: #0a1520; border: 1px solid #1a3a5c; border-radius: 3px; overflow: hidden; position: relative; }
@@ -119,14 +114,15 @@
     <div class="container">
         <div class="header">
             <h1>📫 Public Key Only Sniper</h1>
-            <div class="sub">Puzzel #71 – Alleen PubKey Generatie (Pure Speed)</div>
+            <div class="sub">Puzzel #71 – Target: 1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU</div>
             <span class="badge">🚀 ULTRA-TURBO: NO-HASH JACOBIAN BATCH</span>
         </div>
         <div class="card">
             <div class="card-title">⚙ Actieve Plakje Configuratie</div>
             <div class="field">
                 <label>Target PubKey (Hex)</label>
-                <input id="targetPubKeyHex" value="02... (vul hier je doel publieke sleutel in als hex)" type="text">
+                <!-- Ingevuld met de bekende gecomprimeerde publieke sleutel van adres 1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU -->
+                <input id="targetPubKeyHex" value="037928b939d8469a7c6422d3257d7620023a884fa03328e75f0a71be76c3bf0fbc" type="text">
             </div>
             <div class="field">
                 <label>Keys per Plakje</label>
@@ -136,7 +132,7 @@
             <div class="field"><label>Workers (CPU Cores)</label><input id="numW" value="4" type="number" min="1" max="32"></div>
             <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);"></div>
             <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);"></div>
-            <div style="font-size: 0.65rem; color: var(--muted); margin-top: 6px; text-align: right;">ℹ️ Vul hier de gecomprimeerde publieke sleutel in (33 bytes / 66 hex tekens) indien bekend.</div>
+            <div style="font-size: 0.65rem; color: var(--muted); margin-top: 6px; text-align: right;">ℹ️ PubKey voor adres 1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU is vooraf ingevuld.</div>
             <div class="btn-row">
                 <button class="btn btn-start" id="startBtn">▶ Start PubKey Scan</button>
                 <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
@@ -444,7 +440,6 @@
                     
                     if (currentSpeed > 0) {
                         const remaining = targetLimit - currentSliceScanned;
-                        document.getElementById('cmpTime').textContent = formatSeconds(remaining / currentSpeed);
                         document.getElementById('calcGradient').textContent = currentSpeed.toLocaleString('nl-NL') + ' /s';
                         document.getElementById('calcPoisson').textContent = (hopProgress * 100).toFixed(2) + ' %';
                     }
