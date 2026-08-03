@@ -294,7 +294,7 @@ function buildPrecomputedTable() {
   return flat;
 }
 
-// --- WGSL Code inclusief GPU-side adresvergelijking ---
+// --- Gecorrigeerde WGSL Code inclusief GPU-side RIPEMD-160 ---
 const WGSL_SOURCE = `
 struct R8  { v: array<u32,8>,  c: u32 };
 const P: array<u32,8> = array<u32,8>(0xFFFFFC2Fu,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
@@ -512,24 +512,48 @@ const RMD_HL: array<u32,5> = array<u32,5>(0x00000000u,0x5a827999u,0x6ed9eba1u,0x
 const RMD_HR: array<u32,5> = array<u32,5>(0x50a28be6u,0x5c4dd124u,0x6d703ef3u,0x7a6d76e9u,0x00000000u);
 
 fn rmdF(j: u32, x: u32, y: u32, z: u32) -> u32 {
-  if (j < 16u) { return x ^ y ^ z; } if (j < 32u) { return (x & y) | ((~x) & z); }
-  if (j < 48u) { return (x | (~y)) ^ z; } if (j < 64u) { return (x & z) | (y & (~z)); }
+  if (j < 16u) { return x ^ y ^ z; }
+  if (j < 32u) { return (x & y) | ((~x) & z); }
+  if (j < 48u) { return (x | (~y)) ^ z; }
+  if (j < 64u) { return (x & z) | (y & (~z)); }
   return x ^ (y | (~z));
 }
+
+// 1. Gecorrigeerde WGSL RIPEMD-160 padding en message block opbouw
 fn ripemd160_32(H: array<u32,8>) -> array<u32,5> {
-  var X: array<u32,16>; for (var i = 0u; i < 16u; i = i + 1u) { X[i] = 0u; }
-  for (var i = 0u; i < 8u; i = i + 1u) { X[i] = bswap32(H[i]); }
-  X[8] = 0x80u; X[14] = 256u;
-  var h0=0x67452301u; var h1=0xefcdab89u; var h2=0x98badcfeu; var h3=0x10325476u; var h4=0xc3d2e1f0u;
-  var al=h0; var bl=h1; var cl=h2; var dl=h3; var el=h4;
-  var ar=h0; var br=h1; var cr=h2; var dr=h3; var er=h4;
-  for (var j = 0u; j < 80u; j = j + 1u) {
-    let round = j / 16u;
-    var t = al + rmdF(j, bl, cl, dl) + X[RMD_ZL[j]] + RMD_HL[round];
-    t = rotl32(t, RMD_SL[j]) + el; al=el; el=dl; dl=rotl32(cl,10u); cl=bl; bl=t;
-    var t2 = ar + rmdF(79u - j, br, cr, dr) + X[RMD_ZR[j]] + RMD_HR[round];
-    t2 = rotl32(t2, RMD_SR[j]) + er; ar=er; er=dr; dr=rotl32(cr,10u); cr=br; br=t2;
+  var X: array<u32,16>;
+  for (var i = 0u; i < 16u; i = i + 1u) { X[i] = 0u; }
+  
+  for (var i = 0u; i < 8u; i = i + 1u) {
+    let word = bswap32(H[i]);
+    let byteIdx = i * 4u;
+    let slot = byteIdx / 4u;
+    let shift = (3u - (byteIdx % 4u)) * 8u;
+    X[slot] = X[slot] | (word << shift);
   }
+  
+  let padSlot = 32u / 4u;
+  let padShift = (3u - (32u % 4u)) * 8u;
+  X[padSlot] = X[padSlot] | (0x80u << padShift);
+  X[14] = 256u; 
+
+  var h0 = 0x67452301u; var h1 = 0xefcdab89u; var h2 = 0x98badcfeu; var h3 = 0x10325476u; var h4 = 0xc3d2e1f0u;
+  var al = h0; var bl = h1; var cl = h2; var dl = h3; var el = h4;
+  var ar = h0; var br = h1; var cr = h2; var dr = h3; var er = h4;
+
+  for (var j = 0u; j < 80u; j = j + 1u) {
+    let roundL = j / 16u;
+    let roundR = (79u - j) / 16u;
+
+    let tl = al + rmdF(j, bl, cl, dl) + X[RMD_ZL[j]] + RMD_HL[roundL];
+    let rotL = rotl32(tl, RMD_SL[j]) + el;
+    al = el; el = dl; dl = rotl32(cl, 10u); cl = bl; bl = rotL;
+
+    let tr = ar + rmdF(79u - j, br, cr, dr) + X[RMD_ZR[j]] + RMD_HR[roundR];
+    let rotR = rotl32(tr, RMD_SR[j]) + er;
+    ar = er; er = dr; dr = rotl32(cr, 10u); cr = br; br = rotR;
+  }
+
   let t = h1 + cl + dr;
   return array<u32,5>(t, h2 + dl + er, h3 + el + ar, h4 + al + br, h0 + bl + cr);
 }
@@ -541,7 +565,7 @@ struct Uniforms {
 @group(0) @binding(0) var<storage, read> privkeys: array<u32>;
 @group(0) @binding(1) var<storage, read> combTable: array<u32>;
 @group(0) @binding(2) var<uniform> uniforms: Uniforms;
-@group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>; // [foundFlag, indexFound]
+@group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>;
 
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -578,22 +602,27 @@ let totalChecked = 0;
 
 function getTargetHash160Bytes(address) {
   const B58ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  let decoded = [0];
+  let digits = [0];
   for (let i = 0; i < address.length; i++) {
-    let char = address[i];
-    let p = B58ALPHABET.indexOf(char);
+    let p = B58ALPHABET.indexOf(address[i]);
+    if (p < 0) continue;
     let carry = p;
-    for (let j = 0; j < decoded.length; j++) {
-      carry += decoded[j] * 58;
-      decoded[j] = carry & 0xff;
+    for (let j = 0; j < digits.length; j++) {
+      carry += digits[j] * 58;
+      digits[j] = carry & 0xff;
       carry = carry >> 8;
     }
-    while (carry > 0) { decoded.push(carry & 0xff); carry = carry >> 8; }
+    while (carry > 0) {
+      digits.push(carry & 0xff);
+      carry = carry >> 8;
+    }
   }
-  for (let i = 0; i < address.length && address[i] === '1'; i++) decoded.push(0);
-  decoded.reverse();
-  const payload = new Uint8Array(decoded.slice(1, 21));
-  return payload;
+  for (let i = 0; i < address.length && address[i] === '1'; i++) {
+    digits.push(0);
+  }
+  digits.reverse();
+  const bytes = new Uint8Array(digits);
+  return bytes.slice(1, 21);
 }
 
 async function initWebGPU() {
@@ -637,13 +666,13 @@ document.getElementById('btnStart').addEventListener('click', async () => {
   const targetAddress = document.getElementById('targetAddressInput').value.trim();
   const targetHashBytes = getTargetHash160Bytes(targetAddress);
   
+  // 2. Gecorrigeerde Endianness conversie voor targetHash
   const targetHashU32 = new Uint32Array(5);
   for (let i = 0; i < 5; i++) {
-    targetHashU32[i] = (targetHashBytes[i*4]) | (targetHashBytes[i*4+1] << 8) | (targetHashBytes[i*4+2] << 16) | (targetHashBytes[i*4+3] << 24);
+    targetHashU32[i] = ((targetHashBytes[i*4+3]) | (targetHashBytes[i*4+2] << 8) | (targetHashBytes[i*4+1] << 16) | (targetHashBytes[i*4] << 24)) >>> 0;
   }
   gpuDevice.queue.writeBuffer(uniformsBuffer, 0, targetHashU32);
 
-  // Lees begin- en eindrange uit de invoervelden (ondersteunt hex met of zonder '0x')
   let currentKeyVal = BigInt(document.getElementById('startRangeInput').value.trim());
   const maxKeyVal = BigInt(document.getElementById('endRangeInput').value.trim());
 
