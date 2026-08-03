@@ -206,6 +206,7 @@
   .log .ev-found { color: var(--warn); font-weight: bold; }
   .log .ev-epoch { color: var(--accent2); }
   .log .ev-stop { color: var(--danger); }
+  .log .ev-hop { color: var(--warn); font-style: italic; }
 
   .warn{
     border: 1px solid var(--accent-dim);
@@ -235,7 +236,7 @@
   <header class="hero">
     <div class="eyebrow"><span class="dot" id="gpuDot"></span> <span id="gpuStatus">WebGPU wordt gecontroleerd…</span></div>
     <h1>WebGPU secp256k1 Sniper</h1>
-    <p class="sub">Massale parallelle puntvermenigvuldiging via WGSL Compute Shaders op je GPU gecombineerd met snelle CPU Hashing & Base58Check.</p>
+    <p class="sub">Massale parallelle puntvermenigvuldiging via WGSL Compute Shaders op je GPU gecombineerd met automatische Random Slices.</p>
 
     <div class="ticker">
       <div class="stat"><b id="statCount">0</b><span>sleutels gegenereerd</span></div>
@@ -252,11 +253,13 @@
       <input id="btcAddr" value="1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU" type="text">
     </div>
     <div class="field">
-      <label>Batch / Limiet per slag</label>
-      <input type="number" id="countInput" value="10000" min="1" max="50000">
+      <label>Keys per Plakje / Batch</label>
+      <input type="number" id="countInput" value="100000" min="1000" max="1000000">
     </div>
+    <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);"></div>
+    <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);"></div>
     <div class="row" style="margin-top: 14px;">
-      <button id="btnGen">▶ Start GPU Sniper</button>
+      <button id="btnGen">▶ Start Auto-Hop GPU Sniper</button>
       <button id="btnStop" class="btn-stop" disabled>■ Stop</button>
       <button id="btnCsv" class="secondary" disabled>Download CSV</button>
     </div>
@@ -286,7 +289,7 @@
       <div class="stat-cell"><div class="label">Status</div><div class="value" id="statusVal" style="color:var(--muted)">In afwachting</div></div>
       <div class="stat-cell"><div class="label">Totaal Gescand</div><div class="value" id="keysScanned">0</div></div>
       <div class="stat-cell"><div class="label">GPU Snelheid</div><div class="value" id="speed">0 /s</div></div>
-      <div class="stat-cell"><div class="label">Sessieduur</div><div class="value" id="sessionTime">0s</div></div>
+      <div class="stat-cell"><div class="label">Plakjes bezocht</div><div class="value" id="slicesVisitedCount">1</div></div>
     </div>
   </div>
 
@@ -307,7 +310,7 @@
   </div>
 
   <footer>
-    WebGPU Secp256k1 Turbo Engine · Werkt opbrowsers met WebGPU ingeschakeld.
+    WebGPU Secp256k1 Turbo Engine · Werkt op browsers met WebGPU ingeschakeld.
   </footer>
 </div>
 
@@ -510,13 +513,8 @@ function limbsLEToBytes(limbs8) {
   return bytes;
 }
 
-const N_HEX = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141";
-const N_BIG = BigInt("0x" + N_HEX);
-
-function randomPrivateKeyBytes() {
-  const b = new Uint8Array(32);
-  crypto.getRandomValues(b);
-  return b;
+function bigIntTo32Bytes(v) {
+  return hexToBytes(v.toString(16).padStart(64, '0'));
 }
 
 // =====================================================================================
@@ -756,13 +754,19 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 `;
 
 // =====================================================================================
-// WEBGPU APPLICATION CONTROLLER
+// APPLICATION CONTROLLER & AUTO-HOP
 // =====================================================================================
 let gpuDevice = null, gpuPipeline = null;
 let isSniperRunning = false;
 let totalScannedKeys = 0;
 let sessionStartTime = 0;
 let lastCsvRows = [];
+let slicesVisited = 1;
+let currentSliceScanned = 0;
+let targetLimit = 100000;
+let currentKeyBI = 0n;
+let sliceEndBI = 0n;
+const SLICE_SIZE = 34359738368n;
 
 async function initWebGPU() {
   const statusEl = document.getElementById('gpuStatus');
@@ -851,9 +855,6 @@ const TEST_VECTORS = [
   { k: 3n,    addr: "1CUNEBjYrCn2y1SdiUMohaKUi4wpP326Lb" },
   { k: 255n,  addr: "1DF7Yr4GKWoCXZZZXoEczo9oiokwQe8Urz" },
 ];
-function bigIntTo32Bytes(v) {
-  return hexToBytes(v.toString(16).padStart(64, '0'));
-}
 
 async function runSelfTest() {
   const btn = document.getElementById('btnTest');
@@ -896,7 +897,7 @@ async function runSelfTest() {
 }
 
 // =====================================================================================
-// SNIPER LOOP (GPU BATCHES)
+// SNIPER LOOP & AUTO-HOP CONTROLLER
 // =====================================================================================
 function logMsg(msg, cls = '') {
   const ts = new Date().toLocaleTimeString('nl-NL');
@@ -912,9 +913,26 @@ function copyToClipboard(text) {
   navigator.clipboard?.writeText(text).catch(()=>{});
 }
 
+function generateRandomSlice() {
+  const globalStart = BigInt("0x400000000000000000");
+  const globalEnd = BigInt("0x7fffffffffffffffff");
+  const maxOffset = (globalEnd - globalStart + 1n) - SLICE_SIZE;
+  const bytes = new Uint8Array(Math.ceil(maxOffset.toString(2).length / 8));
+  window.crypto.getRandomValues(bytes);
+  const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  const rand = BigInt("0x" + hex);
+  const offset = rand % maxOffset;
+  currentKeyBI = globalStart + offset;
+  sliceEndBI = currentKeyBI + SLICE_SIZE - 1n;
+
+  document.getElementById('rangeStart').value = currentKeyBI.toString(16);
+  document.getElementById('rangeEnd').value = sliceEndBI.toString(16);
+  logMsg(`Nieuw plakje geladen. Start: ${currentKeyBI.toString(16)}`, 'ev-hop');
+}
+
 async function sniperLoop() {
   const targetAddr = document.getElementById('btcAddr').value.trim();
-  const count = parseInt(document.getElementById('countInput').value) || 10000;
+  targetLimit = parseInt(document.getElementById('countInput').value) || 100000;
   
   if (!gpuDevice) {
     const ok = await initWebGPU();
@@ -923,19 +941,33 @@ async function sniperLoop() {
 
   sessionStartTime = performance.now();
   totalScannedKeys = 0;
+  currentSliceScanned = 0;
+  slicesVisited = 1;
   lastCsvRows = [];
+  generateRandomSlice();
 
   document.getElementById('statusVal').textContent = 'Actief (GPU)';
   document.getElementById('statusVal').style.color = 'var(--success)';
-  logMsg('GPU Sniper loop gestart...', 'ev-epoch');
+  logMsg('GPU Auto-Hop Sniper gestart...', 'ev-epoch');
 
   const tbody = document.getElementById('resultBody');
   tbody.innerHTML = '';
 
   while (isSniperRunning) {
+    if (currentSliceScanned >= targetLimit) {
+      slicesVisited++;
+      currentSliceScanned = 0;
+      generateRandomSlice();
+      logMsg(`Limiet bereikt. Hopt naar nieuw plakje #${slicesVisited}`, 'ev-hop');
+    }
+
+    const batchSize = Math.min(10000, targetLimit - currentSliceScanned);
     const t0 = performance.now();
     const privKeys = [];
-    for (let i = 0; i < count; i++) privKeys.push(randomPrivateKeyBytes());
+    
+    for (let i = 0; i < batchSize; i++) {
+      privKeys.push(bigIntTo32Bytes(currentKeyBI + BigInt(i)));
+    }
 
     let points;
     try {
@@ -947,7 +979,7 @@ async function sniperLoop() {
     }
 
     const rows = [];
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < batchSize; i++) {
       const priv = privKeys[i];
       const pt = points[i];
       const pub = compressedPubkeyFromXY(pt.x, pt.y[31]);
@@ -965,18 +997,20 @@ async function sniperLoop() {
       }
     }
 
-    totalScannedKeys += count;
+    totalScannedKeys += batchSize;
+    currentSliceScanned += batchSize;
+    currentKeyBI += BigInt(batchSize);
     lastCsvRows.push(...rows);
 
     const dt = (performance.now() - t0) / 1000;
-    const rate = Math.round(count / dt);
+    const rate = dt > 0 ? Math.round(batchSize / dt) : 0;
     const sessionSec = Math.round((performance.now() - sessionStartTime) / 1000);
 
     document.getElementById('statCount').textContent = totalScannedKeys.toLocaleString('nl-NL');
     document.getElementById('statRate').textContent = rate.toLocaleString('nl-NL');
     document.getElementById('keysScanned').textContent = totalScannedKeys.toLocaleString('nl-NL');
     document.getElementById('speed').textContent = rate.toLocaleString('nl-NL') + ' /s';
-    document.getElementById('sessionTime').textContent = sessionSec + 's';
+    document.getElementById('slicesVisitedCount').textContent = slicesVisited.toLocaleString('nl-NL');
     document.getElementById('feedText').textContent = rows[0].pub.slice(0, 20) + '…';
 
     // UI Tabel verversen met de laatste batch
