@@ -196,7 +196,12 @@
   <header class="hero">
     <div class="eyebrow"><span class="dot" id="gpuDot"></span> <span id="gpuStatus">WebGPU wordt gecontroleerd…</span></div>
     <h1>secp256k1 op de <span class="k">GPU</span></h1>
-    <p class="sub">Een WGSL-compute-shader doet de elliptische-krommewiskunde (private key → publieke sleutel) massaal parallel op je GPU. Hashing en Base58Check-encodering gebeuren op de CPU in JavaScript — dat is inherent sequentieel per sleutel en dus niet de interessante GPU-taak.</p>
+    <p class="sub">Een WGSL-compute-shader doet de elliptische-krommewiskunde (private key → publieke sleutel) én de
+    hash160 (SHA-256 + RIPEMD-160) massaal parallel op je GPU: een vooraf berekende comb-tabel van veelvouden van G
+    zodat er per sleutel geen enkele "double" meer nodig is, in Jacobiaanse coördinaten opgeteld zodat er onderweg
+    geen dure modulaire inverses nodig zijn, en de laatste, onvermijdelijke inverse per key wordt niet per thread
+    gedaan maar via Montgomery batch-inversion één keer gedeeld over een hele workgroup van 128 keys. Alleen
+    Base58Check-encodering blijft op de CPU, want dat is inherent sequentieel per sleutel.</p>
 
     <div class="ticker">
       <div class="stat"><b id="statCount">0</b><span>sleutels gegenereerd</span></div>
@@ -208,23 +213,28 @@
   <section class="panel" id="testPanel">
     <h2><span class="n">01</span> Zelftest — klopt de shader?</h2>
     <p class="desc">
-      GPU-elliptische-kromme-wiskunde in 32-bit shader-registers is foutgevoelig om blind te vertrouwen. Deze test laat de shader
-      <code>k·G</code> uitrekenen voor een aantal private keys waarvan het publieke, onafhankelijk verifieerbare antwoord bekend is
-      (o.a. Bitcoin Puzzle&nbsp;#1, priv = 1). Als hier niet alles op groen staat, vertrouw dan de rest van de pagina niet.
+      GPU-elliptische-kromme-wiskunde én GPU-hashing in 32-bit shader-registers zijn foutgevoelig om blind te
+      vertrouwen. Deze test laat de shader het volledige adres (comb-tabel-vermenigvuldiging + on-GPU hash160)
+      uitrekenen voor een aantal private keys waarvan het publieke, onafhankelijk verifieerbare antwoord bekend is
+      (o.a. Bitcoin Puzzle&nbsp;#1, priv = 1). Als extra controle wordt het GPU-hash160 ook nog eens onafhankelijk
+      op de CPU herberekend uit dezelfde (x,y) — als die twee niet overeenkomen, zit de fout specifiek in de
+      GPU-hashcode. Als hier niet alles op groen staat, vertrouw dan de rest van de pagina niet.
     </p>
     <div class="row">
       <button id="btnTest">Voer zelftest uit</button>
       <span id="testSummary" style="font-family:var(--mono); font-size:12.5px; color:var(--muted);"></span>
     </div>
     <table id="testTable" style="display:none;">
-      <thead><tr><th>priv key</th><th>berekend adres</th><th>verwacht adres</th><th>status</th></tr></thead>
+      <thead><tr><th>priv key</th><th>berekend adres (GPU)</th><th>verwacht adres</th><th>status</th></tr></thead>
       <tbody></tbody>
     </table>
   </section>
 
   <section class="panel">
     <h2><span class="n">02</span> Genereer adressen</h2>
-    <p class="desc">Private keys komen uit <code>crypto.getRandomValues</code> (een cryptografisch veilige bron, niet de GPU) — de GPU doet alleen de puntvermenigvuldiging. Compressed public keys, legacy P2PKH-adressen (mainnet, versie <code>0x00</code>).</p>
+    <p class="desc">Private keys komen uit <code>crypto.getRandomValues</code> (een cryptografisch veilige bron, niet
+    de GPU). De GPU doet de puntvermenigvuldiging via een vooraf berekende comb-tabel én de hash160-berekening.
+    Compressed public keys, legacy P2PKH-adressen (mainnet, versie <code>0x00</code>).</p>
     <div class="row">
       <label class="field">Aantal
         <input type="number" id="countInput" value="256" min="1" max="20000">
@@ -242,10 +252,12 @@
   </section>
 
   <div class="warn" style="margin-top:26px;">
-    <b>Voor een schoolproject, niet voor een echte wallet.</b> Deze pagina is gebouwd en inhoudelijk geverifieerd zonder een echte
-    WebGPU-runtime beschikbaar te hebben tijdens het maken ervan — de kromme-wiskunde is los geverifieerd in Python tegen bekende
-    testvectoren, maar de shadercode zelf is pas voor het eerst getest zodra jij op "zelftest" klikt in je eigen browser.
-    Draai dus altijd eerst de zelftest. Gebruik gegenereerde sleutels nooit voor echte bedragen.
+    <b>Voor een schoolproject, niet voor een echte wallet.</b> Deze pagina is gebouwd en inhoudelijk geverifieerd
+    zonder een echte WebGPU-runtime beschikbaar te hebben tijdens het maken ervan. De kromme-wiskunde, de
+    comb-tabel-opbouw en de SHA-256/RIPEMD-160-poort naar WGSL zijn los geverifieerd tegen bekende testvectoren
+    (Python/BigInt-referentie), maar de shadercode zelf — inclusief de gedeelde batch-inversion binnen elke
+    workgroup, met shared memory en padding-threads — is pas voor het eerst getest zodra jij op "zelftest" klikt in
+    je eigen browser. Draai dus altijd eerst de zelftest. Gebruik gegenereerde sleutels nooit voor echte bedragen.
   </div>
 
   <footer>
@@ -257,7 +269,9 @@
 <script>
 // =====================================================================================
 // SHA-256 / RIPEMD-160 / Base58Check — pure JS, verified against Python hashlib and
-// known Bitcoin test vectors (private key 1 -> address 1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH)
+// known Bitcoin test vectors (private key 1 -> address 1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH).
+// Kept on the CPU side for: (a) Base58Check checksums (WIF + address, tiny inputs, cheap),
+// and (b) an independent cross-check of the GPU's on-chip hash160 during the self-test.
 // =====================================================================================
 function rotr(x, n) { return ((x >>> n) | (x << (32 - n))) >>> 0; }
 
@@ -463,6 +477,9 @@ function compressedPubkeyFromXY(xBytes32, yLastByte) {
 function addressFromCompressedPubkey(pub33) {
   return base58checkEncode(0x00, hash160(pub33));
 }
+function addressFromHash160(hash20) {
+  return base58checkEncode(0x00, hash20);
+}
 function wifCompressed(priv32) {
   const payload = new Uint8Array(33);
   payload.set(priv32, 0);
@@ -501,19 +518,92 @@ function randomPrivateKeyBytes() {
   }
 }
 
+function bigIntTo32Bytes(v) {
+  const hex = v.toString(16).padStart(64, '0');
+  return hexToBytes(hex);
+}
+
 // =====================================================================================
-// WGSL — secp256k1 field arithmetic (8x u32 limbs, little-endian) + Jacobian point math.
-// Algorithm verified independently in Python against a trusted affine-coordinate
-// reference (incl. random 256-bit scalars and n-1) before being translated here.
+// Comb-table precomputation (JS / BigInt, one-time, on the CPU).
+// table[i][j] = j * 256^i * G  for i = 0..31 (byte position), j = 0..255 (byte value).
+// Verified against known test vectors (j=1,i=0 must equal G itself; table[0][1] address
+// checks out against the same public Bitcoin Puzzle #1 vector used in the self-test).
+// Built once via affine BigInt EC math (not GPU, not performance-critical — this runs a
+// single time at page load and is cross-checked structurally, not against a live GPU).
+// =====================================================================================
+const SECP_P = (1n << 256n) - (1n << 32n) - 977n;
+const SECP_GX = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
+const SECP_GY = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n;
+
+function modinv(a, m) {
+  a = ((a % m) + m) % m;
+  let [oldR, r] = [a, m];
+  let [oldS, s] = [1n, 0n];
+  while (r !== 0n) {
+    const q = oldR / r;
+    [oldR, r] = [r, oldR - q * r];
+    [oldS, s] = [s, oldS - q * s];
+  }
+  return ((oldS % m) + m) % m;
+}
+function ecDouble(P) {
+  if (P === null) return null;
+  if (P.y === 0n) return null;
+  const lam = ((3n * P.x % SECP_P) * P.x % SECP_P) * modinv((2n * P.y) % SECP_P, SECP_P) % SECP_P;
+  const x3 = (((lam * lam) % SECP_P) - 2n * P.x % SECP_P + 2n * SECP_P) % SECP_P;
+  const y3 = ((lam * ((P.x - x3 + SECP_P) % SECP_P)) % SECP_P - P.y + SECP_P) % SECP_P;
+  return { x: x3, y: y3 };
+}
+function ecAdd(P, Q) {
+  if (P === null) return Q;
+  if (Q === null) return P;
+  if (P.x === Q.x) {
+    if ((P.y + Q.y) % SECP_P === 0n) return null;
+    return ecDouble(P);
+  }
+  const lam = (((Q.y - P.y + SECP_P) % SECP_P) * modinv((Q.x - P.x + SECP_P) % SECP_P, SECP_P)) % SECP_P;
+  const x3 = (((lam * lam) % SECP_P) - P.x - Q.x + 3n * SECP_P) % SECP_P;
+  const y3 = ((lam * ((P.x - x3 + SECP_P) % SECP_P)) % SECP_P - P.y + SECP_P) % SECP_P;
+  return { x: x3, y: y3 };
+}
+
+const TABLE_ROWS = 32, TABLE_COLS = 256;
+function buildPrecomputedTable(statusCb) {
+  const flat = new Uint32Array(TABLE_ROWS * TABLE_COLS * 16);
+  let base = { x: SECP_GX, y: SECP_GY };
+  for (let i = 0; i < TABLE_ROWS; i++) {
+    let acc = null;
+    for (let j = 1; j < TABLE_COLS; j++) {
+      acc = ecAdd(acc, base);
+      const xLimbs = bytesToLimbsLE(bigIntTo32Bytes(acc.x));
+      const yLimbs = bytesToLimbsLE(bigIntTo32Bytes(acc.y));
+      const off = (i * TABLE_COLS + j) * 16;
+      flat.set(xLimbs, off);
+      flat.set(yLimbs, off + 8);
+    }
+    for (let d = 0; d < 8; d++) base = ecDouble(base);
+    if (statusCb && (i % 8 === 7)) statusCb(i + 1, TABLE_ROWS);
+  }
+  // sanity check: table[0][1] must be G itself
+  const gCheckX = limbsLEToBytes(flat.slice(16, 24));
+  if (bytesToHex(gCheckX) !== SECP_GX.toString(16).padStart(64,'0')) {
+    throw new Error("comb-tabel sanity check gefaald (table[0][1] != G)");
+  }
+  return flat;
+}
+
+// =====================================================================================
+// WGSL — secp256k1 field arithmetic (8x u32 limbs, little-endian) + Jacobian point math,
+// scalar multiplication via a precomputed comb-table (no doublings, only table lookups +
+// mixed-affine additions), plus single-block SHA-256 and RIPEMD-160 for hash160, all
+// running in one pass on the GPU. Algorithm verified independently in Python/BigInt
+// against a trusted affine-coordinate reference before being translated here.
 // =====================================================================================
 const WGSL_SOURCE = `
 struct R8  { v: array<u32,8>,  c: u32 };
-struct R16 { v: array<u32,16> };
 
 const P: array<u32,8> = array<u32,8>(0xFFFFFC2Fu,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
 const P_MINUS_2: array<u32,8> = array<u32,8>(0xFFFFFC2Du,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
-const GX: array<u32,8> = array<u32,8>(0x16F81798u,0x59F2815Bu,0x2DCE28D9u,0x029BFCDBu,0xCE870B07u,0x55A06295u,0xF9DCBBACu,0x79BE667Eu);
-const GY: array<u32,8> = array<u32,8>(0xFB10D4B8u,0x9C47D08Fu,0xA6855419u,0xFD17B448u,0x0E1108A8u,0x5DA4FBFCu,0x26A3C465u,0x483ADA77u);
 
 fn addc(a: u32, b: u32, cin: u32) -> vec2<u32> {
   let s1 = a + b;
@@ -593,7 +683,6 @@ fn mulRaw(a: array<u32,8>, b: array<u32,8>) -> array<u32,16> {
   return res;
 }
 
-// 8-limb * small (<2^16) scalar -> 9 limbs returned as array<u32,9> packed in a 16-array (only first 9 used)
 fn mulSmall8(a: array<u32,8>, m: u32) -> array<u32,9> {
   var out: array<u32,9>;
   for (var i=0u;i<9u;i=i+1u){ out[i]=0u; }
@@ -620,7 +709,6 @@ fn addScalarAt(acc: ptr<function, array<u32,8>>, pos: u32, value: u32) {
   }
 }
 
-// reduce a 512-bit product (16 limbs) mod p, using 2^256 = 2^32 + 977 (mod p)
 fn reduceModP(r: array<u32,16>) -> array<u32,8> {
   var lo: array<u32,9>;
   for (var i=0u;i<8u;i=i+1u){ lo[i]=r[i]; } lo[8]=0u;
@@ -633,15 +721,13 @@ fn reduceModP(r: array<u32,16>) -> array<u32,8> {
 
   let hi977 = mulSmall8(hi, 977u);
 
-  // add9: lo + hiShifted
   var sum1: array<u32,9>; var carry: u32 = 0u;
   for (var i=0u;i<9u;i=i+1u){ let s=addc(lo[i], hiShifted[i], carry); sum1[i]=s.x; carry=s.y; }
   let carry1 = carry;
-  // sum1 + hi977
   var sum2: array<u32,9>; carry = 0u;
   for (var i=0u;i<9u;i=i+1u){ let s=addc(sum1[i], hi977[i], carry); sum2[i]=s.x; carry=s.y; }
   let carry2 = carry;
-  let extra = carry1 + carry2; // 0,1 or 2
+  let extra = carry1 + carry2;
 
   var acc: array<u32,8>;
   for (var i=0u;i<8u;i=i+1u){ acc[i]=sum2[i]; }
@@ -748,56 +834,238 @@ fn jacMaddAffine(p: JPoint, x2: array<u32,8>, y2: array<u32,8>) -> JPoint {
   return out;
 }
 
-fn scalarMultG(k: array<u32,8>) -> array<array<u32,8>,2> {
+// ---- comb-table scalar multiplication: k*G with zero doublings ----
+// table[i][j] = j * 256^i * G, flattened as row-major (i*256+j)*16 u32 (x then y limbs).
+// Returns the Jacobian point WITHOUT converting to affine — the caller batches the
+// final inversion across a whole workgroup (see main()) instead of doing one per thread.
+fn scalarMultCombGJac(k: array<u32,8>) -> JPoint {
   var pt: JPoint;
   pt.X = u32to8(0u); pt.Y = u32to8(0u); pt.Z = u32to8(0u); pt.isInf = true;
 
-  for (var ii = 0u; ii < 256u; ii = ii + 1u) {
-    let i = 255u - ii;
-    let limbIdx = i / 32u;
-    let bitIdx = i % 32u;
-    if (!pt.isInf) { pt = jacDouble(pt); }
-    let bit = (k[limbIdx] >> bitIdx) & 1u;
-    if (bit == 1u) {
-      pt = jacMaddAffine(pt, GX, GY);
+  for (var i = 0u; i < 32u; i = i + 1u) {
+    let limbIdx = i / 4u;
+    let shift = 8u * (i % 4u);
+    let byteVal = (k[limbIdx] >> shift) & 0xffu;
+    if (byteVal != 0u) {
+      let base = (i * 256u + byteVal) * 16u;
+      var tx: array<u32,8>;
+      var ty: array<u32,8>;
+      for (var m = 0u; m < 8u; m = m + 1u) {
+        tx[m] = combTable[base + m];
+        ty[m] = combTable[base + 8u + m];
+      }
+      pt = jacMaddAffine(pt, tx, ty);
     }
   }
+  return pt;
+}
 
-  let Zinv = modpowP2(pt.Z);
+// ---- SHA-256, single 64-byte block (fixed 33-byte input: 1 prefix + 32 x-bytes) ----
+fn rotr32(x: u32, n: u32) -> u32 { return (x >> n) | (x << (32u - n)); }
+fn rotl32(x: u32, n: u32) -> u32 { return (x << n) | (x >> (32u - n)); }
+fn bswap32(x: u32) -> u32 {
+  return ((x & 0xffu) << 24u) | ((x & 0xff00u) << 8u) | ((x >> 8u) & 0xff00u) | ((x >> 24u) & 0xffu);
+}
+fn byteOfBE(limbs: array<u32,8>, k: u32) -> u32 {
+  let limbIdx = 7u - (k / 4u);
+  let shift = 24u - 8u * (k % 4u);
+  return (limbs[limbIdx] >> shift) & 0xffu;
+}
+
+const SHA_K: array<u32,64> = array<u32,64>(
+  0x428a2f98u,0x71374491u,0xb5c0fbcfu,0xe9b5dba5u,0x3956c25bu,0x59f111f1u,0x923f82a4u,0xab1c5ed5u,
+  0xd807aa98u,0x12835b01u,0x243185beu,0x550c7dc3u,0x72be5d74u,0x80deb1feu,0x9bdc06a7u,0xc19bf174u,
+  0xe49b69c1u,0xefbe4786u,0x0fc19dc6u,0x240ca1ccu,0x2de92c6fu,0x4a7484aau,0x5cb0a9dcu,0x76f988dau,
+  0x983e5152u,0xa831c66du,0xb00327c8u,0xbf597fc7u,0xc6e00bf3u,0xd5a79147u,0x06ca6351u,0x14292967u,
+  0x27b70a85u,0x2e1b2138u,0x4d2c6dfcu,0x53380d13u,0x650a7354u,0x766a0abbu,0x81c2c92eu,0x92722c85u,
+  0xa2bfe8a1u,0xa81a664bu,0xc24b8b70u,0xc76c51a3u,0xd192e819u,0xd6990624u,0xf40e3585u,0x106aa070u,
+  0x19a4c116u,0x1e376c08u,0x2748774cu,0x34b0bcb5u,0x391c0cb3u,0x4ed8aa4au,0x5b9cca4fu,0x682e6ff3u,
+  0x748f82eeu,0x78a5636fu,0x84c87814u,0x8cc70208u,0x90befffau,0xa4506cebu,0xbef9a3f7u,0xc67178f2u
+);
+
+fn sha256_33(prefix: u32, x: array<u32,8>) -> array<u32,8> {
+  var b: array<u32,64>;
+  for (var i = 0u; i < 64u; i = i + 1u) { b[i] = 0u; }
+  b[0] = prefix;
+  for (var k = 0u; k < 32u; k = k + 1u) { b[1u + k] = byteOfBE(x, k); }
+  b[33] = 0x80u;
+  b[62] = 0x01u; // length = 33*8 = 264 = 0x0108
+  b[63] = 0x08u;
+
+  var W: array<u32,64>;
+  for (var i = 0u; i < 16u; i = i + 1u) {
+    W[i] = (b[4u*i] << 24u) | (b[4u*i+1u] << 16u) | (b[4u*i+2u] << 8u) | b[4u*i+3u];
+  }
+  for (var i = 16u; i < 64u; i = i + 1u) {
+    let s0 = rotr32(W[i-15u],7u) ^ rotr32(W[i-15u],18u) ^ (W[i-15u] >> 3u);
+    let s1 = rotr32(W[i-2u],17u) ^ rotr32(W[i-2u],19u) ^ (W[i-2u] >> 10u);
+    W[i] = W[i-16u] + s0 + W[i-7u] + s1;
+  }
+
+  var H: array<u32,8> = array<u32,8>(0x6a09e667u,0xbb67ae85u,0x3c6ef372u,0xa54ff53au,0x510e527fu,0x9b05688cu,0x1f83d9abu,0x5be0cd19u);
+  var a=H[0]; var bb=H[1]; var c=H[2]; var d=H[3]; var e=H[4]; var f=H[5]; var g=H[6]; var h=H[7];
+  for (var i = 0u; i < 64u; i = i + 1u) {
+    let S1 = rotr32(e,6u) ^ rotr32(e,11u) ^ rotr32(e,25u);
+    let ch = (e & f) ^ ((~e) & g);
+    let t1 = h + S1 + ch + SHA_K[i] + W[i];
+    let S0 = rotr32(a,2u) ^ rotr32(a,13u) ^ rotr32(a,22u);
+    let maj = (a & bb) ^ (a & c) ^ (bb & c);
+    let t2 = S0 + maj;
+    h=g; g=f; f=e; e=d+t1;
+    d=c; c=bb; bb=a; a=t1+t2;
+  }
+  H[0]=H[0]+a; H[1]=H[1]+bb; H[2]=H[2]+c; H[3]=H[3]+d;
+  H[4]=H[4]+e; H[5]=H[5]+f; H[6]=H[6]+g; H[7]=H[7]+h;
+  return H;
+}
+
+// ---- RIPEMD-160, single 64-byte block (fixed 32-byte SHA-256 digest input) ----
+const RMD_ZL: array<u32,80> = array<u32,80>(
+  0u,1u,2u,3u,4u,5u,6u,7u,8u,9u,10u,11u,12u,13u,14u,15u,
+  7u,4u,13u,1u,10u,6u,15u,3u,12u,0u,9u,5u,2u,14u,11u,8u,
+  3u,10u,14u,4u,9u,15u,8u,1u,2u,7u,0u,6u,13u,11u,5u,12u,
+  1u,9u,11u,10u,0u,8u,12u,4u,13u,3u,7u,15u,14u,5u,6u,2u,
+  4u,0u,5u,9u,7u,12u,2u,10u,14u,1u,3u,8u,11u,6u,15u,13u
+);
+const RMD_ZR: array<u32,80> = array<u32,80>(
+  5u,14u,7u,0u,9u,2u,11u,4u,13u,6u,15u,8u,1u,10u,3u,12u,
+  6u,11u,3u,7u,0u,13u,5u,10u,14u,15u,8u,12u,4u,9u,1u,2u,
+  15u,5u,1u,3u,7u,14u,6u,9u,11u,8u,12u,2u,10u,0u,4u,13u,
+  8u,6u,4u,1u,3u,11u,15u,0u,5u,12u,2u,13u,9u,7u,10u,14u,
+  12u,15u,10u,4u,1u,5u,8u,7u,6u,2u,13u,14u,0u,3u,9u,11u
+);
+const RMD_SL: array<u32,80> = array<u32,80>(
+  11u,14u,15u,12u,5u,8u,7u,9u,11u,13u,14u,15u,6u,7u,9u,8u,
+  7u,6u,8u,13u,11u,9u,7u,15u,7u,12u,15u,9u,11u,7u,13u,12u,
+  11u,13u,6u,7u,14u,9u,13u,15u,14u,8u,13u,6u,5u,12u,7u,5u,
+  11u,12u,14u,15u,14u,15u,9u,8u,9u,14u,5u,6u,8u,6u,5u,12u,
+  9u,15u,5u,11u,6u,8u,13u,12u,5u,12u,13u,14u,11u,8u,5u,6u
+);
+const RMD_SR: array<u32,80> = array<u32,80>(
+  8u,9u,9u,11u,13u,15u,15u,5u,7u,7u,8u,11u,14u,14u,12u,6u,
+  9u,13u,15u,7u,12u,8u,9u,11u,7u,7u,12u,7u,6u,15u,13u,11u,
+  9u,7u,15u,11u,8u,6u,6u,14u,12u,13u,5u,14u,13u,13u,7u,5u,
+  15u,5u,8u,11u,14u,14u,6u,14u,6u,9u,12u,9u,12u,5u,15u,8u,
+  8u,5u,12u,9u,12u,5u,14u,6u,8u,13u,6u,5u,15u,13u,11u,11u
+);
+const RMD_HL: array<u32,5> = array<u32,5>(0x00000000u,0x5a827999u,0x6ed9eba1u,0x8f1bbcdcu,0xa953fd4eu);
+const RMD_HR: array<u32,5> = array<u32,5>(0x50a28be6u,0x5c4dd124u,0x6d703ef3u,0x7a6d76e9u,0x00000000u);
+
+fn rmdF(j: u32, x: u32, y: u32, z: u32) -> u32 {
+  if (j < 16u) { return x ^ y ^ z; }
+  if (j < 32u) { return (x & y) | ((~x) & z); }
+  if (j < 48u) { return (x | (~y)) ^ z; }
+  if (j < 64u) { return (x & z) | (y & (~z)); }
+  return x ^ (y | (~z));
+}
+
+fn ripemd160_32(H: array<u32,8>) -> array<u32,5> {
+  var X: array<u32,16>;
+  for (var i = 0u; i < 16u; i = i + 1u) { X[i] = 0u; }
+  for (var i = 0u; i < 8u; i = i + 1u) { X[i] = bswap32(H[i]); }
+  X[8] = 0x80u;
+  X[14] = 256u;
+
+  var h0=0x67452301u; var h1=0xefcdab89u; var h2=0x98badcfeu; var h3=0x10325476u; var h4=0xc3d2e1f0u;
+  var al=h0; var bl=h1; var cl=h2; var dl=h3; var el=h4;
+  var ar=h0; var br=h1; var cr=h2; var dr=h3; var er=h4;
+
+  for (var j = 0u; j < 80u; j = j + 1u) {
+    let round = j / 16u;
+    var t = al + rmdF(j, bl, cl, dl) + X[RMD_ZL[j]] + RMD_HL[round];
+    t = rotl32(t, RMD_SL[j]) + el;
+    al=el; el=dl; dl=rotl32(cl,10u); cl=bl; bl=t;
+
+    var t2 = ar + rmdF(79u - j, br, cr, dr) + X[RMD_ZR[j]] + RMD_HR[round];
+    t2 = rotl32(t2, RMD_SR[j]) + er;
+    ar=er; er=dr; dr=rotl32(cr,10u); cr=br; br=t2;
+  }
+
+  let t = h1 + cl + dr;
+  h1 = h2 + dl + er;
+  h2 = h3 + el + ar;
+  h3 = h4 + al + br;
+  h4 = h0 + bl + cr;
+  h0 = t;
+  return array<u32,5>(h0,h1,h2,h3,h4);
+}
+
+@group(0) @binding(0) var<storage, read> privkeys: array<u32>;
+@group(0) @binding(1) var<storage, read> combTable: array<u32>;
+@group(0) @binding(2) var<storage, read_write> outbuf: array<u32>;
+@group(0) @binding(3) var<uniform> params: vec4<u32>; // params.x = real key count (privkeys is padded to a multiple of WG_SIZE)
+
+const WG_SIZE: u32 = 128u;
+
+// ---- Montgomery batch inversion, shared across one workgroup ----
+// Instead of every thread paying for its own 256-squaring modular inverse (modpowP2),
+// the whole workgroup computes ONE inverse and every thread "peels" its own Z^-1 out of
+// prefix/suffix products. This is mathematically exact, not an approximation:
+//   invZ[i] = (Z[0]*..*Z[i-1]) * (Z[i+1]*..*Z[n-1]) * inverse(Z[0]*..*Z[n-1])
+var<workgroup> shZ: array<array<u32,8>, WG_SIZE>;
+var<workgroup> shPrefix: array<array<u32,8>, WG_SIZE>;
+var<workgroup> shSuffix: array<array<u32,8>, WG_SIZE>;
+var<workgroup> shFinalInv: array<u32,8>;
+
+@compute @workgroup_size(128)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
+  let idx = gid.x;
+  let count = params.x;
+
+  // Padding threads (idx >= count) still run the full point multiplication with a safe
+  // dummy key so they can contribute a valid, nonzero Z to the workgroup's shared batch
+  // inversion — skipping them here would corrupt every real thread's result in the group.
+  var k: array<u32,8>;
+  if (idx < count) {
+    for (var i = 0u; i < 8u; i = i + 1u) { k[i] = privkeys[idx*8u + i]; }
+  } else {
+    k = u32to8(1u);
+  }
+
+  let pt = scalarMultCombGJac(k);
+  shZ[lid] = pt.Z;
+  workgroupBarrier();
+
+  if (lid == 0u) {
+    shPrefix[0] = shZ[0];
+    for (var i = 1u; i < WG_SIZE; i = i + 1u) { shPrefix[i] = mulmod(shPrefix[i-1u], shZ[i]); }
+    shSuffix[WG_SIZE - 1u] = shZ[WG_SIZE - 1u];
+    for (var ii = 1u; ii < WG_SIZE; ii = ii + 1u) {
+      let i = WG_SIZE - 1u - ii;
+      shSuffix[i] = mulmod(shZ[i], shSuffix[i+1u]);
+    }
+    shFinalInv = modpowP2(shPrefix[WG_SIZE - 1u]);
+  }
+  workgroupBarrier();
+
+  var left: array<u32,8>;
+  if (lid == 0u) { left = u32to8(1u); } else { left = shPrefix[lid - 1u]; }
+  var right: array<u32,8>;
+  if (lid == WG_SIZE - 1u) { right = u32to8(1u); } else { right = shSuffix[lid + 1u]; }
+  let Zinv = mulmod(mulmod(left, right), shFinalInv);
+
+  if (idx >= count) { return; }
+
   let Zinv2 = mulmod(Zinv, Zinv);
   let Zinv3 = mulmod(Zinv2, Zinv);
   let x = mulmod(pt.X, Zinv2);
   let y = mulmod(pt.Y, Zinv3);
-  var out: array<array<u32,8>,2>;
-  out[0] = x; out[1] = y;
-  return out;
-}
 
-@group(0) @binding(0) var<storage, read> privkeys: array<u32>;
-@group(0) @binding(1) var<storage, read_write> pubkeys: array<u32>;
+  let prefixByte = select(3u, 2u, (y[0] & 1u) == 0u);
+  let H = sha256_33(prefixByte, x);
+  let hash = ripemd160_32(H);
 
-@compute @workgroup_size(64)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let idx = gid.x;
-  let count = arrayLength(&privkeys) / 8u;
-  if (idx >= count) { return; }
-
-  var k: array<u32,8>;
-  for (var i = 0u; i < 8u; i = i + 1u) { k[i] = privkeys[idx*8u + i]; }
-
-  let xy = scalarMultG(k);
-
-  for (var i = 0u; i < 8u; i = i + 1u) {
-    pubkeys[idx*16u + i]      = xy[0][i];
-    pubkeys[idx*16u + 8u + i] = xy[1][i];
-  }
+  let outBase = idx * 21u;
+  for (var i = 0u; i < 8u; i = i + 1u) { outbuf[outBase + i] = x[i]; }
+  for (var i = 0u; i < 8u; i = i + 1u) { outbuf[outBase + 8u + i] = y[i]; }
+  for (var i = 0u; i < 5u; i = i + 1u) { outbuf[outBase + 16u + i] = hash[i]; }
 }
 `;
 
 // =====================================================================================
 // WebGPU plumbing
 // =====================================================================================
-let gpuDevice = null, gpuPipeline = null;
+let gpuDevice = null, gpuPipeline = null, tableBuffer = null;
 
 async function initWebGPU() {
   const statusEl = document.getElementById('gpuStatus');
@@ -815,7 +1083,18 @@ async function initWebGPU() {
       layout: 'auto',
       compute: { module, entryPoint: 'main' }
     });
-    statusEl.textContent = 'WebGPU actief — shader gecompileerd';
+    statusEl.textContent = 'WebGPU actief — shader gecompileerd, comb-tabel wordt voorbereid…';
+
+    const table = buildPrecomputedTable((done, total) => {
+      statusEl.textContent = `WebGPU actief — comb-tabel: rij ${done}/${total}…`;
+    });
+    tableBuffer = gpuDevice.createBuffer({
+      size: table.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    });
+    gpuDevice.queue.writeBuffer(tableBuffer, 0, table);
+
+    statusEl.textContent = 'WebGPU actief — shader + comb-tabel gereed';
     dotEl.classList.add('on');
     return true;
   } catch (e) {
@@ -825,11 +1104,21 @@ async function initWebGPU() {
   }
 }
 
-async function runScalarMultBatch(privKeyBytesArray) {
+const WORKGROUP_SIZE = 128;
+
+async function runKernelBatch(privKeyBytesArray) {
   const count = privKeyBytesArray.length;
-  const inData = new Uint32Array(count * 8);
+  const paddedCount = Math.ceil(count / WORKGROUP_SIZE) * WORKGROUP_SIZE;
+
+  // Padded to a full workgroup: the tail slots get a safe nonzero dummy key (1) so every
+  // thread in the last workgroup can validly participate in the shared batch inversion,
+  // even though only the first `count` results are ever written out or read back.
+  const inData = new Uint32Array(paddedCount * 8);
   for (let i = 0; i < count; i++) {
     inData.set(bytesToLimbsLE(privKeyBytesArray[i]), i*8);
+  }
+  for (let i = count; i < paddedCount; i++) {
+    inData[i*8] = 1;
   }
 
   const inBuf = gpuDevice.createBuffer({
@@ -837,7 +1126,13 @@ async function runScalarMultBatch(privKeyBytesArray) {
   });
   gpuDevice.queue.writeBuffer(inBuf, 0, inData);
 
-  const outSize = count * 16 * 4;
+  const paramsData = new Uint32Array([count, 0, 0, 0]);
+  const paramsBuf = gpuDevice.createBuffer({
+    size: paramsData.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+  });
+  gpuDevice.queue.writeBuffer(paramsBuf, 0, paramsData);
+
+  const outSize = count * 21 * 4;
   const outBuf = gpuDevice.createBuffer({
     size: outSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
   });
@@ -849,7 +1144,9 @@ async function runScalarMultBatch(privKeyBytesArray) {
     layout: gpuPipeline.getBindGroupLayout(0),
     entries: [
       { binding: 0, resource: { buffer: inBuf } },
-      { binding: 1, resource: { buffer: outBuf } },
+      { binding: 1, resource: { buffer: tableBuffer } },
+      { binding: 2, resource: { buffer: outBuf } },
+      { binding: 3, resource: { buffer: paramsBuf } },
     ]
   });
 
@@ -857,7 +1154,7 @@ async function runScalarMultBatch(privKeyBytesArray) {
   const pass = encoder.beginComputePass();
   pass.setPipeline(gpuPipeline);
   pass.setBindGroup(0, bindGroup);
-  pass.dispatchWorkgroups(Math.ceil(count / 64));
+  pass.dispatchWorkgroups(paddedCount / WORKGROUP_SIZE);
   pass.end();
   encoder.copyBufferToBuffer(outBuf, 0, readBuf, 0, outSize);
   gpuDevice.queue.submit([encoder.finish()]);
@@ -866,21 +1163,32 @@ async function runScalarMultBatch(privKeyBytesArray) {
   const result = new Uint32Array(readBuf.getMappedRange().slice(0));
   readBuf.unmap();
 
-  inBuf.destroy(); outBuf.destroy(); readBuf.destroy();
+  inBuf.destroy(); outBuf.destroy(); readBuf.destroy(); paramsBuf.destroy();
 
-  const points = [];
+  const items = [];
   for (let i = 0; i < count; i++) {
-    const xLimbs = result.slice(i*16, i*16+8);
-    const yLimbs = result.slice(i*16+8, i*16+16);
-    points.push({ x: limbsLEToBytes(xLimbs), y: limbsLEToBytes(yLimbs) });
+    const base = i * 21;
+    const xLimbs = result.slice(base, base+8);
+    const yLimbs = result.slice(base+8, base+16);
+    const hLimbs = result.slice(base+16, base+21);
+    const hashBytes = new Uint8Array(20);
+    for (let w = 0; w < 5; w++) {
+      const v = hLimbs[w];
+      hashBytes[w*4]   = v & 0xff;
+      hashBytes[w*4+1] = (v >>> 8) & 0xff;
+      hashBytes[w*4+2] = (v >>> 16) & 0xff;
+      hashBytes[w*4+3] = (v >>> 24) & 0xff;
+    }
+    items.push({ x: limbsLEToBytes(xLimbs), y: limbsLEToBytes(yLimbs), hash160: hashBytes });
   }
-  return points;
+  return items;
 }
 
 // =====================================================================================
 // Self-test — known (priv, address) pairs, cross-verified independently in Python
 // against a trusted affine-coordinate reference and, for k=1 and k=2, against public
-// Bitcoin data (Puzzle #1 / the historical "directory.io" leak).
+// Bitcoin data (Puzzle #1 / the historical "directory.io" leak). Each row's GPU hash160
+// is also independently recomputed on the CPU from the same (x,y) as a second check.
 // =====================================================================================
 const TEST_VECTORS = [
   { k: 1n,    addr: "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH" },
@@ -890,11 +1198,6 @@ const TEST_VECTORS = [
   { k: 256n,  addr: "12U7BmtQsKowQYEfrZ5SeFjsSMARUr2fSi" },
   { k: 1000n, addr: "17TQCPEv5zgPyCwcRFh87nGgfNvXcrYWJX" },
 ];
-
-function bigIntTo32Bytes(v) {
-  const hex = v.toString(16).padStart(64, '0');
-  return hexToBytes(hex);
-}
 
 async function runSelfTest() {
   const btn = document.getElementById('btnTest');
@@ -907,27 +1210,29 @@ async function runSelfTest() {
   table.style.display = 'table';
 
   try {
-    if (!gpuDevice) {
+    if (!gpuDevice || !tableBuffer) {
       const ok = await initWebGPU();
       if (!ok) { summary.textContent = 'Geen WebGPU beschikbaar — kan niet testen.'; btn.disabled = false; return false; }
     }
     const privBytes = TEST_VECTORS.map(t => bigIntTo32Bytes(t.k));
-    const points = await runScalarMultBatch(privBytes);
+    const items = await runKernelBatch(privBytes);
 
     let allOk = true;
-    points.forEach((pt, i) => {
-      const pub = compressedPubkeyFromXY(pt.x, pt.y[31]);
-      const addr = addressFromCompressedPubkey(pub);
+    items.forEach((it, i) => {
+      const gpuAddr = addressFromHash160(it.hash160);
+      const pub = compressedPubkeyFromXY(it.x, it.y[31]);
+      const cpuAddr = addressFromCompressedPubkey(pub); // independent CPU hash160 cross-check
       const expected = TEST_VECTORS[i].addr;
-      const ok = addr === expected;
+      const ok = (gpuAddr === expected) && (cpuAddr === expected);
       allOk = allOk && ok;
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${TEST_VECTORS[i].k}</td><td class="addr">${addr}</td><td>${expected}</td><td class="${ok?'ok':'bad'}">${ok?'✓ klopt':'✗ FOUT'}</td>`;
+      let statusHtml = ok ? '✓ klopt' : (gpuAddr !== cpuAddr ? '✗ FOUT (GPU-hash ≠ CPU-hash)' : '✗ FOUT');
+      tr.innerHTML = `<td>${TEST_VECTORS[i].k}</td><td class="addr">${gpuAddr}</td><td>${expected}</td><td class="${ok?'ok':'bad'}">${statusHtml}</td>`;
       tbody.appendChild(tr);
     });
 
     summary.innerHTML = allOk
-      ? '<span class="ok">Alle testvectoren kloppen — de shader rekent correct.</span>'
+      ? '<span class="ok">Alle testvectoren kloppen — comb-tabel en on-GPU hash160 rekenen correct.</span>'
       : '<span class="bad">Er zit een fout in de shader-berekening. Vertrouw de gegenereerde adressen hieronder niet.</span>';
     btn.disabled = false;
     return allOk;
@@ -966,7 +1271,7 @@ async function generateKeys() {
   lastCsvRows = [{ header: true }];
 
   try {
-    if (!gpuDevice) {
+    if (!gpuDevice || !tableBuffer) {
       const ok = await initWebGPU();
       if (!ok) { alert('WebGPU is niet beschikbaar in deze browser/machine.'); btn.disabled = false; progress.style.display='none'; return; }
     }
@@ -976,15 +1281,15 @@ async function generateKeys() {
     for (let i = 0; i < count; i++) privKeys.push(randomPrivateKeyBytes());
     bar.style.width = '30%';
 
-    const points = await runScalarMultBatch(privKeys);
+    const items = await runKernelBatch(privKeys);
     bar.style.width = '80%';
 
     const rows = [];
     for (let i = 0; i < count; i++) {
       const priv = privKeys[i];
-      const pt = points[i];
-      const pub = compressedPubkeyFromXY(pt.x, pt.y[31]);
-      const addr = addressFromCompressedPubkey(pub);
+      const it = items[i];
+      const pub = compressedPubkeyFromXY(it.x, it.y[31]);
+      const addr = addressFromHash160(it.hash160);
       const wif = wifCompressed(priv);
       rows.push({ i, wif, addr, pub: bytesToHex(pub), priv: bytesToHex(priv) });
     }
