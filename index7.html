@@ -815,7 +815,7 @@
             gpuDevice.queue.submit([encoder.finish()]);
 
             await readBuf.mapAsync(GPUMapMode.READ);
-            const result = new Uint32Array(readBuf.getMappedRange().slice(0));
+            const result = new Uint32Array(readBuf.getMappedRange());
             readBuf.unmap();
 
             inBuf.destroy(); outBuf.destroy(); readBuf.destroy();
@@ -963,16 +963,13 @@
             const targetH160 = hexToBytes(targetH160Hex);
             const targetInt0 = new DataView(targetH160.buffer).getUint32(0, true);
 
-            // Genereer private keys
             const privKeys = [];
             for (let i = 0; i < numKeys; i++) {
                 privKeys.push(randomPrivateKeyBytes());
             }
 
-            // GPU berekening
             const points = await runScalarMultBatch(privKeys);
 
-            // CPU hashing en verificatie
             let foundMatch = false;
             for (let i = 0; i < numKeys; i++) {
                 if (stopRequested) return;
@@ -981,11 +978,9 @@
                 const pub = compressedPubkeyFromXY(pt.x, pt.y[31]);
                 const h160 = hash160(pub);
                 
-                // Fast check: vergelijk eerste 4 bytes
                 const h160View = new DataView(h160.buffer);
                 if (h160View.getUint32(0, true) !== targetInt0) continue;
                 
-                // Volledige check
                 let match = true;
                 for (let k = 4; k < 20; k++) {
                     if (h160[k] !== targetH160[k]) { match = false; break; }
@@ -1030,7 +1025,7 @@
             setStatus('⚡ WebGPU Scan Actief', 'running');
             log('WebGPU Turbo Scan gestart.', 'ev-epoch');
 
-            const batchSize = 100000; // 100k keys per GPU batch
+            const batchSize = 100000;
             const numBatches = Math.ceil(targetLimit / batchSize);
 
             try {
