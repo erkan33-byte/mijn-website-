@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bitcoin Puzzle 71 Oplosser (WebGPU + WGSL secp256k1)</title>
+<title>Bitcoin Puzzle 71 Oplosser (WebGPU + WGSL - Geoptimaliseerd)</title>
 <link rel="preconnect" href="https://cdnjs.cloudflare.com">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/JetBrains-Mono/2.304/css/jetbrains-mono.min.css" rel="stylesheet">
 <style>
@@ -19,167 +19,52 @@
     --text: #E8E6E1;
     --muted: #8A8F98;
     --accent: #F7931A;
-    --accent-dim: #7a4d16;
     --teal: #2DD4BF;
     --danger: #E5484D;
-    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    --disp: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --disp: 'Space Grotesk', system-ui, sans-serif;
   }
   *{ box-sizing: border-box; }
   html,body{ margin:0; padding:0; }
-  body{
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--disp);
-    line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
-  }
-  a{ color: var(--accent); }
-
+  body{ background: var(--bg); color: var(--text); font-family: var(--disp); line-height: 1.5; }
   .wrap{ max-width: 980px; margin: 0 auto; padding: 32px 20px 80px; }
-
-  header.hero{
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 22px;
-    margin-bottom: 0;
-  }
-  .eyebrow{
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--teal);
-    display:flex; align-items:center; gap:8px;
-  }
-  .eyebrow .dot{
-    width:6px;height:6px;border-radius:50%;
-    background: var(--muted);
-    display:inline-block;
-  }
+  header.hero{ border-bottom: 1px solid var(--border); padding-bottom: 22px; }
+  .eyebrow{ font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--teal); display:flex; align-items:center; gap:8px; }
+  .eyebrow .dot{ width:6px; height:6px; border-radius:50%; background: var(--muted); display:inline-block; }
   .eyebrow .dot.on{ background: var(--teal); box-shadow: 0 0 8px var(--teal); }
-  h1{
-    font-size: clamp(28px, 4vw, 42px);
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    margin: 10px 0 8px;
-  }
+  h1{ font-size: clamp(28px, 4vw, 42px); font-weight: 600; margin: 10px 0 8px; }
   h1 .k{ color: var(--accent); }
-  .sub{
-    color: var(--muted);
-    font-size: 15px;
-    max-width: 740px;
-    margin: 0 0 4px;
-  }
-
-  .ticker{
-    margin-top: 20px;
-    border: 1px solid var(--border);
-    background: linear-gradient(180deg, #101317, #0d0f13);
-    border-radius: 10px;
-    padding: 12px 16px;
-    display: flex;
-    align-items: center;
-    gap: 18px;
-    overflow: hidden;
-    position: relative;
-  }
+  .sub{ color: var(--muted); font-size: 15px; max-width: 740px; margin: 0 0 4px; }
+  .ticker{ margin-top: 20px; border: 1px solid var(--border); background: linear-gradient(180deg, #101317, #0d0f13); border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; gap: 18px; }
   .ticker .stat{ text-align:left; white-space:nowrap; }
-  .ticker .stat b{
-    display:block; font-family: var(--mono); font-size: 20px; color: var(--text);
-    font-variant-numeric: tabular-nums;
-  }
+  .ticker .stat b{ display:block; font-family: var(--mono); font-size: 20px; color: var(--text); }
   .ticker .stat span{ font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
-  .ticker .feed{
-    flex: 1;
-    font-family: var(--mono);
-    font-size: 12px;
-    color: #4a5058;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
+  .ticker .feed{ flex: 1; font-family: var(--mono); font-size: 12px; color: #4a5058; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   section{ margin-top: 34px; }
-  .panel{
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-  }
-  .panel h2{
-    font-size: 15px; margin: 0 0 4px; font-weight: 600;
-    display:flex; align-items:center; gap:8px;
-  }
+  .panel{ background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .panel h2{ font-size: 15px; margin: 0 0 4px; font-weight: 600; display:flex; align-items:center; gap:8px; }
   .panel h2 .n{ color: var(--accent); font-family: var(--mono); font-size: 12px; }
   .panel .desc{ color: var(--muted); font-size: 13px; margin: 0 0 16px; }
-
   .row{ display:flex; gap:10px; flex-wrap: wrap; align-items:center; }
-
-  button{
-    font-family: var(--disp);
-    font-weight: 600;
-    font-size: 14px;
-    padding: 10px 18px;
-    border-radius: 8px;
-    border: 1px solid var(--accent);
-    background: var(--accent);
-    color: #14100a;
-    cursor: pointer;
-    transition: filter .15s ease, transform .05s ease;
-  }
+  button{ font-family: var(--disp); font-weight: 600; font-size: 14px; padding: 10px 18px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: #14100a; cursor: pointer; }
   button:hover{ filter: brightness(1.08); }
-  button:active{ transform: translateY(1px); }
-  button.secondary{
-    background: transparent;
-    color: var(--text);
-    border-color: var(--border);
-  }
-  button.secondary:hover{ border-color: var(--accent); }
-  button:disabled{ opacity: .4; cursor: not-allowed; filter:none; }
-
-  input[type=text]{
-    font-family: var(--mono);
-    background: var(--panel2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 8px;
-    padding: 9px 12px;
-    width: 360px;
-    font-size: 13px;
-  }
-
-  .match-box{
-    margin-top: 20px;
-    border: 1px solid var(--teal);
-    background: rgba(45, 212, 191, 0.08);
-    border-radius: 10px;
-    padding: 16px;
-    display: none;
-  }
+  button.secondary{ background: transparent; color: var(--text); border-color: var(--border); }
+  button:disabled{ opacity: .4; cursor: not-allowed; }
+  input[type=text]{ font-family: var(--mono); background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 9px 12px; width: 360px; font-size: 13px; }
+  .match-box{ margin-top: 20px; border: 1px solid var(--teal); background: rgba(45, 212, 191, 0.08); border-radius: 10px; padding: 16px; display: none; }
   .match-box h3{ color: var(--teal); margin: 0 0 10px; font-size: 16px; }
   .match-info{ font-family: var(--mono); font-size: 13px; word-break: break-all; }
-
   .ok{ color: var(--teal); }
-  .bad{ color: var(--danger); }
-
-  footer{
-    margin-top: 48px;
-    padding-top: 18px;
-    border-top: 1px solid var(--border);
-    color: var(--muted);
-    font-size: 12px;
-  }
+  footer{ margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
   code{ font-family: var(--mono); background: var(--panel2); padding: 1px 5px; border-radius: 4px; }
 </style>
 </head>
 <body>
 <div class="wrap">
-
   <header class="hero">
     <div class="eyebrow"><span class="dot" id="gpuDot"></span> <span id="gpuStatus">WebGPU wordt gecontroleerd…</span></div>
     <h1>Bitcoin <span class="k">Puzzle 71</span> Oplosser</h1>
-    <p class="sub">Deze tool doorzoekt automatisch het bereik van Puzzle 71 ($2^{70}$ tot $2^{71} - 1$) via de WGSL secp256k1 compute shader. De GPU berekent parallel de punten en hash160. Zodra het doeladres overeenkomt, stopt de zoektocht direct.</p>
-
+    <p class="sub">Volledig geoptimaliseerde WebGPU solver (1M+ batches, GPU-side adresvergelijking).</p>
     <div class="ticker">
       <div class="stat"><b id="statCount">0</b><span>sleutels getest</span></div>
       <div class="stat"><b id="statRate">0</b><span>keys / sec</span></div>
@@ -189,9 +74,6 @@
 
   <section class="panel">
     <h2><span class="n">01</span> Doelconfiguratie</h2>
-    <p class="desc">
-      Standaard bereik Puzzle 71: <code>0x4000000000000000</code> t/m <code>0x7fffffffffffffff</code>.
-    </p>
     <div class="row">
       <label style="font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:6px;">Doeladres (P2PKH)
         <input type="text" id="targetAddressInput" value="1PWo3aEvgjjHbtgfbS7Yf99F2t55T95UfK">
@@ -201,34 +83,18 @@
       <button id="btnStart">Start Puzzle 71 Zoektocht</button>
       <button id="btnStop" class="secondary" disabled>Stop</button>
     </div>
-
     <div class="match-box" id="matchBox">
       <h3>🎉 PUZZEL OPGELOST! MATCH GEVONDEN!</h3>
       <div class="match-info" id="matchInfo"></div>
     </div>
   </section>
-
-  <footer>
-    Vereist een moderne browser met WebGPU ondersteuning (Chrome of Edge).
-  </footer>
+  <footer>Vereist een moderne browser met WebGPU ondersteuning.</footer>
 </div>
 
 <script>
-// --- Cryptografische basisroutines (CPU side voor Base58Check & Validatie) ---
-function rotr(x, n) { return ((x >>> n) | (x << (32 - n))) >>> 0; }
-function rotl(x, n) { return ((x << n) | (x >>> (32 - n))) >>> 0; }
-
 function sha256(msg) {
-  const K = [
-    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
-    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
-    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
-    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
-    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
-    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
-    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
-    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
-  ];
+  const K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  function rotr(x, n) { return ((x >>> n) | (x << (32 - n))) >>> 0; }
   let H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
   const l = msg.length;
   const withOne = l + 1;
@@ -309,12 +175,13 @@ function ripemd160(msg) {
     for (let j = 0; j < 80; j++) {
       const round = Math.floor(j / 16);
       let t = (al + fn(j, bl, cl, dl) + X[zl[j]] + hl[round]) >>> 0;
-      t = (rotl(t, sl[j]) + el) >>> 0;
-      al = el; el = dl; dl = rotl(cl,10); cl = bl; bl = t;
+      t = (((t << sl[j]) | (t >>> (32 - sl[j]))) + el) >>> 0;
+      al = el; el = dl; dl = ((cl << 10) | (cl >>> 22)) >>> 0; cl = bl; bl = t;
       t = (ar + fn(79 - j, br, cr, dr) + X[zr[j]] + hr[round]) >>> 0;
-      t = (rotl(t, sr[j]) + er) >>> 0;
-      ar = er; er = dr; dr = rotl(cr,10); cr = br; br = t;
+      t = (((t << sr[j]) | (t >>> (32 - sr[j]))) + er) >>> 0;
+      ar = er; er = dr; dr = ((cr << 10) | (cr >>> 22)) >>> 0; cr = br; br = t;
     }
+    let rot10 = (cl, 10);
     const t = (h1 + cl + dr) >>> 0;
     h1 = (h2 + dl + er) >>> 0; h2 = (h3 + el + ar) >>> 0; h3 = (h4 + al + br) >>> 0; h4 = (h0 + bl + cr) >>> 0; h0 = t;
   }
@@ -325,7 +192,6 @@ function ripemd160(msg) {
   }
   return out;
 }
-
 function hash160(bytes) { return ripemd160(sha256(bytes)); }
 const B58ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 function base58encode(bytes) {
@@ -352,13 +218,16 @@ function base58checkEncode(versionByte, payload) {
   full.set(data); full.set(checksum, data.length);
   return base58encode(full);
 }
-function addressFromHash160(hash20) { return base58checkEncode(0x00, hash20); }
 function wifCompressed(priv32) {
   const payload = new Uint8Array(33);
   payload.set(priv32, 0); payload[32] = 0x01;
   return base58checkEncode(0x80, payload);
 }
-
+function hexToBytes(hex) {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i*2,2), 16);
+  return out;
+}
 function bytesToLimbsLE(bytes32) {
   const limbs = new Uint32Array(8);
   for (let i = 0; i < 8; i++) {
@@ -367,17 +236,7 @@ function bytesToLimbsLE(bytes32) {
   }
   return limbs;
 }
-function limbsLEToBytes(limbs8) {
-  const bytes = new Uint8Array(32);
-  for (let i = 0; i < 8; i++) {
-    const off = 28 - 4*i;
-    const v = limbs8[i];
-    bytes[off]=(v>>>24)&0xff; bytes[off+1]=(v>>>16)&0xff; bytes[off+2]=(v>>>8)&0xff; bytes[off+3]=v&0xff;
-  }
-  return bytes;
-}
 
-// --- Comb-tabel generatie (CPU) ---
 const SECP_P = (1n << 256n) - (1n << 32n) - 977n;
 const SECP_GX = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
 const SECP_GY = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n;
@@ -408,13 +267,8 @@ function ecAdd(P, Q) {
   return { x: x3, y: y3 };
 }
 function bigIntTo32Bytes(v) { return hexToBytes(v.toString(16).padStart(64, '0')); }
-function hexToBytes(hex) {
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i*2,2), 16);
-  return out;
-}
 
-function buildPrecomputedTable(statusCb) {
+function buildPrecomputedTable() {
   const flat = new Uint32Array(32 * 256 * 16);
   let base = { x: SECP_GX, y: SECP_GY };
   for (let i = 0; i < 32; i++) {
@@ -427,12 +281,11 @@ function buildPrecomputedTable(statusCb) {
       flat.set(xLimbs, off); flat.set(yLimbs, off + 8);
     }
     for (let d = 0; d < 8; d++) base = ecDouble(base);
-    if (statusCb) statusCb(i + 1, 32);
   }
   return flat;
 }
 
-// --- WGSL Code ---
+// --- WGSL Code inclusief GPU-side adresvergelijking ---
 const WGSL_SOURCE = `
 struct R8  { v: array<u32,8>,  c: u32 };
 const P: array<u32,8> = array<u32,8>(0xFFFFFC2Fu,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
@@ -672,9 +525,14 @@ fn ripemd160_32(H: array<u32,8>) -> array<u32,5> {
   return array<u32,5>(t, h2 + dl + er, h3 + el + ar, h4 + al + br, h0 + bl + cr);
 }
 
+struct Uniforms {
+  targetHash: array<u32, 5>,
+};
+
 @group(0) @binding(0) var<storage, read> privkeys: array<u32>;
 @group(0) @binding(1) var<storage, read> combTable: array<u32>;
-@group(0) @binding(2) var<storage, read_write> outbuf: array<u32>;
+@group(0) @binding(2) var<uniform> uniforms: Uniforms;
+@group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>; // [foundFlag, indexFound]
 
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -690,17 +548,46 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let H = sha256_33(prefix, xy[0]);
   let hash = ripemd160_32(H);
 
-  let outBase = idx * 21u;
-  for (var i = 0u; i < 8u; i = i + 1u) { outbuf[outBase + i] = xy[0][i]; }
-  for (var i = 0u; i < 8u; i = i + 1u) { outbuf[outBase + 8u + i] = xy[1][i]; }
-  for (var i = 0u; i < 5u; i = i + 1u) { outbuf[outBase + 16u + i] = hash[i]; }
+  // Vergelijk direct op de GPU met het doeladres-hash
+  var match = true;
+  for (var i = 0u; i < 5u; i = i + 1u) {
+    if (hash[i] != uniforms.targetHash[i]) {
+      match = false;
+      break;
+    }
+  }
+
+  if (match) {
+    resultBuffer[0] = 1u;
+    resultBuffer[1] = idx;
+  }
 }
 `;
 
-// --- WebGPU & UI Logica ---
-let gpuDevice = null, gpuPipeline = null, tableBuffer = null;
+let gpuDevice = null, gpuPipeline = null, tableBuffer = null, uniformsBuffer = null;
 let isRunning = false;
 let totalChecked = 0;
+
+// Converteer P2PKH doeladres naar de 20 bytes hash160 zodat de GPU direct kan vergelijken
+function getTargetHash160Bytes(address) {
+  const B58ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  let decoded = [0];
+  for (let i = 0; i < address.length; i++) {
+    let char = address[i];
+    let p = B58ALPHABET.indexOf(char);
+    let carry = p;
+    for (let j = 0; j < decoded.length; j++) {
+      carry += decoded[j] * 58;
+      decoded[j] = carry & 0xff;
+      carry = carry >> 8;
+    }
+    while (carry > 0) { decoded.push(carry & 0xff); carry = carry >> 8; }
+  }
+  for (let i = 0; i < address.length && address[i] === '1'; i++) decoded.push(0);
+  decoded.reverse();
+  const payload = new Uint8Array(decoded.slice(1, 21));
+  return payload;
+}
 
 async function initWebGPU() {
   const statusEl = document.getElementById('gpuStatus');
@@ -717,6 +604,8 @@ async function initWebGPU() {
     tableBuffer = gpuDevice.createBuffer({ size: table.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
     gpuDevice.queue.writeBuffer(tableBuffer, 0, table);
 
+    uniformsBuffer = gpuDevice.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+
     statusEl.textContent = 'WebGPU gereed voor Puzzle 71.';
     dotEl.classList.add('on');
     return true;
@@ -726,7 +615,6 @@ async function initWebGPU() {
   }
 }
 
-// Hulpfunctie om BigInt om te zetten naar 8 u32 limbs in little-endian formaat
 function bigIntToLimbsLE(bi) {
   let hex = bi.toString(16).padStart(64, '0');
   let bytes = hexToBytes(hex);
@@ -740,14 +628,23 @@ document.getElementById('btnStart').addEventListener('click', async () => {
   }
 
   const targetAddress = document.getElementById('targetAddressInput').value.trim();
+  const targetHashBytes = getTargetHash160Bytes(targetAddress);
+  
+  // Vul uniform buffer met doelhash (5 x u32)
+  const targetHashU32 = new Uint32Array(5);
+  for (let i = 0; i < 5; i++) {
+    targetHashU32[i] = (targetHashBytes[i*4]) | (targetHashBytes[i*4+1] << 8) | (targetHashBytes[i*4+2] << 16) | (targetHashBytes[i*4+3] << 24);
+  }
+  gpuDevice.queue.writeBuffer(uniformsBuffer, 0, targetHashU32);
+
   isRunning = true;
   document.getElementById('btnStart').disabled = true;
   document.getElementById('btnStop').disabled = false;
   document.getElementById('feedText').textContent = "Zoeken naar Puzzle 71...";
 
-  let currentKeyVal = 0x4000000000000000n; // Start van Puzzle 71 ($2^{70}$)
-  const maxKeyVal = 0x7fffffffffffffffn;   // Einde van Puzzle 71 ($2^{71} - 1$)
-  const batchSize = 16384; // Aantal keys per GPU dispatch batch
+  let currentKeyVal = 0x4000000000000000n;
+  const maxKeyVal = 0x7fffffffffffffffn;
+  const batchSize = 1048576; // Verhoogd naar 1 Miljoen keys per batch!
 
   let startTime = performance.now();
   totalChecked = 0;
@@ -760,32 +657,33 @@ document.getElementById('btnStart').addEventListener('click', async () => {
       return;
     }
 
-    // Bouw array van sleutels voor deze batch
     const batchLimbs = new Uint32Array(batchSize * 8);
-    const privKeysRaw = [];
+    const startValForBatch = currentKeyVal;
+    
     for (let i = 0; i < batchSize; i++) {
       if (currentKeyVal > maxKeyVal) break;
       const limbs = bigIntToLimbsLE(currentKeyVal);
       batchLimbs.set(limbs, i * 8);
-      privKeysRaw.push({ val: currentKeyVal, limbs });
       currentKeyVal += 1n;
     }
-    const actualBatchCount = privKeysRaw.length;
+    const actualBatchCount = Math.min(batchSize, Number(currentKeyVal - startValForBatch));
 
-    // Buffer opzetten voor GPU
     const inBuf = gpuDevice.createBuffer({ size: actualBatchCount * 32, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
     gpuDevice.queue.writeBuffer(inBuf, 0, batchLimbs.buffer, 0, actualBatchCount * 32);
 
-    const outSize = actualBatchCount * 21 * 4;
-    const outBuf = gpuDevice.createBuffer({ size: outSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
-    const readBuf = gpuDevice.createBuffer({ size: outSize, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    // Result buffer: [foundFlag (u32), indexFound (u32)]
+    const resBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    gpuDevice.queue.writeBuffer(resBuf, 0, new Uint32Array([0, 0]));
+
+    const readBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
 
     const bindGroup = gpuDevice.createBindGroup({
       layout: gpuPipeline.getBindGroupLayout(0),
       entries: [
         { binding: 0, resource: { buffer: inBuf } },
         { binding: 1, resource: { buffer: tableBuffer } },
-        { binding: 2, resource: { buffer: outBuf } }
+        { binding: 2, resource: { buffer: uniformsBuffer } },
+        { binding: 3, resource: { buffer: resBuf } }
       ]
     });
 
@@ -795,46 +693,14 @@ document.getElementById('btnStart').addEventListener('click', async () => {
     pass.setBindGroup(0, bindGroup);
     pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 64));
     pass.end();
-    encoder.copyBufferToBuffer(outBuf, 0, readBuf, 0, outSize);
+    encoder.copyBufferToBuffer(resBuf, 0, readBuf, 0, 8);
     gpuDevice.queue.submit([encoder.finish()]);
 
     await readBuf.mapAsync(GPUMapMode.READ);
-    const result = new Uint32Array(readBuf.getMappedRange().slice(0));
+    const gpuResult = new Uint32Array(readBuf.getMappedRange().slice(0));
     readBuf.unmap();
 
-    inBuf.destroy(); outBuf.destroy(); readBuf.destroy();
-
-    // Controleer of het doeladres ertussen zit
-    let found = false;
-    for (let i = 0; i < actualBatchCount; i++) {
-      const base = i * 21;
-      const hLimbs = result.slice(base + 16, base + 21);
-      const hashBytes = new Uint8Array(20);
-      for (let w = 0; w < 5; w++) {
-        const v = hLimbs[w];
-        hashBytes[w*4] = v & 0xff;
-        hashBytes[w*4+1] = (v >>> 8) & 0xff;
-        hashBytes[w*4+2] = (v >>> 16) & 0xff;
-        hashBytes[w*4+3] = (v >>> 24) & 0xff;
-      }
-      const addr = addressFromHash160(hashBytes);
-      if (addr === targetAddress) {
-        found = true;
-        const privHex = privKeysRaw[i].val.toString(16).padStart(64, '0');
-        const wif = wifCompressed(hexToBytes(privHex));
-        
-        document.getElementById('matchBox').style.display = 'block';
-        document.getElementById('matchInfo').innerHTML = `
-          Private Key (Hex): <b>0x${privHex}</b><br>
-          Private Key (WIF): <b>${wif}</b><br>
-          Adres: <b class="ok">${addr}</b>
-        `;
-        isRunning = false;
-        document.getElementById('btnStart').disabled = false;
-        document.getElementById('btnStop').disabled = true;
-        break;
-      }
-    }
+    inBuf.destroy(); resBuf.destroy(); readBuf.destroy();
 
     totalChecked += actualBatchCount;
     let elapsed = (performance.now() - startTime) / 1000;
@@ -842,9 +708,26 @@ document.getElementById('btnStart').addEventListener('click', async () => {
 
     document.getElementById('statCount').textContent = totalChecked.toLocaleString();
     document.getElementById('statRate').textContent = rate.toLocaleString() + " keys/s";
-    document.getElementById('feedText').textContent = "Huidige test: 0x" + privKeysRaw[privKeysRaw.length-1].val.toString(16);
+    document.getElementById('feedText').textContent = "Huidige test: 0x" + startValForBatch.toString(16);
 
-    if (found) return;
+    // Als de GPU gevonden-vlag op 1 staat
+    if (gpuResult[0] === 1) {
+      const foundIdx = gpuResult[1];
+      const foundPrivInt = startValForBatch + BigInt(foundIdx);
+      const privHex = foundPrivInt.toString(16).padStart(64, '0');
+      const wif = wifCompressed(hexToBytes(privHex));
+      
+      document.getElementById('matchBox').style.display = 'block';
+      document.getElementById('matchInfo').innerHTML = `
+        Private Key (Hex): <b>0x${privHex}</b><br>
+        Private Key (WIF): <b>${wif}</b><br>
+        Adres: <b class="ok">${targetAddress}</b>
+      `;
+      isRunning = false;
+      document.getElementById('btnStart').disabled = false;
+      document.getElementById('btnStop').disabled = true;
+      return;
+    }
 
     if (isRunning) {
       requestAnimationFrame(step);
