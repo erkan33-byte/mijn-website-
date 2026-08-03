@@ -481,7 +481,7 @@ fn ripemd160_32(H: array<u32,8>) -> array<u32,5> {
 
   for (var j = 0u; j < 80u; j = j + 1u) {
     let roundL = j / 16u;
-    let roundR = (79u - j) / 16u;
+    let roundR = j / 16u;
 
     let tl = al + rmdF(j, bl, cl, dl) + X[RMD_ZL[j]] + RMD_HL[roundL];
     let rotL = rotl32(tl, RMD_SL[j]) + el;
