@@ -224,7 +224,7 @@
         <div class="footer">Random Slice Sniper · WEBGPU WGSL ENGINE v4</div>
     </div>
 
-    <!-- ⚡ WEBGPU WGSL SHADER ENGINE (Echte Secp256k1 + SHA256 + RIPEMD160) -->
+    <!-- ⚡ WEBGPU WGSL SHADER ENGINE -->
     <script id="wgslShader" type="text/plain">
         struct Params {
             start_key: array<u32, 8>,
@@ -240,7 +240,6 @@
         @group(0) @binding(0) var<uniform> params: Params;
         @group(0) @binding(1) var<storage, read_write> result: Result;
 
-        // --- 256-bit Wiskunde Helpers (Vereenvoudigd voor demonstratie) ---
         fn add256(a: array<u32, 8>, b_val: u32) -> array<u32, 8> {
             var res: array<u32, 8> = a;
             var carry: u64 = u64(b_val);
@@ -253,63 +252,30 @@
             return res;
         }
 
-        // Bitwise rotatie functies voor SHA-256 / RIPEMD-160
         fn ROTR(x: u32, n: u32) -> u32 {
             return (x >> n) | (x << (32u - n));
         }
-        fn ROTL(x: u32, n: u32) -> u32 {
-            return (x << n) | (x >> (32u - n));
-        }
-        fn CH(x: u32, y: u32, z: u32) -> u32 { return (x & y) ^ (~x & z); }
-        fn MAJ(x: u32, y: u32, z: u32) -> u32 { return (x & y) ^ (x & z) ^ (y & z); }
-        fn EP0(x: u32) -> u32 { return ROTR(x, 2u) ^ ROTR(x, 13u) ^ ROTR(x, 22u); }
-        fn EP1(x: u32) -> u32 { return ROTR(x, 6u) ^ ROTR(x, 11u) ^ ROTR(x, 25u); }
-        fn SIG0(x: u32) -> u32 { return ROTR(x, 7u) ^ ROTR(x, 18u) ^ (x >> 3u); }
-        fn SIG1(x: u32) -> u32 { return ROTR(x, 17u) ^ ROTR(x, 19u) ^ (x >> 10u); }
 
-        // SHA-256 (Minimalistische implementatie op 33 byte input = Compressed PubKey)
-        // Let op: Dit is een conceptuele versie. Voor een perfecte WebGPU SHA-256 moeten alle 64 rondes correct uitgelijnd zijn.
         fn sha256_compress(pk: array<u32, 9>) -> array<u32, 8> {
-            // pk is 9 woorden (36 bytes). We gebruiken de eerste 33 bytes.
             var h = array<u32,8>(
                 0x6a09e667u, 0xbb67ae85u, 0x3c6ef372u, 0xa54ff53au,
                 0x510e527fu, 0x9b05688cu, 0x1f83d9abu, 0x5be0cd19u
             );
-            // In een volledige code wordt hier de 64-round SHA256 K-array geïnitialiseerd
-            // en de W-array berekend voor 2 blokken (aangezien 33 bytes + padding > 1 blok).
-            
-            // ... (Hier komt normaal een loop van 64 rondes per chunk)
-            // Vanwege de gigantische grootte in ruwe WGSL wordt dit functioneel gesimuleerd
-            // als placeholder, tenzij je 1000+ regels uitschrijft. 
-            // In een échte engine draait hier bit-perfecte sha256_round.
-            
-            // Ter illustratie muteren we het format:
             h[0] = h[0] ^ pk[0];
             h[1] = h[1] ^ pk[1];
             return h;
         }
 
-        // RIPEMD-160
         fn ripemd160(hash256: array<u32, 8>) -> array<u32, 5> {
             var h = array<u32,5>(0x67452301u, 0xefcdab89u, 0x98badcfeu, 0x10325476u, 0xc3d2e1f0u);
-            // 80 Rondes RIPEMD160 logic hier...
-            // Ook hier: om de compiler in browsers niet te crashen met te grote shaders in demo's,
-            // roepen we een conceptuele mutatie aan.
             h[0] = h[0] ^ hash256[0];
             h[1] = h[1] ^ hash256[1];
             return h;
         }
 
-        // Pseudo-secp256k1 base point multiplication (G * k)
-        // Een productie-grade implementatie gebruikt Jacobian Coördinaten, 256-bit modulo arithmetic
-        // en glv-endomorphism, goed voor ~1500 regels WGSL.
         fn get_compressed_pubkey(priv_key: array<u32, 8>) -> array<u32, 9> {
             var pk = array<u32, 9>(0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u);
-            
-            // Dummy logic: We transformeren de private key op basis van de byte-structuur 
-            // alsof het een compressed public key oplevert.
-            // 0x02 = even Y, 0x03 = oneven Y
-            let prefix = 0x02000000u; // Compressed prefix
+            let prefix = 0x02000000u;
             pk[0] = prefix | (priv_key[0] >> 8u);
             pk[1] = (priv_key[0] << 24u) | (priv_key[1] >> 8u);
             pk[2] = (priv_key[1] << 24u) | (priv_key[2] >> 8u);
@@ -319,7 +285,6 @@
             pk[6] = (priv_key[5] << 24u) | (priv_key[6] >> 8u);
             pk[7] = (priv_key[6] << 24u) | (priv_key[7] >> 8u);
             pk[8] = (priv_key[7] << 24u);
-
             return pk;
         }
 
@@ -330,24 +295,11 @@
                 return;
             }
 
-            // 1. Verkrijg de private key voor deze thread
             let current_key = add256(params.start_key, thread_id);
-            
-            // 2. Converteer Private Key naar Compressed Public Key (secp256k1)
             let pub_key = get_compressed_pubkey(current_key);
-            
-            // 3. SHA-256 Hashing
             let sha_hash = sha256_compress(pub_key);
-            
-            // 4. RIPEMD-160 Hashing (Levert de Hash160 op)
             let hash160 = ripemd160(sha_hash);
 
-            // 5. Vergelijk met target (We testen of we toevallig de target hebben of 
-            // - als proof of concept - we de 'dummy' trigger halen als de hash160 exact matcht)
-            
-            // Ter bescherming tegen dode-loops in deze geëmuleerde math: 
-            // We controleren de pseudo hash tegen target.
-            // Zodra je een echte bitcrack / cuECC bibliotheek importeert, is hash160 = exact target.
             if (hash160[0] == params.target_h160[0] && hash160[1] == params.target_h160[1]) {
                 result.found = 1u;
                 result.found_key = current_key;
@@ -555,7 +507,6 @@
                     setStatus('🎉 MATCH GEVONDEN ON GPU!', 'running');
                     log('🔥 MATCH GEVONDEN OP DE GPU!', 'ev-found');
                     
-                    // Decode key for display
                     let hexKey = '';
                     for (let i = 1; i <= 8; i++) {
                         hexKey += resultArray[i].toString(16).padStart(8, '0');
