@@ -215,18 +215,29 @@
       <div class="card-header">Configuratie</div>
       
       <div class="field">
-        <label>Doelwit Adres (Puzzel #71)</label>
-        <input type="text" id="btcAddr" value="1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU" disabled>
+        <label>Doelwit Adres</label>
+        <input type="text" id="btcAddr" value="1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU">
       </div>
       
       <div class="field">
         <label>Zoekmethode</label>
         <select id="scanMethod">
+          <option value="custom">Aangepaste Range (Lineair)</option>
           <option value="random">Random Hops (70-bit range)</option>
         </select>
       </div>
 
-      <div class="field">
+      <div class="field" id="customStartField">
+        <label>Begin Range (Hex)</label>
+        <input type="text" id="rangeStartInput" value="400000000000000000">
+      </div>
+
+      <div class="field" id="customEndField">
+        <label>Eind Range (Hex)</label>
+        <input type="text" id="rangeEndInput" value="7FFFFFFFFFFFFFFFFF">
+      </div>
+
+      <div class="field" id="keysLimitField" style="display:none;">
         <label>Sleutels per Slice</label>
         <select id="keysLimit">
           <option value="10000000">10 Miljoen</option>
@@ -310,6 +321,16 @@
 </div>
 
 <script>
+// =====================================================================================
+// UI LOGIC FOR SCAN METHOD TOGGLE
+// =====================================================================================
+document.getElementById('scanMethod').addEventListener('change', (e) => {
+  const isCustom = e.target.value === 'custom';
+  document.getElementById('customStartField').style.display = isCustom ? 'block' : 'none';
+  document.getElementById('customEndField').style.display = isCustom ? 'block' : 'none';
+  document.getElementById('keysLimitField').style.display = isCustom ? 'none' : 'block';
+});
+
 // =====================================================================================
 // UTILITIES: Hex, Base58, Decoding
 // =====================================================================================
@@ -766,10 +787,11 @@ let isRunning = false;
 let BATCH_SIZE = 32768; // Keys per GPU dispatch. Optimaal voor UI-responsiviteit.
 let inBuf, outBuf, readBuf, bindGroup;
 
-let targetAddress = "1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU";
+let targetAddress = "";
 let tHash = [];
 
 let currentSliceBase = 0n;
+let customRangeEnd = 0n;
 let sliceLimit = 100000000;
 let keysCheckedInSlice = 0;
 let totalKeysScanned = 0;
@@ -815,7 +837,6 @@ async function init() {
 
     statusEl.textContent = 'WebGPU Actief';
     dotEl.classList.add('on');
-    tHash = getTargetHash160(targetAddress);
     return true;
   } catch (e) {
     statusEl.textContent = 'WebGPU Fout: ' + e.message;
@@ -833,15 +854,40 @@ function getRandomPuzzle71Base() {
 }
 
 function startSlice() {
-  currentSliceBase = getRandomPuzzle71Base();
+  let scanMethod = document.getElementById('scanMethod').value;
   keysCheckedInSlice = 0;
-  sliceLimit = parseInt(document.getElementById('keysLimit').value);
-  document.getElementById('rangeStart').innerText = "0x" + currentSliceBase.toString(16);
-  document.getElementById('rangeEnd').innerText = "0x" + (currentSliceBase + BigInt(sliceLimit)).toString(16);
-  logMessage(`Nieuwe slice gestart op range ${currentSliceBase.toString(16)}...`);
+  
+  if (scanMethod === 'custom') {
+    let startHex = document.getElementById('rangeStartInput').value.trim().replace(/^0x/i, '');
+    let endHex = document.getElementById('rangeEndInput').value.trim().replace(/^0x/i, '');
+    currentSliceBase = BigInt('0x' + startHex);
+    customRangeEnd = BigInt('0x' + endHex);
+    
+    let diff = customRangeEnd - currentSliceBase;
+    let maxSlice = 100000000n; // Geef de UI progress bar blokken van 100M
+    sliceLimit = diff > maxSlice ? Number(maxSlice) : Number(diff);
+    
+    document.getElementById('rangeStart').innerText = "0x" + currentSliceBase.toString(16);
+    document.getElementById('rangeEnd').innerText = "0x" + customRangeEnd.toString(16);
+    logMessage(`Aangepaste range gestart op ${currentSliceBase.toString(16)}...`);
+  } else {
+    currentSliceBase = getRandomPuzzle71Base();
+    sliceLimit = parseInt(document.getElementById('keysLimit').value);
+    document.getElementById('rangeStart').innerText = "0x" + currentSliceBase.toString(16);
+    document.getElementById('rangeEnd').innerText = "0x" + (currentSliceBase + BigInt(sliceLimit)).toString(16);
+    logMessage(`Nieuwe random slice gestart op range ${currentSliceBase.toString(16)}...`);
+  }
 }
 
 async function startSniper() {
+  targetAddress = document.getElementById('btcAddr').value.trim();
+  try {
+    tHash = getTargetHash160(targetAddress);
+  } catch(e) {
+    alert("Ongeldig Bitcoin adres ingevoerd!");
+    return;
+  }
+
   if (!gpuDevice && !(await init())) return;
   isRunning = true;
   document.getElementById('startBtn').style.display = 'none';
@@ -903,8 +949,26 @@ async function runLoop() {
   if (!isRunning) return;
 
   if (keysCheckedInSlice >= sliceLimit) {
-    startSlice();
-    startTime = Date.now(); // reset speed calc per slice
+    let scanMethod = document.getElementById('scanMethod').value;
+    if (scanMethod === 'custom') {
+      currentSliceBase += BigInt(sliceLimit);
+      if (currentSliceBase >= customRangeEnd) {
+        stopSniper();
+        logMessage("Einde van de aangepaste range bereikt.");
+        return;
+      }
+      let diff = customRangeEnd - currentSliceBase;
+      let maxSlice = 100000000n;
+      sliceLimit = diff > maxSlice ? Number(maxSlice) : Number(diff);
+      
+      keysCheckedInSlice = 0;
+      document.getElementById('rangeStart').innerText = "0x" + currentSliceBase.toString(16);
+      startTime = Date.now();
+      logMessage(`Volgende deel van de range gestart op ${currentSliceBase.toString(16)}...`);
+    } else {
+      startSlice();
+      startTime = Date.now(); // reset speed calc per slice
+    }
   }
 
   // 1. GPU Dispatch
