@@ -769,12 +769,19 @@ function checkHash160(x0, x1, x2, x3, x4, x5, x6, x7, parity, tr0, tr1, tr2, tr3
     ar = er; er = dr; dr = rotl(cr,10); cr = br; br = t2;
   }
 
-  // Vergelijk rechtstreeks met de doelwit RIPEMD-160 hash
-  if (((0xefcdab89 + cl + dr) >>> 0) !== tr0) return false;
-  if (((0x98badcfe + dl + er) >>> 0) !== tr1) return false;
-  if (((0x10325476 + el + ar) >>> 0) !== tr2) return false;
-  if (((0xc3d2e1f0 + al + br) >>> 0) !== tr3) return false;
-  if (((0x67452301 + bl + cr) >>> 0) !== tr4) return false;
+  // GEFIXT: Vergelijk de eerste 5 woorden van de hash (niet de laatste)
+  let h0 = (0x67452301 + al + br) >>> 0;
+  let h1 = (0xefcdab89 + bl + cr) >>> 0;
+  let h2 = (0x98badcfe + cl + dr) >>> 0;
+  let h3 = (0x10325476 + dl + er) >>> 0;
+  let h4 = (0xc3d2e1f0 + el + ar) >>> 0;
+
+  if (h0 !== tr0) return false;
+  if (h1 !== tr1) return false;
+  if (h2 !== tr2) return false;
+  if (h3 !== tr3) return false;
+  if (h4 !== tr4) return false;
+  
   return true;
 }
 
