@@ -436,13 +436,22 @@
                 await readBuffer.mapAsync(GPUMapMode.READ);
                 const resultArray = new Uint32Array(readBuffer.getMappedRange());
 
-                if (resultArray[0] === 1u) {
-                    // Match gevonden op GPU!
+                // Controleer op een match
+                let matchFound = false;
+                if (resultArray[0] === 1) { // Gecorrigeerd: 1 in plaats van 1u
                     setRunning(false);
                     setStatus('🎉 MATCH GEVONDEN ON GPU!', 'running');
                     log('🔥 MATCH GEVONDEN OP DE GPU!', 'ev-found');
-                    return;
+                    matchFound = true;
                 }
+
+                // GEHEUGENLEK FIX: Geef het buffer-geheugen direct weer vrij!
+                readBuffer.unmap();
+                paramsBuffer.destroy();
+                resultBuffer.destroy();
+                readBuffer.destroy();
+
+                if (matchFound) return;
 
                 currentSliceScanned += batchKeys;
                 cumulativeScanned += batchKeys;
