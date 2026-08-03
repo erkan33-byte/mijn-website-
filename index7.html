@@ -1,777 +1,960 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-    <meta charset="UTF-8">
-    <title>Puzzel #71 – Random Slice Sniper (wNAF GLV + TURBO v4) ⚡</title>
-    <style>
-        :root {
-            --bg: #07090f; --surface: #0d1117; --panel: #111827;
-            --border: #1f2937; --accent: #00ff99; --accent2: #00c3ff;
-            --warn: #f59e0b; --danger: #ef4444; --success: #10b981;
-            --dim: #374151; --muted: #6b7280; --text: #e2e8f0;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: 'Courier New', monospace;
-            background: var(--bg); color: var(--text);
-            min-height: 100vh; padding: 24px 16px 48px;
-        }
-        body::before {
-            content: ''; position: fixed; inset: 0;
-            background: repeating-linear-gradient(transparent 0px, transparent 3px,
-                rgba(0,255,153,.015) 3px, rgba(0,255,153,.015) 4px);
-            pointer-events: none; z-index: 999;
-        }
-        .container { max-width: 820px; margin: 0 auto; position: relative; z-index: 1; }
-        .header { text-align: center; margin-bottom: 28px; }
-        .header h1 { font-size: 1.6rem; letter-spacing: .2em; color: var(--accent);
-            text-shadow: 0 0 18px var(--accent); text-transform: uppercase; }
-        .header .sub { font-size: .72rem; color: var(--muted); letter-spacing: .12em; margin-top: 6px; }
-        .badge { display: inline-block; background: linear-gradient(90deg,#1a2a1a,#0d2010);
-            border: 1px solid var(--accent); color: var(--accent); font-size: .62rem;
-            letter-spacing: .15em; padding: 3px 10px; border-radius: 2px; margin-top: 10px; }
-        .card, .calc-card, .chance-card {
-            background: var(--panel); border: 1px solid var(--border);
-            border-radius: 6px; padding: 20px; margin-bottom: 16px;
-        }
-        .calc-card, .chance-card {
-            background: linear-gradient(135deg, #0a0f1a 0%, #0d1520 100%);
-            border-color: #1a3a5c;
-        }
-        .chance-card { position: relative; overflow: hidden; }
-        .chance-card::before {
-            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
-            background: radial-gradient(ellipse at center, rgba(0,195,255,.04) 0%, transparent 60%);
-            pointer-events: none;
-        }
-        .card-title, .calc-title, .chance-title {
-            font-size: .65rem; letter-spacing: .18em; text-transform: uppercase;
-            border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px;
-        }
-        .calc-title, .chance-title { color: var(--accent2); border-color: #1a3a5c; }
-        .field { display: grid; grid-template-columns: 210px 1fr; align-items: center; gap: 10px; margin-bottom: 12px; }
-        .field label { font-size: .72rem; color: var(--muted); letter-spacing: .06em; }
-        .field input, select {
-            background: var(--surface); color: var(--accent); border: 1px solid var(--dim);
-            border-radius: 3px; padding: 7px 10px; font-family: inherit; font-size: .78rem; outline: none; width: 100%;
-        }
-        .field input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,255,153,.12); }
-        .field input[type="number"] { max-width: 150px; }
-        .divider { border: none; border-top: 1px dashed var(--dim); margin: 14px 0; }
-        .btn-row { display: flex; gap: 10px; margin-top: 4px; }
-        .btn {
-            flex: 1; padding: 11px 16px; font-family: inherit; font-size: .8rem; font-weight: bold;
-            letter-spacing: .1em; cursor: pointer; border: none; border-radius: 4px; transition: opacity .15s, transform .1s;
-        }
-        .btn:active:not(:disabled) { transform: scale(.97); }
-        .btn:disabled { opacity: .35; cursor: not-allowed; }
-        .btn-start { background: var(--success); color: #000; }
-        .btn-stop { background: var(--danger); color: #fff; }
-        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .stat-cell { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 10px 14px; }
-        .stat-cell .label { font-size: .6rem; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
-        .stat-cell .value { font-size: 1.05rem; font-weight: bold; color: var(--accent); }
-        #statusVal { color: var(--danger); }
-        #statusVal.running { color: var(--success); }
-        .progress-wrap { height: 4px; background: var(--border); border-radius: 2px; margin-top: 14px; overflow: hidden; }
-        .progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width .4s; }
-        .chance-main { display: flex; align-items: center; gap: 20px; margin-bottom: 18px; }
-        .chance-gauge { position: relative; width: 100px; height: 100px; flex-shrink: 0; }
-        .chance-gauge svg { width: 100%; height: 100%; }
-        .gauge-bg { fill: none; stroke: #1a2a3a; stroke-width: 8; }
-        .gauge-fill { fill: none; stroke: var(--accent2); stroke-width: 8; stroke-linecap: round;
-            transition: stroke-dashoffset 1s ease; transform: rotate(-90deg); transform-origin: 50% 50%; }
-        .gauge-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
-            justify-content: center; font-size: .62rem; color: var(--muted); text-align: center; line-height: 1.3; }
-        .gauge-label span { font-size: 1rem; color: var(--accent2); font-weight: bold; }
-        .chance-info { flex: 1; }
-        .chance-info .big-number { font-size: 1.1rem; color: var(--accent2); font-weight: bold; letter-spacing: .05em; margin-bottom: 4px; }
-        .chance-info .label-small { font-size: .62rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px; }
-        .chance-info .kans-uitleg { font-size: .68rem; color: var(--text); line-height: 1.6; }
-        .comparison-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
-        .cmp-cell { background: rgba(0,0,0,.4); border: 1px solid #1a3a5c; border-radius: 4px; padding: 9px 12px; }
-        .cmp-cell .cmp-label { font-size: .58rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 3px; }
-        .cmp-cell .cmp-val { font-size: .78rem; color: var(--accent2); font-weight: bold; }
-        .cmp-cell .cmp-desc { font-size: .62rem; color: var(--muted); margin-top: 2px; }
-        .kans-progress { margin-top: 14px; }
-        .kans-progress .kp-label { display: flex; justify-content: space-between; font-size: .62rem; color: var(--muted); margin-bottom: 5px; }
-        .kans-track { height: 18px; background: #0a1520; border: 1px solid #1a3a5c; border-radius: 3px; overflow: hidden; position: relative; }
-        .kans-fill { height: 100%; background: linear-gradient(90deg, #003366, var(--accent2)); transition: width 1s ease; }
-        .kans-pct-label { font-size: .62rem; color: var(--muted); text-align: right; margin-top: 4px; }
-        .log { background: #000; color: var(--accent); height: 150px; overflow-y: scroll;
-            padding: 10px 12px; font-size: .72rem; line-height: 1.6; border-radius: 4px; border: 1px solid var(--border); }
-        .log .ts { color: var(--muted); }
-        .log .ev-found { color: var(--warn); font-weight: bold; }
-        .log .ev-epoch { color: var(--accent2); }
-        .log .ev-stop { color: var(--danger); }
-        .log .ev-hop { color: var(--warn); font-style: italic; }
-        .result-table { width: 100%; border-collapse: collapse; font-size: .72rem; }
-        .result-table th { background: var(--surface); color: var(--accent2); letter-spacing: .1em; font-size: .62rem;
-            text-transform: uppercase; padding: 10px 12px; border: 1px solid var(--border); text-align: left; }
-        .result-table td { border: 1px solid var(--border); padding: 9px 12px; color: var(--text); word-break: break-all; }
-        .footer { text-align: center; font-size: .6rem; color: var(--muted); letter-spacing: .1em; margin-top: 24px; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: var(--surface); }
-        ::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 3px; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Puzzel #71 — WebGPU Sniper</title>
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/JetBrains-Mono/2.304/css/jetbrains-mono.min.css" rel="stylesheet">
+<style>
+  @font-face {
+    font-family: 'Space Grotesk';
+    src: local('Space Grotesk');
+  }
+  :root {
+    --bg: #090A0C;
+    --panel: #111316;
+    --panel2: #181A1F;
+    --border: #22252A;
+    --border-hover: #333840;
+    --text: #E5E7EB;
+    --muted: #8B929D;
+    --accent: #F7931A;
+    --accent-dim: rgba(247, 147, 26, 0.15);
+    --teal: #10B981;
+    --danger: #EF4444;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    --disp: 'Space Grotesk', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--disp);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    flex-direction: column;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Navbar */
+  nav {
+    border-bottom: 1px solid var(--border);
+    background: rgba(17, 19, 22, 0.8);
+    backdrop-filter: blur(12px);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: -0.02em; }
+  .brand .logo { width: 24px; height: 24px; background: var(--accent); border-radius: 6px; display: grid; place-items: center; color: #000; font-size: 14px; }
+  .badge { font-family: var(--mono); font-size: 11px; background: var(--panel2); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); color: var(--muted); }
+  .gpu-status { display: flex; align-items: center; gap: 8px; font-size: 12px; font-family: var(--mono); color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.on { background: var(--teal); box-shadow: 0 0 8px var(--teal); }
+
+  /* Layout */
+  .container {
+    flex: 1;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 32px 24px;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 24px;
+  }
+
+  /* Sidebar Settings */
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .card-header { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .field { margin-bottom: 16px; }
+  .field:last-child { margin-bottom: 0; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  input, select {
+    width: 100%;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+  input:disabled, select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .actions { display: flex; gap: 10px; margin-top: 8px; }
+  button {
+    flex: 1;
+    font-family: var(--disp);
+    font-weight: 600;
+    font-size: 14px;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .btn-danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); border-color: rgba(239, 68, 68, 0.2); display: none; }
+  .btn-danger:hover { background: rgba(239, 68, 68, 0.2); }
+
+  /* Main Content Area */
+  .main-view { display: flex; flex-direction: column; gap: 24px; }
+
+  /* Stats Grid */
+  .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .stat-box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-val { font-family: var(--mono); font-size: 24px; font-weight: 500; margin-top: 4px; }
+  .stat-val.highlight { color: var(--teal); }
+  .stat-lbl { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat-box::after {
+    content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: var(--border);
+  }
+  .stat-box:nth-child(1)::after { background: var(--accent); }
+  .stat-box:nth-child(2)::after { background: var(--teal); }
+  .stat-box:nth-child(3)::after { background: #3B82F6; }
+
+  /* Live Range Box */
+  .range-box { font-family: var(--mono); font-size: 13px; background: var(--panel2); padding: 16px; border-radius: 8px; border: 1px solid var(--border); color: var(--muted); }
+  .range-box b { color: var(--text); }
+  .range-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+  .range-row:last-child { margin-bottom: 0; }
+
+  /* Progress Visuals */
+  .visual-area {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 30px;
+    display: flex;
+    align-items: center;
+    gap: 40px;
+  }
+  .gauge-container { position: relative; width: 120px; height: 120px; flex-shrink: 0; }
+  .gauge-svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+  .gauge-bg { fill: none; stroke: var(--panel2); stroke-width: 8; }
+  .gauge-fg { fill: none; stroke: var(--teal); stroke-width: 8; stroke-linecap: round; stroke-dasharray: 314; stroke-dashoffset: 314; transition: stroke-dashoffset 0.1s linear; }
+  .gauge-text {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 18px; font-weight: 600;
+  }
+  .progress-details { flex: 1; }
+  .slice-meta { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+  .bar-bg { height: 8px; background: var(--panel2); border-radius: 4px; overflow: hidden; position: relative; }
+  .bar-fg { position: absolute; top: 0; left: 0; height: 100%; width: 0%; background: var(--accent); transition: width 0.1s linear; }
+
+  /* Log & Match Table */
+  .log-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    min-height: 200px;
+    max-height: 300px;
+  }
+  .log-header { padding: 12px 20px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--muted); display: flex; justify-content: space-between; }
+  .log-content { padding: 16px 20px; overflow-y: auto; font-family: var(--mono); font-size: 12px; color: var(--muted); flex: 1; }
+  .log-content div { margin-bottom: 6px; }
+  .log-content .match { color: var(--teal); }
+
+  table.matches { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; text-align: left; }
+  table.matches th { padding: 10px 20px; border-bottom: 1px solid var(--border); color: var(--muted); font-weight: normal; font-size: 11px; text-transform: uppercase; }
+  table.matches td { padding: 12px 20px; border-bottom: 1px solid var(--border); }
+  table.matches .pk { color: var(--accent); }
+</style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – Native JS Turbo v4 (Geen Netwerk nodig)</div>
-            <span class="badge">🚀 OPTIE 5: wNAF + GLV ENDOMORPHISM + JACOBIAN BATCH</span>
-        </div>
-        <div class="card">
-            <div class="card-title">⚙ Actieve Plakje Configuratie</div>
-            <div class="field">
-                <label>Target BTC Adres</label>
-                <input id="btcAddr" value="1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU" type="text">
-            </div>
-            <div class="field">
-                <label>Scan methode</label>
-                <select id="scanMethod">
-                    <option value="glv" selected>🌌 wNAF-GLV Jacobian Batch (Hyper-Speed v4)</option>
-                </select>
-            </div>
-            <div class="field">
-                <label>Keys per Plakje</label>
-                <input id="keysLimit" value="10000000" type="number" min="1000">
-            </div>
-            <hr class="divider">
-            <div class="field"><label>Workers (CPU Cores)</label><input id="numW" value="4" type="number" min="1" max="32"></div>
-            <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);"></div>
-            <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);"></div>
-            <div style="font-size: 0.65rem; color: var(--muted); margin-top: 6px; text-align: right;">ℹ️ Deze HEX-waarden vernieuwen na het bereiken van je ingestelde key limiet.</div>
-            <div class="btn-row">
-                <button class="btn btn-start" id="startBtn">▶ Start Auto-Hop Scan</button>
-                <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
-            </div>
-        </div>
-        <div class="calc-card">
-            <div class="calc-title">📐 Live Gradiënt</div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
-                <div class="stat-cell" style="background:rgba(0,0,0,0.3); border-color:#1a3a5c;">
-                    <div class="label" style="color:var(--accent2)">Gradiënt dP/dt</div>
-                    <div class="value" id="calcGradient" style="color:#7fcfff">0.00 /s</div>
-                </div>
-                <div class="stat-cell" style="background:rgba(0,0,0,0.3); border-color:#1a3a5c;">
-                    <div class="label" style="color:var(--accent2)">Limiet Dekking (P)</div>
-                    <div class="value" id="calcPoisson" style="color:#7fcfff">0.0000 %</div>
-                </div>
-            </div>
-            <div class="formula-box" style="background:rgba(0,0,0,0.5); border-left:3px solid var(--accent2); padding:10px; font-size:.75rem; color:#bfe4ff; line-height:1.5;">
-                Engine: wNAF (Windowed Non-Adjacent Form) + GLV + Jacobian Mixed Add + Batch Z-Inversion
-            </div>
-        </div>
-        <div class="chance-card">
-            <div class="chance-title">🎲 Voortgang tot volgende Hop</div>
-            <div class="chance-main">
-                <div class="chance-gauge">
-                    <svg viewBox="0 0 100 100">
-                        <circle class="gauge-bg" cx="50" cy="50" r="38"/>
-                        <circle class="gauge-fill" cx="50" cy="50" r="38" id="gaugeFill" stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
-                    </svg>
-                    <div class="gauge-label"><span id="gaugePct">0%</span>gedekt</div>
-                </div>
-                <div class="chance-info">
-                    <div class="big-number" id="chanceScientific">0.00%</div>
-                    <div class="label-small">van limiet bereikt</div>
-                    <div class="kans-uitleg" id="chanceUitleg">Nog niet gestart.</div>
-                </div>
-            </div>
-            <div class="kans-progress">
-                <div class="kp-label"><span>Dekkingsgraad tot Switch</span><span id="coveragePct">0.000000%</span></div>
-                <div class="kans-track"><div class="kans-fill" id="kansBar" style="width:0%"></div></div>
-                <div class="kans-pct-label" id="jumpsCoverage">0 keys in dit plakje</div>
-            </div>
-            <div class="comparison-grid">
-                <div class="cmp-cell"><div class="cmp-label">🌌 Plakje Grootte</div><div class="cmp-val" id="cmpUniverse">2³⁵ keys</div><div class="cmp-desc">34.359.738.368 opties</div></div>
-                <div class="cmp-cell"><div class="cmp-label">⏱ Tijd tot hop</div><div class="cmp-val" id="cmpTime">—</div><div class="cmp-desc">tijd tot nieuwe zone</div></div>
-                <div class="cmp-cell"><div class="cmp-label">🎰 Globale Puzzel 71 Kans</div><div class="cmp-val" id="cmpLottery">0.00e+0</div><div class="cmp-desc">statistische trefkans</div></div>
-                <div class="cmp-cell"><div class="cmp-label">📡 % van Puzzel 71</div><div class="cmp-val" id="cmpEpochs">0%</div></div>
-            </div>
-        </div>
-        <div class="card">
-            <div class="card-title">📊 Sessie Statistieken</div>
-            <div class="stats-grid">
-                <div class="stat-cell"><div class="label">Status</div><div class="value" id="statusVal">Gestopt</div></div>
-                <div class="stat-cell"><div class="label">Totaal Gescand</div><div class="value" id="keysScanned">0</div></div>
-                <div class="stat-cell"><div class="label">Snelheid</div><div class="value" id="speed">0 /s</div></div>
-                <div class="stat-cell"><div class="label">Plakjes bezocht</div><div class="value" id="slicesVisitedCount">1</div></div>
-            </div>
-            <div style="margin-top:10px;font-size:.7rem;color:var(--muted);">In dit plakje: <span id="currentSliceKeys">0</span> / <span id="limitDisplay">10.000.000</span></div>
-            <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
-        </div>
-        <div class="card"><div class="card-title">📋 Activiteitenlog</div><div class="log" id="logBox"></div></div>
-        <div class="card">
-            <div class="card-title">🎯 Resultaten</div>
-            <table class="result-table">
-                <thead><tr><th>Type</th><th>WIF</th><th>Privésleutel (HEX)</th></tr></thead>
-                <tbody id="matchTable"><tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr></tbody>
-            </table>
-        </div>
-        <div class="footer">Random Slice Sniper · wNAF GLV + JACOBIAN BATCH ENGINE v4</div>
+
+<nav>
+  <div class="brand">
+    <div class="logo">71</div>
+    Random Slice Sniper <span class="badge">WGSL + Zero-GC</span>
+  </div>
+  <div class="gpu-status">
+    <span class="dot" id="gpuDot"></span>
+    <span id="gpuStatus">Initialiseren...</span>
+  </div>
+</nav>
+
+<div class="container">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="card">
+      <div class="card-header">Configuratie</div>
+      
+      <div class="field">
+        <label>Doelwit Adres (Puzzel #71)</label>
+        <input type="text" id="btcAddr" value="1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU" disabled>
+      </div>
+      
+      <div class="field">
+        <label>Zoekmethode</label>
+        <select id="scanMethod">
+          <option value="random">Random Hops (70-bit range)</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Sleutels per Slice</label>
+        <select id="keysLimit">
+          <option value="10000000">10 Miljoen</option>
+          <option value="50000000">50 Miljoen</option>
+          <option value="100000000" selected>100 Miljoen</option>
+          <option value="500000000">500 Miljoen</option>
+        </select>
+      </div>
+
+      <div class="actions">
+        <button id="startBtn" class="btn-primary">Start Sniper</button>
+        <button id="stopBtn" class="btn-danger">Stop</button>
+      </div>
     </div>
 
-    <!-- ⚡ wNAF + GLV + OPTIMIZED WORKER ENGINE -->
-    <script id="workerCode" type="javascript/worker">
-        self.onerror = function(e) {
-            self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
-        };
+    <div class="card" id="matchCard" style="display:none; border-color: var(--teal); background: rgba(16, 185, 129, 0.05);">
+      <div class="card-header" style="color: var(--teal);">🎯 MATCH GEVONDEN!</div>
+      <div style="font-family: var(--mono); font-size: 12px; word-break: break-all;" id="matchDisplay"></div>
+    </div>
+  </aside>
 
-        const P = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
-        const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n; 
-        const LAMBDA = 0x5363ad4cc05c30e0a5261c028812645a122e22ea20816678df02967c1b23bd72n; 
-        const BETA = 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501een; 
+  <!-- Main View -->
+  <main class="main-view">
+    
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="stat-lbl">Snelheid</div>
+        <div class="stat-val" id="speed">0 <span style="font-size:14px; color:var(--muted)">keys/s</span></div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-lbl">Totaal Gescand (Sessie)</div>
+        <div class="stat-val highlight" id="keysScanned">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-lbl">Status</div>
+        <div class="stat-val" id="statusVal" style="color: var(--muted); font-size: 18px; margin-top: 10px;">IDLE</div>
+      </div>
+    </div>
 
-        const G_x = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n;
-        const G_y = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n;
-        const G = { x: G_x, y: G_y };
+    <div class="card">
+      <div class="card-header">Huidige Slice (70-bit space)</div>
+      <div class="range-box">
+        <div class="range-row">
+          <span>Start:</span> <b id="rangeStart">Wacht op start...</b>
+        </div>
+        <div class="range-row">
+          <span>Eind:</span>  <b id="rangeEnd">-</b>
+        </div>
+      </div>
+    </div>
 
-        function mod(a, b = P) { const r = a % b; return r >= 0n ? r : r + b; }
-        function inverse(a, n = P) {
-            let t = 0n, newt = 1n; let r = n, newr = a;
-            while (newr !== 0n) {
-                let q = r / newr;
-                let tmp = t - q * newt; t = newt; newt = tmp;
-                tmp = r - q * newr; r = newr; newr = tmp;
-            }
-            return t < 0n ? t + n : t;
-        }
+    <div class="visual-area">
+      <div class="gauge-container">
+        <svg class="gauge-svg" viewBox="0 0 110 110">
+          <circle class="gauge-bg" cx="55" cy="55" r="50"></circle>
+          <circle class="gauge-fg" id="gaugeRing" cx="55" cy="55" r="50"></circle>
+        </svg>
+        <div class="gauge-text" id="pctText">0%</div>
+      </div>
+      <div class="progress-details">
+        <div class="slice-meta">
+          <span>Voortgang in huidige slice</span>
+          <span id="currentSliceKeys">0 / 100M</span>
+        </div>
+        <div class="bar-bg">
+          <div class="bar-fg" id="progressBar"></div>
+        </div>
+      </div>
+    </div>
 
-        const Q_x = mod(G_x * BETA, P);
-        const Q_y = G_y;
-        const Q = { x: Q_x, y: Q_y };
+    <div class="log-panel">
+      <div class="log-header">
+        <span>Activiteitenlogboek (WebGPU + JS)</span>
+      </div>
+      <div class="log-content" id="logBox">
+        <div>Klaar om te starten. WebGPU verwerkt de elliptische kromme, CPU doet zero-GC hashing.</div>
+      </div>
+    </div>
 
-        // Negatief punt - Nodig voor NAF
-        function neg(p) {
-            if (!p) return null;
-            return { x: p.x, y: mod(-p.y) };
-        }
+  </main>
+</div>
 
-        function add(p, q) {
-            if (!p) return q; if (!q) return p;
-            if (p.x === q.x) {
-                if (p.y !== q.y || p.y === 0n) return null;
-                let lam = mod((3n * p.x * p.x) * inverse(2n * p.y));
-                let x3 = mod(lam * lam - 2n * p.x);
-                return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
-            }
-            let lam = mod(mod(q.y - p.y) * inverse(mod(q.x - p.x)));
-            let x3 = mod(lam * lam - p.x - q.x);
-            return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
-        }
+<script>
+// =====================================================================================
+// UTILITIES: Hex, Base58, Decoding
+// =====================================================================================
+function bytesToHex(bytes) {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+function hexToBytes(hex) {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i*2,2), 16);
+  return out;
+}
+function bigIntTo32Bytes(bn) {
+  let hex = bn.toString(16).padStart(64, '0');
+  const out = new Uint8Array(32);
+  for(let i=0; i<32; i++) out[i] = parseInt(hex.slice(i*2, i*2+2), 16);
+  return out;
+}
+function bytesToLimbsLE(bytes32) {
+  const limbs = new Uint32Array(8);
+  for (let i = 0; i < 8; i++) {
+    const off = 28 - 4*i;
+    limbs[i] = ((bytes32[off]<<24) | (bytes32[off+1]<<16) | (bytes32[off+2]<<8) | (bytes32[off+3])) >>> 0;
+  }
+  return limbs;
+}
 
-        function splitGLV(k) {
-            k = k % N;
-            const k1 = k % LAMBDA;
-            const k2 = k / LAMBDA; 
-            return { k1, k2 };
-        }
+const B58ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function decodeBase58(str) {
+  let bytes = [0];
+  for (let i = 0; i < str.length; i++) {
+    let val = B58ALPHA.indexOf(str[i]);
+    for (let j = 0; j < bytes.length; j++) bytes[j] *= 58;
+    bytes[0] += val;
+    let carry = 0;
+    for (let j = 0; j < bytes.length; j++) {
+      bytes[j] += carry;
+      carry = bytes[j] >> 8;
+      bytes[j] &= 0xff;
+    }
+    while (carry) { bytes.push(carry & 0xff); carry >>= 8; }
+  }
+  for (let i = 0; i < str.length && str[i] === "1"; i++) bytes.push(0);
+  return new Uint8Array(bytes.reverse());
+}
 
-        // ==========================================
-        // ⚡ wNAF (Windowed Non-Adjacent Form) LOGICA
-        // ==========================================
-        function getWNAF(k, w = 4) {
-            let n = BigInt(k);
-            let naf = [];
-            const modW = 1n << BigInt(w);
-            const mid = 1n << BigInt(w - 1);
-            
-            while (n > 0n) {
-                if (n & 1n) {
-                    let mods = n % modW;
-                    if (mods >= mid) mods -= modW;
-                    naf.push(Number(mods)); // Push b.v. 1, 3, -1, -5 etc.
-                    n -= mods;
-                } else {
-                    naf.push(0);
-                }
-                n >>= 1n;
-            }
-            return naf;
-        }
+// Haal de verwachte 5x Uint32 (Little-Endian) RIPEMD160 hash uit een adres
+function getTargetHash160(address) {
+  let decoded = decodeBase58(address);
+  if(decoded.length < 25) throw new Error("Invalid address length");
+  let hash = decoded.slice(1, 21);
+  let view = new DataView(hash.buffer, hash.byteOffset, hash.byteLength);
+  return [
+    view.getUint32(0, true),
+    view.getUint32(4, true),
+    view.getUint32(8, true),
+    view.getUint32(12, true),
+    view.getUint32(16, true)
+  ];
+}
 
-        function precomputeWNAF(basePoint) {
-            let pre = {};
-            let doubleP = add(basePoint, basePoint);
-            let curr = basePoint;
-            
-            // Precompute +1, -1
-            pre[1] = curr; pre[-1] = neg(curr);
-            // Precompute +3, -3
-            curr = add(curr, doubleP); pre[3] = curr; pre[-3] = neg(curr);
-            // Precompute +5, -5
-            curr = add(curr, doubleP); pre[5] = curr; pre[-5] = neg(curr);
-            // Precompute +7, -7
-            curr = add(curr, doubleP); pre[7] = curr; pre[-7] = neg(curr);
-            
-            return pre;
-        }
+// Voor het netjes weergeven van WIF zodra gevonden
+async function sha256_buffer(buf) {
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', buf));
+}
+async function getWIF(privKeyBigInt) {
+  let pkBytes = bigIntTo32Bytes(privKeyBigInt);
+  let payload = new Uint8Array(34);
+  payload[0] = 0x80;
+  payload.set(pkBytes, 1);
+  payload[33] = 0x01; // compressed
+  let h1 = await sha256_buffer(payload);
+  let h2 = await sha256_buffer(h1);
+  let full = new Uint8Array(38);
+  full.set(payload);
+  full.set(h2.slice(0,4), 34);
+  // Base58 Encode
+  let digits = [0];
+  for (let i = 0; i < full.length; i++) {
+    let carry = full[i];
+    for (let j = 0; j < digits.length; j++) {
+      carry += digits[j] << 8;
+      digits[j] = carry % 58;
+      carry = Math.floor(carry / 58);
+    }
+    while (carry > 0) { digits.push(carry % 58); carry = Math.floor(carry / 58); }
+  }
+  let str = "";
+  for (let i = 0; i < full.length && full[i] === 0; i++) str += "1";
+  for (let i = digits.length - 1; i >= 0; i--) str += B58ALPHA[digits[i]];
+  return str;
+}
 
-        // Geoptimaliseerde wNAF-GLV Vermenigvuldiging
-        function mul(p, n) {
-            if (p.x === G.x && p.y === G.y) {
-                // Splits in k1 en k2 via GLV
-                const { k1, k2 } = splitGLV(n);
-                
-                // Genereer wNAF Arrays voor beide sub-keys
-                let naf1 = getWNAF(k1, 4);
-                let naf2 = getWNAF(k2, 4);
-                
-                // Haal precomputed tabellen op (1P, 3P, 5P, 7P)
-                let pre1 = precomputeWNAF(G);
-                let pre2 = precomputeWNAF(Q);
-                
-                let maxLen = Math.max(naf1.length, naf2.length);
-                let result = null;
-                
-                for (let i = maxLen - 1; i >= 0; i--) {
-                    if (result) result = add(result, result); // Double
-                    
-                    let n1 = i < naf1.length ? naf1[i] : 0;
-                    let n2 = i < naf2.length ? naf2[i] : 0;
-                    
-                    if (n1 !== 0) result = add(result, pre1[n1]); // Add 
-                    if (n2 !== 0) result = add(result, pre2[n2]); // Add
-                }
-                return result;
-            }
-            
-            // Standaard wNAF fallback voor niet-G punten
-            let naf = getWNAF(n, 4);
-            let pre = precomputeWNAF(p);
-            let r = null;
-            for (let i = naf.length - 1; i >= 0; i--) {
-                if (r) r = add(r, r);
-                if (naf[i] !== 0) r = add(r, pre[naf[i]]);
-            }
-            return r;
-        }
 
-        // SHA256 & RIPEMD160
-        const sha256_K = new Uint32Array([
-            0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-            0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-            0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-            0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-            0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-            0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-            0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-            0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
-        ]);
-        function sha256(data) {
-            const h = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
-            let mLen = data.length;
-            let l = ((mLen + 8) >>> 6) + 1;
-            let m = new Uint8Array(l << 6);
-            m.set(data); m[mLen] = 0x80;
-            let view = new DataView(m.buffer);
-            view.setUint32((l << 6) - 4, mLen << 3);
-            let w = new Uint32Array(64);
-            for (let i = 0; i < l; i++) {
-                let a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], _h = h[7];
-                for (let j = 0; j < 64; j++) {
-                    if (j < 16) w[j] = view.getUint32((i << 6) + j * 4);
-                    else {
-                        let s0 = (w[j-15] >>> 7 | w[j-15] << 25) ^ (w[j-15] >>> 18 | w[j-15] << 14) ^ (w[j-15] >>> 3);
-                        let s1 = (w[j-2] >>> 17 | w[j-2] << 15) ^ (w[j-2] >>> 19 | w[j-2] << 13) ^ (w[j-2] >>> 10);
-                        w[j] = (w[j-16] + s0 + w[j-7] + s1) | 0;
-                    }
-                    let S1 = (e >>> 6 | e << 26) ^ (e >>> 11 | e << 21) ^ (e >>> 25 | e << 7);
-                    let ch = (e & f) ^ (~e & g);
-                    let temp1 = (_h + S1 + ch + sha256_K[j] + w[j]) | 0;
-                    let S0 = (a >>> 2 | a << 30) ^ (a >>> 13 | a << 19) ^ (a >>> 22 | a << 10);
-                    let maj = (a & b) ^ (a & c) ^ (b & c);
-                    let temp2 = (S0 + maj) | 0;
-                    _h = g; g = f; f = e; e = (d + temp1) | 0; d = c; c = b; b = a; a = (temp1 + temp2) | 0;
-                }
-                h[0] = (h[0] + a)|0; h[1] = (h[1] + b)|0; h[2] = (h[2] + c)|0; h[3] = (h[3] + d)|0;
-                h[4] = (h[4] + e)|0; h[5] = (h[5] + f)|0; h[6] = (h[6] + g)|0; h[7] = (h[7] + _h)|0;
-            }
-            let out = new Uint8Array(32);
-            let outView = new DataView(out.buffer);
-            for(let i=0; i<8; i++) outView.setUint32(i*4, h[i]);
-            return out;
-        }
+// =====================================================================================
+// WGSL — SECP256K1 BATCH GENERATOR (Base + Offset)
+// =====================================================================================
+const WGSL_SOURCE = `
+const P: array<u32,8> = array<u32,8>(0xFFFFFC2Fu,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
+const P_MINUS_2: array<u32,8> = array<u32,8>(0xFFFFFC2Du,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
+const GX: array<u32,8> = array<u32,8>(0x16F81798u,0x59F2815Bu,0x2DCE28D9u,0x029BFCDBu,0xCE870B07u,0x55A06295u,0xF9DCBBACu,0x79BE667Eu);
+const GY: array<u32,8> = array<u32,8>(0xFB10D4B8u,0x9C47D08Fu,0xA6855419u,0xFD17B448u,0x0E1108A8u,0x5DA4FBFCu,0x26A3C465u,0x483ADA77u);
 
-        const zl = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15, 7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8, 3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12, 1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2, 4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13];
-        const zr = [5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12, 6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2, 15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13, 8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14, 12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11];
-        const sl = [11,14,15,12,5,8,7,9,11,13,14,15,6,7,9,8, 7,6,8,13,11,9,7,15,7,12,15,9,11,7,13,12, 11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5, 11,12,14,15,14,15,9,8,9,14,5,6,8,6,5,12, 9,15,5,11,6,8,13,12,5,12,13,14,11,8,5,6];
-        const sr = [8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6, 9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11, 9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5, 15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8, 8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];
-        const hl = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
-        const hr = [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000];
-        function ripemd160(msg) {
-            let mLen = msg.length, l = ((mLen + 8) >> 6) + 1;
-            let m = new Uint8Array(l << 6); m.set(msg); m[mLen] = 0x80;
-            let view = new DataView(m.buffer);
-            view.setUint32((l << 6) - 8, mLen << 3, true);
-            let h = new Uint32Array([0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0]);
-            let w = new Uint32Array(16);
-            for (let i = 0; i < l; i++) {
-                for (let j = 0; j < 16; j++) w[j] = view.getUint32((i << 6) + (j << 2), true);
-                let al = h[0], bl = h[1], cl = h[2], dl = h[3], el = h[4];
-                let ar = h[0], br = h[1], cr = h[2], dr = h[3], er = h[4];
-                for (let j = 0; j < 80; j++) {
-                    let round = Math.floor(j / 16), tL, tR;
-                    if (round === 0) { tL = al + (bl ^ cl ^ dl); tR = ar + (br ^ (cr | ~dr)); }
-                    else if (round === 1) { tL = al + ((bl & cl) | (~bl & dl)); tR = ar + ((br & dr) | (cr & ~dr)); }
-                    else if (round === 2) { tL = al + ((bl | ~cl) ^ dl); tR = ar + ((br | ~cr) ^ dr); }
-                    else if (round === 3) { tL = al + ((bl & dl) | (cl & ~dl)); tR = ar + ((br & cr) | (~br & dr)); }
-                    else { tL = al + (bl ^ (cl | ~dl)); tR = ar + (br ^ cr ^ dr); }
-                    tL = (tL + w[zl[j]] + hl[round]) | 0; tL = (tL << sl[j] | tL >>> (32 - sl[j])) + el;
-                    al = el; el = dl; dl = (cl << 10 | cl >>> 22); cl = bl; bl = tL;
-                    tR = (tR + w[zr[j]] + hr[round]) | 0; tR = (tR << sr[j] | tR >>> (32 - sr[j])) + er;
-                    ar = er; er = dr; dr = (cr << 10 | cr >>> 22); cr = br; br = tR;
-                }
-                let t = (h[1] + cl + dr) | 0;
-                h[1] = (h[2] + dl + er) | 0; h[2] = (h[3] + el + ar) | 0; h[3] = (h[4] + al + br) | 0;
-                h[4] = (h[0] + bl + cr) | 0; h[0] = t;
-            }
-            let out = new Uint8Array(20);
-            let outView = new DataView(out.buffer);
-            for(let i=0; i<5; i++) outView.setUint32(i*4, h[i], true);
-            return out;
-        }
+fn addc(a: u32, b: u32, cin: u32) -> vec2<u32> {
+  let s1 = a + b;
+  let c1 = select(0u, 1u, s1 < a);
+  let s2 = s1 + cin;
+  let c2 = select(0u, 1u, s2 < s1);
+  return vec2<u32>(s2, c1 + c2);
+}
+fn subb(a: u32, b: u32, bin: u32) -> vec2<u32> {
+  let d1 = a - b;
+  let b1 = select(0u, 1u, a < b);
+  let d2 = d1 - bin;
+  let b2 = select(0u, 1u, d1 < bin);
+  return vec2<u32>(d2, b1 + b2);
+}
+fn mul32(a: u32, b: u32) -> vec2<u32> {
+  let alo = a & 0xFFFFu; let ahi = a >> 16u;
+  let blo = b & 0xFFFFu; let bhi = b >> 16u;
+  let lolo = alo * blo; let lohi = alo * bhi; let hilo = ahi * blo; let hihi = ahi * bhi;
+  let mr = addc(lohi, hilo, 0u);
+  let mid = mr.x; let midCarry = mr.y;
+  let lr = addc(lolo, mid << 16u, 0u);
+  let lo = lr.x; let loCarry = lr.y;
+  let hi = hihi + (mid >> 16u) + (midCarry << 16u) + loCarry;
+  return vec2<u32>(lo, hi);
+}
 
-        function toBase58(hex) {
-            const ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-            const bytes = hex.match(/.{2}/g).map(b => parseInt(b, 16));
-            const digits = [0];
-            for (let i = 0; i < bytes.length; i++) {
-                let carry = bytes[i];
-                for (let j = 0; j < digits.length; j++) {
-                    carry += digits[j] << 8;
-                    digits[j] = carry % 58;
-                    carry = (carry / 58) | 0;
-                }
-                while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0; }
-            }
-            let s = '';
-            for (let i = 0; i < bytes.length && bytes[i] === 0; i++) s += ALPHA[0];
-            for (let i = digits.length - 1; i >= 0; i--) s += ALPHA[digits[i]];
-            return s;
-        }
+fn add8(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> {
+  var out: array<u32,8>; var carry: u32 = 0u;
+  for (var i = 0u; i < 8u; i = i + 1u) {
+    let r = addc(a[i], b[i], carry);
+    out[i] = r.x; carry = r.y;
+  }
+  return out;
+}
+fn sub8(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> {
+  var out: array<u32,8>; var borrow: u32 = 0u;
+  for (var i = 0u; i < 8u; i = i + 1u) {
+    let r = subb(a[i], b[i], borrow);
+    out[i] = r.x; borrow = r.y;
+  }
+  return out;
+}
+fn cmp8(a: array<u32,8>, b: array<u32,8>) -> i32 {
+  for (var ii = 0u; ii < 8u; ii = ii + 1u) {
+    let i = 7u - ii;
+    if (a[i] != b[i]) { return select(-1, 1, a[i] > b[i]); }
+  }
+  return 0;
+}
+fn isZero8(a: array<u32,8>) -> bool {
+  for (var i = 0u; i < 8u; i = i + 1u) { if (a[i] != 0u) { return false; } }
+  return true;
+}
 
-        self.onmessage = function(e) {
-            const data = e.data;
-            if (data.type === "ADDRESS_SCAN") {
-                let currentKey = BigInt("0x" + data.startHex);
-                const endKey = BigInt("0x" + data.endHex);
-                const targetH160 = new Uint8Array(data.targetH160Hex.match(/.{2}/g).map(b => parseInt(b, 16)));
-                const targetAddr = data.targetAddress;
-                const workerId = data.workerId;
-                const BATCH = 10000;
-                
-                // 🔥 INITIALISATIE MET wNAF + GLV! (Super snelle instap)
-                let currentPoint = mul(G, currentKey);
+fn mulRaw(a: array<u32,8>, b: array<u32,8>) -> array<u32,16> {
+  var res: array<u32,16>;
+  for (var i = 0u; i < 16u; i = i + 1u) { res[i] = 0u; }
+  for (var i = 0u; i < 8u; i = i + 1u) {
+    var carry: u32 = 0u;
+    for (var j = 0u; j < 8u; j = j + 1u) {
+      let m = mul32(a[i], b[j]);
+      let s = addc(res[i+j], m.x, carry);
+      res[i+j] = s.x;
+      carry = m.y + s.y;
+    }
+    var k = i + 8u;
+    var cc = carry;
+    loop {
+      if (cc == 0u) { break; }
+      let s = addc(res[k], cc, 0u);
+      res[k] = s.x;
+      cc = s.y;
+      k = k + 1u;
+    }
+  }
+  return res;
+}
 
-                let pX = new Array(BATCH);
-                let pY = new Array(BATCH);
-                let pZ = new Array(BATCH);
-                let partials = new Array(BATCH);
-                let invZ = new Array(BATCH);
+fn mulSmall8(a: array<u32,8>, m: u32) -> array<u32,9> {
+  var out: array<u32,9>;
+  for (var i=0u;i<9u;i=i+1u){ out[i]=0u; }
+  var carry: u32 = 0u;
+  for (var i = 0u; i < 8u; i = i + 1u) {
+    let pr = mul32(a[i], m);
+    let s = addc(out[i], pr.x, carry);
+    out[i] = s.x;
+    carry = pr.y + s.y;
+  }
+  out[8] = carry;
+  return out;
+}
 
-                function fastStep() {
-                    let batchCount = 0;
-                    let jX = currentPoint.x;
-                    let jY = currentPoint.y;
-                    let jZ = 1n;
+fn addScalarAt(acc: ptr<function, array<u32,8>>, pos: u32, value: u32) {
+  var carry = value;
+  var i = pos;
+  loop {
+    if (carry == 0u || i >= 8u) { break; }
+    let s = addc((*acc)[i], carry, 0u);
+    (*acc)[i] = s.x;
+    carry = s.y;
+    i = i + 1u;
+  }
+}
 
-                    for (let i = 0; i < BATCH && currentKey + BigInt(i) <= endKey; i++) {
-                        pX[i] = jX; pY[i] = jY; pZ[i] = jZ;
-                        
-                        let Z1Z1 = mod(jZ * jZ);
-                        let U2 = mod(G_x * Z1Z1);
-                        let S2 = mod(G_y * mod(jZ * Z1Z1));
-                        let H = mod(U2 - jX);
-                        let R = mod(S2 - jY);
-                        
-                        let HH = mod(H * H);
-                        let HHH = mod(H * HH);
-                        let V = mod(jX * HH);
-                        
-                        jX = mod(R * R - HHH - 2n * V);
-                        jY = mod(R * (V - jX) - jY * HHH);
-                        jZ = mod(jZ * H);
-                        
-                        batchCount++;
-                    }
+fn reduceModP(r: array<u32,16>) -> array<u32,8> {
+  var lo: array<u32,9>;
+  for (var i=0u;i<8u;i=i+1u){ lo[i]=r[i]; } lo[8]=0u;
+  var hi: array<u32,8>;
+  for (var i=0u;i<8u;i=i+1u){ hi[i]=r[8u+i]; }
 
-                    if (batchCount === 0) {
-                        self.postMessage({ type: "SCAN_DONE", workerId });
-                        return;
-                    }
-                    
-                    let acc = 1n;
-                    for(let i = 0; i < batchCount; i++) {
-                        partials[i] = acc;
-                        acc = mod(acc * pZ[i]);
-                    }
-                    
-                    let invAcc = inverse(acc);
-                    
-                    for(let i = batchCount - 1; i >= 0; i--) {
-                        invZ[i] = mod(invAcc * partials[i]);
-                        invAcc = mod(invAcc * pZ[i]);
-                    }
-                    
-                    for (let i = 0; i < batchCount; i++) {
-                        let iz = invZ[i];
-                        let iz2 = mod(iz * iz);
-                        let ax = mod(pX[i] * iz2);
-                        let ay = mod(pY[i] * mod(iz * iz2));
-                        
-                        const bytes = new Uint8Array(33);
-                        bytes[0] = (ay & 1n) === 0n ? 0x02 : 0x03;
-                        let tmp = ax;
-                        for (let b = 32; b >= 1; b--) { bytes[b] = Number(tmp & 0xffn); tmp >>= 8n; }
-                        
-                        const s256 = sha256(bytes);
-                        const r160 = ripemd160(s256);
+  var hiShifted: array<u32,9>;
+  hiShifted[0]=0u;
+  for (var i=0u;i<8u;i=i+1u){ hiShifted[i+1u]=hi[i]; }
 
-                        let match = true;
-                        for(let k = 0; k < 20; k++) {
-                            if (r160[k] !== targetH160[k]) { match = false; break; }
-                        }
+  let hi977 = mulSmall8(hi, 977u);
 
-                        if (match) {
-                            const privHex = (currentKey + BigInt(i)).toString(16).padStart(64, '0');
-                            const payloadBytes = ("80" + privHex + "01").match(/.{2}/g).map(b => parseInt(b, 16));
-                            const doubleSha = sha256(sha256(new Uint8Array(payloadBytes)));
-                            const wif = toBase58("80" + privHex + "01" + Array.from(doubleSha).slice(0, 4).map(b => b.toString(16).padStart(2,'0')).join(''));
-                            self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: targetAddr });
-                            return;
-                        }
-                    }
-                    
-                    currentKey += BigInt(batchCount);
-                    
-                    if (currentKey > endKey) {
-                        self.postMessage({ type: "SCAN_DONE", workerId });
-                        return;
-                    }
-                    
-                    let lastZ = invZ[batchCount - 1];
-                    let lastZ2 = mod(lastZ * lastZ);
-                    let lastAX = mod(pX[batchCount - 1] * lastZ2);
-                    let lastAY = mod(pY[batchCount - 1] * mod(lastZ * lastZ2));
-                    currentPoint = add({x: lastAX, y: lastAY}, G);
+  var sum1: array<u32,9>; var carry: u32 = 0u;
+  for (var i=0u;i<9u;i=i+1u){ let s=addc(lo[i], hiShifted[i], carry); sum1[i]=s.x; carry=s.y; }
+  let carry1 = carry;
+  var sum2: array<u32,9>; carry = 0u;
+  for (var i=0u;i<9u;i=i+1u){ let s=addc(sum1[i], hi977[i], carry); sum2[i]=s.x; carry=s.y; }
+  let carry2 = carry;
+  let extra = carry1 + carry2; 
 
-                    self.postMessage({ type: "PROGRESS", count: batchCount, workerId });
-                    setTimeout(fastStep, 0);
-                }
-                fastStep();
-            }
-        };
-    </script>
+  var acc: array<u32,8>;
+  for (var i=0u;i<8u;i=i+1u){ acc[i]=sum2[i]; }
+  let hi2 = sum2[8];
 
-    <script>
-        (function() {
-            let workers = [], totalJumps = 0, cumulativeScanned = 0;
-            let currentSliceScanned = 0;
-            let slicesVisited = 1;
-            let targetLimit = 10000000;
-            let startTime = 0, isRunning = false;
-            let lastUpdateScanned = 0, lastUpdateTime = 0;
+  let hi2_977 = mul32(hi2, 977u);
+  addScalarAt(&acc, 0u, hi2_977.x);
+  addScalarAt(&acc, 1u, hi2_977.y);
+  addScalarAt(&acc, 1u, hi2);
+  addScalarAt(&acc, 2u, extra);
+  addScalarAt(&acc, 1u, extra * 977u);
 
-            const SLICE_SIZE = 34359738368n;
-            const PUZZLE_71_TOTAL = 1180591620717411303424n;
+  for (var iter=0u; iter<6u; iter=iter+1u) {
+    if (cmp8(acc, P) >= 0) { acc = sub8(acc, P); } else { break; }
+  }
+  return acc;
+}
 
-            const logBox = document.getElementById('logBox'),
-                  startBtn = document.getElementById('startBtn'),
-                  stopBtn = document.getElementById('stopBtn'),
-                  statusVal = document.getElementById('statusVal'),
-                  progressBar = document.getElementById('progressBar');
+fn mulmod(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> {
+  return reduceModP(mulRaw(a, b));
+}
+fn addmod(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> {
+  var s = add8(a, b);
+  if (cmp8(s, P) >= 0 || (s[7] < a[7] && b[7] != 0u)) { s = sub8(s, P); } // Simplified carry check
+  return s;
+}
+fn submod(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> {
+  if (cmp8(a, b) >= 0) { return sub8(a, b);
+  } else { return sub8(P, sub8(b, a)); }
+}
 
-            function log(msg, cls = '') {
-                const ts = new Date().toLocaleTimeString('nl-NL');
-                const div = document.createElement('div');
-                div.innerHTML = `<span class="ts">[${ts}]</span> ${msg}`;
-                if (cls) div.className = cls;
-                logBox.appendChild(div);
-                logBox.scrollTop = logBox.scrollHeight;
-            }
+fn u32to8(x: u32) -> array<u32,8> {
+  var out: array<u32,8>; out[0]=x;
+  for (var i=1u;i<8u;i=i+1u){ out[i]=0u; }
+  return out;
+}
 
-            function setStatus(txt, cls = '') {
-                statusVal.textContent = txt;
-                statusVal.className = cls;
-            }
+fn modpowP2(base: array<u32,8>) -> array<u32,8> {
+  var result = u32to8(1u); var b = base;
+  for (var i = 0u; i < 256u; i = i + 1u) {
+    if (((P_MINUS_2[i / 32u] >> (i % 32u)) & 1u) == 1u) { result = mulmod(result, b); }
+    b = mulmod(b, b);
+  }
+  return result;
+}
 
-            function killWorkers() {
-                workers.forEach(w => { try { w.terminate(); } catch (_) {} });
-                workers = [];
-            }
+struct JPoint { X: array<u32,8>, Y: array<u32,8>, Z: array<u32,8>, isInf: bool };
 
-            function generateRandomSlice() {
-                const globalStart = BigInt("0x400000000000000000");
-                const globalEnd = BigInt("0x7fffffffffffffffff");
-                const maxOffset = (globalEnd - globalStart + 1n) - SLICE_SIZE;
-                const bytes = new Uint8Array(Math.ceil(maxOffset.toString(2).length / 8));
-                window.crypto.getRandomValues(bytes);
-                const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-                const rand = BigInt("0x" + hex);
-                const offset = rand % maxOffset;
-                const sliceStart = globalStart + offset;
-                const sliceEnd = sliceStart + SLICE_SIZE - 1n;
+fn jacDouble(p: JPoint) -> JPoint {
+  let Ysq = mulmod(p.Y, p.Y);
+  let S = mulmod(u32to8(4u), mulmod(p.X, Ysq));
+  let M = mulmod(u32to8(3u), mulmod(p.X, p.X));
+  let twoS = addmod(S, S);
+  let X3 = submod(mulmod(M, M), twoS);
+  let Y3 = submod(mulmod(M, submod(S, X3)), mulmod(u32to8(8u), mulmod(Ysq, Ysq)));
+  let Z3 = mulmod(u32to8(2u), mulmod(p.Y, p.Z));
+  var out: JPoint; out.X = X3; out.Y = Y3; out.Z = Z3; out.isInf = isZero8(Z3);
+  return out;
+}
 
-                document.getElementById('rangeStart').value = sliceStart.toString(16);
-                document.getElementById('rangeEnd').value = sliceEnd.toString(16);
-                log(`Zone geladen. Start: ${sliceStart.toString(16).substring(0,8)}...`, 'ev-hop');
-            }
+fn jacMaddAffine(p: JPoint, x2: array<u32,8>, y2: array<u32,8>) -> JPoint {
+  if (p.isInf) {
+    var out: JPoint; out.X = x2; out.Y = y2; out.Z = u32to8(1u); out.isInf = false; return out;
+  }
+  let Z1sq = mulmod(p.Z, p.Z);
+  let U2 = mulmod(x2, Z1sq);
+  let S2 = mulmod(mulmod(y2, Z1sq), p.Z);
+  let H = submod(U2, p.X);
+  let R = submod(S2, p.Y);
+  if (isZero8(H)) {
+    if (isZero8(R)) { return jacDouble(p); } 
+    else { var out: JPoint; out.X=u32to8(0u); out.Y=u32to8(0u); out.Z=u32to8(0u); out.isInf=true; return out; }
+  }
+  let HH = mulmod(H, H); let HHH = mulmod(HH, H);
+  let V = mulmod(p.X, HH);
+  let X3 = submod(submod(mulmod(R, R), HHH), addmod(V, V));
+  let Y3 = submod(mulmod(R, submod(V, X3)), mulmod(p.Y, HHH));
+  let Z3 = mulmod(p.Z, H);
+  var out: JPoint; out.X = X3; out.Y = Y3; out.Z = Z3; out.isInf = isZero8(Z3);
+  return out;
+}
 
-            function makeWorker() {
-                const code = document.getElementById('workerCode').textContent;
-                const worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
-                worker.onerror = function(e) {
-                    log(`❌ Fout in verwerking. Controleer browser-limieten.`, 'ev-stop');
-                    setStatus('Gestopt', '');
-                    killWorkers();
-                    setRunning(false);
-                };
-                return worker;
-            }
+fn scalarMultG(k: array<u32,8>) -> array<array<u32,8>,2> {
+  var pt: JPoint; pt.X = u32to8(0u); pt.Y = u32to8(0u); pt.Z = u32to8(0u); pt.isInf = true;
+  for (var ii = 0u; ii < 256u; ii = ii + 1u) {
+    let i = 255u - ii;
+    if (!pt.isInf) { pt = jacDouble(pt); }
+    if (((k[i / 32u] >> (i % 32u)) & 1u) == 1u) { pt = jacMaddAffine(pt, GX, GY); }
+  }
+  let Zinv = modpowP2(pt.Z);
+  let Zinv2 = mulmod(Zinv, Zinv);
+  let x = mulmod(pt.X, Zinv2);
+  let y = mulmod(pt.Y, mulmod(Zinv2, Zinv));
+  var out: array<array<u32,8>,2>; out[0] = x; out[1] = y; return out;
+}
 
-            function setRunning(v) {
-                isRunning = v;
-                startBtn.disabled = v;
-                stopBtn.disabled = !v;
-            }
+fn add_offset(base: array<u32,8>, offset: u32) -> array<u32,8> {
+  var k = base; var carry = offset;
+  for (var i = 0u; i < 8u; i = i + 1u) {
+    let s = k[i] + carry; let c = select(0u, 1u, s < k[i]);
+    k[i] = s; carry = c;
+    if (carry == 0u) { break; }
+  }
+  return k;
+}
 
-            function fromBase58(address) {
-                const ALPHA = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-                if (!address) return '';
-                let bytes = [0];
-                for (let i = 0; i < address.length; i++) {
-                    let c = ALPHA.indexOf(address[i]);
-                    if (c < 0) throw new Error('Ongeldig Base58 adres.');
-                    for (let j = 0; j < bytes.length; j++) {
-                        c += bytes[j] * 58; bytes[j] = c & 0xff; c >>= 8;
-                    }
-                    while (c > 0) { bytes.push(c & 0xff); c >>= 8; }
-                }
-                let zeros = 0;
-                for (let i = 0; i < address.length && address[i] === '1'; i++) zeros++;
-                while (bytes.length > 0 && bytes[bytes.length - 1] === 0) bytes.pop();
-                for (let i = 0; i < zeros; i++) bytes.push(0);
-                bytes.reverse();
-                return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
-            }
+@group(0) @binding(0) var<uniform> base_key: array<u32,8>;
+@group(0) @binding(1) var<storage, read_write> pubkeys: array<u32>;
 
-            function formatSeconds(seconds) {
-                if (!isFinite(seconds) || seconds <= 0) return '—';
-                if (seconds > 3.15e7) return (seconds / 3.15e7).toFixed(1) + ' jaar';
-                if (seconds > 86400) return (seconds / 86400).toFixed(1) + ' dagen';
-                if (seconds > 3600) return (seconds / 3600).toFixed(1) + ' uur';
-                if (seconds > 60) return (seconds / 60).toFixed(0) + ' min';
-                return seconds.toFixed(0) + ' s';
-            }
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let idx = gid.x;
+  let count = arrayLength(&pubkeys) / 9u;
+  if (idx >= count) { return; }
 
-            function updateAllStats() {
-                targetLimit = Number(document.getElementById('keysLimit').value) || 10000000;
-                document.getElementById('limitDisplay').textContent = targetLimit.toLocaleString('nl-NL');
-                document.getElementById('slicesVisitedCount').textContent = slicesVisited.toLocaleString('nl-NL');
+  let k = add_offset(base_key, idx);
+  let xy = scalarMultG(k);
 
-                const hopProgress = Math.min(1, currentSliceScanned / targetLimit);
-                document.getElementById('gaugePct').textContent = (hopProgress * 100).toFixed(1) + '%';
-                document.getElementById('gaugeFill').style.strokeDashoffset = 238.76 - (hopProgress * 238.76);
-                document.getElementById('kansBar').style.width = (hopProgress * 100) + '%';
-                document.getElementById('coveragePct').textContent = (hopProgress * 100).toFixed(2) + '%';
-                document.getElementById('jumpsCoverage').textContent = currentSliceScanned.toLocaleString('nl-NL') + ' keys gescand';
-                document.getElementById('chanceScientific').innerHTML = `${(hopProgress * 100).toFixed(2)}%`;
+  // We write X (8 u32s) + the Y-parity bit (1 u32) = 9 u32s per thread
+  for (var i = 0u; i < 8u; i = i + 1u) {
+    pubkeys[idx*9u + i] = xy[0][i];
+  }
+  pubkeys[idx*9u + 8u] = xy[1][0] & 1u;
+}
+`;
 
-                document.getElementById('cmpLottery').textContent = (cumulativeScanned / Number(PUZZLE_71_TOTAL)).toExponential(4);
-                document.getElementById('cmpEpochs').textContent = ((Number(SLICE_SIZE) / Number(PUZZLE_71_TOTAL)) * 100).toExponential(6) + '%';
 
-                const now = Date.now();
-                const elapsedSec = (now - lastUpdateTime) / 1000;
-                
-                if (elapsedSec >= 1) { 
-                    const currentSpeed = Math.floor((cumulativeScanned - lastUpdateScanned) / elapsedSec);
-                    document.getElementById('speed').textContent = currentSpeed.toLocaleString('nl-NL') + ' /s';
-                    
-                    if (currentSpeed > 0) {
-                        const remaining = targetLimit - currentSliceScanned;
-                        document.getElementById('cmpTime').textContent = formatSeconds(remaining / currentSpeed);
-                        document.getElementById('calcGradient').textContent = currentSpeed.toLocaleString('nl-NL') + ' /s';
-                        document.getElementById('calcPoisson').textContent = (hopProgress * 100).toFixed(2) + ' %';
-                    }
-                    lastUpdateTime = now; lastUpdateScanned = cumulativeScanned;
-                }
+// =====================================================================================
+// ZERO-GC JAVASCRIPT HASHING (Main Thread, ultra-fast inline SHA256 -> RIPEMD160)
+// =====================================================================================
+const sha_K = new Uint32Array([0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
+const zl=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15, 7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8, 3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12, 1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2, 4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13];
+const zr=[5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12, 6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2, 15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13, 8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14, 12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11];
+const sl=[11,14,15,12,5,8,7,9,11,13,14,15,6,7,9,8, 7,6,8,13,11,9,7,15,7,12,15,9,11,7,13,12, 11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5, 11,12,14,15,14,15,9,8,9,14,5,6,8,6,5,12, 9,15,5,11,6,8,13,12,5,12,13,14,11,8,5,6];
+const sr=[8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6, 9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11, 9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5, 15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8, 8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];
+const hl=[0x00000000,0x5a827999,0x6ed9eba1,0x8f1bbcdc,0xa953fd4e];
+const hr=[0x50a28be6,0x5c4dd124,0x6d703ef3,0x7a6d76e9,0x00000000];
+const W = new Uint32Array(64);
 
-                progressBar.style.width = (hopProgress * 100) + '%';
-                document.getElementById('keysScanned').textContent = cumulativeScanned.toLocaleString('nl-NL');
-                document.getElementById('currentSliceKeys').textContent = currentSliceScanned.toLocaleString('nl-NL');
-            }
+function fn(j, x, y, z) {
+  if (j < 16) return x ^ y ^ z;
+  if (j < 32) return (x & y) | (~x & z);
+  if (j < 48) return (x | (~y >>> 0)) ^ z;
+  if (j < 64) return (x & z) | (y & (~z >>> 0));
+  return x ^ (y | (~z >>> 0));
+}
+function rotl(x, n) { return ((x << n) | (x >>> (32 - n))) >>> 0; }
+function reverseBytes(x) { return ((x >>> 24) | ((x >>> 8) & 0xff00) | ((x << 8) & 0xff0000) | (x << 24)) >>> 0; }
 
-            function spawnWorkers() {
-                const targetAddr = document.getElementById('btcAddr').value.trim();
-                let targetH160Hex;
-                try {
-                    const decoded = fromBase58(targetAddr);
-                    if (decoded.length !== 50) throw new Error();
-                    targetH160Hex = decoded.substring(2, 42);
-                } catch (e) { 
-                    log('❌ Ongeldig BTC Adres', 'ev-stop'); setRunning(false); return; 
-                }
+// Extreem geoptimaliseerde controle voor de 33-byte compressed public key tegen het doelwit.
+function checkHash160(x0, x1, x2, x3, x4, x5, x6, x7, parity, tr0, tr1, tr2, tr3, tr4) {
+  // Vul SHA-256 (Big-Endian words)
+  W[0] = ((parity ? 0x03 : 0x02) << 24) | (x7 >>> 8);
+  W[1] = ((x7 & 0xFF) << 24) | (x6 >>> 8);
+  W[2] = ((x6 & 0xFF) << 24) | (x5 >>> 8);
+  W[3] = ((x5 & 0xFF) << 24) | (x4 >>> 8);
+  W[4] = ((x4 & 0xFF) << 24) | (x3 >>> 8);
+  W[5] = ((x3 & 0xFF) << 24) | (x2 >>> 8);
+  W[6] = ((x2 & 0xFF) << 24) | (x1 >>> 8);
+  W[7] = ((x1 & 0xFF) << 24) | (x0 >>> 8);
+  W[8] = ((x0 & 0xFF) << 24) | 0x00800000; // Padding
+  W[9] = 0; W[10] = 0; W[11] = 0; W[12] = 0; W[13] = 0; W[14] = 0;
+  W[15] = 264; // bit length (33 * 8)
 
-                const startBI = BigInt("0x" + document.getElementById('rangeStart').value);
-                const endBI = BigInt("0x" + document.getElementById('rangeEnd').value);
-                const numW = Math.max(1, parseInt(document.getElementById('numW').value) || 4);
-                
-                killWorkers();
-                let workersDone = 0;
+  for (let i = 16; i < 64; i++) {
+    let w15 = W[i - 15], w2 = W[i - 2];
+    let s0 = ((w15 >>> 7) | (w15 << 25)) ^ ((w15 >>> 18) | (w15 << 14)) ^ (w15 >>> 3);
+    let s1 = ((w2 >>> 17) | (w2 << 15)) ^ ((w2 >>> 19) | (w2 << 13)) ^ (w2 >>> 10);
+    W[i] = (W[i - 16] + s0 + W[i - 7] + s1) >>> 0;
+  }
 
-                for (let i = 0; i < numW; i++) {
-                    const worker = makeWorker();
-                    workers.push(worker);
-                    
-                    const chunkSize = (endBI - startBI + 1n) / BigInt(numW);
-                    const segStart = (startBI + chunkSize * BigInt(i)).toString(16);
-                    const segEnd = (i === numW - 1) ? endBI.toString(16) : (startBI + chunkSize * BigInt(i + 1) - 1n).toString(16);
+  let a = 0x6a09e667, b = 0xbb67ae85, c = 0x3c6ef372, d = 0xa54ff53a;
+  let e = 0x510e527f, f = 0x9b05688c, g = 0x1f83d9ab, h = 0x5be0cd19;
 
-                    worker.onmessage = (ev) => {
-                        if (ev.data.type === "PROGRESS") {
-                            if (!isRunning) return;
-                            totalJumps += ev.data.count; cumulativeScanned += ev.data.count; currentSliceScanned += ev.data.count;
-                            if (currentSliceScanned >= targetLimit) {
-                                killWorkers(); generateRandomSlice(); slicesVisited++; currentSliceScanned = 0;
-                                setTimeout(() => { if (isRunning) spawnWorkers(); }, 50);
-                            }
-                        }
-                        else if (ev.data.type === "SCAN_DONE") {
-                            workersDone++;
-                            if (workersDone === numW) {
-                                killWorkers(); generateRandomSlice(); slicesVisited++; currentSliceScanned = 0;
-                                setTimeout(() => { if (isRunning) spawnWorkers(); }, 50);
-                            }
-                        } else if (ev.data.type === "FOUND") {
-                            setRunning(false); killWorkers(); setStatus('🎉 GEVONDEN!', 'running');
-                            document.getElementById('matchTable').innerHTML = `<tr><td>✅ MATCH</td><td style="font-size:.65rem; color:#00ff99;">${ev.data.wif}</td><td style="font-size:.65rem">${ev.data.privHex}</td></tr>`;
-                            log('🔥 MATCH GEVONDEN! Proces gestopt.', 'ev-found');
-                        }
-                    };
-                    worker.postMessage({ type: "ADDRESS_SCAN", startHex: segStart, endHex: segEnd, targetH160Hex, targetAddress: targetAddr, workerId: i });
-                }
-            }
+  for (let i = 0; i < 64; i++) {
+    let S1 = ((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7));
+    let ch = (e & f) ^ (~e & g);
+    let temp1 = (h + S1 + ch + sha_K[i] + W[i]) >>> 0;
+    let S0 = ((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10));
+    let maj = (a & b) ^ (a & c) ^ (b & c);
+    let temp2 = (S0 + maj) >>> 0;
 
-            function startAddressScan() {
-                if (isRunning) return;
-                startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = cumulativeScanned;
-                setRunning(true);
-                setStatus('⚡ wNAF + Batch v4', 'running');
-                log('wNAF-GLV Jacobian Batch Scan v4 gestart.', 'ev-epoch');
-                spawnWorkers();
-            }
+    h = g; g = f; f = e; e = (d + temp1) >>> 0;
+    d = c; c = b; b = a; a = (temp1 + temp2) >>> 0;
+  }
 
-            startBtn.onclick = () => { if (!isRunning) startAddressScan(); };
-            stopBtn.onclick = () => { setRunning(false); killWorkers(); setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop'); };
-            generateRandomSlice();
-            log('Systeem klaar. wNAF-GLV + Batch Engine v4 geladen.', 'ts');
+  // Vul RIPEMD-160 (Little-Endian words gebaseerd op SHA-256 output)
+  W[0] = reverseBytes((0x6a09e667 + a) >>> 0);
+  W[1] = reverseBytes((0xbb67ae85 + b) >>> 0);
+  W[2] = reverseBytes((0x3c6ef372 + c) >>> 0);
+  W[3] = reverseBytes((0xa54ff53a + d) >>> 0);
+  W[4] = reverseBytes((0x510e527f + e) >>> 0);
+  W[5] = reverseBytes((0x9b05688c + f) >>> 0);
+  W[6] = reverseBytes((0x1f83d9ab + g) >>> 0);
+  W[7] = reverseBytes((0x5be0cd19 + h) >>> 0);
+  W[8] = 0x80;
+  W[9] = 0; W[10] = 0; W[11] = 0; W[12] = 0; W[13] = 0;
+  W[14] = 256; W[15] = 0;
 
-            setInterval(() => { if (isRunning) updateAllStats(); }, 800);
-        })();
-    </script>
+  let al=0x67452301, bl=0xefcdab89, cl=0x98badcfe, dl=0x10325476, el=0xc3d2e1f0;
+  let ar=0x67452301, br=0xefcdab89, cr=0x98badcfe, dr=0x10325476, er=0xc3d2e1f0;
+
+  for (let j = 0; j < 80; j++) {
+    let round = Math.floor(j / 16);
+    let t1 = (al + fn(j, bl, cl, dl) + W[zl[j]] + hl[round]) >>> 0;
+    t1 = (rotl(t1, sl[j]) + el) >>> 0;
+    al = el; el = dl; dl = rotl(cl,10); cl = bl; bl = t1;
+
+    let t2 = (ar + fn(79 - j, br, cr, dr) + W[zr[j]] + hr[round]) >>> 0;
+    t2 = (rotl(t2, sr[j]) + er) >>> 0;
+    ar = er; er = dr; dr = rotl(cr,10); cr = br; br = t2;
+  }
+
+  // Vergelijk rechtstreeks met de doelwit RIPEMD-160 hash
+  if (((0xefcdab89 + cl + dr) >>> 0) !== tr0) return false;
+  if (((0x98badcfe + dl + er) >>> 0) !== tr1) return false;
+  if (((0x10325476 + el + ar) >>> 0) !== tr2) return false;
+  if (((0xc3d2e1f0 + al + br) >>> 0) !== tr3) return false;
+  if (((0x67452301 + bl + cr) >>> 0) !== tr4) return false;
+  return true;
+}
+
+
+// =====================================================================================
+// APP LOGIC
+// =====================================================================================
+let gpuDevice = null, gpuPipeline = null;
+let isRunning = false;
+let BATCH_SIZE = 32768; // Keys per GPU dispatch. Optimaal voor UI-responsiviteit.
+let inBuf, outBuf, readBuf, bindGroup;
+
+let targetAddress = "1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU";
+let tHash = [];
+
+let currentSliceBase = 0n;
+let sliceLimit = 100000000;
+let keysCheckedInSlice = 0;
+let totalKeysScanned = 0;
+let startTime = 0;
+let lastUiUpdate = 0;
+
+function logMessage(msg) {
+  const box = document.getElementById('logBox');
+  const d = new Date().toLocaleTimeString('nl-NL');
+  box.insertAdjacentHTML('afterbegin', `<div><span style="color:#666">[${d}]</span> ${msg}</div>`);
+}
+
+async function init() {
+  const statusEl = document.getElementById('gpuStatus');
+  const dotEl = document.getElementById('gpuDot');
+  if (!('gpu' in navigator)) {
+    statusEl.textContent = 'WebGPU niet beschikbaar in deze browser';
+    return false;
+  }
+  try {
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) throw new Error("Geen adapter");
+    gpuDevice = await adapter.requestDevice();
+    const module = gpuDevice.createShaderModule({ code: WGSL_SOURCE });
+    gpuPipeline = gpuDevice.createComputePipeline({
+      layout: 'auto',
+      compute: { module, entryPoint: 'main' }
+    });
+    
+    // Create buffers once
+    inBuf = gpuDevice.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    let outSize = BATCH_SIZE * 9 * 4;
+    outBuf = gpuDevice.createBuffer({ size: outSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    readBuf = gpuDevice.createBuffer({ size: outSize, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+
+    bindGroup = gpuDevice.createBindGroup({
+      layout: gpuPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: inBuf } },
+        { binding: 1, resource: { buffer: outBuf } }
+      ]
+    });
+
+    statusEl.textContent = 'WebGPU Actief';
+    dotEl.classList.add('on');
+    tHash = getTargetHash160(targetAddress);
+    return true;
+  } catch (e) {
+    statusEl.textContent = 'WebGPU Fout: ' + e.message;
+    return false;
+  }
+}
+
+function getRandomPuzzle71Base() {
+  const min = 0x400000000000000000n; // 2^70
+  const r = new Uint8Array(9);
+  crypto.getRandomValues(r);
+  r[0] &= 0x3F; // max 70 bit
+  let randVal = BigInt("0x" + bytesToHex(r));
+  return min + randVal;
+}
+
+function startSlice() {
+  currentSliceBase = getRandomPuzzle71Base();
+  keysCheckedInSlice = 0;
+  sliceLimit = parseInt(document.getElementById('keysLimit').value);
+  document.getElementById('rangeStart').innerText = "0x" + currentSliceBase.toString(16);
+  document.getElementById('rangeEnd').innerText = "0x" + (currentSliceBase + BigInt(sliceLimit)).toString(16);
+  logMessage(`Nieuwe slice gestart op range ${currentSliceBase.toString(16)}...`);
+}
+
+async function startSniper() {
+  if (!gpuDevice && !(await init())) return;
+  isRunning = true;
+  document.getElementById('startBtn').style.display = 'none';
+  document.getElementById('stopBtn').style.display = 'block';
+  document.getElementById('statusVal').innerText = "SCANNING";
+  document.getElementById('statusVal').style.color = "var(--teal)";
+  
+  startSlice();
+  startTime = Date.now();
+  lastUiUpdate = startTime;
+  
+  runLoop();
+}
+
+function stopSniper() {
+  isRunning = false;
+  document.getElementById('startBtn').style.display = 'block';
+  document.getElementById('stopBtn').style.display = 'none';
+  document.getElementById('statusVal').innerText = "GESTOPT";
+  document.getElementById('statusVal').style.color = "var(--danger)";
+}
+
+async function matchFound(privKeyBigInt) {
+  stopSniper();
+  const hex = privKeyBigInt.toString(16).padStart(64, '0');
+  const wif = await getWIF(privKeyBigInt);
+  
+  logMessage(`<b class="match">Doelwit gevonden!</b>`);
+  
+  document.getElementById('matchCard').style.display = 'block';
+  document.getElementById('matchDisplay').innerHTML = `
+    <b>Target:</b> ${targetAddress}<br><br>
+    <b>Private Key (Hex):</b><br>${hex}<br><br>
+    <b>Private Key (WIF):</b><br><span style="color:var(--accent); font-size:14px;">${wif}</span>
+  `;
+}
+
+function updateUI() {
+  let now = Date.now();
+  let elapsed = (now - lastUiUpdate) / 1000;
+  if (elapsed >= 0.5) {
+    let speed = (keysCheckedInSlice / ((now - startTime)/1000)) || 0;
+    document.getElementById('speed').innerText = Math.floor(speed).toLocaleString('nl-NL');
+    document.getElementById('keysScanned').innerText = totalKeysScanned.toLocaleString('nl-NL');
+    document.getElementById('currentSliceKeys').innerText = `${keysCheckedInSlice.toLocaleString('nl-NL')} / ${sliceLimit.toLocaleString('nl-NL')}`;
+    
+    let pct = (keysCheckedInSlice / sliceLimit);
+    document.getElementById('progressBar').style.width = (pct * 100) + '%';
+    
+    let dashoffset = 314 - (314 * pct);
+    document.getElementById('gaugeRing').style.strokeDashoffset = dashoffset;
+    document.getElementById('pctText').innerText = Math.floor(pct * 100) + '%';
+    
+    lastUiUpdate = now;
+  }
+}
+
+async function runLoop() {
+  if (!isRunning) return;
+
+  if (keysCheckedInSlice >= sliceLimit) {
+    startSlice();
+    startTime = Date.now(); // reset speed calc per slice
+  }
+
+  // 1. GPU Dispatch
+  let currentKey = currentSliceBase + BigInt(keysCheckedInSlice);
+  gpuDevice.queue.writeBuffer(inBuf, 0, bytesToLimbsLE(bigIntTo32Bytes(currentKey)));
+
+  let encoder = gpuDevice.createCommandEncoder();
+  let pass = encoder.beginComputePass();
+  pass.setPipeline(gpuPipeline);
+  pass.setBindGroup(0, bindGroup);
+  pass.dispatchWorkgroups(Math.ceil(BATCH_SIZE / 64));
+  pass.end();
+  encoder.copyBufferToBuffer(outBuf, 0, readBuf, 0, BATCH_SIZE * 9 * 4);
+  gpuDevice.queue.submit([encoder.finish()]);
+
+  // 2. Wacht op GPU
+  await readBuf.mapAsync(GPUMapMode.READ);
+  let result = new Uint32Array(readBuf.getMappedRange());
+
+  // 3. Extreem snelle Zero-GC check (CPU)
+  let foundIndex = -1;
+  let tr0=tHash[0], tr1=tHash[1], tr2=tHash[2], tr3=tHash[3], tr4=tHash[4];
+
+  for (let i = 0; i < BATCH_SIZE; i++) {
+    let idx = i * 9;
+    if (checkHash160(result[idx], result[idx+1], result[idx+2], result[idx+3], result[idx+4], result[idx+5], result[idx+6], result[idx+7], result[idx+8], tr0, tr1, tr2, tr3, tr4)) {
+      foundIndex = i;
+      break;
+    }
+  }
+  
+  readBuf.unmap();
+
+  if (foundIndex !== -1) {
+    matchFound(currentKey + BigInt(foundIndex));
+    return;
+  }
+
+  // 4. Administratie & Loop
+  keysCheckedInSlice += BATCH_SIZE;
+  totalKeysScanned += BATCH_SIZE;
+  
+  updateUI();
+  
+  // Geef browser event loop kans om te ademen, vervolg direct
+  setTimeout(runLoop, 0);
+}
+
+document.getElementById('startBtn').addEventListener('click', startSniper);
+document.getElementById('stopBtn').addEventListener('click', stopSniper);
+</script>
 </body>
 </html>
