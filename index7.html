@@ -75,7 +75,7 @@
   </header>
 
   <section class="panel">
-    <h2><span class="n">01</span> Doelconfiguratie & Range</h2>
+    <h2><span class="n">01</span> Doelconfiguratie &amp; Range</h2>
     <div class="input-grid">
       <label style="font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:6px; grid-column: 1 / -1;">Doeladres (P2PKH)
         <input type="text" id="targetAddressInput" value="19EEC52krRUK1RkUAEZmQdjTyHT7Gp1TYT">
@@ -306,7 +306,7 @@ fn mulSmall8(a: array<u32,8>, m: u32) -> array<u32,9> {
   var out: array<u32,9>; for (var i=0u;i<9u;i=i+1u){ out[i]=0u; }
   var carry: u32 = 0u;
   for (var i = 0u; i < 8u; i = i + 1u) {
-    let pr = mul32(a[i], m); let s = addc(out[i], pr.x, carry);
+    let pr = mul32(a[i], m); let s = addc(pr.x, carry, 0u);
     out[i] = s.x; carry = pr.y + s.y;
   }
   out[8] = carry; return out;
@@ -466,19 +466,14 @@ fn rmdF(j: u32, x: u32, y: u32, z: u32) -> u32 {
   return x ^ (y | (~z));
 }
 
-// FIX 1 & 2: Correcte bswap en Little-Endian paddings
 fn ripemd160_32(H: array<u32,8>) -> array<u32,5> {
   var X: array<u32,16>;
   for (var i = 0u; i < 16u; i = i + 1u) { X[i] = 0u; }
-  
-  // H is Big-Endian from SHA256. X is Little-Endian for RIPEMD160. bswap32 is direct en verliest geen bits.
   for (var i = 0u; i < 8u; i = i + 1u) {
     X[i] = bswap32(H[i]);
   }
-  
-  // Little-endian padding: 0x80 is de laagste byte.
-  X[8] = 0x80u; 
-  X[14] = 256u; 
+  X[8] = 0x80u;
+  X[14] = 256u;
 
   var h0 = 0x67452301u; var h1 = 0xefcdab89u; var h2 = 0x98badcfeu; var h3 = 0x10325476u; var h4 = 0xc3d2e1f0u;
   var al = h0; var bl = h1; var cl = h2; var dl = h3; var el = h4;
@@ -543,7 +538,6 @@ let gpuDevice = null, gpuPipeline = null, tableBuffer = null, uniformsBuffer = n
 let isRunning = false;
 let totalChecked = 0;
 
-// FIX 4: Robuustere Base58 decoder (garandeert exact 20 bytes voor P2PKH Hash160)
 function getTargetHash160Bytes(address) {
   const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
   let bytes = [0];
@@ -563,10 +557,8 @@ function getTargetHash160Bytes(address) {
   }
   for (let i = 0; i < address.length && address[i] === '1'; i++) bytes.push(0);
   bytes.reverse();
-  
   while (bytes.length > 25 && bytes[0] === 0) bytes.shift();
   while (bytes.length < 25) bytes.unshift(0);
-  
   return new Uint8Array(bytes.slice(1, 21));
 }
 
@@ -579,7 +571,7 @@ async function initWebGPU() {
     gpuDevice = await adapter.requestDevice();
     const module = gpuDevice.createShaderModule({ code: WGSL_SOURCE });
     gpuPipeline = gpuDevice.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
-    
+
     statusEl.textContent = 'Comb-tabel aanmaken…';
     const table = buildPrecomputedTable();
     tableBuffer = gpuDevice.createBuffer({ size: table.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
@@ -610,13 +602,12 @@ document.getElementById('btnStart').addEventListener('click', async () => {
 
   const targetAddress = document.getElementById('targetAddressInput').value.trim();
   const targetHashBytes = getTargetHash160Bytes(targetAddress);
-  
-  // FIX 3: Little-Endian packing in JS om te matchen met de Little-Endian vergelijking in WGSL
+
   const targetHashU32 = new Uint32Array(5);
   for (let i = 0; i < 5; i++) {
-    targetHashU32[i] = (targetHashBytes[i*4] | 
-                       (targetHashBytes[i*4+1] << 8) | 
-                       (targetHashBytes[i*4+2] << 16) | 
+    targetHashU32[i] = (targetHashBytes[i*4] |
+                       (targetHashBytes[i*4+1] << 8) |
+                       (targetHashBytes[i*4+2] << 16) |
                        (targetHashBytes[i*4+3] << 24)) >>> 0;
   }
   gpuDevice.queue.writeBuffer(uniformsBuffer, 0, targetHashU32);
@@ -629,7 +620,7 @@ document.getElementById('btnStart').addEventListener('click', async () => {
   document.getElementById('btnStop').disabled = false;
   document.getElementById('feedText').textContent = "Zoeken binnen ingestelde range...";
 
-  const batchSize = 1048576; 
+  const batchSize = 1048576;
   let startTime = performance.now();
   totalChecked = 0;
 
@@ -646,7 +637,7 @@ document.getElementById('btnStart').addEventListener('click', async () => {
 
     const batchLimbs = new Uint32Array(batchSize * 8);
     const startValForBatch = currentKeyVal;
-    
+
     for (let i = 0; i < batchSize; i++) {
       if (currentKeyVal > maxKeyVal) break;
       const limbs = bigIntToLimbsLE(currentKeyVal);
@@ -701,7 +692,7 @@ document.getElementById('btnStart').addEventListener('click', async () => {
       const foundPrivInt = startValForBatch + BigInt(foundIdx);
       const privHex = foundPrivInt.toString(16).padStart(64, '0');
       const wif = wifCompressed(hexToBytes(privHex));
-      
+
       document.getElementById('matchBox').style.display = 'block';
       document.getElementById('matchInfo').innerHTML = `
         Private Key (Hex): <b>0x${privHex}</b><br>
