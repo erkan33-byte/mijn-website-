@@ -216,7 +216,7 @@
       
       <div class="field">
         <label>Doelwit Adres</label>
-        <input type="text" id="btcAddr" value="1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU">
+        <input type="text" id="btcAddr" value="15LRBsgarZ457i31moUCUwj82SzW9zHoxV">
       </div>
       
       <div class="field">
@@ -278,7 +278,7 @@
     </div>
 
     <div class="card">
-      <div class="card-header">Huidige Slice (70-bit space)</div>
+      <div class="card-header">Huidige Slice</div>
       <div class="range-box">
         <div class="range-row">
           <span>Start:</span> <b id="rangeStart">Wacht op start...</b>
@@ -376,7 +376,6 @@ function decodeBase58(str) {
   return new Uint8Array(bytes.reverse());
 }
 
-// Haal de verwachte 5x Uint32 (Little-Endian) RIPEMD160 hash uit een adres
 function getTargetHash160(address) {
   let decoded = decodeBase58(address);
   if(decoded.length < 25) throw new Error("Invalid address length");
@@ -391,7 +390,6 @@ function getTargetHash160(address) {
   ];
 }
 
-// Voor het netjes weergeven van WIF zodra gevonden
 async function sha256_buffer(buf) {
   return new Uint8Array(await crypto.subtle.digest('SHA-256', buf));
 }
@@ -400,13 +398,12 @@ async function getWIF(privKeyBigInt) {
   let payload = new Uint8Array(34);
   payload[0] = 0x80;
   payload.set(pkBytes, 1);
-  payload[33] = 0x01; // compressed
+  payload[33] = 0x01;
   let h1 = await sha256_buffer(payload);
   let h2 = await sha256_buffer(h1);
   let full = new Uint8Array(38);
   full.set(payload);
   full.set(h2.slice(0,4), 34);
-  // Base58 Encode
   let digits = [0];
   for (let i = 0; i < full.length; i++) {
     let carry = full[i];
@@ -425,7 +422,7 @@ async function getWIF(privKeyBigInt) {
 
 
 // =====================================================================================
-// WGSL — SECP256K1 BATCH GENERATOR (Base + Offset)
+// WGSL — SECP256K1 BATCH GENERATOR (Fixed & Optimized)
 // =====================================================================================
 const WGSL_SOURCE = `
 const P: array<u32,8> = array<u32,8>(0xFFFFFC2Fu,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
@@ -579,7 +576,7 @@ fn mulmod(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> {
 }
 fn addmod(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> {
   var s = add8(a, b);
-  if (cmp8(s, P) >= 0 || (s[7] < a[7] && b[7] != 0u)) { s = sub8(s, P); } // Simplified carry check
+  if (cmp8(s, P) >= 0) { s = sub8(s, P); }
   return s;
 }
 fn submod(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> {
@@ -605,6 +602,7 @@ fn modpowP2(base: array<u32,8>) -> array<u32,8> {
 struct JPoint { X: array<u32,8>, Y: array<u32,8>, Z: array<u32,8>, isInf: bool };
 
 fn jacDouble(p: JPoint) -> JPoint {
+  if (p.isInf) { return p; }
   let Ysq = mulmod(p.Y, p.Y);
   let S = mulmod(u32to8(4u), mulmod(p.X, Ysq));
   let M = mulmod(u32to8(3u), mulmod(p.X, p.X));
@@ -642,8 +640,10 @@ fn scalarMultG(k: array<u32,8>) -> array<array<u32,8>,2> {
   var pt: JPoint; pt.X = u32to8(0u); pt.Y = u32to8(0u); pt.Z = u32to8(0u); pt.isInf = true;
   for (var ii = 0u; ii < 256u; ii = ii + 1u) {
     let i = 255u - ii;
-    if (!pt.isInf) { pt = jacDouble(pt); }
-    if (((k[i / 32u] >> (i % 32u)) & 1u) == 1u) { pt = jacMaddAffine(pt, GX, GY); }
+    pt = jacDouble(pt);
+    if (((k[i / 32u] >> (i % 32u)) & 1u) == 1u) {
+      pt = jacMaddAffine(pt, GX, GY);
+    }
   }
   let Zinv = modpowP2(pt.Z);
   let Zinv2 = mulmod(Zinv, Zinv);
@@ -674,7 +674,6 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let k = add_offset(base_key, idx);
   let xy = scalarMultG(k);
 
-  // We write X (8 u32s) + the Y-parity bit (1 u32) = 9 u32s per thread
   for (var i = 0u; i < 8u; i = i + 1u) {
     pubkeys[idx*9u + i] = xy[0][i];
   }
@@ -684,7 +683,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 
 // =====================================================================================
-// ZERO-GC JAVASCRIPT HASHING (Main Thread, ultra-fast inline SHA256 -> RIPEMD160)
+// ZERO-GC JAVASCRIPT HASHING
 // =====================================================================================
 const sha_K = new Uint32Array([0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
 const zl=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15, 7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8, 3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12, 1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2, 4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13];
@@ -705,9 +704,7 @@ function fn(j, x, y, z) {
 function rotl(x, n) { return ((x << n) | (x >>> (32 - n))) >>> 0; }
 function reverseBytes(x) { return ((x >>> 24) | ((x >>> 8) & 0xff00) | ((x << 8) & 0xff0000) | (x << 24)) >>> 0; }
 
-// Extreem geoptimaliseerde controle voor de 33-byte compressed public key tegen het doelwit.
 function checkHash160(x0, x1, x2, x3, x4, x5, x6, x7, parity, tr0, tr1, tr2, tr3, tr4) {
-  // Vul SHA-256 (Big-Endian words)
   W[0] = ((parity ? 0x03 : 0x02) << 24) | (x7 >>> 8);
   W[1] = ((x7 & 0xFF) << 24) | (x6 >>> 8);
   W[2] = ((x6 & 0xFF) << 24) | (x5 >>> 8);
@@ -716,9 +713,9 @@ function checkHash160(x0, x1, x2, x3, x4, x5, x6, x7, parity, tr0, tr1, tr2, tr3
   W[5] = ((x3 & 0xFF) << 24) | (x2 >>> 8);
   W[6] = ((x2 & 0xFF) << 24) | (x1 >>> 8);
   W[7] = ((x1 & 0xFF) << 24) | (x0 >>> 8);
-  W[8] = ((x0 & 0xFF) << 24) | 0x00800000; // Padding
+  W[8] = ((x0 & 0xFF) << 24) | 0x00800000;
   W[9] = 0; W[10] = 0; W[11] = 0; W[12] = 0; W[13] = 0; W[14] = 0;
-  W[15] = 264; // bit length (33 * 8)
+  W[15] = 264;
 
   for (let i = 16; i < 64; i++) {
     let w15 = W[i - 15], w2 = W[i - 2];
@@ -742,7 +739,6 @@ function checkHash160(x0, x1, x2, x3, x4, x5, x6, x7, parity, tr0, tr1, tr2, tr3
     d = c; c = b; b = a; a = (temp1 + temp2) >>> 0;
   }
 
-  // Vul RIPEMD-160 (Little-Endian words gebaseerd op SHA-256 output)
   W[0] = reverseBytes((0x6a09e667 + a) >>> 0);
   W[1] = reverseBytes((0xbb67ae85 + b) >>> 0);
   W[2] = reverseBytes((0x3c6ef372 + c) >>> 0);
@@ -769,7 +765,6 @@ function checkHash160(x0, x1, x2, x3, x4, x5, x6, x7, parity, tr0, tr1, tr2, tr3
     ar = er; er = dr; dr = rotl(cr,10); cr = br; br = t2;
   }
 
-  // GEFIXT: Vergelijk de eerste 5 woorden van de hash (niet de laatste)
   let h0 = (0x67452301 + al + br) >>> 0;
   let h1 = (0xefcdab89 + bl + cr) >>> 0;
   let h2 = (0x98badcfe + cl + dr) >>> 0;
@@ -791,7 +786,7 @@ function checkHash160(x0, x1, x2, x3, x4, x5, x6, x7, parity, tr0, tr1, tr2, tr3
 // =====================================================================================
 let gpuDevice = null, gpuPipeline = null;
 let isRunning = false;
-let BATCH_SIZE = 32768; // Keys per GPU dispatch. Optimaal voor UI-responsiviteit.
+let BATCH_SIZE = 32768;
 let inBuf, outBuf, readBuf, bindGroup;
 
 let targetAddress = "";
@@ -828,7 +823,6 @@ async function init() {
       compute: { module, entryPoint: 'main' }
     });
     
-    // Create buffers once
     inBuf = gpuDevice.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     let outSize = BATCH_SIZE * 9 * 4;
     outBuf = gpuDevice.createBuffer({ size: outSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
@@ -852,10 +846,10 @@ async function init() {
 }
 
 function getRandomPuzzle71Base() {
-  const min = 0x400000000000000000n; // 2^70
+  const min = 0x400000000000000000n;
   const r = new Uint8Array(9);
   crypto.getRandomValues(r);
-  r[0] &= 0x3F; // max 70 bit
+  r[0] &= 0x3F;
   let randVal = BigInt("0x" + bytesToHex(r));
   return min + randVal;
 }
@@ -871,7 +865,7 @@ function startSlice() {
     customRangeEnd = BigInt('0x' + endHex);
     
     let diff = customRangeEnd - currentSliceBase;
-    let maxSlice = 100000000n; // Geef de UI progress bar blokken van 100M
+    let maxSlice = 100000000n;
     sliceLimit = diff > maxSlice ? Number(maxSlice) : Number(diff);
     
     document.getElementById('rangeStart').innerText = "0x" + currentSliceBase.toString(16);
@@ -974,11 +968,10 @@ async function runLoop() {
       logMessage(`Volgende deel van de range gestart op ${currentSliceBase.toString(16)}...`);
     } else {
       startSlice();
-      startTime = Date.now(); // reset speed calc per slice
+      startTime = Date.now();
     }
   }
 
-  // 1. GPU Dispatch
   let currentKey = currentSliceBase + BigInt(keysCheckedInSlice);
   gpuDevice.queue.writeBuffer(inBuf, 0, bytesToLimbsLE(bigIntTo32Bytes(currentKey)));
 
@@ -991,11 +984,9 @@ async function runLoop() {
   encoder.copyBufferToBuffer(outBuf, 0, readBuf, 0, BATCH_SIZE * 9 * 4);
   gpuDevice.queue.submit([encoder.finish()]);
 
-  // 2. Wacht op GPU
   await readBuf.mapAsync(GPUMapMode.READ);
   let result = new Uint32Array(readBuf.getMappedRange());
 
-  // 3. Extreem snelle Zero-GC check (CPU)
   let foundIndex = -1;
   let tr0=tHash[0], tr1=tHash[1], tr2=tHash[2], tr3=tHash[3], tr4=tHash[4];
 
@@ -1014,13 +1005,11 @@ async function runLoop() {
     return;
   }
 
-  // 4. Administratie & Loop
   keysCheckedInSlice += BATCH_SIZE;
   totalKeysScanned += BATCH_SIZE;
   
   updateUI();
   
-  // Geef browser event loop kans om te ademen, vervolg direct
   setTimeout(runLoop, 0);
 }
 
