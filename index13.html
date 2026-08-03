@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bitcoin Puzzle 71 Oplosser (WebGPU + WGSL - Geoptimaliseerd)</title>
+<title>Bitcoin Puzzle Oplosser (WebGPU + WGSL - Geoptimaliseerd)</title>
 <link rel="preconnect" href="https://cdnjs.cloudflare.com">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/JetBrains-Mono/2.304/css/jetbrains-mono.min.css" rel="stylesheet">
 <style>
@@ -50,7 +50,9 @@
   button:hover{ filter: brightness(1.08); }
   button.secondary{ background: transparent; color: var(--text); border-color: var(--border); }
   button:disabled{ opacity: .4; cursor: not-allowed; }
-  input[type=text]{ font-family: var(--mono); background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 9px 12px; width: 360px; font-size: 13px; }
+  input[type=text]{ font-family: var(--mono); background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 9px 12px; width: 100%; font-size: 13px; }
+  .input-grid { display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 10px; }
+  @media(min-width: 650px) { .input-grid { grid-template-columns: 1fr 1fr; } }
   .match-box{ margin-top: 20px; border: 1px solid var(--teal); background: rgba(45, 212, 191, 0.08); border-radius: 10px; padding: 16px; display: none; }
   .match-box h3{ color: var(--teal); margin: 0 0 10px; font-size: 16px; }
   .match-info{ font-family: var(--mono); font-size: 13px; word-break: break-all; }
@@ -63,7 +65,7 @@
 <div class="wrap">
   <header class="hero">
     <div class="eyebrow"><span class="dot" id="gpuDot"></span> <span id="gpuStatus">WebGPU wordt gecontroleerd…</span></div>
-    <h1>Bitcoin <span class="k">Puzzle 71</span> Oplosser</h1>
+    <h1>Bitcoin <span class="k">Puzzle</span> Oplosser</h1>
     <p class="sub">Volledig geoptimaliseerde WebGPU solver (1M+ batches, GPU-side adresvergelijking).</p>
     <div class="ticker">
       <div class="stat"><b id="statCount">0</b><span>sleutels getest</span></div>
@@ -73,14 +75,20 @@
   </header>
 
   <section class="panel">
-    <h2><span class="n">01</span> Doelconfiguratie</h2>
-    <div class="row">
-      <label style="font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:6px;">Doeladres (P2PKH)
+    <h2><span class="n">01</span> Doelconfiguratie & Range</h2>
+    <div class="input-grid">
+      <label style="font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:6px; grid-column: 1 / -1;">Doeladres (P2PKH)
         <input type="text" id="targetAddressInput" value="1PWo3aEvgjjHbtgfbS7Yf99F2t55T95UfK">
+      </label>
+      <label style="font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:6px;">Beginrange (Hex)
+        <input type="text" id="startRangeInput" value="0x4000000000000000">
+      </label>
+      <label style="font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:6px;">Eindrange (Hex)
+        <input type="text" id="endRangeInput" value="0x7fffffffffffffff">
       </label>
     </div>
     <div class="row" style="margin-top:16px;">
-      <button id="btnStart">Start Puzzle 71 Zoektocht</button>
+      <button id="btnStart">Start Zoektocht</button>
       <button id="btnStop" class="secondary" disabled>Stop</button>
     </div>
     <div class="match-box" id="matchBox">
@@ -224,8 +232,9 @@ function wifCompressed(priv32) {
   return base58checkEncode(0x80, payload);
 }
 function hexToBytes(hex) {
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i*2,2), 16);
+  const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
+  const out = new Uint8Array(cleanHex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(cleanHex.substr(i*2,2), 16);
   return out;
 }
 function bytesToLimbsLE(bytes32) {
@@ -285,7 +294,7 @@ function buildPrecomputedTable() {
   return flat;
 }
 
-// --- WGSL Code inclusief GPU-side adresvergelijking ---
+// --- Gecorrigeerde WGSL Code inclusief GPU-side RIPEMD-160 ---
 const WGSL_SOURCE = `
 struct R8  { v: array<u32,8>,  c: u32 };
 const P: array<u32,8> = array<u32,8>(0xFFFFFC2Fu,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
@@ -503,24 +512,34 @@ const RMD_HL: array<u32,5> = array<u32,5>(0x00000000u,0x5a827999u,0x6ed9eba1u,0x
 const RMD_HR: array<u32,5> = array<u32,5>(0x50a28be6u,0x5c4dd124u,0x6d703ef3u,0x7a6d76e9u,0x00000000u);
 
 fn rmdF(j: u32, x: u32, y: u32, z: u32) -> u32 {
-  if (j < 16u) { return x ^ y ^ z; } if (j < 32u) { return (x & y) | ((~x) & z); }
-  if (j < 48u) { return (x | (~y)) ^ z; } if (j < 64u) { return (x & z) | (y & (~z)); }
+  if (j < 16u) { return x ^ y ^ z; }
+  if (j < 32u) { return (x & y) | ((~x) & z); }
+  if (j < 48u) { return (x | (~y)) ^ z; }
+  if (j < 64u) { return (x & z) | (y & (~z)); }
   return x ^ (y | (~z));
 }
 fn ripemd160_32(H: array<u32,8>) -> array<u32,5> {
   var X: array<u32,16>; for (var i = 0u; i < 16u; i = i + 1u) { X[i] = 0u; }
   for (var i = 0u; i < 8u; i = i + 1u) { X[i] = bswap32(H[i]); }
   X[8] = 0x80u; X[14] = 256u;
-  var h0=0x67452301u; var h1=0xefcdab89u; var h2=0x98badcfeu; var h3=0x10325476u; var h4=0xc3d2e1f0u;
-  var al=h0; var bl=h1; var cl=h2; var dl=h3; var el=h4;
-  var ar=h0; var br=h1; var cr=h2; var dr=h3; var er=h4;
+
+  var h0 = 0x67452301u; var h1 = 0xefcdab89u; var h2 = 0x98badcfeu; var h3 = 0x10325476u; var h4 = 0xc3d2e1f0u;
+  var al = h0; var bl = h1; var cl = h2; var dl = h3; var el = h4;
+  var ar = h0; var br = h1; var cr = h2; var dr = h3; var er = h4;
+
   for (var j = 0u; j < 80u; j = j + 1u) {
-    let round = j / 16u;
-    var t = al + rmdF(j, bl, cl, dl) + X[RMD_ZL[j]] + RMD_HL[round];
-    t = rotl32(t, RMD_SL[j]) + el; al=el; el=dl; dl=rotl32(cl,10u); cl=bl; bl=t;
-    var t2 = ar + rmdF(79u - j, br, cr, dr) + X[RMD_ZR[j]] + RMD_HR[round];
-    t2 = rotl32(t2, RMD_SR[j]) + er; ar=er; er=dr; dr=rotl32(cr,10u); cr=br; br=t2;
+    let roundL = j / 16u;
+    let roundR = (79u - j) / 16u;
+
+    let tl = al + rmdF(j, bl, cl, dl) + X[RMD_ZL[j]] + RMD_HL[roundL];
+    let rotL = rotl32(tl, RMD_SL[j]) + el;
+    al = el; el = dl; dl = rotl32(cl, 10u); cl = bl; bl = rotL;
+
+    let tr = ar + rmdF(79u - j, br, cr, dr) + X[RMD_ZR[j]] + RMD_HR[roundR];
+    let rotR = rotl32(tr, RMD_SR[j]) + er;
+    ar = er; er = dr; dr = rotl32(cr, 10u); cr = br; br = rotR;
   }
+
   let t = h1 + cl + dr;
   return array<u32,5>(t, h2 + dl + er, h3 + el + ar, h4 + al + br, h0 + bl + cr);
 }
@@ -532,7 +551,7 @@ struct Uniforms {
 @group(0) @binding(0) var<storage, read> privkeys: array<u32>;
 @group(0) @binding(1) var<storage, read> combTable: array<u32>;
 @group(0) @binding(2) var<uniform> uniforms: Uniforms;
-@group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>; // [foundFlag, indexFound]
+@group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>;
 
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -548,7 +567,6 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let H = sha256_33(prefix, xy[0]);
   let hash = ripemd160_32(H);
 
-  // Vergelijk direct op de GPU met het doeladres-hash
   var match = true;
   for (var i = 0u; i < 5u; i = i + 1u) {
     if (hash[i] != uniforms.targetHash[i]) {
@@ -568,25 +586,29 @@ let gpuDevice = null, gpuPipeline = null, tableBuffer = null, uniformsBuffer = n
 let isRunning = false;
 let totalChecked = 0;
 
-// Converteer P2PKH doeladres naar de 20 bytes hash160 zodat de GPU direct kan vergelijken
 function getTargetHash160Bytes(address) {
   const B58ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  let decoded = [0];
+  let digits = [0];
   for (let i = 0; i < address.length; i++) {
-    let char = address[i];
-    let p = B58ALPHABET.indexOf(char);
+    let p = B58ALPHABET.indexOf(address[i]);
+    if (p < 0) continue;
     let carry = p;
-    for (let j = 0; j < decoded.length; j++) {
-      carry += decoded[j] * 58;
-      decoded[j] = carry & 0xff;
+    for (let j = 0; j < digits.length; j++) {
+      carry += digits[j] * 58;
+      digits[j] = carry & 0xff;
       carry = carry >> 8;
     }
-    while (carry > 0) { decoded.push(carry & 0xff); carry = carry >> 8; }
+    while (carry > 0) {
+      digits.push(carry & 0xff);
+      carry = carry >> 8;
+    }
   }
-  for (let i = 0; i < address.length && address[i] === '1'; i++) decoded.push(0);
-  decoded.reverse();
-  const payload = new Uint8Array(decoded.slice(1, 21));
-  return payload;
+  for (let i = 0; i < address.length && address[i] === '1'; i++) {
+    digits.push(0);
+  }
+  digits.reverse();
+  const bytes = new Uint8Array(digits);
+  return bytes.slice(1, 21);
 }
 
 async function initWebGPU() {
@@ -599,14 +621,14 @@ async function initWebGPU() {
     const module = gpuDevice.createShaderModule({ code: WGSL_SOURCE });
     gpuPipeline = gpuDevice.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
     
-    statusEl.textContent = 'Comb-tabel aanmaken voor Puzzle 71...';
+    statusEl.textContent = 'Comb-tabel aanmaken…';
     const table = buildPrecomputedTable();
     tableBuffer = gpuDevice.createBuffer({ size: table.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
     gpuDevice.queue.writeBuffer(tableBuffer, 0, table);
 
     uniformsBuffer = gpuDevice.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
-    statusEl.textContent = 'WebGPU gereed voor Puzzle 71.';
+    statusEl.textContent = 'WebGPU gereed.';
     dotEl.classList.add('on');
     return true;
   } catch (e) {
@@ -630,22 +652,21 @@ document.getElementById('btnStart').addEventListener('click', async () => {
   const targetAddress = document.getElementById('targetAddressInput').value.trim();
   const targetHashBytes = getTargetHash160Bytes(targetAddress);
   
-  // Vul uniform buffer met doelhash (5 x u32)
   const targetHashU32 = new Uint32Array(5);
   for (let i = 0; i < 5; i++) {
     targetHashU32[i] = (targetHashBytes[i*4]) | (targetHashBytes[i*4+1] << 8) | (targetHashBytes[i*4+2] << 16) | (targetHashBytes[i*4+3] << 24);
   }
   gpuDevice.queue.writeBuffer(uniformsBuffer, 0, targetHashU32);
 
+  let currentKeyVal = BigInt(document.getElementById('startRangeInput').value.trim());
+  const maxKeyVal = BigInt(document.getElementById('endRangeInput').value.trim());
+
   isRunning = true;
   document.getElementById('btnStart').disabled = true;
   document.getElementById('btnStop').disabled = false;
-  document.getElementById('feedText').textContent = "Zoeken naar Puzzle 71...";
+  document.getElementById('feedText').textContent = "Zoeken binnen ingestelde range...";
 
-  let currentKeyVal = 0x4000000000000000n;
-  const maxKeyVal = 0x7fffffffffffffffn;
-  const batchSize = 1048576; // Verhoogd naar 1 Miljoen keys per batch!
-
+  const batchSize = 1048576; 
   let startTime = performance.now();
   totalChecked = 0;
 
@@ -654,6 +675,9 @@ document.getElementById('btnStart').addEventListener('click', async () => {
       isRunning = false;
       document.getElementById('btnStart').disabled = false;
       document.getElementById('btnStop').disabled = true;
+      if (currentKeyVal > maxKeyVal) {
+        document.getElementById('feedText').textContent = "Einde van de range bereikt.";
+      }
       return;
     }
 
@@ -671,7 +695,6 @@ document.getElementById('btnStart').addEventListener('click', async () => {
     const inBuf = gpuDevice.createBuffer({ size: actualBatchCount * 32, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
     gpuDevice.queue.writeBuffer(inBuf, 0, batchLimbs.buffer, 0, actualBatchCount * 32);
 
-    // Result buffer: [foundFlag (u32), indexFound (u32)]
     const resBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
     gpuDevice.queue.writeBuffer(resBuf, 0, new Uint32Array([0, 0]));
 
@@ -710,7 +733,6 @@ document.getElementById('btnStart').addEventListener('click', async () => {
     document.getElementById('statRate').textContent = rate.toLocaleString() + " keys/s";
     document.getElementById('feedText').textContent = "Huidige test: 0x" + startValForBatch.toString(16);
 
-    // Als de GPU gevonden-vlag op 1 staat
     if (gpuResult[0] === 1) {
       const foundIdx = gpuResult[1];
       const foundPrivInt = startValForBatch + BigInt(foundIdx);
