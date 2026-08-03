@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Random Slice Sniper — WebGPU Turbo (secp256k1)</title>
+<title>Bitcoin Puzzle 71 Oplosser (WebGPU + WGSL secp256k1)</title>
 <link rel="preconnect" href="https://cdnjs.cloudflare.com">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/JetBrains-Mono/2.304/css/jetbrains-mono.min.css" rel="stylesheet">
 <style>
@@ -12,48 +12,36 @@
     src: local('Space Grotesk');
   }
   :root{
-    --bg: #07090f;
-    --surface: #0d1117;
-    --panel: #111827;
+    --bg: #0B0D10;
+    --panel: #14171C;
     --panel2: #191D23;
-    --border: #1f2937;
-    --text: #e2e8f0;
-    --muted: #6b7280;
-    --accent: #00ff99;
-    --accent2: #00c3ff;
+    --border: #23272E;
+    --text: #E8E6E1;
+    --muted: #8A8F98;
+    --accent: #F7931A;
     --accent-dim: #7a4d16;
     --teal: #2DD4BF;
-    --danger: #ef4444;
-    --success: #10b981;
-    --warn: #f59e0b;
+    --danger: #E5484D;
     --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     --disp: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif;
   }
-  *{ box-sizing: border-box; margin:0; padding:0; }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
   body{
     background: var(--bg);
     color: var(--text);
     font-family: var(--disp);
     line-height: 1.5;
-    min-height: 100vh;
-    padding: 24px 16px 48px;
     -webkit-font-smoothing: antialiased;
-  }
-  body::before {
-    content: ''; position: fixed; inset: 0;
-    background: repeating-linear-gradient(transparent 0px, transparent 3px,
-        rgba(0,255,153,.015) 3px, rgba(0,255,153,.015) 4px);
-    pointer-events: none; z-index: 999;
   }
   a{ color: var(--accent); }
 
-  .container { max-width: 860px; margin: 0 auto; position: relative; z-index: 1; }
+  .wrap{ max-width: 980px; margin: 0 auto; padding: 32px 20px 80px; }
 
   header.hero{
     border-bottom: 1px solid var(--border);
     padding-bottom: 22px;
-    margin-bottom: 24px;
-    text-align: center;
+    margin-bottom: 0;
   }
   .eyebrow{
     font-family: var(--mono);
@@ -61,7 +49,7 @@
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--teal);
-    display:flex; align-items:center; justify-content:center; gap:8px;
+    display:flex; align-items:center; gap:8px;
   }
   .eyebrow .dot{
     width:6px;height:6px;border-radius:50%;
@@ -70,22 +58,19 @@
   }
   .eyebrow .dot.on{ background: var(--teal); box-shadow: 0 0 8px var(--teal); }
   h1{
-    font-size: clamp(24px, 3.5vw, 36px);
+    font-size: clamp(28px, 4vw, 42px);
     font-weight: 600;
     letter-spacing: -0.01em;
     margin: 10px 0 8px;
-    color: var(--accent);
-    text-shadow: 0 0 18px rgba(0,255,153,0.3);
-    text-transform: uppercase;
   }
+  h1 .k{ color: var(--accent); }
   .sub{
     color: var(--muted);
-    font-size: 13px;
-    max-width: 680px;
-    margin: 0 auto;
+    font-size: 15px;
+    max-width: 740px;
+    margin: 0 0 4px;
   }
 
-  /* Ticker */
   .ticker{
     margin-top: 20px;
     border: 1px solid var(--border);
@@ -97,11 +82,10 @@
     gap: 18px;
     overflow: hidden;
     position: relative;
-    text-align: left;
   }
   .ticker .stat{ text-align:left; white-space:nowrap; }
   .ticker .stat b{
-    display:block; font-family: var(--mono); font-size: 18px; color: var(--text);
+    display:block; font-family: var(--mono); font-size: 20px; color: var(--text);
     font-variant-numeric: tabular-nums;
   }
   .ticker .stat span{ font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
@@ -112,45 +96,34 @@
     color: #4a5058;
     white-space: nowrap;
     overflow: hidden;
-    mask-image: linear-gradient(90deg, transparent, black 8%, black 92%, transparent);
+    text-overflow: ellipsis;
   }
 
-  section, .card, .calc-card, .chance-card {
+  section{ margin-top: 34px; }
+  .panel{
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 12px;
     padding: 20px;
-    margin-bottom: 16px;
   }
-  .calc-card, .chance-card {
-    background: linear-gradient(135deg, #0a0f1a 0%, #0d1520 100%);
-    border-color: #1a3a5c;
-  }
-  .chance-card { position: relative; overflow: hidden; }
-  
-  .panel h2, .card-title, .calc-title, .chance-title {
-    font-size: 13px; margin: 0 0 14px; font-weight: 600;
+  .panel h2{
+    font-size: 15px; margin: 0 0 4px; font-weight: 600;
     display:flex; align-items:center; gap:8px;
-    letter-spacing: .12em; text-transform: uppercase;
-    border-bottom: 1px solid var(--border); padding-bottom: 8px;
   }
-  .calc-title, .chance-title { color: var(--accent2); border-color: #1a3a5c; }
   .panel h2 .n{ color: var(--accent); font-family: var(--mono); font-size: 12px; }
-  .panel .desc{ color: var(--muted); font-size: 13px; margin: 0 0 16px; line-height: 1.5; }
+  .panel .desc{ color: var(--muted); font-size: 13px; margin: 0 0 16px; }
 
   .row{ display:flex; gap:10px; flex-wrap: wrap; align-items:center; }
-  .field { display: grid; grid-template-columns: 180px 1fr; align-items: center; gap: 10px; margin-bottom: 12px; width: 100%; }
-  .field label { font-size: 12px; color: var(--muted); letter-spacing: .06em; }
 
   button{
     font-family: var(--disp);
     font-weight: 600;
-    font-size: 13px;
+    font-size: 14px;
     padding: 10px 18px;
     border-radius: 8px;
     border: 1px solid var(--accent);
     background: var(--accent);
-    color: #07090f;
+    color: #14100a;
     cursor: pointer;
     transition: filter .15s ease, transform .05s ease;
   }
@@ -163,60 +136,31 @@
   }
   button.secondary:hover{ border-color: var(--accent); }
   button:disabled{ opacity: .4; cursor: not-allowed; filter:none; }
-  .btn-stop { background: var(--danger) !important; border-color: var(--danger) !important; color: #fff !important; }
 
-  input[type=number], input[type=text], select{
+  input[type=text]{
     font-family: var(--mono);
-    background: var(--surface);
+    background: var(--panel2);
     border: 1px solid var(--border);
     color: var(--text);
-    border-radius: 6px;
-    padding: 8px 12px;
+    border-radius: 8px;
+    padding: 9px 12px;
+    width: 360px;
     font-size: 13px;
-    outline: none;
-    width: 100%;
   }
-  input:focus, select:focus{ border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,255,153,.12); }
 
-  .progress{
-    height: 6px; border-radius: 4px; background: var(--surface);
-    overflow:hidden; margin-top:14px; display:none;
-  }
-  .progress .bar{ height:100%; width:0%; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width .15s ease; }
-
-  table{ width:100%; border-collapse: collapse; margin-top: 16px; font-family: var(--mono); font-size: 12px; }
-  th{ text-align:left; color: var(--muted); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.06em; padding: 8px 10px; border-bottom: 1px solid var(--border); background: var(--surface); }
-  td{ padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; word-break: break-all; }
-  tr:hover td{ background: rgba(255,255,255,0.02); }
-  .addr{ color: var(--accent); }
-  .copy{ cursor:pointer; color: var(--muted); font-size:11px; margin-left:6px; }
-  .copy:hover{ color: var(--teal); }
-  .ok{ color: var(--success); }
-  .bad{ color: var(--danger); }
-  .trunc{ max-width: 220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:bottom; }
-
-  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 10px; }
-  .stat-cell { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; }
-  .stat-cell .label { font-size: 10px; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
-  .stat-cell .value { font-size: 1.1rem; font-weight: bold; color: var(--accent); font-family: var(--mono); }
-  
-  .log { background: #000; color: var(--accent); height: 130px; overflow-y: scroll;
-      padding: 10px 12px; font-size: 11px; line-height: 1.6; border-radius: 6px; border: 1px solid var(--border); font-family: var(--mono); }
-  .log .ts { color: var(--muted); }
-  .log .ev-found { color: var(--warn); font-weight: bold; }
-  .log .ev-epoch { color: var(--accent2); }
-  .log .ev-stop { color: var(--danger); }
-
-  .warn{
-    border: 1px solid var(--accent-dim);
-    background: rgba(247,147,26,0.06);
-    color: #e8c99a;
-    border-radius: 10px;
-    padding: 14px 16px;
-    font-size: 13px;
+  .match-box{
     margin-top: 20px;
+    border: 1px solid var(--teal);
+    background: rgba(45, 212, 191, 0.08);
+    border-radius: 10px;
+    padding: 16px;
+    display: none;
   }
-  .warn b{ color: var(--accent); }
+  .match-box h3{ color: var(--teal); margin: 0 0 10px; font-size: 16px; }
+  .match-info{ font-family: var(--mono); font-size: 13px; word-break: break-all; }
+
+  .ok{ color: var(--teal); }
+  .bad{ color: var(--danger); }
 
   footer{
     margin-top: 48px;
@@ -224,97 +168,53 @@
     border-top: 1px solid var(--border);
     color: var(--muted);
     font-size: 12px;
-    text-align: center;
   }
-  code{ font-family: var(--mono); background: var(--surface); padding: 1px 5px; border-radius: 4px; color: var(--teal); }
+  code{ font-family: var(--mono); background: var(--panel2); padding: 1px 5px; border-radius: 4px; }
 </style>
 </head>
 <body>
-<div class="container">
+<div class="wrap">
 
   <header class="hero">
     <div class="eyebrow"><span class="dot" id="gpuDot"></span> <span id="gpuStatus">WebGPU wordt gecontroleerd…</span></div>
-    <h1>WebGPU secp256k1 Sniper</h1>
-    <p class="sub">Massale parallelle puntvermenigvuldiging via WGSL Compute Shaders op je GPU gecombineerd met snelle CPU Hashing & Base58Check.</p>
+    <h1>Bitcoin <span class="k">Puzzle 71</span> Oplosser</h1>
+    <p class="sub">Deze tool doorzoekt automatisch het bereik van Puzzle 71 ($2^{70}$ tot $2^{71} - 1$) via de WGSL secp256k1 compute shader. De GPU berekent parallel de punten en hash160. Zodra het doeladres overeenkomt, stopt de zoektocht direct.</p>
 
     <div class="ticker">
-      <div class="stat"><b id="statCount">0</b><span>sleutels gegenereerd</span></div>
+      <div class="stat"><b id="statCount">0</b><span>sleutels getest</span></div>
       <div class="stat"><b id="statRate">0</b><span>keys / sec</span></div>
-      <div class="feed"><span id="feedText">systeem gereed…</span></div>
+      <div class="feed" id="feedText">Gereed om te starten…</div>
     </div>
   </header>
 
-  <!-- CONFIGURATIE & TARGET -->
-  <section class="card">
-    <div class="card-title">⚙ Target & Configuratie</div>
-    <div class="field">
-      <label>Target BTC Adres</label>
-      <input id="btcAddr" value="1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU" type="text">
-    </div>
-    <div class="field">
-      <label>Batch / Limiet per slag</label>
-      <input type="number" id="countInput" value="10000" min="1" max="50000">
-    </div>
-    <div class="row" style="margin-top: 14px;">
-      <button id="btnGen">▶ Start GPU Sniper</button>
-      <button id="btnStop" class="btn-stop" disabled>■ Stop</button>
-      <button id="btnCsv" class="secondary" disabled>Download CSV</button>
-    </div>
-    <div class="progress" id="progress"><div class="bar" id="progressBar"></div></div>
-  </section>
-
-  <!-- ZELFTEST SECTION -->
-  <section class="panel" id="testPanel">
-    <h2><span class="n">01</span> Zelftest — Klopt de WGSL Shader?</h2>
+  <section class="panel">
+    <h2><span class="n">01</span> Doelconfiguratie</h2>
     <p class="desc">
-      GPU-wiskunde in 32-bit registers is complex. Deze test verifieert <code>k·G</code> voor bekende private keys (o.a. Bitcoin Puzzle #1). Als dit niet groen kleurt, is de shader-output onbetrouwbaar.
+      Standaard bereik Puzzle 71: <code>0x4000000000000000</code> t/m <code>0x7fffffffffffffff</code>.
     </p>
     <div class="row">
-      <button id="btnTest" class="secondary">Voer zelftest uit</button>
-      <span id="testSummary" style="font-family:var(--mono); font-size:12.5px; color:var(--muted);"></span>
+      <label style="font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:6px;">Doeladres (P2PKH)
+        <input type="text" id="targetAddressInput" value="1PWo3aEvgjjHbtgfbS7Yf99F2t55T95UfK">
+      </label>
     </div>
-    <table id="testTable" style="display:none;">
-      <thead><tr><th>priv key</th><th>berekend adres</th><th>verwacht adres</th><th>status</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </section>
-
-  <!-- STATISTIEKEN -->
-  <div class="card">
-    <div class="card-title">📊 Live Statistieken</div>
-    <div class="stats-grid">
-      <div class="stat-cell"><div class="label">Status</div><div class="value" id="statusVal" style="color:var(--muted)">In afwachting</div></div>
-      <div class="stat-cell"><div class="label">Totaal Gescand</div><div class="value" id="keysScanned">0</div></div>
-      <div class="stat-cell"><div class="label">GPU Snelheid</div><div class="value" id="speed">0 /s</div></div>
-      <div class="stat-cell"><div class="label">Sessieduur</div><div class="value" id="sessionTime">0s</div></div>
+    <div class="row" style="margin-top:16px;">
+      <button id="btnStart">Start Puzzle 71 Zoektocht</button>
+      <button id="btnStop" class="secondary" disabled>Stop</button>
     </div>
-  </div>
 
-  <!-- LOG -->
-  <div class="card"><div class="card-title">📋 Activiteitenlog</div><div class="log" id="logBox"></div></div>
-
-  <!-- RESULTATEN / MATCHES -->
-  <section class="panel">
-    <h2><span class="n">02</span> Gegenereerde Sleutels / Resultaten</h2>
-    <table id="resultTable">
-      <thead><tr><th>#</th><th>private key (WIF, compressed)</th><th>adres</th><th>actie</th></tr></thead>
-      <tbody id="resultBody"><tr><td colspan="4" style="text-align:center; color:var(--muted);">Nog geen sleutels gegenereerd...</td></tr></tbody>
-    </table>
+    <div class="match-box" id="matchBox">
+      <h3>🎉 PUZZEL OPGELOST! MATCH GEVONDEN!</h3>
+      <div class="match-info" id="matchInfo"></div>
+    </div>
   </section>
-
-  <div class="warn">
-    <b>Let op:</b> Deze tool is bedoeld voor educatieve doeleinden en cryptografische experimenten. Gebruik gegenereerde sleutels nooit voor echte fondsen.
-  </div>
 
   <footer>
-    WebGPU Secp256k1 Turbo Engine · Werkt opbrowsers met WebGPU ingeschakeld.
+    Vereist een moderne browser met WebGPU ondersteuning (Chrome of Edge).
   </footer>
 </div>
 
 <script>
-// =====================================================================================
-// CRYPTO HELPERS (SHA-256, RIPEMD-160, Base58Check)
-// =====================================================================================
+// --- Cryptografische basisroutines (CPU side voor Base58Check & Validatie) ---
 function rotr(x, n) { return ((x >>> n) | (x << (32 - n))) >>> 0; }
 function rotl(x, n) { return ((x << n) | (x >>> (32 - n))) >>> 0; }
 
@@ -347,7 +247,6 @@ function sha256(msg) {
   buf[total-7] = (bitLenHi >>> 16) & 0xff;
   buf[total-6] = (bitLenHi >>> 8) & 0xff;
   buf[total-5] = bitLenHi & 0xff;
-
   const w = new Uint32Array(64);
   for (let chunk = 0; chunk < total; chunk += 64) {
     for (let i = 0; i < 16; i++) {
@@ -386,7 +285,6 @@ function ripemd160(msg) {
   const sr = [8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6,9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11,9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5,15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8,8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];
   const hl = [0x00000000,0x5a827999,0x6ed9eba1,0x8f1bbcdc,0xa953fd4e];
   const hr = [0x50a28be6,0x5c4dd124,0x6d703ef3,0x7a6d76e9,0x00000000];
-
   function fn(j, x, y, z) {
     if (j < 16) return x ^ y ^ z;
     if (j < 32) return (x & y) | (~x & z);
@@ -402,18 +300,12 @@ function ripemd160(msg) {
   buf.set(msg);
   buf[l] = 0x80;
   let bitLen = l * 8;
-  for (let i = 0; i < 8; i++) {
-    buf[total - 8 + i] = bitLen % 256;
-    bitLen = Math.floor(bitLen / 256);
-  }
+  for (let i = 0; i < 8; i++) { buf[total - 8 + i] = bitLen % 256; bitLen = Math.floor(bitLen / 256); }
   let h0=0x67452301,h1=0xefcdab89,h2=0x98badcfe,h3=0x10325476,h4=0xc3d2e1f0;
   for (let chunk = 0; chunk < total; chunk += 64) {
     const X = new Uint32Array(16);
-    for (let i = 0; i < 16; i++) {
-      X[i] = (buf[chunk+i*4] | (buf[chunk+i*4+1]<<8) | (buf[chunk+i*4+2]<<16) | (buf[chunk+i*4+3]<<24)) >>> 0;
-    }
-    let al=h0, bl=h1, cl=h2, dl=h3, el=h4;
-    let ar=h0, br=h1, cr=h2, dr=h3, er=h4;
+    for (let i = 0; i < 16; i++) { X[i] = (buf[chunk+i*4] | (buf[chunk+i*4+1]<<8) | (buf[chunk+i*4+2]<<16) | (buf[chunk+i*4+3]<<24)) >>> 0; }
+    let al=h0, bl=h1, cl=h2, dl=h3, el=h4, ar=h0, br=h1, cr=h2, dr=h3, er=h4;
     for (let j = 0; j < 80; j++) {
       const round = Math.floor(j / 16);
       let t = (al + fn(j, bl, cl, dl) + X[zl[j]] + hl[round]) >>> 0;
@@ -423,12 +315,8 @@ function ripemd160(msg) {
       t = (rotl(t, sr[j]) + er) >>> 0;
       ar = er; er = dr; dr = rotl(cr,10); cr = br; br = t;
     }
-    let t = (h1 + cl + dr) >>> 0;
-    h1 = (h2 + dl + er) >>> 0;
-    h2 = (h3 + el + ar) >>> 0;
-    h3 = (h4 + al + br) >>> 0;
-    h4 = (h0 + bl + cr) >>> 0;
-    h0 = t;
+    const t = (h1 + cl + dr) >>> 0;
+    h1 = (h2 + dl + er) >>> 0; h2 = (h3 + el + ar) >>> 0; h3 = (h4 + al + br) >>> 0; h4 = (h0 + bl + cr) >>> 0; h0 = t;
   }
   const out = new Uint8Array(20);
   const hs = [h0,h1,h2,h3,h4];
@@ -439,7 +327,6 @@ function ripemd160(msg) {
 }
 
 function hash160(bytes) { return ripemd160(sha256(bytes)); }
-
 const B58ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 function base58encode(bytes) {
   let digits = [0];
@@ -459,36 +346,16 @@ function base58encode(bytes) {
 }
 function base58checkEncode(versionByte, payload) {
   const data = new Uint8Array(1 + payload.length);
-  data[0] = versionByte;
-  data.set(payload, 1);
+  data[0] = versionByte; data.set(payload, 1);
   const checksum = sha256(sha256(data)).slice(0, 4);
   const full = new Uint8Array(data.length + 4);
   full.set(data); full.set(checksum, data.length);
   return base58encode(full);
 }
-function hexToBytes(hex) {
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i*2,2), 16);
-  return out;
-}
-function bytesToHex(bytes) {
-  return Array.from(bytes).map(b => b.toString(16).padStart(2,'0')).join('');
-}
-
-function compressedPubkeyFromXY(xBytes32, yLastByte) {
-  const prefix = (yLastByte & 1) === 0 ? 0x02 : 0x03;
-  const out = new Uint8Array(33);
-  out[0] = prefix;
-  out.set(xBytes32, 1);
-  return out;
-}
-function addressFromCompressedPubkey(pub33) {
-  return base58checkEncode(0x00, hash160(pub33));
-}
+function addressFromHash160(hash20) { return base58checkEncode(0x00, hash20); }
 function wifCompressed(priv32) {
   const payload = new Uint8Array(33);
-  payload.set(priv32, 0);
-  payload[32] = 0x01;
+  payload.set(priv32, 0); payload[32] = 0x01;
   return base58checkEncode(0x80, payload);
 }
 
@@ -510,39 +377,75 @@ function limbsLEToBytes(limbs8) {
   return bytes;
 }
 
-const N_HEX = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141";
-const N_BIG = BigInt("0x" + N_HEX);
+// --- Comb-tabel generatie (CPU) ---
+const SECP_P = (1n << 256n) - (1n << 32n) - 977n;
+const SECP_GX = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
+const SECP_GY = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n;
 
-function randomPrivateKeyBytes() {
-  const b = new Uint8Array(32);
-  crypto.getRandomValues(b);
-  return b;
+function modinv(a, m) {
+  a = ((a % m) + m) % m;
+  let [oldR, r] = [a, m], [oldS, s] = [1n, 0n];
+  while (r !== 0n) {
+    const q = oldR / r;
+    [oldR, r] = [r, oldR - q * r];
+    [oldS, s] = [s, oldS - q * s];
+  }
+  return ((oldS % m) + m) % m;
+}
+function ecDouble(P) {
+  if (P === null || P.y === 0n) return null;
+  const lam = ((3n * P.x % SECP_P) * P.x % SECP_P) * modinv((2n * P.y) % SECP_P, SECP_P) % SECP_P;
+  const x3 = (((lam * lam) % SECP_P) - 2n * P.x % SECP_P + 2n * SECP_P) % SECP_P;
+  const y3 = ((lam * ((P.x - x3 + SECP_P) % SECP_P)) % SECP_P - P.y + SECP_P) % SECP_P;
+  return { x: x3, y: y3 };
+}
+function ecAdd(P, Q) {
+  if (P === null) return Q; if (Q === null) return P;
+  if (P.x === Q.x) { if ((P.y + Q.y) % SECP_P === 0n) return null; return ecDouble(P); }
+  const lam = (((Q.y - P.y + SECP_P) % SECP_P) * modinv((Q.x - P.x + SECP_P) % SECP_P, SECP_P)) % SECP_P;
+  const x3 = (((lam * lam) % SECP_P) - P.x - Q.x + 3n * SECP_P) % SECP_P;
+  const y3 = ((lam * ((P.x - x3 + SECP_P) % SECP_P)) % SECP_P - P.y + SECP_P) % SECP_P;
+  return { x: x3, y: y3 };
+}
+function bigIntTo32Bytes(v) { return hexToBytes(v.toString(16).padStart(64, '0')); }
+function hexToBytes(hex) {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i*2,2), 16);
+  return out;
 }
 
-// =====================================================================================
-// WGSL SHADER
-// =====================================================================================
+function buildPrecomputedTable(statusCb) {
+  const flat = new Uint32Array(32 * 256 * 16);
+  let base = { x: SECP_GX, y: SECP_GY };
+  for (let i = 0; i < 32; i++) {
+    let acc = null;
+    for (let j = 1; j < 256; j++) {
+      acc = ecAdd(acc, base);
+      const xLimbs = bytesToLimbsLE(bigIntTo32Bytes(acc.x));
+      const yLimbs = bytesToLimbsLE(bigIntTo32Bytes(acc.y));
+      const off = (i * 256 + j) * 16;
+      flat.set(xLimbs, off); flat.set(yLimbs, off + 8);
+    }
+    for (let d = 0; d < 8; d++) base = ecDouble(base);
+    if (statusCb) statusCb(i + 1, 32);
+  }
+  return flat;
+}
+
+// --- WGSL Code ---
 const WGSL_SOURCE = `
 struct R8  { v: array<u32,8>,  c: u32 };
-struct R16 { v: array<u32,16> };
-
 const P: array<u32,8> = array<u32,8>(0xFFFFFC2Fu,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
 const P_MINUS_2: array<u32,8> = array<u32,8>(0xFFFFFC2Du,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
-const GX: array<u32,8> = array<u32,8>(0x16F81798u,0x59F2815Bu,0x2DCE28D9u,0x029BFCDBu,0xCE870B07u,0x55A06295u,0xF9DCBBACu,0x79BE667Eu);
-const GY: array<u32,8> = array<u32,8>(0xFB10D4B8u,0x9C47D08Fu,0xA6855419u,0xFD17B448u,0x0E1108A8u,0x5DA4FBFCu,0x26A3C465u,0x483ADA77u);
 
 fn addc(a: u32, b: u32, cin: u32) -> vec2<u32> {
-  let s1 = a + b;
-  let c1 = select(0u, 1u, s1 < a);
-  let s2 = s1 + cin;
-  let c2 = select(0u, 1u, s2 < s1);
+  let s1 = a + b; let c1 = select(0u, 1u, s1 < a);
+  let s2 = s1 + cin; let c2 = select(0u, 1u, s2 < s1);
   return vec2<u32>(s2, c1 + c2);
 }
 fn subb(a: u32, b: u32, bin: u32) -> vec2<u32> {
-  let d1 = a - b;
-  let b1 = select(0u, 1u, a < b);
-  let d2 = d1 - bin;
-  let b2 = select(0u, 1u, d1 < bin);
+  let d1 = a - b; let b1 = select(0u, 1u, a < b);
+  let d2 = d1 - bin; let b2 = select(0u, 1u, d1 < bin);
   return vec2<u32>(d2, b1 + b2);
 }
 fn mul32(a: u32, b: u32) -> vec2<u32> {
@@ -550,32 +453,23 @@ fn mul32(a: u32, b: u32) -> vec2<u32> {
   let blo = b & 0xFFFFu; let bhi = b >> 16u;
   let lolo = alo * blo; let lohi = alo * bhi; let hilo = ahi * blo; let hihi = ahi * bhi;
   let mr = addc(lohi, hilo, 0u);
-  let mid = mr.x; let midCarry = mr.y;
-  let lr = addc(lolo, mid << 16u, 0u);
-  let lo = lr.x; let loCarry = lr.y;
-  let hi = hihi + (mid >> 16u) + (midCarry << 16u) + loCarry;
-  return vec2<u32>(lo, hi);
+  let lr = addc(lolo, mr.x << 16u, 0u);
+  let hi = hihi + (mr.x >> 16u) + (mr.y << 16u) + lr.y;
+  return vec2<u32>(lr.x, hi);
 }
 fn add8(a: array<u32,8>, b: array<u32,8>) -> R8 {
   var out: array<u32,8>; var carry: u32 = 0u;
-  for (var i = 0u; i < 8u; i = i + 1u) {
-    let r = addc(a[i], b[i], carry);
-    out[i] = r.x; carry = r.y;
-  }
+  for (var i = 0u; i < 8u; i = i + 1u) { let r = addc(a[i], b[i], carry); out[i] = r.x; carry = r.y; }
   var res: R8; res.v = out; res.c = carry; return res;
 }
 fn sub8(a: array<u32,8>, b: array<u32,8>) -> R8 {
   var out: array<u32,8>; var borrow: u32 = 0u;
-  for (var i = 0u; i < 8u; i = i + 1u) {
-    let r = subb(a[i], b[i], borrow);
-    out[i] = r.x; borrow = r.y;
-  }
+  for (var i = 0u; i < 8u; i = i + 1u) { let r = subb(a[i], b[i], borrow); out[i] = r.x; borrow = r.y; }
   var res: R8; res.v = out; res.c = borrow; return res;
 }
 fn cmp8(a: array<u32,8>, b: array<u32,8>) -> i32 {
   for (var ii = 0u; ii < 8u; ii = ii + 1u) {
-    let i = 7u - ii;
-    if (a[i] != b[i]) { return select(-1, 1, a[i] > b[i]); }
+    let i = 7u - ii; if (a[i] != b[i]) { return select(-1, 1, a[i] > b[i]); }
   }
   return 0;
 }
@@ -584,59 +478,41 @@ fn isZero8(a: array<u32,8>) -> bool {
   return true;
 }
 fn mulRaw(a: array<u32,8>, b: array<u32,8>) -> array<u32,16> {
-  var res: array<u32,16>;
-  for (var i = 0u; i < 16u; i = i + 1u) { res[i] = 0u; }
+  var res: array<u32,16>; for (var i = 0u; i < 16u; i = i + 1u) { res[i] = 0u; }
   for (var i = 0u; i < 8u; i = i + 1u) {
     var carry: u32 = 0u;
     for (var j = 0u; j < 8u; j = j + 1u) {
-      let m = mul32(a[i], b[j]);
-      let s = addc(res[i+j], m.x, carry);
-      res[i+j] = s.x;
-      carry = m.y + s.y;
+      let m = mul32(a[i], b[j]); let s = addc(res[i+j], m.x, carry);
+      res[i+j] = s.x; carry = m.y + s.y;
     }
-    var k = i + 8u;
-    var cc = carry;
+    var k = i + 8u; var cc = carry;
     loop {
       if (cc == 0u) { break; }
-      let s = addc(res[k], cc, 0u);
-      res[k] = s.x;
-      cc = s.y;
-      k = k + 1u;
+      let s = addc(res[k], cc, 0u); res[k] = s.x; cc = s.y; k = k + 1u;
     }
   }
   return res;
 }
 fn mulSmall8(a: array<u32,8>, m: u32) -> array<u32,9> {
-  var out: array<u32,9>;
-  for (var i=0u;i<9u;i=i+1u){ out[i]=0u; }
+  var out: array<u32,9>; for (var i=0u;i<9u;i=i+1u){ out[i]=0u; }
   var carry: u32 = 0u;
   for (var i = 0u; i < 8u; i = i + 1u) {
-    let pr = mul32(a[i], m);
-    let s = addc(out[i], pr.x, carry);
-    out[i] = s.x;
-    carry = pr.y + s.y;
+    let pr = mul32(a[i], m); let s = addc(out[i], pr.x, carry);
+    out[i] = s.x; carry = pr.y + s.y;
   }
-  out[8] = carry;
-  return out;
+  out[8] = carry; return out;
 }
 fn addScalarAt(acc: ptr<function, array<u32,8>>, pos: u32, value: u32) {
-  var carry = value;
-  var i = pos;
+  var carry = value; var i = pos;
   loop {
     if (carry == 0u || i >= 8u) { break; }
-    let s = addc((*acc)[i], carry, 0u);
-    (*acc)[i] = s.x;
-    carry = s.y;
-    i = i + 1u;
+    let s = addc((*acc)[i], carry, 0u); (*acc)[i] = s.x; carry = s.y; i = i + 1u;
   }
 }
 fn reduceModP(r: array<u32,16>) -> array<u32,8> {
-  var lo: array<u32,9>;
-  for (var i=0u;i<8u;i=i+1u){ lo[i]=r[i]; } lo[8]=0u;
-  var hi: array<u32,8>;
-  for (var i=0u;i<8u;i=i+1u){ hi[i]=r[8u+i]; }
-  var hiShifted: array<u32,9>;
-  hiShifted[0]=0u;
+  var lo: array<u32,9>; for (var i=0u;i<8u;i=i+1u){ lo[i]=r[i]; } lo[8]=0u;
+  var hi: array<u32,8>; for (var i=0u;i<8u;i=i+1u){ hi[i]=r[8u+i]; }
+  var hiShifted: array<u32,9>; hiShifted[0]=0u;
   for (var i=0u;i<8u;i=i+1u){ hiShifted[i+1u]=hi[i]; }
   let hi977 = mulSmall8(hi, 977u);
   var sum1: array<u32,9>; var carry: u32 = 0u;
@@ -646,41 +522,27 @@ fn reduceModP(r: array<u32,16>) -> array<u32,8> {
   for (var i=0u;i<9u;i=i+1u){ let s=addc(sum1[i], hi977[i], carry); sum2[i]=s.x; carry=s.y; }
   let carry2 = carry;
   let extra = carry1 + carry2;
-  var acc: array<u32,8>;
-  for (var i=0u;i<8u;i=i+1u){ acc[i]=sum2[i]; }
+  var acc: array<u32,8>; for (var i=0u;i<8u;i=i+1u){ acc[i]=sum2[i]; }
   let hi2 = sum2[8];
   let hi2_977 = mul32(hi2, 977u);
-  addScalarAt(&acc, 0u, hi2_977.x);
-  addScalarAt(&acc, 1u, hi2_977.y);
-  addScalarAt(&acc, 1u, hi2);
-  addScalarAt(&acc, 2u, extra);
-  addScalarAt(&acc, 1u, extra * 977u);
+  addScalarAt(&acc, 0u, hi2_977.x); addScalarAt(&acc, 1u, hi2_977.y);
+  addScalarAt(&acc, 1u, hi2); addScalarAt(&acc, 2u, extra); addScalarAt(&acc, 1u, extra * 977u);
   for (var iter=0u; iter<6u; iter=iter+1u) {
-    if (cmp8(acc, P) >= 0) {
-      let s = sub8(acc, P);
-      acc = s.v;
-    } else { break; }
+    if (cmp8(acc, P) >= 0) { let s = sub8(acc, P); acc = s.v; } else { break; }
   }
   return acc;
 }
 fn mulmod(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> { return reduceModP(mulRaw(a, b)); }
 fn addmod(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> {
-  let s = add8(a, b);
-  if (s.c == 1u || cmp8(s.v, P) >= 0) { let d = sub8(s.v, P); return d.v; }
-  return s.v;
+  let s = add8(a, b); if (s.c == 1u || cmp8(s.v, P) >= 0) { let d = sub8(s.v, P); return d.v; } return s.v;
 }
 fn submod(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> {
   if (cmp8(a, b) >= 0) { let d = sub8(a, b); return d.v; }
   else { let t = sub8(b, a); let d = sub8(P, t.v); return d.v; }
 }
-fn u32to8(x: u32) -> array<u32,8> {
-  var out: array<u32,8>; out[0]=x;
-  for (var i=1u;i<8u;i=i+1u){ out[i]=0u; }
-  return out;
-}
+fn u32to8(x: u32) -> array<u32,8> { var out: array<u32,8>; out[0]=x; for (var i=1u;i<8u;i=i+1u){ out[i]=0u; } return out; }
 fn modpowP2(base: array<u32,8>) -> array<u32,8> {
-  var result = u32to8(1u);
-  var b = base;
+  var result = u32to8(1u); var b = base;
   for (var i = 0u; i < 256u; i = i + 1u) {
     let limbIdx = i / 32u; let bitIdx = i % 32u;
     if (((P_MINUS_2[limbIdx] >> bitIdx) & 1u) == 1u) { result = mulmod(result, b); }
@@ -688,6 +550,7 @@ fn modpowP2(base: array<u32,8>) -> array<u32,8> {
   }
   return result;
 }
+
 struct JPoint { X: array<u32,8>, Y: array<u32,8>, Z: array<u32,8>, isInf: bool };
 fn jacDouble(p: JPoint) -> JPoint {
   let Ysq = mulmod(p.Y, p.Y);
@@ -697,8 +560,7 @@ fn jacDouble(p: JPoint) -> JPoint {
   let X3 = submod(mulmod(M, M), twoS);
   let Y3 = submod(mulmod(M, submod(S, X3)), mulmod(u32to8(8u), mulmod(Ysq, Ysq)));
   let Z3 = mulmod(u32to8(2u), mulmod(p.Y, p.Z));
-  var out: JPoint; out.X = X3; out.Y = Y3; out.Z = Z3; out.isInf = isZero8(Z3);
-  return out;
+  var out: JPoint; out.X = X3; out.Y = Y3; out.Z = Z3; out.isInf = isZero8(Z3); return out;
 }
 fn jacMaddAffine(p: JPoint, x2: array<u32,8>, y2: array<u32,8>) -> JPoint {
   if (p.isInf) { var out: JPoint; out.X = x2; out.Y = y2; out.Z = u32to8(1u); out.isInf = false; return out; }
@@ -707,334 +569,298 @@ fn jacMaddAffine(p: JPoint, x2: array<u32,8>, y2: array<u32,8>) -> JPoint {
   let S2 = mulmod(mulmod(y2, Z1sq), p.Z);
   let H = submod(U2, p.X);
   let R = submod(S2, p.Y);
-  if (isZero8(H)) {
-    if (isZero8(R)) { return jacDouble(p); }
-    else { var out: JPoint; out.X = u32to8(0u); out.Y = u32to8(0u); out.Z = u32to8(0u); out.isInf = true; return out; }
-  }
-  let HH = mulmod(H, H);
-  let HHH = mulmod(HH, H);
+  if (isZero8(H)) { if (isZero8(R)) { return jacDouble(p); } else { var out: JPoint; out.isInf = true; return out; } }
+  let HH = mulmod(H, H); let HHH = mulmod(HH, H);
   let V = mulmod(p.X, HH);
   let X3 = submod(submod(mulmod(R, R), HHH), addmod(V, V));
   let Y3 = submod(mulmod(R, submod(V, X3)), mulmod(p.Y, HHH));
   let Z3 = mulmod(p.Z, H);
-  var out: JPoint; out.X = X3; out.Y = Y3; out.Z = Z3; out.isInf = isZero8(Z3);
-  return out;
+  var out: JPoint; out.X = X3; out.Y = Y3; out.Z = Z3; out.isInf = isZero8(Z3); return out;
 }
-fn scalarMultG(k: array<u32,8>) -> array<array<u32,8>,2> {
-  var pt: JPoint; pt.X = u32to8(0u); pt.Y = u32to8(0u); pt.Z = u32to8(0u); pt.isInf = true;
-  for (var ii = 0u; ii < 256u; ii = ii + 1u) {
-    let i = 255u - ii;
-    let limbIdx = i / 32u; let bitIdx = i % 32u;
-    if (!pt.isInf) { pt = jacDouble(pt); }
-    let bit = (k[limbIdx] >> bitIdx) & 1u;
-    if (bit == 1u) { pt = jacMaddAffine(pt, GX, GY); }
+fn scalarMultCombG(k: array<u32,8>) -> array<array<u32,8>,2> {
+  var pt: JPoint; pt.isInf = true;
+  for (var i = 0u; i < 32u; i = i + 1u) {
+    let limbIdx = i / 4u; let shift = 8u * (i % 4u);
+    let byteVal = (k[limbIdx] >> shift) & 0xffu;
+    if (byteVal != 0u) {
+      let base = (i * 256u + byteVal) * 16u;
+      var tx: array<u32,8>; var ty: array<u32,8>;
+      for (var m = 0u; m < 8u; m = m + 1u) {
+        tx[m] = combTable[base + m]; ty[m] = combTable[base + 8u + m];
+      }
+      pt = jacMaddAffine(pt, tx, ty);
+    }
   }
   let Zinv = modpowP2(pt.Z);
   let Zinv2 = mulmod(Zinv, Zinv);
   let Zinv3 = mulmod(Zinv2, Zinv);
-  let x = mulmod(pt.X, Zinv2);
-  let y = mulmod(pt.Y, Zinv3);
   var out: array<array<u32,8>,2>;
-  out[0] = x; out[1] = y;
+  out[0] = mulmod(pt.X, Zinv2); out[1] = mulmod(pt.Y, Zinv3);
   return out;
 }
+
+fn rotr32(x: u32, n: u32) -> u32 { return (x >> n) | (x << (32u - n)); }
+fn rotl32(x: u32, n: u32) -> u32 { return (x << n) | (x >> (32u - n)); }
+fn bswap32(x: u32) -> u32 { return ((x & 0xffu) << 24u) | ((x & 0xff00u) << 8u) | ((x >> 8u) & 0xff00u) | ((x >> 24u) & 0xffu); }
+fn byteOfBE(limbs: array<u32,8>, k: u32) -> u32 {
+  let limbIdx = 7u - (k / 4u); let shift = 24u - 8u * (k % 4u); return (limbs[limbIdx] >> shift) & 0xffu;
+}
+const SHA_K: array<u32,64> = array<u32,64>(
+  0x428a2f98u,0x71374491u,0xb5c0fbcfu,0xe9b5dba5u,0x3956c25bu,0x59f111f1u,0x923f82a4u,0xab1c5ed5u,
+  0xd807aa98u,0x12835b01u,0x243185beu,0x550c7dc3u,0x72be5d74u,0x80deb1feu,0x9bdc06a7u,0xc19bf174u,
+  0xe49b69c1u,0xefbe4786u,0x0fc19dc6u,0x240ca1ccu,0x2de92c6fu,0x4a7484aau,0x5cb0a9dcu,0x76f988dau,
+  0x983e5152u,0xa831c66du,0xb00327c8u,0xbf597fc7u,0xc6e00bf3u,0xd5a79147u,0x06ca6351u,0x14292967u,
+  0x27b70a85u,0x2e1b2138u,0x4d2c6dfcu,0x53380d13u,0x650a7354u,0x766a0abbu,0x81c2c92eu,0x92722c85u,
+  0xa2bfe8a1u,0xa81a664bu,0xc24b8b70u,0xc76c51a3u,0xd192e819u,0xd6990624u,0xf40e3585u,0x106aa070u,
+  0x19a4c116u,0x1e376c08u,0x2748774cu,0x34b0bcb5u,0x391c0cb3u,0x4ed8aa4au,0x5b9cca4fu,0x682e6ff3u,
+  0x748f82eeu,0x78a5636fu,0x84c87814u,0x8cc70208u,0x90befffau,0xa4506cebu,0xbef9a3f7u,0xc67178f2u
+);
+fn sha256_33(prefix: u32, x: array<u32,8>) -> array<u32,8> {
+  var b: array<u32,64>; for (var i = 0u; i < 64u; i = i + 1u) { b[i] = 0u; }
+  b[0] = prefix; for (var k = 0u; k < 32u; k = k + 1u) { b[1u + k] = byteOfBE(x, k); }
+  b[33] = 0x80u; b[62] = 0x01u; b[63] = 0x08u;
+  var W: array<u32,64>;
+  for (var i = 0u; i < 16u; i = i + 1u) { W[i] = (b[4u*i] << 24u) | (b[4u*i+1u] << 16u) | (b[4u*i+2u] << 8u) | b[4u*i+3u]; }
+  for (var i = 16u; i < 64u; i = i + 1u) {
+    let s0 = rotr32(W[i-15u],7u) ^ rotr32(W[i-15u],18u) ^ (W[i-15u] >> 3u);
+    let s1 = rotr32(W[i-2u],17u) ^ rotr32(W[i-2u],19u) ^ (W[i-2u] >> 10u);
+    W[i] = W[i-16u] + s0 + W[i-7u] + s1;
+  }
+  var H: array<u32,8> = array<u32,8>(0x6a09e667u,0xbb67ae85u,0x3c6ef372u,0xa54ff53au,0x510e527fu,0x9b05688cu,0x1f83d9abu,0x5be0cd19u);
+  var a=H[0]; var bb=H[1]; var c=H[2]; var d=H[3]; var e=H[4]; var f=H[5]; var g=H[6]; var h=H[7];
+  for (var i = 0u; i < 64u; i = i + 1u) {
+    let S1 = rotr32(e,6u) ^ rotr32(e,11u) ^ rotr32(e,25u);
+    let ch = (e & f) ^ ((~e) & g);
+    let t1 = h + S1 + ch + SHA_K[i] + W[i];
+    let S0 = rotr32(a,2u) ^ rotr32(a,13u) ^ rotr32(a,22u);
+    let maj = (a & bb) ^ (a & c) ^ (bb & c);
+    let t2 = S0 + maj;
+    h=g; g=f; f=e; e=d+t1; d=c; c=bb; bb=a; a=t1+t2;
+  }
+  H[0]=H[0]+a; H[1]=H[1]+bb; H[2]=H[2]+c; H[3]=H[3]+d;
+  H[4]=H[4]+e; H[5]=H[5]+f; H[6]=H[6]+g; H[7]=H[7]+h;
+  return H;
+}
+
+const RMD_ZL: array<u32,80> = array<u32,80>(0u,1u,2u,3u,4u,5u,6u,7u,8u,9u,10u,11u,12u,13u,14u,15u,7u,4u,13u,1u,10u,6u,15u,3u,12u,0u,9u,5u,2u,14u,11u,8u,3u,10u,14u,4u,9u,15u,8u,1u,2u,7u,0u,6u,13u,11u,5u,12u,1u,9u,11u,10u,0u,8u,12u,4u,13u,3u,7u,15u,14u,5u,6u,2u,4u,0u,5u,9u,7u,12u,2u,10u,14u,1u,3u,8u,11u,6u,15u,13u);
+const RMD_ZR: array<u32,80> = array<u32,80>(5u,14u,7u,0u,9u,2u,11u,4u,13u,6u,15u,8u,1u,10u,3u,12u,6u,11u,3u,7u,0u,13u,5u,10u,14u,15u,8u,12u,4u,9u,1u,2u,15u,5u,1u,3u,7u,14u,6u,9u,11u,8u,12u,2u,10u,0u,4u,13u,8u,6u,4u,1u,3u,11u,15u,0u,5u,12u,2u,13u,9u,7u,10u,14u,12u,15u,10u,4u,1u,5u,8u,7u,6u,2u,13u,14u,0u,3u,9u,11u);
+const RMD_SL: array<u32,80> = array<u32,80>(11u,14u,15u,12u,5u,8u,7u,9u,11u,13u,14u,15u,6u,7u,9u,8u,7u,6u,8u,13u,11u,9u,7u,15u,7u,12u,15u,9u,11u,7u,13u,12u,11u,13u,6u,7u,14u,9u,13u,15u,14u,8u,13u,6u,5u,12u,7u,5u,11u,12u,14u,15u,14u,15u,9u,8u,9u,14u,5u,6u,8u,6u,5u,12u,9u,15u,5u,11u,6u,8u,13u,12u,5u,12u,13u,14u,11u,8u,5u,6u);
+const RMD_SR: array<u32,80> = array<u32,80>(8u,9u,9u,11u,13u,15u,15u,5u,7u,7u,8u,11u,14u,14u,12u,6u,9u,13u,15u,7u,12u,8u,9u,11u,7u,7u,12u,7u,6u,15u,13u,11u,9u,7u,15u,11u,8u,6u,6u,14u,12u,13u,5u,14u,13u,13u,7u,5u,15u,5u,8u,11u,14u,14u,6u,14u,6u,9u,12u,9u,12u,5u,15u,8u,8u,5u,12u,9u,12u,5u,14u,6u,8u,13u,6u,5u,15u,13u,11u,11u);
+const RMD_HL: array<u32,5> = array<u32,5>(0x00000000u,0x5a827999u,0x6ed9eba1u,0x8f1bbcdcu,0xa953fd4eu);
+const RMD_HR: array<u32,5> = array<u32,5>(0x50a28be6u,0x5c4dd124u,0x6d703ef3u,0x7a6d76e9u,0x00000000u);
+
+fn rmdF(j: u32, x: u32, y: u32, z: u32) -> u32 {
+  if (j < 16u) { return x ^ y ^ z; } if (j < 32u) { return (x & y) | ((~x) & z); }
+  if (j < 48u) { return (x | (~y)) ^ z; } if (j < 64u) { return (x & z) | (y & (~z)); }
+  return x ^ (y | (~z));
+}
+fn ripemd160_32(H: array<u32,8>) -> array<u32,5> {
+  var X: array<u32,16>; for (var i = 0u; i < 16u; i = i + 1u) { X[i] = 0u; }
+  for (var i = 0u; i < 8u; i = i + 1u) { X[i] = bswap32(H[i]); }
+  X[8] = 0x80u; X[14] = 256u;
+  var h0=0x67452301u; var h1=0xefcdab89u; var h2=0x98badcfeu; var h3=0x10325476u; var h4=0xc3d2e1f0u;
+  var al=h0; var bl=h1; var cl=h2; var dl=h3; var el=h4;
+  var ar=h0; var br=h1; var cr=h2; var dr=h3; var er=h4;
+  for (var j = 0u; j < 80u; j = j + 1u) {
+    let round = j / 16u;
+    var t = al + rmdF(j, bl, cl, dl) + X[RMD_ZL[j]] + RMD_HL[round];
+    t = rotl32(t, RMD_SL[j]) + el; al=el; el=dl; dl=rotl32(cl,10u); cl=bl; bl=t;
+    var t2 = ar + rmdF(79u - j, br, cr, dr) + X[RMD_ZR[j]] + RMD_HR[round];
+    t2 = rotl32(t2, RMD_SR[j]) + er; ar=er; er=dr; dr=rotl32(cr,10u); cr=br; br=t2;
+  }
+  let t = h1 + cl + dr;
+  return array<u32,5>(t, h2 + dl + er, h3 + el + ar, h4 + al + br, h0 + bl + cr);
+}
+
 @group(0) @binding(0) var<storage, read> privkeys: array<u32>;
-@group(0) @binding(1) var<storage, read_write> pubkeys: array<u32>;
+@group(0) @binding(1) var<storage, read> combTable: array<u32>;
+@group(0) @binding(2) var<storage, read_write> outbuf: array<u32>;
+
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let idx = gid.x;
   let count = arrayLength(&privkeys) / 8u;
   if (idx >= count) { return; }
+
   var k: array<u32,8>;
   for (var i = 0u; i < 8u; i = i + 1u) { k[i] = privkeys[idx*8u + i]; }
-  let xy = scalarMultG(k);
-  for (var i = 0u; i < 8u; i = i + 1u) {
-    pubkeys[idx*16u + i]      = xy[0][i];
-    pubkeys[idx*16u + 8u + i] = xy[1][i];
-  }
+
+  let xy = scalarMultCombG(k);
+  let prefix = select(3u, 2u, (xy[1][0] & 1u) == 0u);
+  let H = sha256_33(prefix, xy[0]);
+  let hash = ripemd160_32(H);
+
+  let outBase = idx * 21u;
+  for (var i = 0u; i < 8u; i = i + 1u) { outbuf[outBase + i] = xy[0][i]; }
+  for (var i = 0u; i < 8u; i = i + 1u) { outbuf[outBase + 8u + i] = xy[1][i]; }
+  for (var i = 0u; i < 5u; i = i + 1u) { outbuf[outBase + 16u + i] = hash[i]; }
 }
 `;
 
-// =====================================================================================
-// WEBGPU APPLICATION CONTROLLER
-// =====================================================================================
-let gpuDevice = null, gpuPipeline = null;
-let isSniperRunning = false;
-let totalScannedKeys = 0;
-let sessionStartTime = 0;
-let lastCsvRows = [];
+// --- WebGPU & UI Logica ---
+let gpuDevice = null, gpuPipeline = null, tableBuffer = null;
+let isRunning = false;
+let totalChecked = 0;
 
 async function initWebGPU() {
   const statusEl = document.getElementById('gpuStatus');
   const dotEl = document.getElementById('gpuDot');
-  if (!('gpu' in navigator)) {
-    statusEl.textContent = 'WebGPU niet beschikbaar in deze browser';
-    return false;
-  }
+  if (!navigator.gpu) { statusEl.textContent = 'WebGPU niet beschikbaar'; return false; }
   try {
     const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) { statusEl.textContent = 'Geen GPU-adapter gevonden'; return false; }
     gpuDevice = await adapter.requestDevice();
     const module = gpuDevice.createShaderModule({ code: WGSL_SOURCE });
-    gpuPipeline = gpuDevice.createComputePipeline({
-      layout: 'auto',
-      compute: { module, entryPoint: 'main' }
-    });
-    statusEl.textContent = 'WebGPU actief — shader gecompileerd';
+    gpuPipeline = gpuDevice.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
+    
+    statusEl.textContent = 'Comb-tabel aanmaken voor Puzzle 71...';
+    const table = buildPrecomputedTable();
+    tableBuffer = gpuDevice.createBuffer({ size: table.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+    gpuDevice.queue.writeBuffer(tableBuffer, 0, table);
+
+    statusEl.textContent = 'WebGPU gereed voor Puzzle 71.';
     dotEl.classList.add('on');
     return true;
   } catch (e) {
-    console.error(e);
-    statusEl.textContent = 'WebGPU-fout: ' + e.message;
+    statusEl.textContent = 'Fout: ' + e.message;
     return false;
   }
 }
 
-async function runScalarMultBatch(privKeyBytesArray) {
-  const count = privKeyBytesArray.length;
-  const inData = new Uint32Array(count * 8);
-  for (let i = 0; i < count; i++) {
-    inData.set(bytesToLimbsLE(privKeyBytesArray[i]), i*8);
-  }
-
-  const inBuf = gpuDevice.createBuffer({
-    size: inData.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
-  gpuDevice.queue.writeBuffer(inBuf, 0, inData);
-
-  const outSize = count * 16 * 4;
-  const outBuf = gpuDevice.createBuffer({
-    size: outSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-  });
-  const readBuf = gpuDevice.createBuffer({
-    size: outSize, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
-  });
-
-  const bindGroup = gpuDevice.createBindGroup({
-    layout: gpuPipeline.getBindGroupLayout(0),
-    entries: [
-      { binding: 0, resource: { buffer: inBuf } },
-      { binding: 1, resource: { buffer: outBuf } },
-    ]
-  });
-
-  const encoder = gpuDevice.createCommandEncoder();
-  const pass = encoder.beginComputePass();
-  pass.setPipeline(gpuPipeline);
-  pass.setBindGroup(0, bindGroup);
-  pass.dispatchWorkgroups(Math.ceil(count / 64));
-  pass.end();
-  encoder.copyBufferToBuffer(outBuf, 0, readBuf, 0, outSize);
-  gpuDevice.queue.submit([encoder.finish()]);
-
-  await readBuf.mapAsync(GPUMapMode.READ);
-  const result = new Uint32Array(readBuf.getMappedRange().slice(0));
-  readBuf.unmap();
-
-  inBuf.destroy(); outBuf.destroy(); readBuf.destroy();
-
-  const points = [];
-  for (let i = 0; i < count; i++) {
-    const xLimbs = result.slice(i*16, i*16+8);
-    const yLimbs = result.slice(i*16+8, i*16+16);
-    points.push({ x: limbsLEToBytes(xLimbs), y: limbsLEToBytes(yLimbs) });
-  }
-  return points;
+// Hulpfunctie om BigInt om te zetten naar 8 u32 limbs in little-endian formaat
+function bigIntToLimbsLE(bi) {
+  let hex = bi.toString(16).padStart(64, '0');
+  let bytes = hexToBytes(hex);
+  return bytesToLimbsLE(bytes);
 }
 
-// =====================================================================================
-// SELF TEST
-// =====================================================================================
-const TEST_VECTORS = [
-  { k: 1n,    addr: "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH" },
-  { k: 2n,    addr: "1cMh228HTCiwS8ZsaakH8A8wze1JR5ZsP" },
-  { k: 3n,    addr: "1CUNEBjYrCn2y1SdiUMohaKUi4wpP326Lb" },
-  { k: 255n,  addr: "1DF7Yr4GKWoCXZZZXoEczo9oiokwQe8Urz" },
-];
-function bigIntTo32Bytes(v) {
-  return hexToBytes(v.toString(16).padStart(64, '0'));
-}
-
-async function runSelfTest() {
-  const btn = document.getElementById('btnTest');
-  const summary = document.getElementById('testSummary');
-  const table = document.getElementById('testTable');
-  const tbody = table.querySelector('tbody');
-  btn.disabled = true;
-  summary.textContent = 'bezig…';
-  tbody.innerHTML = '';
-  table.style.display = 'table';
-
-  try {
-    if (!gpuDevice) {
-      const ok = await initWebGPU();
-      if (!ok) { summary.textContent = 'Geen WebGPU beschikbaar.'; btn.disabled = false; return false; }
-    }
-    const privBytes = TEST_VECTORS.map(t => bigIntTo32Bytes(t.k));
-    const points = await runScalarMultBatch(privBytes);
-
-    let allOk = true;
-    points.forEach((pt, i) => {
-      const pub = compressedPubkeyFromXY(pt.x, pt.y[31]);
-      const addr = addressFromCompressedPubkey(pub);
-      const expected = TEST_VECTORS[i].addr;
-      const ok = addr === expected;
-      allOk = allOk && ok;
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${TEST_VECTORS[i].k}</td><td class="addr">${addr}</td><td>${expected}</td><td class="${ok?'ok':'bad'}">${ok?'✓ klopt':'✗ FOUT'}</td>`;
-      tbody.appendChild(tr);
-    });
-
-    summary.innerHTML = allOk ? '<span class="ok">Alle testvectoren kloppen!</span>' : '<span class="bad">Fout in shader.</span>';
-    btn.disabled = false;
-    return allOk;
-  } catch (e) {
-    summary.textContent = 'Fout: ' + e.message;
-    btn.disabled = false;
-    return false;
-  }
-}
-
-// =====================================================================================
-// SNIPER LOOP (GPU BATCHES)
-// =====================================================================================
-function logMsg(msg, cls = '') {
-  const ts = new Date().toLocaleTimeString('nl-NL');
-  const box = document.getElementById('logBox');
-  const div = document.createElement('div');
-  div.innerHTML = `<span class="ts">[${ts}]</span> ${msg}`;
-  if (cls) div.className = cls;
-  box.appendChild(div);
-  box.scrollTop = box.scrollHeight;
-}
-
-function copyToClipboard(text) {
-  navigator.clipboard?.writeText(text).catch(()=>{});
-}
-
-async function sniperLoop() {
-  const targetAddr = document.getElementById('btcAddr').value.trim();
-  const count = parseInt(document.getElementById('countInput').value) || 10000;
-  
+document.getElementById('btnStart').addEventListener('click', async () => {
   if (!gpuDevice) {
     const ok = await initWebGPU();
-    if (!ok) { alert('WebGPU vereist.'); stopSniper(); return; }
+    if (!ok) return;
   }
 
-  sessionStartTime = performance.now();
-  totalScannedKeys = 0;
-  lastCsvRows = [];
+  const targetAddress = document.getElementById('targetAddressInput').value.trim();
+  isRunning = true;
+  document.getElementById('btnStart').disabled = true;
+  document.getElementById('btnStop').disabled = false;
+  document.getElementById('feedText').textContent = "Zoeken naar Puzzle 71...";
 
-  document.getElementById('statusVal').textContent = 'Actief (GPU)';
-  document.getElementById('statusVal').style.color = 'var(--success)';
-  logMsg('GPU Sniper loop gestart...', 'ev-epoch');
+  let currentKeyVal = 0x4000000000000000n; // Start van Puzzle 71 ($2^{70}$)
+  const maxKeyVal = 0x7fffffffffffffffn;   // Einde van Puzzle 71 ($2^{71} - 1$)
+  const batchSize = 16384; // Aantal keys per GPU dispatch batch
 
-  const tbody = document.getElementById('resultBody');
-  tbody.innerHTML = '';
+  let startTime = performance.now();
+  totalChecked = 0;
 
-  while (isSniperRunning) {
-    const t0 = performance.now();
-    const privKeys = [];
-    for (let i = 0; i < count; i++) privKeys.push(randomPrivateKeyBytes());
-
-    let points;
-    try {
-      points = await runScalarMultBatch(privKeys);
-    } catch (e) {
-      logMsg('GPU Fout: ' + e.message, 'ev-stop');
-      stopSniper();
-      break;
+  async function step() {
+    if (!isRunning || currentKeyVal > maxKeyVal) {
+      isRunning = false;
+      document.getElementById('btnStart').disabled = false;
+      document.getElementById('btnStop').disabled = true;
+      return;
     }
 
-    const rows = [];
-    for (let i = 0; i < count; i++) {
-      const priv = privKeys[i];
-      const pt = points[i];
-      const pub = compressedPubkeyFromXY(pt.x, pt.y[31]);
-      const addr = addressFromCompressedPubkey(pub);
-      const wif = wifCompressed(priv);
-      
-      rows.push({ i: totalScannedKeys + i, wif, addr, pub: bytesToHex(pub), priv: bytesToHex(priv) });
+    // Bouw array van sleutels voor deze batch
+    const batchLimbs = new Uint32Array(batchSize * 8);
+    const privKeysRaw = [];
+    for (let i = 0; i < batchSize; i++) {
+      if (currentKeyVal > maxKeyVal) break;
+      const limbs = bigIntToLimbsLE(currentKeyVal);
+      batchLimbs.set(limbs, i * 8);
+      privKeysRaw.push({ val: currentKeyVal, limbs });
+      currentKeyVal += 1n;
+    }
+    const actualBatchCount = privKeysRaw.length;
 
-      if (addr === targetAddr) {
-        isSniperRunning = false;
-        logMsg(`🎯 TARGET GEVONDEN! Adres: ${addr} | WIF: ${wif}`, 'ev-found');
-        alert(`Gefeliciteerd! Target adres gevonden!\nWIF: ${wif}`);
-        document.getElementById('statusVal').textContent = '🎯 Target Gevonden!';
+    // Buffer opzetten voor GPU
+    const inBuf = gpuDevice.createBuffer({ size: actualBatchCount * 32, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+    gpuDevice.queue.writeBuffer(inBuf, 0, batchLimbs.buffer, 0, actualBatchCount * 32);
+
+    const outSize = actualBatchCount * 21 * 4;
+    const outBuf = gpuDevice.createBuffer({ size: outSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const readBuf = gpuDevice.createBuffer({ size: outSize, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+
+    const bindGroup = gpuDevice.createBindGroup({
+      layout: gpuPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: inBuf } },
+        { binding: 1, resource: { buffer: tableBuffer } },
+        { binding: 2, resource: { buffer: outBuf } }
+      ]
+    });
+
+    const encoder = gpuDevice.createCommandEncoder();
+    const pass = encoder.beginComputePass();
+    pass.setPipeline(gpuPipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 64));
+    pass.end();
+    encoder.copyBufferToBuffer(outBuf, 0, readBuf, 0, outSize);
+    gpuDevice.queue.submit([encoder.finish()]);
+
+    await readBuf.mapAsync(GPUMapMode.READ);
+    const result = new Uint32Array(readBuf.getMappedRange().slice(0));
+    readBuf.unmap();
+
+    inBuf.destroy(); outBuf.destroy(); readBuf.destroy();
+
+    // Controleer of het doeladres ertussen zit
+    let found = false;
+    for (let i = 0; i < actualBatchCount; i++) {
+      const base = i * 21;
+      const hLimbs = result.slice(base + 16, base + 21);
+      const hashBytes = new Uint8Array(20);
+      for (let w = 0; w < 5; w++) {
+        const v = hLimbs[w];
+        hashBytes[w*4] = v & 0xff;
+        hashBytes[w*4+1] = (v >>> 8) & 0xff;
+        hashBytes[w*4+2] = (v >>> 16) & 0xff;
+        hashBytes[w*4+3] = (v >>> 24) & 0xff;
+      }
+      const addr = addressFromHash160(hashBytes);
+      if (addr === targetAddress) {
+        found = true;
+        const privHex = privKeysRaw[i].val.toString(16).padStart(64, '0');
+        const wif = wifCompressed(hexToBytes(privHex));
+        
+        document.getElementById('matchBox').style.display = 'block';
+        document.getElementById('matchInfo').innerHTML = `
+          Private Key (Hex): <b>0x${privHex}</b><br>
+          Private Key (WIF): <b>${wif}</b><br>
+          Adres: <b class="ok">${addr}</b>
+        `;
+        isRunning = false;
+        document.getElementById('btnStart').disabled = false;
+        document.getElementById('btnStop').disabled = true;
         break;
       }
     }
 
-    totalScannedKeys += count;
-    lastCsvRows.push(...rows);
+    totalChecked += actualBatchCount;
+    let elapsed = (performance.now() - startTime) / 1000;
+    let rate = Math.round(totalChecked / elapsed);
 
-    const dt = (performance.now() - t0) / 1000;
-    const rate = Math.round(count / dt);
-    const sessionSec = Math.round((performance.now() - sessionStartTime) / 1000);
+    document.getElementById('statCount').textContent = totalChecked.toLocaleString();
+    document.getElementById('statRate').textContent = rate.toLocaleString() + " keys/s";
+    document.getElementById('feedText').textContent = "Huidige test: 0x" + privKeysRaw[privKeysRaw.length-1].val.toString(16);
 
-    document.getElementById('statCount').textContent = totalScannedKeys.toLocaleString('nl-NL');
-    document.getElementById('statRate').textContent = rate.toLocaleString('nl-NL');
-    document.getElementById('keysScanned').textContent = totalScannedKeys.toLocaleString('nl-NL');
-    document.getElementById('speed').textContent = rate.toLocaleString('nl-NL') + ' /s';
-    document.getElementById('sessionTime').textContent = sessionSec + 's';
-    document.getElementById('feedText').textContent = rows[0].pub.slice(0, 20) + '…';
+    if (found) return;
 
-    // UI Tabel verversen met de laatste batch
-    tbody.innerHTML = '';
-    rows.slice(0, 50).forEach((r, idx) => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${idx+1}</td><td><span class="trunc" title="${r.wif}">${r.wif}</span></td><td class="addr">${r.addr}</td><td><span class="copy" data-copy="${r.wif}">WIF</span></td>`;
-      tbody.appendChild(tr);
-    });
-    tbody.querySelectorAll('.copy').forEach(el => el.addEventListener('click', () => copyToClipboard(el.dataset.copy)));
-
-    document.getElementById('btnCsv').disabled = false;
-    
-    // Kleine pauze om de UI responsief te houden
-    await new Promise(r => setTimeout(r, 10));
+    if (isRunning) {
+      requestAnimationFrame(step);
+    }
   }
-}
 
-function startSniper() {
-  if (isSniperRunning) return;
-  isSniperRunning = true;
-  document.getElementById('btnGen').disabled = true;
-  document.getElementById('btnStop').disabled = false;
-  document.getElementById('progress').style.display = 'block';
-  document.getElementById('progressBar').style.width = '100%';
-  sniperLoop();
-}
+  requestAnimationFrame(step);
+});
 
-function stopSniper() {
-  isSniperRunning = false;
-  document.getElementById('btnGen').disabled = false;
+document.getElementById('btnStop').addEventListener('click', () => {
+  isRunning = false;
+  document.getElementById('btnStart').disabled = false;
   document.getElementById('btnStop').disabled = true;
-  document.getElementById('progress').style.display = 'none';
-  document.getElementById('statusVal').textContent = 'Gestopt';
-  document.getElementById('statusVal').style.color = 'var(--muted)';
-  logMsg('Sniper handmatig gestopt.', 'ev-stop');
-}
+  document.getElementById('feedText').textContent = "Gepauzeerd.";
+});
 
-function downloadCsv() {
-  if (!lastCsvRows.length) return;
-  const lines = ['index,private_key_wif,private_key_hex,compressed_pubkey_hex,address'];
-  lastCsvRows.forEach(r => {
-    lines.push(`${r.i+1},${r.wif},${r.priv},${r.pub},${r.addr}`);
-  });
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'webgpu-bitcoin-adressen.csv'; a.click();
-  URL.revokeObjectURL(url);
-}
-
-// Event Listeners
-document.getElementById('btnTest').addEventListener('click', runSelfTest);
-document.getElementById('btnGen').addEventListener('click', startSniper);
-document.getElementById('btnStop').addEventListener('click', stopSniper);
-document.getElementById('btnCsv').addEventListener('click', downloadCsv);
-
-// Init opstart
 initWebGPU();
 </script>
 </body>
