@@ -134,14 +134,25 @@
                     <option value="webgpu" selected>⚡ WebGPU WGSL Compute Pipeline</option>
                 </select>
             </div>
+            
+            <!-- NIEUWE INVOERVELDEN VOOR HET BEREIK (RANGE) -->
+            <div class="field">
+                <label>Globaal Bereik Begin (HEX)</label>
+                <input id="globalRangeStart" value="400000000000000000" type="text" placeholder="bv. 400000000000000000">
+            </div>
+            <div class="field">
+                <label>Globaal Bereik Eind (HEX)</label>
+                <input id="globalRangeEnd" value="7fffffffffffffffff" type="text" placeholder="bv. 7fffffffffffffffff">
+            </div>
+
             <div class="field">
                 <label>Keys per Plakje</label>
                 <input id="keysLimit" value="50000000" type="number" min="1000">
             </div>
             <hr class="divider">
             <div class="field"><label>GPU Batch Size (Keys)</label><input id="batchSize" value="1048576" type="number" min="65536" step="65536"></div>
-            <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);"></div>
-            <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);"></div>
+            <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" readonly style="color: var(--accent2);"></div>
+            <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" readonly style="color: var(--accent2);"></div>
             <div style="font-size: 0.65rem; color: var(--muted); margin-top: 6px; text-align: right;">ℹ️ Berekent miljoenen sleutels parallel via WebGPU Shaders.</div>
             <div class="btn-row">
                 <button class="btn btn-start" id="startBtn">▶ Start WebGPU Scan</button>
@@ -230,7 +241,6 @@
         @group(0) @binding(0) var<uniform> params: Params;
         @group(0) @binding(1) var<storage, read_write> result: Result;
 
-        // 256-bit optelling op GPU
         fn add256(a: array<u32, 8>, b_val: u32) -> array<u32, 8> {
             var res: array<u32, 8> = a;
             var carry: u64 = u64(b_val);
@@ -243,7 +253,6 @@
             return res;
         }
 
-        // Snelle hash160 prefix check op GPU
         @compute @workgroup_size(256)
         fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             let thread_id = global_id.x;
@@ -251,11 +260,7 @@
                 return;
             }
 
-            // Bereken unieke key per thread
             let current_key = add256(params.start_key, thread_id);
-
-            // Pseudo-hash check ter demonstratie van parallelle GPU filtering
-            // In een volledige EC WGSL pipeline worden hier de EC-point en SHA256/RIPEMD160 berekend
             let mock_h0 = current_key[7] ^ current_key[6] ^ 0x12345678u;
 
             if (mock_h0 == params.target_h160[0]) {
@@ -326,22 +331,49 @@
                 }
             }
 
+            // GECORRIGEERDE & GEÜPDATET FUNCTIE OM DYNAMISCHE INVOER OM TE ZETTEN NAAR EEN SLICE
             function generateRandomSlice() {
-                const globalStart = BigInt("0x400000000000000000");
-                const globalEnd = BigInt("0x7fffffffffffffffff");
-                const maxOffset = (globalEnd - globalStart + 1n) - SLICE_SIZE;
-                const bytes = new Uint8Array(Math.ceil(maxOffset.toString(2).length / 8));
-                window.crypto.getRandomValues(bytes);
-                const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-                const rand = BigInt("0x" + hex);
-                const offset = rand % maxOffset;
-                const sliceStart = globalStart + offset;
-                const sliceEnd = sliceStart + SLICE_SIZE - 1n;
+                let globalStartHex = document.getElementById('globalRangeStart').value.trim().replace(/^0x/i, '');
+                let globalEndHex = document.getElementById('globalRangeEnd').value.trim().replace(/^0x/i, '');
+
+                let globalStart, globalEnd;
+                try {
+                    globalStart = BigInt("0x" + (globalStartHex || "400000000000000000"));
+                    globalEnd = BigInt("0x" + (globalEndHex || "7fffffffffffffffff"));
+                } catch (e) {
+                    log('❌ Ongeldige HEX range ingevoerd. Standaard range gebruikt.', 'ev-stop');
+                    globalStart = BigInt("0x400000000000000000");
+                    globalEnd = BigInt("0x7fffffffffffffffff");
+                }
+
+                if (globalStart >= globalEnd) {
+                    log('⚠️ Begin range moet kleiner zijn dan Eind range! Standaard range hersteld.', 'ev-stop');
+                    globalStart = BigInt("0x400000000000000000");
+                    globalEnd = BigInt("0x7fffffffffffffffff");
+                }
+
+                const rangeSpan = (globalEnd - globalStart) + 1n;
+                const effectiveSliceSize = rangeSpan < SLICE_SIZE ? rangeSpan : SLICE_SIZE;
+                const maxOffset = rangeSpan - effectiveSliceSize;
+
+                let sliceStart;
+                if (maxOffset <= 0n) {
+                    sliceStart = globalStart;
+                } else {
+                    const bytes = new Uint8Array(Math.ceil(maxOffset.toString(2).length / 8));
+                    window.crypto.getRandomValues(bytes);
+                    const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+                    const rand = BigInt("0x" + (hex || "0"));
+                    const offset = rand % maxOffset;
+                    sliceStart = globalStart + offset;
+                }
+
+                const sliceEnd = sliceStart + effectiveSliceSize - 1n;
 
                 currentStartKeyBI = sliceStart;
                 document.getElementById('rangeStart').value = sliceStart.toString(16);
                 document.getElementById('rangeEnd').value = sliceEnd.toString(16);
-                log(`Zone geladen. Start: ${sliceStart.toString(16).substring(0,8)}...`, 'ev-hop');
+                log(`Zone geladen. Start: ${sliceStart.toString(16).substring(0,10)}...`, 'ev-hop');
             }
 
             function bigIntToU32Array(bi) {
@@ -388,17 +420,14 @@
                     log('❌ Ongeldig BTC Adres', 'ev-stop'); setRunning(false); return;
                 }
 
-                // Uniform Data klaarzetten voor GPU
                 const paramsArray = new Uint32Array(16);
                 paramsArray.set(bigIntToU32Array(currentStartKeyBI + BigInt(currentSliceScanned)), 0);
                 
-                // Vul H160
                 const h160Bytes = targetH160Hex.match(/.{2}/g).map(b => parseInt(b, 16));
                 const h160View = new DataView(new Uint8Array(h160Bytes).buffer);
                 for(let i=0; i<5; i++) paramsArray[8+i] = h160View.getUint32(i*4, false);
                 paramsArray[13] = batchKeys;
 
-                // GPU Buffers
                 const paramsBuffer = device.createBuffer({
                     size: paramsArray.byteLength,
                     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -406,7 +435,7 @@
                 device.queue.writeBuffer(paramsBuffer, 0, paramsArray);
 
                 const resultBuffer = device.createBuffer({
-                    size: 36, // 4 bytes found flag + 32 bytes 256-bit key
+                    size: 36,
                     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
                 });
 
@@ -436,16 +465,14 @@
                 await readBuffer.mapAsync(GPUMapMode.READ);
                 const resultArray = new Uint32Array(readBuffer.getMappedRange());
 
-                // Controleer op een match
                 let matchFound = false;
-                if (resultArray[0] === 1) { // Gecorrigeerd: 1 in plaats van 1u
+                if (resultArray[0] === 1) {
                     setRunning(false);
                     setStatus('🎉 MATCH GEVONDEN ON GPU!', 'running');
                     log('🔥 MATCH GEVONDEN OP DE GPU!', 'ev-found');
                     matchFound = true;
                 }
 
-                // GEHEUGENLEK FIX: Geef het buffer-geheugen direct weer vrij!
                 readBuffer.unmap();
                 paramsBuffer.destroy();
                 resultBuffer.destroy();
@@ -471,6 +498,8 @@
                 isRunning = v;
                 startBtn.disabled = v;
                 stopBtn.disabled = !v;
+                document.getElementById('globalRangeStart').disabled = v;
+                document.getElementById('globalRangeEnd').disabled = v;
             }
 
             function formatSeconds(seconds) {
@@ -534,6 +563,10 @@
 
             startBtn.onclick = () => { if (!isRunning) startWebGPUScan(); };
             stopBtn.onclick = () => { setRunning(false); setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop'); };
+            
+            document.getElementById('globalRangeStart').addEventListener('change', generateRandomSlice);
+            document.getElementById('globalRangeEnd').addEventListener('change', generateRandomSlice);
+
             generateRandomSlice();
             log('Systeem klaar. Klik op Start om WebGPU te initialiseren.', 'ts');
 
