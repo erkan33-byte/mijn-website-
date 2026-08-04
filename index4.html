@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #71 – Random Slice Sniper (ZERO-GC TURBO v3) ⚡</title>
+    <title>Puzzel #71 – Random Slice Sniper (ZERO-GC TURBO v4) ⚡</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -119,8 +119,8 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – Native JS Turbo v3 (Zero-GC & 32-bit Match)</div>
-            <span class="badge">🚀 ULTRA-TURBO: IN-PLACE HASHING + 32-BIT BITWISE CHECK</span>
+            <div class="sub">Puzzel #71 – Native JS Turbo v4 (Zero-GC & 32-bit Match)</div>
+            <span class="badge">🚀 ULTRA-TURBO v4: OPTIMAL BATCHING + REDUCED WORKER OVERHEAD</span>
         </div>
         <div class="card">
             <div class="card-title">⚙ Actieve Plakje Configuratie</div>
@@ -131,7 +131,7 @@
             <div class="field">
                 <label>Scan methode</label>
                 <select id="scanMethod">
-                    <option value="linear" selected>📏 Lineair Jacobian Batch (Zero-GC v3)</option>
+                    <option value="linear" selected>📏 Lineair Jacobian Batch (Zero-GC v4)</option>
                 </select>
             </div>
             <div class="field">
@@ -161,7 +161,7 @@
                 </div>
             </div>
             <div class="formula-box" style="background:rgba(0,0,0,0.5); border-left:3px solid var(--accent2); padding:10px; font-size:.75rem; color:#bfe4ff; line-height:1.5;">
-                Engine: Jacobian Mixed Addition + In-Place Hashing (Zero GC, 32-Bit Bitwise Match)
+                Engine: Jacobian Mixed Addition + In-Place Hashing (Zero GC, 32-Bit Bitwise Match v4)
             </div>
         </div>
         <div class="chance-card">
@@ -211,10 +211,10 @@
                 <tbody id="matchTable"><tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Random Slice Sniper · ZERO-GC TURBO ENGINE v3</div>
+        <div class="footer">Random Slice Sniper · ZERO-GC TURBO ENGINE v4</div>
     </div>
 
-    <!-- ⚡ OPTIMIZED WORKER ENGINE (ZERO-GC & IN-PLACE HASHING) -->
+    <!-- ⚡ OPTIMIZED WORKER ENGINE (OPTIMIZED BATCH & ZERO-GC) -->
     <script id="workerCode" type="javascript/worker">
         self.onerror = function(e) {
             self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
@@ -258,9 +258,6 @@
             return r;
         }
 
-        // =======================================================
-        // ⚡ ZERO-GC PRE-ALLOCATED BUFFERS & CONSTANTS
-        // =======================================================
         const sha256_K = new Uint32Array([
             0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
             0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -278,7 +275,6 @@
         const hl = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
         const hr = [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000];
 
-        // Statische werkbuffers voor Zero-GC inner-loop
         const pubKeyBuffer = new Uint8Array(33);
         const sha256Buffer = new Uint8Array(32);
         const ripemdBuffer = new Uint8Array(20);
@@ -290,7 +286,6 @@
         const w_sha = new Uint32Array(64);
         const w_ripemd = new Uint32Array(16);
 
-        // Geoptimaliseerde in-place SHA-256 (altijd exact 33 bytes input = 1 block van 512 bits)
         function sha256_33_inplace() {
             let a = 0x6a09e667, b = 0xbb67ae85, c = 0x3c6ef372, d = 0xa54ff53a;
             let e = 0x510e527f, f = 0x9b05688c, g = 0x1f83d9ab, _h = 0x5be0cd19;
@@ -306,7 +301,7 @@
             w_sha[8] = (pubKeyBuffer[32] << 24) | 0x800000;
             w_sha[9] = 0; w_sha[10] = 0; w_sha[11] = 0;
             w_sha[12] = 0; w_sha[13] = 0; w_sha[14] = 0;
-            w_sha[15] = 264; // 33 bytes * 8 = 264 bits
+            w_sha[15] = 264;
 
             for (let j = 16; j < 64; j++) {
                 let s0 = (w_sha[j-15] >>> 7 | w_sha[j-15] << 25) ^ (w_sha[j-15] >>> 18 | w_sha[j-15] << 14) ^ (w_sha[j-15] >>> 3);
@@ -334,7 +329,6 @@
             sha256View.setUint32(28, (0x5be0cd19 + _h) | 0, false);
         }
 
-        // Geoptimaliseerde in-place RIPEMD-160 (altijd exact 32 bytes input = 1 block van 512 bits)
         function ripemd160_32_inplace() {
             w_ripemd[0] = sha256View.getUint32(0, true);
             w_ripemd[1] = sha256View.getUint32(4, true);
@@ -347,7 +341,7 @@
             w_ripemd[8] = 0x00000080;
             w_ripemd[9] = 0; w_ripemd[10] = 0; w_ripemd[11] = 0;
             w_ripemd[12] = 0; w_ripemd[13] = 0;
-            w_ripemd[14] = 256; // 32 bytes * 8 = 256 bits
+            w_ripemd[14] = 256;
             w_ripemd[15] = 0;
 
             let al = 0x67452301, bl = 0xefcdab89, cl = 0x98badcfe, dl = 0x10325476, el = 0xc3d2e1f0;
@@ -376,7 +370,6 @@
             ripemdView.setUint32(16, (0x67452301 + bl + cr) | 0, true);
         }
 
-        // Generieke SHA-256 alleen voor WIF export bij match
         function sha256_generic(data) {
             const h = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
             let mLen = data.length;
@@ -431,9 +424,6 @@
             return s;
         }
 
-        // ==========================================
-        // ⚡ ZERO-GC BATCH ENGINE
-        // ==========================================
         self.onmessage = function(e) {
             const data = e.data;
             if (data.type === "ADDRESS_SCAN") {
@@ -444,11 +434,12 @@
                 const targetInt0 = targetH160View.getUint32(0, true);
                 const targetAddr = data.targetAddress;
                 const workerId = data.workerId;
-                const BATCH = 10000;
+                
+                // ⚡ Vergroot de batchgrootte voor minder overhead
+                const BATCH = 50000;
                 
                 let currentPoint = mul(G, currentKey);
 
-                // Pre-allocatie van arrays buiten de stappen-loop
                 let pX = new Array(BATCH);
                 let pY = new Array(BATCH);
                 let pZ = new Array(BATCH);
@@ -486,7 +477,6 @@
                         return;
                     }
                     
-                    // Batch Inversion
                     let acc = 1n;
                     for(let i = 0; i < batchCount; i++) {
                         partials[i] = acc;
@@ -500,14 +490,12 @@
                         invAcc = mod(invAcc * pZ[i]);
                     }
                     
-                    // Validatie en conversie (ZERO-GC & 32-bit Match)
                     for (let i = 0; i < batchCount; i++) {
                         let iz = invZ[i];
                         let iz2 = mod(iz * iz);
                         let ax = mod(pX[i] * iz2);
                         let ay = mod(pY[i] * mod(iz * iz2));
                         
-                        // Vul de pre-gealloceerde pubkey buffer in-place
                         pubKeyBuffer[0] = (ay & 1n) === 0n ? 0x02 : 0x03;
                         let tmp = ax;
                         for (let b = 32; b >= 1; b--) { 
@@ -515,11 +503,9 @@
                             tmp >>= 8n; 
                         }
                         
-                        // In-place hashing
                         sha256_33_inplace();
                         ripemd160_32_inplace();
 
-                        // Fast Bitwise Check (vergelijk eerste 32 bits direct als integer)
                         if (ripemdView.getUint32(0, true) === targetInt0) {
                             let match = true;
                             for (let k = 4; k < 20; k++) {
@@ -754,20 +740,17 @@
                 if (isRunning) return;
                 startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = cumulativeScanned;
                 setRunning(true);
-                setStatus('⚡ Zero-GC Engine v3 Actief', 'running');
-                log('Zero-GC Turbo Scan v3 gestart.', 'ev-epoch');
+                setStatus('⚡ Zero-GC Engine v4 Actief', 'running');
+                log('Zero-GC Turbo Scan v4 gestart.', 'ev-epoch');
                 spawnWorkers();
             }
 
             startBtn.onclick = () => { if (!isRunning) startAddressScan(); };
             stopBtn.onclick = () => { setRunning(false); killWorkers(); setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop'); };
-            
-            // Automatisch initialiseren en direct starten voor GitHub Pages
             generateRandomSlice();
-            log('Systeem klaar. Zero-GC Turbo Engine v3 geladen.', 'ts');
-            startAddressScan();
+            log('Systeem klaar. Zero-GC Turbo Engine v4 geladen.', 'ts');
 
-            setInterval(() => { if (isRunning) updateAllStats(); }, 800);
+            setInterval(() => { if (isRunning) updateAllStats(); }, 1000);
         })();
     </script>
 </body>
