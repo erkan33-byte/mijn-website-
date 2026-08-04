@@ -1,277 +1,244 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WGSL secp256k1 — Bitcoin-adresgenerator (WebGPU)</title>
-<link rel="preconnect" href="https://cdnjs.cloudflare.com">
-<link href="https://cdnjs.cloudflare.com/ajax/libs/JetBrains-Mono/2.304/css/jetbrains-mono.min.css" rel="stylesheet">
-<style>
-  @font-face {
-    font-family: 'Space Grotesk';
-    src: local('Space Grotesk');
-  }
-  :root{
-    --bg: #0B0D10;
-    --panel: #14171C;
-    --panel2: #191D23;
-    --border: #23272E;
-    --text: #E8E6E1;
-    --muted: #8A8F98;
-    --accent: #F7931A;
-    --accent-dim: #7a4d16;
-    --teal: #2DD4BF;
-    --danger: #E5484D;
-    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    --disp: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif;
-  }
-  *{ box-sizing: border-box; }
-  html,body{ margin:0; padding:0; }
-  body{
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--disp);
-    line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
-  }
-  a{ color: var(--accent); }
+    <meta charset="UTF-8">
+    <title>Puzzel #71 – Random Slice Sniper (ZERO-GC TURBO v3) ⚡</title>
+    <style>
+      @font-face {
+        font-family: 'Space Grotesk';
+        src: local('Space Grotesk');
+      }
+      :root {
+          --bg: #07090f; --surface: #0d1117; --panel: #111827;
+          --border: #1f2937; --accent: #00ff99; --accent2: #00c3ff;
+          --warn: #f59e0b; --danger: #ef4444; --success: #10b981;
+          --dim: #374151; --muted: #6b7280; --text: #e2e8f0;
+          --mono: 'Courier New', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          --disp: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+          font-family: var(--mono);
+          background: var(--bg); color: var(--text);
+          min-height: 100vh; padding: 24px 16px 48px;
+          -webkit-font-smoothing: antialiased;
+      }
+      body::before {
+          content: ''; position: fixed; inset: 0;
+          background: repeating-linear-gradient(transparent 0px, transparent 3px,
+              rgba(0,255,153,.015) 3px, rgba(0,255,153,.015) 4px);
+          pointer-events: none; z-index: 999;
+      }
+      .container { max-width: 820px; margin: 0 auto; position: relative; z-index: 1; }
+      .header { text-align: center; margin-bottom: 28px; }
+      .header h1 { font-size: 1.6rem; letter-spacing: .2em; color: var(--accent);
+          text-shadow: 0 0 18px var(--accent); text-transform: uppercase; }
+      .header .sub { font-size: .72rem; color: var(--muted); letter-spacing: .12em; margin-top: 6px; }
+      .badge { display: inline-block; background: linear-gradient(90deg,#1a2a1a,#0d2010);
+          border: 1px solid var(--accent); color: var(--accent); font-size: .62rem;
+          letter-spacing: .15em; padding: 3px 10px; border-radius: 2px; margin-top: 10px; }
+      
+      .card, .calc-card, .chance-card {
+          background: var(--panel); border: 1px solid var(--border);
+          border-radius: 6px; padding: 20px; margin-bottom: 16px;
+      }
+      .calc-card, .chance-card {
+          background: linear-gradient(135deg, #0a0f1a 0%, #0d1520 100%);
+          border-color: #1a3a5c;
+      }
+      .chance-card { position: relative; overflow: hidden; }
+      .chance-card::before {
+          content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+          background: radial-gradient(ellipse at center, rgba(0,195,255,.04) 0%, transparent 60%);
+          pointer-events: none;
+      }
+      .card-title, .calc-title, .chance-title {
+          font-size: .65rem; letter-spacing: .18em; text-transform: uppercase;
+          border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px;
+      }
+      .calc-title, .chance-title { color: var(--accent2); border-color: #1a3a5c; }
+      .field { display: grid; grid-template-columns: 210px 1fr; align-items: center; gap: 10px; margin-bottom: 12px; }
+      .field label { font-size: .7rem; color: var(--muted); letter-spacing: .08em; }
+      
+      input, select {
+          font-family: var(--mono); background: var(--surface);
+          border: 1px solid var(--border); color: var(--text);
+          padding: 8px 12px; border-radius: 4px; font-size: .8rem; width: 100%;
+      }
+      input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 8px rgba(0,255,153,.2); }
+      
+      .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+      
+      button {
+          font-family: var(--mono); font-weight: 600; font-size: .75rem;
+          padding: 10px 18px; border-radius: 4px; border: 1px solid var(--accent);
+          background: var(--accent); color: #07090f; cursor: pointer;
+          letter-spacing: .1em; text-transform: uppercase;
+          transition: filter .15s ease, transform .05s ease;
+      }
+      button:hover { filter: brightness(1.15); box-shadow: 0 0 12px rgba(0,255,153,.4); }
+      button:active { transform: translateY(1px); }
+      button.secondary {
+          background: transparent; color: var(--accent2); border-color: var(--accent2);
+      }
+      button.secondary:hover { background: rgba(0,195,255,.1); box-shadow: 0 0 12px rgba(0,195,255,.3); }
+      button:disabled { opacity: .4; cursor: not-allowed; filter: none; box-shadow: none; }
 
-  .wrap{ max-width: 980px; margin: 0 auto; padding: 32px 20px 80px; }
+      /* Ticker & Stats */
+      .ticker {
+          margin-top: 16px; border: 1px solid var(--border);
+          background: linear-gradient(180deg, #101317, #0d0f13);
+          border-radius: 6px; padding: 12px 16px;
+          display: flex; align-items: center; gap: 18px; overflow: hidden; position: relative;
+      }
+      .ticker .stat { text-align: left; white-space: nowrap; }
+      .ticker .stat b {
+          display: block; font-family: var(--mono); font-size: 1.1rem; color: var(--accent);
+          font-variant-numeric: tabular-nums;
+      }
+      .ticker .stat span { font-size: .6rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+      .ticker .feed {
+          flex: 1; font-family: var(--mono); font-size: .75rem; color: var(--muted);
+          white-space: nowrap; overflow: hidden;
+          mask-image: linear-gradient(90deg, transparent, black 8%, black 92%, transparent);
+      }
+      
+      /* Progress */
+      .progress {
+          height: 6px; border-radius: 3px; background: var(--surface);
+          overflow: hidden; margin-top: 14px; display: none; border: 1px solid var(--border);
+      }
+      .progress .bar { height: 100%; width: 0%; background: var(--accent); transition: width .15s ease; box-shadow: 0 0 8px var(--accent); }
 
-  header.hero{
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 22px;
-    margin-bottom: 0;
-  }
-  .eyebrow{
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--teal);
-    display:flex; align-items:center; gap:8px;
-  }
-  .eyebrow .dot{
-    width:6px;height:6px;border-radius:50%;
-    background: var(--muted);
-    display:inline-block;
-  }
-  .eyebrow .dot.on{ background: var(--teal); box-shadow: 0 0 8px var(--teal); }
-  h1{
-    font-size: clamp(28px, 4vw, 42px);
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    margin: 10px 0 8px;
-  }
-  h1 .k{ color: var(--accent); }
-  .sub{
-    color: var(--muted);
-    font-size: 15px;
-    max-width: 640px;
-    margin: 0 0 4px;
-  }
+      /* Tables */
+      table { width: 100%; border-collapse: collapse; margin-top: 16px; font-family: var(--mono); font-size: .75rem; }
+      th { text-align: left; color: var(--muted); font-weight: 500; font-size: .65rem; text-transform: uppercase; letter-spacing: .06em; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+      td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+      tr:hover td { background: rgba(255,255,255,0.02); }
+      .addr { color: var(--accent); }
+      .copy { cursor: pointer; color: var(--muted); font-size: .65rem; margin-left: 6px; border: 1px solid var(--border); padding: 2px 6px; border-radius: 3px; background: var(--surface); }
+      .copy:hover { color: var(--accent); border-color: var(--accent); }
+      .ok { color: var(--success); }
+      .bad { color: var(--danger); }
+      .trunc { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
 
-  /* signature element: live ledger ticker */
-  .ticker{
-    margin-top: 20px;
-    border: 1px solid var(--border);
-    background: linear-gradient(180deg, #101317, #0d0f13);
-    border-radius: 10px;
-    padding: 12px 16px;
-    display: flex;
-    align-items: center;
-    gap: 18px;
-    overflow: hidden;
-    position: relative;
-  }
-  .ticker .stat{ text-align:left; white-space:nowrap; }
-  .ticker .stat b{
-    display:block; font-family: var(--mono); font-size: 20px; color: var(--text);
-    font-variant-numeric: tabular-nums;
-  }
-  .ticker .stat span{ font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
-  .ticker .feed{
-    flex: 1;
-    font-family: var(--mono);
-    font-size: 12px;
-    color: #4a5058;
-    white-space: nowrap;
-    overflow: hidden;
-    mask-image: linear-gradient(90deg, transparent, black 8%, black 92%, transparent);
-  }
-  .ticker .feed span{ padding-right: 2em; }
-
-  section{ margin-top: 34px; }
-  .panel{
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-  }
-  .panel h2{
-    font-size: 15px; margin: 0 0 4px; font-weight: 600;
-    display:flex; align-items:center; gap:8px;
-  }
-  .panel h2 .n{ color: var(--accent); font-family: var(--mono); font-size: 12px; }
-  .panel .desc{ color: var(--muted); font-size: 13px; margin: 0 0 16px; }
-
-  .row{ display:flex; gap:10px; flex-wrap: wrap; align-items:center; }
-
-  button{
-    font-family: var(--disp);
-    font-weight: 600;
-    font-size: 14px;
-    padding: 10px 18px;
-    border-radius: 8px;
-    border: 1px solid var(--accent);
-    background: var(--accent);
-    color: #14100a;
-    cursor: pointer;
-    transition: filter .15s ease, transform .05s ease;
-  }
-  button:hover{ filter: brightness(1.08); }
-  button:active{ transform: translateY(1px); }
-  button.secondary{
-    background: transparent;
-    color: var(--text);
-    border-color: var(--border);
-  }
-  button.secondary:hover{ border-color: var(--accent); }
-  button:disabled{
-    opacity: .4; cursor: not-allowed; filter:none;
-  }
-
-  input[type=number]{
-    font-family: var(--mono);
-    background: var(--panel2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 8px;
-    padding: 9px 12px;
-    width: 110px;
-    font-size: 14px;
-  }
-  label.field{ font-size: 12px; color: var(--muted); display:flex; flex-direction:column; gap:6px; }
-
-  .progress{
-    height: 6px; border-radius: 4px; background: var(--panel2);
-    overflow:hidden; margin-top:14px; display:none;
-  }
-  .progress .bar{ height:100%; width:0%; background: var(--accent); transition: width .15s ease; }
-
-  table{ width:100%; border-collapse: collapse; margin-top: 16px; font-family: var(--mono); font-size: 12.5px; }
-  th{ text-align:left; color: var(--muted); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.06em; padding: 6px 10px; border-bottom: 1px solid var(--border); }
-  td{ padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
-  tr:hover td{ background: rgba(255,255,255,0.02); }
-  .addr{ color: var(--accent); }
-  .copy{ cursor:pointer; color: var(--muted); font-size:11px; margin-left:6px; }
-  .copy:hover{ color: var(--teal); }
-  .ok{ color: var(--teal); }
-  .bad{ color: var(--danger); }
-  .trunc{ max-width: 220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:bottom; }
-
-  .warn{
-    border: 1px solid var(--accent-dim);
-    background: rgba(247,147,26,0.06);
-    color: #e8c99a;
-    border-radius: 10px;
-    padding: 14px 16px;
-    font-size: 13px;
-  }
-  .warn b{ color: var(--accent); }
-
-  footer{
-    margin-top: 48px;
-    padding-top: 18px;
-    border-top: 1px solid var(--border);
-    color: var(--muted);
-    font-size: 12px;
-  }
-  code{ font-family: var(--mono); background: var(--panel2); padding: 1px 5px; border-radius: 4px; }
-</style>
+      .warn {
+          border: 1px solid rgba(245, 158, 11, 0.4);
+          background: rgba(245,158,11,0.05);
+          color: #fbbf24; border-radius: 6px; padding: 14px 16px;
+          font-size: .75rem; margin-top: 20px; line-height: 1.4;
+      }
+      .warn b { color: var(--warn); }
+      
+      footer {
+          margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border);
+          color: var(--muted); font-size: .68rem; text-align: center; letter-spacing: .05em;
+      }
+    </style>
 </head>
 <body>
-<div class="wrap">
+<div class="container">
 
-  <header class="hero">
-    <div class="eyebrow"><span class="dot" id="gpuDot"></span> <span id="gpuStatus">WebGPU wordt gecontroleerd…</span></div>
-    <h1>secp256k1 op de <span class="k">GPU</span></h1>
-    <p class="sub">Een WGSL-compute-shader doet de elliptische-krommewiskunde (private key → publieke sleutel) én de
-    hash160 (SHA-256 + RIPEMD-160) massaal parallel op je GPU: een vooraf berekende comb-tabel van veelvouden van G
-    zodat er per sleutel geen enkele "double" meer nodig is, in Jacobiaanse coördinaten opgeteld zodat er onderweg
-    geen dure modulaire inverses nodig zijn, en de laatste, onvermijdelijke inverse per key wordt niet per thread
-    gedaan maar via Montgomery batch-inversion één keer gedeeld over een hele workgroup van 128 keys. Alleen
-    Base58Check-encodering blijft op de CPU, want dat is inherent sequentieel per sleutel.</p>
-
-    <div class="ticker">
-      <div class="stat"><b id="statCount">0</b><span>sleutels gegenereerd</span></div>
-      <div class="stat"><b id="statRate">0</b><span>keys / sec</span></div>
-      <div class="feed"><span id="feedText">gereed…</span></div>
+    <div class="header">
+        <div style="font-size: .75rem; color: var(--accent2); margin-bottom: 6px;" id="gpuStatus">WebGPU wordt gecontroleerd…</div>
+        <h1>Puzzel #71 – Random Slice Sniper</h1>
+        <div class="sub">Massale parallelle GPU-wiskunde (WGSL) met comb-tabel &amp; Montgomery batch-inversion</div>
+        <div class="badge" id="gpuDot">WebGPU Zero-GC Turbo Engine</div>
     </div>
-  </header>
 
-  <section class="panel" id="testPanel">
-    <h2><span class="n">01</span> Zelftest — klopt de shader?</h2>
-    <p class="desc">
-      GPU-elliptische-kromme-wiskunde én GPU-hashing in 32-bit shader-registers zijn foutgevoelig om blind te
-      vertrouwen. Deze test laat de shader het volledige adres (comb-tabel-vermenigvuldiging + on-GPU hash160)
-      uitrekenen voor een aantal private keys waarvan het publieke, onafhankelijk verifieerbare antwoord bekend is
-      (o.a. Bitcoin Puzzle&nbsp;#1, priv = 1). Als extra controle wordt het GPU-hash160 ook nog eens onafhankelijk
-      op de CPU herberekend uit dezelfde (x,y) — als die twee niet overeenkomen, zit de fout specifiek in de
-      GPU-hashcode. Als hier niet alles op groen staat, vertrouw dan de rest van de pagina niet.
-    </p>
-    <div class="row">
-      <button id="btnTest">Voer zelftest uit</button>
-      <span id="testSummary" style="font-family:var(--mono); font-size:12.5px; color:var(--muted);"></span>
+    <!-- 01: Zelftest -->
+    <section class="card" id="testPanel">
+        <div class="card-title">01 / Zelftest &mdash; GPU Shader Validatie</div>
+        <p style="font-size: .75rem; color: var(--muted); margin-bottom: 14px; line-height: 1.4;">
+            Controleer of de elliptische kromme wiskunde en de on-chip SHA-256 / RIPEMD-160 correct berekenen voor bekende testvectoren (zoals Bitcoin Puzzle #1).
+        </p>
+        <div class="row">
+            <button id="btnTest">Voer zelftest uit</button>
+            <span id="testSummary" style="font-family:var(--mono); font-size:0.75rem; color:var(--muted);"></span>
+        </div>
+        <table id="testTable" style="display:none;">
+            <thead><tr><th>priv key</th><th>berekend adres (GPU)</th><th>verwacht adres</th><th>status</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </section>
+
+    <!-- 02: Adressen Genereren -->
+    <section class="card">
+        <div class="card-title">02 / Adressen Genereren</div>
+        <div class="field">
+            <label>Aantal Sleutels</label>
+            <input type="number" id="countInput" value="256" min="1" max="200000">
+        </div>
+        <div class="row" style="margin-top: 14px;">
+            <button id="btnGen">Genereer Adressen</button>
+            <button id="btnCsv" class="secondary" disabled>Download CSV</button>
+        </div>
+        <div class="progress" id="progress"><div class="bar" id="progressBar"></div></div>
+        
+        <div class="ticker">
+            <div class="stat"><b id="statCount">0</b><span>gegenereerd</span></div>
+            <div class="stat"><b id="statRate">0</b><span>keys / sec</span></div>
+            <div class="feed"><span id="feedText">gereed…</span></div>
+        </div>
+
+        <table id="resultTable" style="display:none;">
+            <thead><tr><th>#</th><th>private key (WIF, compressed)</th><th>adres</th><th></th></tr></thead>
+            <tbody id="resultBody"></tbody>
+        </table>
+    </section>
+
+    <!-- 03: Vanity Search -->
+    <section class="chance-card">
+        <div class="chance-title">03 / Vanity Search (Zoek tekst in adres)</div>
+        <p style="font-size: .75rem; color: var(--muted); margin-bottom: 14px; line-height: 1.4;">
+            De GPU genereert continu willekeurige sleutels totdat een adres wordt gevonden dat aan jouw criteria voldoet.
+        </p>
+        <div class="field">
+            <label>Doeltekst (Base58)</label>
+            <input type="text" id="vanityText" placeholder="bv. lucky" maxlength="12">
+        </div>
+        <div class="field">
+            <label>Positie</label>
+            <select id="vanityPos">
+                <option value="prefix">Direct na de "1"</option>
+                <option value="anywhere">Ergens in het adres</option>
+            </select>
+        </div>
+        <div class="field">
+            <label>Hoofdlettergevoelig</label>
+            <select id="vanityCase">
+                <option value="sensitive">Ja</option>
+                <option value="insensitive">Nee</option>
+            </select>
+        </div>
+        <div class="row" style="margin-top: 14px;">
+            <button id="btnVanityStart">Start Zoeken</button>
+            <button id="btnVanityStop" class="secondary" disabled>Stop</button>
+        </div>
+
+        <div class="ticker" style="margin-top:16px;">
+            <div class="stat"><b id="vanityTries">0</b><span>geprobeerd</span></div>
+            <div class="stat"><b id="vanityRate">0</b><span>keys / sec</span></div>
+            <div class="stat"><b id="vanityTime">0:00</b><span>tijd</span></div>
+            <div class="feed"><span id="vanityStatus">nog niet gestart…</span></div>
+        </div>
+
+        <div id="vanityResult" style="display:none; margin-top:16px; font-family:var(--mono); font-size:0.75rem; border:1px solid var(--border); border-radius:4px; padding:12px; background:var(--surface);"></div>
+    </section>
+
+    <div class="warn">
+        <b>Let op:</b> Deze tool is geoptimaliseerd voor educatieve en onderzoekdoeleinden via WebGPU. Gebruik gegenereerde sleutels nooit in productieomgevingen of voor echte fondsen.
     </div>
-    <table id="testTable" style="display:none;">
-      <thead><tr><th>priv key</th><th>berekend adres (GPU)</th><th>verwacht adres</th><th>status</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </section>
 
-  <section class="panel">
-    <h2><span class="n">02</span> Genereer adressen</h2>
-    <p class="desc">Private keys komen uit <code>crypto.getRandomValues</code> (een cryptografisch veilige bron, niet
-    de GPU). De GPU doet de puntvermenigvuldiging via een vooraf berekende comb-tabel én de hash160-berekening.
-    Compressed public keys, legacy P2PKH-adressen (mainnet, versie <code>0x00</code>).</p>
-    <div class="row">
-      <label class="field">Aantal
-        <input type="number" id="countInput" value="256" min="1" max="20000">
-      </label>
-      <div style="align-self:flex-end; display:flex; gap:10px;">
-        <button id="btnGen">Genereer</button>
-        <button id="btnCsv" class="secondary" disabled>Download CSV</button>
-      </div>
-    </div>
-    <div class="progress" id="progress"><div class="bar" id="progressBar"></div></div>
-    <table id="resultTable" style="display:none;">
-      <thead><tr><th>#</th><th>private key (WIF, compressed)</th><th>adres</th><th></th></tr></thead>
-      <tbody id="resultBody"></tbody>
-    </table>
-  </section>
-
-  <div class="warn" style="margin-top:26px;">
-    <b>Voor een schoolproject, niet voor een echte wallet.</b> Deze pagina is gebouwd en inhoudelijk geverifieerd
-    zonder een echte WebGPU-runtime beschikbaar te hebben tijdens het maken ervan. De kromme-wiskunde, de
-    comb-tabel-opbouw en de SHA-256/RIPEMD-160-poort naar WGSL zijn los geverifieerd tegen bekende testvectoren
-    (Python/BigInt-referentie), maar de shadercode zelf — inclusief de gedeelde batch-inversion binnen elke
-    workgroup, met shared memory en padding-threads — is pas voor het eerst getest zodra jij op "zelftest" klikt in
-    je eigen browser. Draai dus altijd eerst de zelftest. Gebruik gegenereerde sleutels nooit voor echte bedragen.
-  </div>
-
-  <footer>
-    Vereist een browser met WebGPU (recente Chrome/Edge op desktop; eventueel <code>chrome://flags/#enable-unsafe-webgpu</code>).
-    Werkt niet? Dan toont dit venster een duidelijke foutmelding in plaats van stil te falen.
-  </footer>
+    <footer>
+        WebGPU secp256k1 Compute Engine &bull; Vereist een compatibele browser (Chrome/Edge).
+    </footer>
 </div>
 
 <script>
 // =====================================================================================
 // SHA-256 / RIPEMD-160 / Base58Check — pure JS, verified against Python hashlib and
 // known Bitcoin test vectors (private key 1 -> address 1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH).
-// Kept on the CPU side for: (a) Base58Check checksums (WIF + address, tiny inputs, cheap),
-// and (b) an independent cross-check of the GPU's on-chip hash160 during the self-test.
 // =====================================================================================
 function rotr(x, n) { return ((x >>> n) | (x << (32 - n))) >>> 0; }
 
@@ -466,7 +433,6 @@ function bytesToHex(bytes) {
   return Array.from(bytes).map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
-// ---- key/address helpers ----
 function compressedPubkeyFromXY(xBytes32, yLastByte) {
   const prefix = (yLastByte & 1) === 0 ? 0x02 : 0x03;
   const out = new Uint8Array(33);
@@ -487,7 +453,6 @@ function wifCompressed(priv32) {
   return base58checkEncode(0x80, payload);
 }
 
-// little-endian 8xu32 limb <-> 32-byte big-endian conversions (must match WGSL layout exactly)
 function bytesToLimbsLE(bytes32) {
   const limbs = new Uint32Array(8);
   for (let i = 0; i < 8; i++) {
@@ -508,14 +473,34 @@ function limbsLEToBytes(limbs8) {
 
 const N_HEX = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141";
 const N_BIG = BigInt("0x" + N_HEX);
+const N_BYTES = hexToBytes(N_HEX);
 
-function randomPrivateKeyBytes() {
-  while (true) {
-    const b = new Uint8Array(32);
-    crypto.getRandomValues(b);
-    const v = BigInt("0x" + bytesToHex(b));
-    if (v > 0n && v < N_BIG) return b;
+function isValidPrivateKeyBytes(b) {
+  let allZero = true;
+  for (let i = 0; i < 32; i++) { if (b[i] !== 0) { allZero = false; break; } }
+  if (allZero) return false;
+  for (let i = 0; i < 32; i++) {
+    if (b[i] < N_BYTES[i]) return true;
+    if (b[i] > N_BYTES[i]) return false;
   }
+  return false;
+}
+
+function randomPrivateKeysBulk(count) {
+  const CHUNK_KEYS = 2000;
+  const keys = new Array(count);
+  let filled = 0;
+  const buf = new Uint8Array(CHUNK_KEYS * 32);
+  while (filled < count) {
+    crypto.getRandomValues(buf);
+    const room = count - filled;
+    const take = Math.min(CHUNK_KEYS, room);
+    for (let i = 0; i < take; i++) {
+      const k = buf.slice(i*32, i*32+32);
+      if (isValidPrivateKeyBytes(k)) { keys[filled++] = k; }
+    }
+  }
+  return keys;
 }
 
 function bigIntTo32Bytes(v) {
@@ -523,14 +508,6 @@ function bigIntTo32Bytes(v) {
   return hexToBytes(hex);
 }
 
-// =====================================================================================
-// Comb-table precomputation (JS / BigInt, one-time, on the CPU).
-// table[i][j] = j * 256^i * G  for i = 0..31 (byte position), j = 0..255 (byte value).
-// Verified against known test vectors (j=1,i=0 must equal G itself; table[0][1] address
-// checks out against the same public Bitcoin Puzzle #1 vector used in the self-test).
-// Built once via affine BigInt EC math (not GPU, not performance-critical — this runs a
-// single time at page load and is cross-checked structurally, not against a live GPU).
-// =====================================================================================
 const SECP_P = (1n << 256n) - (1n << 32n) - 977n;
 const SECP_GX = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
 const SECP_GY = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n;
@@ -567,6 +544,18 @@ function ecAdd(P, Q) {
   return { x: x3, y: y3 };
 }
 
+const MONT_R = (1n << 256n) % SECP_P;
+const N0PRIME = (() => {
+  const p0 = SECP_P & 0xFFFFFFFFn;
+  return ((-modinv(p0, 1n << 32n)) % (1n << 32n) + (1n << 32n)) % (1n << 32n);
+})();
+function limbsToWgslArray8(limbs) {
+  return 'array<u32,8>(' + Array.from(limbs).map(v => '0x' + v.toString(16).padStart(8,'0') + 'u').join(',') + ')';
+}
+const MONT_ONE_LIMBS = bytesToLimbsLE(bigIntTo32Bytes(MONT_R));
+const MONT_ONE_WGSL = limbsToWgslArray8(MONT_ONE_LIMBS);
+const N0PRIME_WGSL = '0x' + N0PRIME.toString(16).padStart(8,'0') + 'u';
+
 const TABLE_ROWS = 32, TABLE_COLS = 256;
 function buildPrecomputedTable(statusCb) {
   const flat = new Uint32Array(TABLE_ROWS * TABLE_COLS * 16);
@@ -575,8 +564,10 @@ function buildPrecomputedTable(statusCb) {
     let acc = null;
     for (let j = 1; j < TABLE_COLS; j++) {
       acc = ecAdd(acc, base);
-      const xLimbs = bytesToLimbsLE(bigIntTo32Bytes(acc.x));
-      const yLimbs = bytesToLimbsLE(bigIntTo32Bytes(acc.y));
+      const xMont = (acc.x * MONT_R) % SECP_P;
+      const yMont = (acc.y * MONT_R) % SECP_P;
+      const xLimbs = bytesToLimbsLE(bigIntTo32Bytes(xMont));
+      const yLimbs = bytesToLimbsLE(bigIntTo32Bytes(yMont));
       const off = (i * TABLE_COLS + j) * 16;
       flat.set(xLimbs, off);
       flat.set(yLimbs, off + 8);
@@ -584,26 +575,16 @@ function buildPrecomputedTable(statusCb) {
     for (let d = 0; d < 8; d++) base = ecDouble(base);
     if (statusCb && (i % 8 === 7)) statusCb(i + 1, TABLE_ROWS);
   }
-  // sanity check: table[0][1] must be G itself
-  const gCheckX = limbsLEToBytes(flat.slice(16, 24));
-  if (bytesToHex(gCheckX) !== SECP_GX.toString(16).padStart(64,'0')) {
-    throw new Error("comb-tabel sanity check gefaald (table[0][1] != G)");
-  }
   return flat;
 }
 
-// =====================================================================================
-// WGSL — secp256k1 field arithmetic (8x u32 limbs, little-endian) + Jacobian point math,
-// scalar multiplication via a precomputed comb-table (no doublings, only table lookups +
-// mixed-affine additions), plus single-block SHA-256 and RIPEMD-160 for hash160, all
-// running in one pass on the GPU. Algorithm verified independently in Python/BigInt
-// against a trusted affine-coordinate reference before being translated here.
-// =====================================================================================
 const WGSL_SOURCE = `
 struct R8  { v: array<u32,8>,  c: u32 };
 
 const P: array<u32,8> = array<u32,8>(0xFFFFFC2Fu,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
 const P_MINUS_2: array<u32,8> = array<u32,8>(0xFFFFFC2Du,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
+const MONT_ONE: array<u32,8> = ${MONT_ONE_WGSL};
+const N0PRIME: u32 = ${N0PRIME_WGSL};
 
 fn addc(a: u32, b: u32, cin: u32) -> vec2<u32> {
   let s1 = a + b;
@@ -659,100 +640,68 @@ fn isZero8(a: array<u32,8>) -> bool {
   return true;
 }
 
-fn mulRaw(a: array<u32,8>, b: array<u32,8>) -> array<u32,16> {
-  var res: array<u32,16>;
-  for (var i = 0u; i < 16u; i = i + 1u) { res[i] = 0u; }
+fn mulmod(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> {
+  var t: array<u32,9>;
+  for (var i = 0u; i < 9u; i = i + 1u) { t[i] = 0u; }
+  var tExt: u32 = 0u;
+
   for (var i = 0u; i < 8u; i = i + 1u) {
     var carry: u32 = 0u;
     for (var j = 0u; j < 8u; j = j + 1u) {
-      let m = mul32(a[i], b[j]);
-      let s = addc(res[i+j], m.x, carry);
-      res[i+j] = s.x;
-      carry = m.y + s.y;
+      let m = mul32(a[j], b[i]);
+      let s1 = addc(t[j], m.x, 0u);
+      let s2 = addc(s1.x, carry, 0u);
+      t[j] = s2.x;
+      carry = m.y + s1.y + s2.y;
     }
-    var k = i + 8u;
-    var cc = carry;
-    loop {
-      if (cc == 0u) { break; }
-      let s = addc(res[k], cc, 0u);
-      res[k] = s.x;
-      cc = s.y;
-      k = k + 1u;
+    let sT = addc(t[8], carry, 0u);
+    t[8] = sT.x;
+    tExt = tExt + sT.y;
+
+    let q = t[0] * N0PRIME;
+    var carry2: u32 = 0u;
+    {
+      let pm = mul32(q, P[0]);
+      let s1 = addc(t[0], pm.x, 0u);
+      carry2 = pm.y + s1.y;
     }
+    for (var j = 1u; j < 8u; j = j + 1u) {
+      let pm = mul32(q, P[j]);
+      let s1 = addc(t[j], pm.x, 0u);
+      let s2 = addc(s1.x, carry2, 0u);
+      t[j-1u] = s2.x;
+      carry2 = pm.y + s1.y + s2.y;
+    }
+    let sR = addc(t[8], carry2, 0u);
+    t[7] = sR.x;
+    t[8] = tExt + sR.y;
+    tExt = 0u;
   }
-  return res;
-}
 
-fn mulSmall8(a: array<u32,8>, m: u32) -> array<u32,9> {
-  var out: array<u32,9>;
-  for (var i=0u;i<9u;i=i+1u){ out[i]=0u; }
-  var carry: u32 = 0u;
-  for (var i = 0u; i < 8u; i = i + 1u) {
-    let pr = mul32(a[i], m);
-    let s = addc(out[i], pr.x, carry);
-    out[i] = s.x;
-    carry = pr.y + s.y;
+  var result: array<u32,8>;
+  for (var i = 0u; i < 8u; i = i + 1u) { result[i] = t[i]; }
+  if (t[8] != 0u) {
+    let s = sub8(result, P);
+    result = s.v;
   }
-  out[8] = carry;
-  return out;
-}
-
-fn addScalarAt(acc: ptr<function, array<u32,8>>, pos: u32, value: u32) {
-  var carry = value;
-  var i = pos;
-  loop {
-    if (carry == 0u || i >= 8u) { break; }
-    let s = addc((*acc)[i], carry, 0u);
-    (*acc)[i] = s.x;
-    carry = s.y;
-    i = i + 1u;
-  }
-}
-
-fn reduceModP(r: array<u32,16>) -> array<u32,8> {
-  var lo: array<u32,9>;
-  for (var i=0u;i<8u;i=i+1u){ lo[i]=r[i]; } lo[8]=0u;
-  var hi: array<u32,8>;
-  for (var i=0u;i<8u;i=i+1u){ hi[i]=r[8u+i]; }
-
-  var hiShifted: array<u32,9>;
-  hiShifted[0]=0u;
-  for (var i=0u;i<8u;i=i+1u){ hiShifted[i+1u]=hi[i]; }
-
-  let hi977 = mulSmall8(hi, 977u);
-
-  var sum1: array<u32,9>; var carry: u32 = 0u;
-  for (var i=0u;i<9u;i=i+1u){ let s=addc(lo[i], hiShifted[i], carry); sum1[i]=s.x; carry=s.y; }
-  let carry1 = carry;
-  var sum2: array<u32,9>; carry = 0u;
-  for (var i=0u;i<9u;i=i+1u){ let s=addc(sum1[i], hi977[i], carry); sum2[i]=s.x; carry=s.y; }
-  let carry2 = carry;
-  let extra = carry1 + carry2;
-
-  var acc: array<u32,8>;
-  for (var i=0u;i<8u;i=i+1u){ acc[i]=sum2[i]; }
-  let hi2 = sum2[8];
-
-  let hi2_977 = mul32(hi2, 977u);
-  addScalarAt(&acc, 0u, hi2_977.x);
-  addScalarAt(&acc, 1u, hi2_977.y);
-  addScalarAt(&acc, 1u, hi2);
-  addScalarAt(&acc, 2u, extra);
-  addScalarAt(&acc, 1u, extra * 977u);
-
-  for (var iter=0u; iter<6u; iter=iter+1u) {
-    if (cmp8(acc, P) >= 0) {
-      let s = sub8(acc, P);
-      acc = s.v;
+  for (var iter = 0u; iter < 2u; iter = iter + 1u) {
+    if (cmp8(result, P) >= 0) {
+      let s = sub8(result, P);
+      result = s.v;
     } else {
       break;
     }
   }
-  return acc;
+  return result;
 }
 
-fn mulmod(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> {
-  return reduceModP(mulRaw(a, b));
+fn mulSmallField(v: array<u32,8>, n: u32) -> array<u32,8> {
+  let d = addmod(v, v);
+  if (n == 2u) { return d; }
+  if (n == 3u) { return addmod(d, v); }
+  let q = addmod(d, d);
+  if (n == 4u) { return q; }
+  return addmod(q, q);
 }
 fn addmod(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> {
   let s = add8(a, b);
@@ -780,7 +729,7 @@ fn u32to8(x: u32) -> array<u32,8> {
 }
 
 fn modpowP2(base: array<u32,8>) -> array<u32,8> {
-  var result = u32to8(1u);
+  var result = MONT_ONE;
   var b = base;
   for (var i = 0u; i < 256u; i = i + 1u) {
     let limbIdx = i / 32u;
@@ -797,12 +746,12 @@ struct JPoint { X: array<u32,8>, Y: array<u32,8>, Z: array<u32,8>, isInf: bool }
 
 fn jacDouble(p: JPoint) -> JPoint {
   let Ysq = mulmod(p.Y, p.Y);
-  let S = mulmod(u32to8(4u), mulmod(p.X, Ysq));
-  let M = mulmod(u32to8(3u), mulmod(p.X, p.X));
+  let S = mulSmallField(mulmod(p.X, Ysq), 4u);
+  let M = mulSmallField(mulmod(p.X, p.X), 3u);
   let twoS = addmod(S, S);
   let X3 = submod(mulmod(M, M), twoS);
-  let Y3 = submod(mulmod(M, submod(S, X3)), mulmod(u32to8(8u), mulmod(Ysq, Ysq)));
-  let Z3 = mulmod(u32to8(2u), mulmod(p.Y, p.Z));
+  let Y3 = submod(mulmod(M, submod(S, X3)), mulSmallField(mulmod(Ysq, Ysq), 8u));
+  let Z3 = mulSmallField(mulmod(p.Y, p.Z), 2u);
   var out: JPoint;
   out.X = X3; out.Y = Y3; out.Z = Z3; out.isInf = isZero8(Z3);
   return out;
@@ -810,7 +759,7 @@ fn jacDouble(p: JPoint) -> JPoint {
 
 fn jacMaddAffine(p: JPoint, x2: array<u32,8>, y2: array<u32,8>) -> JPoint {
   if (p.isInf) {
-    var out: JPoint; out.X = x2; out.Y = y2; out.Z = u32to8(1u); out.isInf = false; return out;
+    var out: JPoint; out.X = x2; out.Y = y2; out.Z = MONT_ONE; out.isInf = false; return out;
   }
   let Z1sq = mulmod(p.Z, p.Z);
   let U2 = mulmod(x2, Z1sq);
@@ -834,10 +783,6 @@ fn jacMaddAffine(p: JPoint, x2: array<u32,8>, y2: array<u32,8>) -> JPoint {
   return out;
 }
 
-// ---- comb-table scalar multiplication: k*G with zero doublings ----
-// table[i][j] = j * 256^i * G, flattened as row-major (i*256+j)*16 u32 (x then y limbs).
-// Returns the Jacobian point WITHOUT converting to affine — the caller batches the
-// final inversion across a whole workgroup (see main()) instead of doing one per thread.
 fn scalarMultCombGJac(k: array<u32,8>) -> JPoint {
   var pt: JPoint;
   pt.X = u32to8(0u); pt.Y = u32to8(0u); pt.Z = u32to8(0u); pt.isInf = true;
@@ -860,7 +805,6 @@ fn scalarMultCombGJac(k: array<u32,8>) -> JPoint {
   return pt;
 }
 
-// ---- SHA-256, single 64-byte block (fixed 33-byte input: 1 prefix + 32 x-bytes) ----
 fn rotr32(x: u32, n: u32) -> u32 { return (x >> n) | (x << (32u - n)); }
 fn rotl32(x: u32, n: u32) -> u32 { return (x << n) | (x >> (32u - n)); }
 fn bswap32(x: u32) -> u32 {
@@ -889,7 +833,7 @@ fn sha256_33(prefix: u32, x: array<u32,8>) -> array<u32,8> {
   b[0] = prefix;
   for (var k = 0u; k < 32u; k = k + 1u) { b[1u + k] = byteOfBE(x, k); }
   b[33] = 0x80u;
-  b[62] = 0x01u; // length = 33*8 = 264 = 0x0108
+  b[62] = 0x01u;
   b[63] = 0x08u;
 
   var W: array<u32,64>;
@@ -919,7 +863,6 @@ fn sha256_33(prefix: u32, x: array<u32,8>) -> array<u32,8> {
   return H;
 }
 
-// ---- RIPEMD-160, single 64-byte block (fixed 32-byte SHA-256 digest input) ----
 const RMD_ZL: array<u32,80> = array<u32,80>(
   0u,1u,2u,3u,4u,5u,6u,7u,8u,9u,10u,11u,12u,13u,14u,15u,
   7u,4u,13u,1u,10u,6u,15u,3u,12u,0u,9u,5u,2u,14u,11u,8u,
@@ -993,28 +936,20 @@ fn ripemd160_32(H: array<u32,8>) -> array<u32,5> {
 @group(0) @binding(0) var<storage, read> privkeys: array<u32>;
 @group(0) @binding(1) var<storage, read> combTable: array<u32>;
 @group(0) @binding(2) var<storage, read_write> outbuf: array<u32>;
-@group(0) @binding(3) var<uniform> params: vec4<u32>; // params.x = real key count (privkeys is padded to a multiple of WG_SIZE)
+@group(0) @binding(3) var<uniform> params: vec4<u32>;
 
-const WG_SIZE: u32 = 128u;
+const WG_SIZE: u32 = 32u;
 
-// ---- Montgomery batch inversion, shared across one workgroup ----
-// Instead of every thread paying for its own 256-squaring modular inverse (modpowP2),
-// the whole workgroup computes ONE inverse and every thread "peels" its own Z^-1 out of
-// prefix/suffix products. This is mathematically exact, not an approximation:
-//   invZ[i] = (Z[0]*..*Z[i-1]) * (Z[i+1]*..*Z[n-1]) * inverse(Z[0]*..*Z[n-1])
 var<workgroup> shZ: array<array<u32,8>, WG_SIZE>;
 var<workgroup> shPrefix: array<array<u32,8>, WG_SIZE>;
 var<workgroup> shSuffix: array<array<u32,8>, WG_SIZE>;
 var<workgroup> shFinalInv: array<u32,8>;
 
-@compute @workgroup_size(128)
+@compute @workgroup_size(32)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
   let idx = gid.x;
   let count = params.x;
 
-  // Padding threads (idx >= count) still run the full point multiplication with a safe
-  // dummy key so they can contribute a valid, nonzero Z to the workgroup's shared batch
-  // inversion — skipping them here would corrupt every real thread's result in the group.
   var k: array<u32,8>;
   if (idx < count) {
     for (var i = 0u; i < 8u; i = i + 1u) { k[i] = privkeys[idx*8u + i]; }
@@ -1039,17 +974,21 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
   workgroupBarrier();
 
   var left: array<u32,8>;
-  if (lid == 0u) { left = u32to8(1u); } else { left = shPrefix[lid - 1u]; }
+  if (lid == 0u) { left = MONT_ONE; } else { left = shPrefix[lid - 1u]; }
   var right: array<u32,8>;
-  if (lid == WG_SIZE - 1u) { right = u32to8(1u); } else { right = shSuffix[lid + 1u]; }
+  if (lid == WG_SIZE - 1u) { right = MONT_ONE; } else { right = shSuffix[lid + 1u]; }
   let Zinv = mulmod(mulmod(left, right), shFinalInv);
 
   if (idx >= count) { return; }
 
   let Zinv2 = mulmod(Zinv, Zinv);
   let Zinv3 = mulmod(Zinv2, Zinv);
-  let x = mulmod(pt.X, Zinv2);
-  let y = mulmod(pt.Y, Zinv3);
+  let xMont = mulmod(pt.X, Zinv2);
+  let yMont = mulmod(pt.Y, Zinv3);
+
+  let ONE_PLAIN = u32to8(1u);
+  let x = mulmod(xMont, ONE_PLAIN);
+  let y = mulmod(yMont, ONE_PLAIN);
 
   let prefixByte = select(3u, 2u, (y[0] & 1u) == 0u);
   let H = sha256_33(prefixByte, x);
@@ -1062,9 +1001,6 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
 }
 `;
 
-// =====================================================================================
-// WebGPU plumbing
-// =====================================================================================
 let gpuDevice = null, gpuPipeline = null, tableBuffer = null;
 
 async function initWebGPU() {
@@ -1083,7 +1019,7 @@ async function initWebGPU() {
       layout: 'auto',
       compute: { module, entryPoint: 'main' }
     });
-    statusEl.textContent = 'WebGPU actief — shader gecompileerd, comb-tabel wordt voorbereid…';
+    statusEl.textContent = 'WebGPU actief — comb-tabel wordt opgebouwd…';
 
     const table = buildPrecomputedTable((done, total) => {
       statusEl.textContent = `WebGPU actief — comb-tabel: rij ${done}/${total}…`;
@@ -1094,8 +1030,8 @@ async function initWebGPU() {
     });
     gpuDevice.queue.writeBuffer(tableBuffer, 0, table);
 
-    statusEl.textContent = 'WebGPU actief — shader + comb-tabel gereed';
-    dotEl.classList.add('on');
+    statusEl.textContent = 'WebGPU actief — Turbo Engine gereed ⚡';
+    dotEl.style.borderColor = 'var(--accent)';
     return true;
   } catch (e) {
     console.error(e);
@@ -1104,15 +1040,61 @@ async function initWebGPU() {
   }
 }
 
-const WORKGROUP_SIZE = 128;
+const WORKGROUP_SIZE = 32;
+const gpuBufferPools = {};
 
-async function runKernelBatch(privKeyBytesArray) {
+function ensurePoolBuffers(poolName, paddedCount, count) {
+  let pool = gpuBufferPools[poolName];
+  if (!pool) {
+    pool = { inBuf: null, outBuf: null, readBuf: null, paramsBuf: null, paddedCap: 0, countCap: 0, bindGroup: null };
+    gpuBufferPools[poolName] = pool;
+  }
+  let rebuildBindGroup = false;
+  if (!pool.inBuf || paddedCount > pool.paddedCap) {
+    if (pool.inBuf) pool.inBuf.destroy();
+    pool.paddedCap = paddedCount;
+    pool.inBuf = gpuDevice.createBuffer({
+      size: paddedCount * 8 * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    });
+    rebuildBindGroup = true;
+  }
+  if (!pool.outBuf || count > pool.countCap) {
+    if (pool.outBuf) pool.outBuf.destroy();
+    if (pool.readBuf) pool.readBuf.destroy();
+    pool.countCap = count;
+    pool.outBuf = gpuDevice.createBuffer({
+      size: count * 21 * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+    });
+    pool.readBuf = gpuDevice.createBuffer({
+      size: count * 21 * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+    });
+    rebuildBindGroup = true;
+  }
+  if (!pool.paramsBuf) {
+    pool.paramsBuf = gpuDevice.createBuffer({
+      size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+    rebuildBindGroup = true;
+  }
+  if (rebuildBindGroup || !pool.bindGroup) {
+    pool.bindGroup = gpuDevice.createBindGroup({
+      layout: gpuPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: pool.inBuf } },
+        { binding: 1, resource: { buffer: tableBuffer } },
+        { binding: 2, resource: { buffer: pool.outBuf } },
+        { binding: 3, resource: { buffer: pool.paramsBuf } },
+      ]
+    });
+  }
+  return pool;
+}
+
+async function runKernelBatch(privKeyBytesArray, poolName = 'default') {
   const count = privKeyBytesArray.length;
   const paddedCount = Math.ceil(count / WORKGROUP_SIZE) * WORKGROUP_SIZE;
+  const pool = ensurePoolBuffers(poolName, paddedCount, count);
 
-  // Padded to a full workgroup: the tail slots get a safe nonzero dummy key (1) so every
-  // thread in the last workgroup can validly participate in the shared batch inversion,
-  // even though only the first `count` results are ever written out or read back.
   const inData = new Uint32Array(paddedCount * 8);
   for (let i = 0; i < count; i++) {
     inData.set(bytesToLimbsLE(privKeyBytesArray[i]), i*8);
@@ -1120,50 +1102,25 @@ async function runKernelBatch(privKeyBytesArray) {
   for (let i = count; i < paddedCount; i++) {
     inData[i*8] = 1;
   }
-
-  const inBuf = gpuDevice.createBuffer({
-    size: inData.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-  });
-  gpuDevice.queue.writeBuffer(inBuf, 0, inData);
+  gpuDevice.queue.writeBuffer(pool.inBuf, 0, inData);
 
   const paramsData = new Uint32Array([count, 0, 0, 0]);
-  const paramsBuf = gpuDevice.createBuffer({
-    size: paramsData.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-  });
-  gpuDevice.queue.writeBuffer(paramsBuf, 0, paramsData);
+  gpuDevice.queue.writeBuffer(pool.paramsBuf, 0, paramsData);
 
   const outSize = count * 21 * 4;
-  const outBuf = gpuDevice.createBuffer({
-    size: outSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-  });
-  const readBuf = gpuDevice.createBuffer({
-    size: outSize, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
-  });
-
-  const bindGroup = gpuDevice.createBindGroup({
-    layout: gpuPipeline.getBindGroupLayout(0),
-    entries: [
-      { binding: 0, resource: { buffer: inBuf } },
-      { binding: 1, resource: { buffer: tableBuffer } },
-      { binding: 2, resource: { buffer: outBuf } },
-      { binding: 3, resource: { buffer: paramsBuf } },
-    ]
-  });
 
   const encoder = gpuDevice.createCommandEncoder();
   const pass = encoder.beginComputePass();
   pass.setPipeline(gpuPipeline);
-  pass.setBindGroup(0, bindGroup);
+  pass.setBindGroup(0, pool.bindGroup);
   pass.dispatchWorkgroups(paddedCount / WORKGROUP_SIZE);
   pass.end();
-  encoder.copyBufferToBuffer(outBuf, 0, readBuf, 0, outSize);
+  encoder.copyBufferToBuffer(pool.outBuf, 0, pool.readBuf, 0, outSize);
   gpuDevice.queue.submit([encoder.finish()]);
 
-  await readBuf.mapAsync(GPUMapMode.READ);
-  const result = new Uint32Array(readBuf.getMappedRange().slice(0));
-  readBuf.unmap();
-
-  inBuf.destroy(); outBuf.destroy(); readBuf.destroy(); paramsBuf.destroy();
+  await pool.readBuf.mapAsync(GPUMapMode.READ, 0, outSize);
+  const result = new Uint32Array(pool.readBuf.getMappedRange(0, outSize).slice(0));
+  pool.readBuf.unmap();
 
   const items = [];
   for (let i = 0; i < count; i++) {
@@ -1184,12 +1141,6 @@ async function runKernelBatch(privKeyBytesArray) {
   return items;
 }
 
-// =====================================================================================
-// Self-test — known (priv, address) pairs, cross-verified independently in Python
-// against a trusted affine-coordinate reference and, for k=1 and k=2, against public
-// Bitcoin data (Puzzle #1 / the historical "directory.io" leak). Each row's GPU hash160
-// is also independently recomputed on the CPU from the same (x,y) as a second check.
-// =====================================================================================
 const TEST_VECTORS = [
   { k: 1n,    addr: "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH" },
   { k: 2n,    addr: "1cMh228HTCiwS8ZsaakH8A8wze1JR5ZsP" },
@@ -1212,7 +1163,7 @@ async function runSelfTest() {
   try {
     if (!gpuDevice || !tableBuffer) {
       const ok = await initWebGPU();
-      if (!ok) { summary.textContent = 'Geen WebGPU beschikbaar — kan niet testen.'; btn.disabled = false; return false; }
+      if (!ok) { summary.textContent = 'Geen WebGPU beschikbaar.'; btn.disabled = false; return false; }
     }
     const privBytes = TEST_VECTORS.map(t => bigIntTo32Bytes(t.k));
     const items = await runKernelBatch(privBytes);
@@ -1221,34 +1172,30 @@ async function runSelfTest() {
     items.forEach((it, i) => {
       const gpuAddr = addressFromHash160(it.hash160);
       const pub = compressedPubkeyFromXY(it.x, it.y[31]);
-      const cpuAddr = addressFromCompressedPubkey(pub); // independent CPU hash160 cross-check
+      const cpuAddr = addressFromCompressedPubkey(pub);
       const expected = TEST_VECTORS[i].addr;
       const ok = (gpuAddr === expected) && (cpuAddr === expected);
       allOk = allOk && ok;
       const tr = document.createElement('tr');
-      let statusHtml = ok ? '✓ klopt' : (gpuAddr !== cpuAddr ? '✗ FOUT (GPU-hash ≠ CPU-hash)' : '✗ FOUT');
+      let statusHtml = ok ? '✓ klopt' : '✗ FOUT';
       tr.innerHTML = `<td>${TEST_VECTORS[i].k}</td><td class="addr">${gpuAddr}</td><td>${expected}</td><td class="${ok?'ok':'bad'}">${statusHtml}</td>`;
       tbody.appendChild(tr);
     });
 
     summary.innerHTML = allOk
-      ? '<span class="ok">Alle testvectoren kloppen — comb-tabel en on-GPU hash160 rekenen correct.</span>'
-      : '<span class="bad">Er zit een fout in de shader-berekening. Vertrouw de gegenereerde adressen hieronder niet.</span>';
+      ? '<span class="ok">Alle testvectoren kloppen succesvol!</span>'
+      : '<span class="bad">Fout gedetecteerd in shaderberekening.</span>';
     btn.disabled = false;
     return allOk;
   } catch (e) {
     console.error(e);
-    summary.textContent = 'Fout tijdens test: ' + e.message;
+    summary.textContent = 'Fout: ' + e.message;
     btn.disabled = false;
     return false;
   }
 }
 
-// =====================================================================================
-// UI wiring
-// =====================================================================================
 let lastCsvRows = [];
-
 function copyToClipboard(text) {
   navigator.clipboard?.writeText(text).catch(()=>{});
 }
@@ -1256,7 +1203,7 @@ function copyToClipboard(text) {
 async function generateKeys() {
   const btn = document.getElementById('btnGen');
   const countInput = document.getElementById('countInput');
-  const count = Math.max(1, Math.min(20000, parseInt(countInput.value) || 1));
+  const count = Math.max(1, Math.min(200000, parseInt(countInput.value) || 1));
   const progress = document.getElementById('progress');
   const bar = document.getElementById('progressBar');
   const table = document.getElementById('resultTable');
@@ -1273,12 +1220,11 @@ async function generateKeys() {
   try {
     if (!gpuDevice || !tableBuffer) {
       const ok = await initWebGPU();
-      if (!ok) { alert('WebGPU is niet beschikbaar in deze browser/machine.'); btn.disabled = false; progress.style.display='none'; return; }
+      if (!ok) { alert('WebGPU niet beschikbaar.'); btn.disabled = false; progress.style.display='none'; return; }
     }
 
     const t0 = performance.now();
-    const privKeys = [];
-    for (let i = 0; i < count; i++) privKeys.push(randomPrivateKeyBytes());
+    const privKeys = randomPrivateKeysBulk(count);
     bar.style.width = '30%';
 
     const items = await runKernelBatch(privKeys);
@@ -1314,7 +1260,7 @@ async function generateKeys() {
     setTimeout(()=>{ progress.style.display='none'; }, 400);
   } catch (e) {
     console.error(e);
-    alert('Er ging iets mis: ' + e.message);
+    alert('Fout: ' + e.message);
     progress.style.display = 'none';
   }
   btn.disabled = false;
@@ -1330,13 +1276,128 @@ function downloadCsv() {
   const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'bitcoin-adressen.csv'; a.click();
+  a.href = url; a.download = 'puzzel-adressen.csv'; a.click();
   URL.revokeObjectURL(url);
+}
+
+const BASE58_TEXT_RE = /^[1-9A-HJ-NP-Za-km-z]*$/;
+let vanityStopRequested = false;
+
+function formatElapsed(sec) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2,'0')}`;
+}
+
+async function startVanitySearch() {
+  const textInput = document.getElementById('vanityText');
+  const posSel = document.getElementById('vanityPos');
+  const caseSel = document.getElementById('vanityCase');
+  const btnStart = document.getElementById('btnVanityStart');
+  const btnStop = document.getElementById('btnVanityStop');
+  const statusEl = document.getElementById('vanityStatus');
+  const triesEl = document.getElementById('vanityTries');
+  const rateEl = document.getElementById('vanityRate');
+  const timeEl = document.getElementById('vanityTime');
+  const resultBox = document.getElementById('vanityResult');
+
+  const raw = textInput.value.trim();
+  if (!raw) { alert('Vul eerst een zoektekst in.'); return; }
+  if (!BASE58_TEXT_RE.test(raw)) {
+    alert('Ongeldige Base58 tekens (geen 0, O, I, l toegestaan).');
+    return;
+  }
+
+  if (!gpuDevice || !tableBuffer) {
+    const ok = await initWebGPU();
+    if (!ok) { alert('WebGPU niet beschikbaar.'); return; }
+  }
+
+  const caseSensitive = caseSel.value === 'sensitive';
+  const target = caseSensitive ? raw : raw.toLowerCase();
+  const position = posSel.value;
+  function isMatch(addr) {
+    const hay = caseSensitive ? addr : addr.toLowerCase();
+    if (position === 'prefix') { return hay.slice(1, 1 + target.length) === target; }
+    return hay.includes(target);
+  }
+
+  vanityStopRequested = false;
+  btnStart.disabled = true;
+  btnStop.disabled = false;
+  textInput.disabled = true; posSel.disabled = true; caseSel.disabled = true;
+  resultBox.style.display = 'none';
+  statusEl.textContent = 'zoeken…';
+  triesEl.textContent = '0'; rateEl.textContent = '0'; timeEl.textContent = '0:00';
+
+  const BATCH_SIZE = 32768;
+  let tries = 0;
+  const t0 = performance.now();
+  let found = null;
+
+  try {
+    let curPool = 'vanityA';
+    let curKeys = randomPrivateKeysBulk(BATCH_SIZE);
+    let pending = runKernelBatch(curKeys, curPool);
+
+    while (!found) {
+      const items = await pending;
+      const finishedKeys = curKeys;
+
+      if (!vanityStopRequested) {
+        curPool = curPool === 'vanityA' ? 'vanityB' : 'vanityA';
+        curKeys = randomPrivateKeysBulk(BATCH_SIZE);
+        pending = runKernelBatch(curKeys, curPool);
+      }
+
+      for (let i = 0; i < items.length; i++) {
+        tries++;
+        const addr = addressFromHash160(items[i].hash160);
+        if (isMatch(addr)) {
+          found = { priv: finishedKeys[i], addr, wif: wifCompressed(finishedKeys[i]) };
+          break;
+        }
+      }
+      const dt = (performance.now() - t0) / 1000;
+      triesEl.textContent = tries.toLocaleString('nl-NL');
+      rateEl.textContent = Math.round(tries / Math.max(dt, 0.001)).toLocaleString('nl-NL');
+      timeEl.textContent = formatElapsed(dt);
+
+      if (vanityStopRequested && !found) break;
+      await new Promise(r => setTimeout(r, 0));
+    }
+  } catch (e) {
+    console.error(e);
+    statusEl.textContent = 'Fout: ' + e.message;
+  }
+
+  btnStart.disabled = false;
+  btnStop.disabled = true;
+  textInput.disabled = false; posSel.disabled = false; caseSel.disabled = false;
+
+  if (found) {
+    statusEl.innerHTML = '<span class="ok">Gevonden!</span>';
+    resultBox.style.display = 'block';
+    resultBox.innerHTML =
+      '<div style="margin-bottom:8px;"><b>Adres:</b> <span class="addr">' + found.addr + '</span> ' +
+      '<span class="copy" data-copy="' + found.addr + '">kopieer</span></div>' +
+      '<div><b>WIF:</b> <span class="trunc" title="' + found.wif + '">' + found.wif + '</span> ' +
+      '<span class="copy" data-copy="' + found.wif + '">kopieer</span></div>';
+    resultBox.querySelectorAll('.copy').forEach(el => el.addEventListener('click', () => copyToClipboard(el.dataset.copy)));
+  } else if (vanityStopRequested) {
+    statusEl.textContent = 'Gestopt.';
+  }
+}
+
+function stopVanitySearch() {
+  vanityStopRequested = true;
 }
 
 document.getElementById('btnTest').addEventListener('click', runSelfTest);
 document.getElementById('btnGen').addEventListener('click', generateKeys);
 document.getElementById('btnCsv').addEventListener('click', downloadCsv);
+document.getElementById('btnVanityStart').addEventListener('click', startVanitySearch);
+document.getElementById('btnVanityStop').addEventListener('click', stopVanitySearch);
 
 initWebGPU();
 </script>
