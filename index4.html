@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #71 – Random Slice Sniper (LIMB-TURBO v4) ⚡</title>
+    <title>Puzzel #71 – Random Slice Sniper (ZERO-GC TURBO v3) ⚡</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -119,8 +119,8 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – Native JS Turbo v4 (Limb-based & Zero-GC)</div>
-            <span class="badge">🚀 ULTRA-TURBO: LIMB-BASED FIELD ARITHMETIC + ZERO-GC</span>
+            <div class="sub">Puzzel #71 – Native JS Turbo v3 (Zero-GC & 32-bit Match)</div>
+            <span class="badge">🚀 ULTRA-TURBO: IN-PLACE HASHING + 32-BIT BITWISE CHECK</span>
         </div>
         <div class="card">
             <div class="card-title">⚙ Actieve Plakje Configuratie</div>
@@ -131,7 +131,7 @@
             <div class="field">
                 <label>Scan methode</label>
                 <select id="scanMethod">
-                    <option value="linear" selected>📏 Lineair Jacobian Batch (Limb-Turbo v4)</option>
+                    <option value="linear" selected>📏 Lineair Jacobian Batch (Zero-GC v3)</option>
                 </select>
             </div>
             <div class="field">
@@ -161,7 +161,7 @@
                 </div>
             </div>
             <div class="formula-box" style="background:rgba(0,0,0,0.5); border-left:3px solid var(--accent2); padding:10px; font-size:.75rem; color:#bfe4ff; line-height:1.5;">
-                Engine: Limb-based Field Arithmetic (10x26-bit) + Zero GC + 32-Bit Bitwise Match
+                Engine: Jacobian Mixed Addition + In-Place Hashing (Zero GC, 32-Bit Bitwise Match)
             </div>
         </div>
         <div class="chance-card">
@@ -211,138 +211,22 @@
                 <tbody id="matchTable"><tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Random Slice Sniper · LIMB-TURBO ENGINE v4</div>
+        <div class="footer">Random Slice Sniper · ZERO-GC TURBO ENGINE v3</div>
     </div>
 
-    <!-- ⚡ OPTIMIZED WORKER ENGINE (LIMB-BASED & ZERO-GC) -->
+    <!-- ⚡ OPTIMIZED WORKER ENGINE (ZERO-GC & IN-PLACE HASHING) -->
     <script id="workerCode" type="javascript/worker">
         self.onerror = function(e) {
             self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
         };
 
-        // ==========================================
-        // ⚡ SECP256K1 LIMB-BASED FIELD ARITHMETIC
-        // ==========================================
-        const L26 = 67108864; // 2^26
-        const FE_SIZE = 10;
-        const P_BI = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
-        
-        // Storage layout: [pX(BATCH), pY(BATCH), pZ(BATCH), partials(BATCH), invZ(BATCH), temps(100)]
-        const BATCH = 10000;
-        const storage = new Float64Array((BATCH * 5 + 100) * FE_SIZE);
-        const t_mul = new Float64Array(20); // Temp for multiplication
+        const P = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
+        const G_x = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n;
+        const G_y = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n;
+        const G = { x: G_x, y: G_y };
 
-        const OFF_PX = 0;
-        const OFF_PY = BATCH * FE_SIZE;
-        const OFF_PZ = 2 * BATCH * FE_SIZE;
-        const OFF_PARTIALS = 3 * BATCH * FE_SIZE;
-        const OFF_INVZ = 4 * BATCH * FE_SIZE;
-        const OFF_TEMPS = 5 * BATCH * FE_SIZE;
-
-        function fe_from_bi(bi, off) {
-            for (let i = 0; i < 10; i++) {
-                storage[off + i] = Number(bi & 0x3FFFFFFn);
-                bi >>= 26n;
-            }
-        }
-
-        function fe_to_bi(off) {
-            let res = 0n;
-            for (let i = 9; i >= 0; i--) {
-                res = (res << 26n) | BigInt(Math.round(storage[off + i]));
-            }
-            return res;
-        }
-
-        function fe_normalize(off) {
-            for (let iter = 0; iter < 2; iter++) {
-                let carry = 0;
-                for (let i = 0; i < 9; i++) {
-                    carry = Math.floor(storage[off + i] / L26);
-                    storage[off + i + 1] += carry;
-                    storage[off + i] -= carry * L26;
-                }
-                let top = Math.floor(storage[off + 9] / 4194304); // 2^22
-                if (top === 0 && iter > 0) break;
-                storage[off + 9] -= top * 4194304;
-                storage[off + 0] += top * 977;
-                storage[off + 1] += top * 64;
-            }
-        }
-
-        function fe_add(a, b, out) {
-            for (let i = 0; i < 10; i++) storage[out + i] = storage[a + i] + storage[b + i];
-            fe_normalize(out);
-        }
-
-        function fe_sub(a, b, out) {
-            for (let i = 0; i < 10; i++) storage[out + i] = storage[a + i] - storage[b + i];
-            fe_normalize(out);
-        }
-
-        function fe_mul(a, b, out) {
-            t_mul.fill(0);
-            for (let i = 0; i < 10; i++) {
-                const ai = storage[a + i];
-                if (ai === 0) continue;
-                for (let j = 0; j < 10; j++) t_mul[i + j] += ai * storage[b + j];
-            }
-            let carry = 0;
-            for (let i = 0; i < 18; i++) {
-                carry = Math.floor(t_mul[i] / L26);
-                t_mul[i + 1] += carry;
-                t_mul[i] -= carry * L26;
-            }
-            for (let i = 18; i >= 10; i--) {
-                let val = t_mul[i];
-                t_mul[i] = 0;
-                t_mul[i - 9] += val * 1024;
-                t_mul[i - 10] += val * 15632;
-            }
-            for (let i = 0; i < 10; i++) storage[out + i] = t_mul[i];
-            fe_normalize(out);
-        }
-
-        function fe_sqr(a, out) {
-            t_mul.fill(0);
-            for (let i = 0; i < 10; i++) {
-                const ai = storage[a + i];
-                if (ai === 0) continue;
-                t_mul[i + i] += ai * ai;
-                for (let j = i + 1; j < 10; j++) t_mul[i + j] += 2 * ai * storage[a + j];
-            }
-            let carry = 0;
-            for (let i = 0; i < 18; i++) {
-                carry = Math.floor(t_mul[i] / L26);
-                t_mul[i + 1] += carry;
-                t_mul[i] -= carry * L26;
-            }
-            for (let i = 18; i >= 10; i--) {
-                let val = t_mul[i];
-                t_mul[i] = 0;
-                t_mul[i - 9] += val * 1024;
-                t_mul[i - 10] += val * 15632;
-            }
-            for (let i = 0; i < 10; i++) storage[out + i] = t_mul[i];
-            fe_normalize(out);
-        }
-
-        function fe_copy(src, dst) {
-            for (let i = 0; i < 10; i++) storage[dst + i] = storage[src + i];
-        }
-
-        // ==========================================
-        // ⚡ SECP256K1 CONSTANTS & HASHING
-        // ==========================================
-        const G_x_BI = 0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n;
-        const G_y_BI = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n;
-        
-        const G_X_OFF = OFF_TEMPS;
-        const G_Y_OFF = OFF_TEMPS + 10;
-        fe_from_bi(G_x_BI, G_X_OFF);
-        fe_from_bi(G_y_BI, G_Y_OFF);
-
-        function inverse(a, n = P_BI) {
+        function mod(a, b = P) { const r = a % b; return r >= 0n ? r : r + b; }
+        function inverse(a, n = P) {
             let t = 0n, newt = 1n; let r = n, newr = a;
             while (newr !== 0n) {
                 let q = r / newr;
@@ -352,10 +236,8 @@
             return t < 0n ? t + n : t;
         }
 
-        // Standard Elliptic Curve Point Addition (Affine) - only for setup
-        function addBI(p, q) {
+        function add(p, q) {
             if (!p) return q; if (!q) return p;
-            const mod = (a) => { const r = a % P_BI; return r >= 0n ? r : r + P_BI; };
             if (p.x === q.x) {
                 if (p.y !== q.y || p.y === 0n) return null;
                 let lam = mod((3n * p.x * p.x) * inverse(2n * p.y));
@@ -366,16 +248,19 @@
             let x3 = mod(lam * lam - p.x - q.x);
             return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
         }
-        function mulBI(p, n) {
+        function mul(p, n) {
             let r = null, base = p;
             while (n > 0n) {
-                if (n & 1n) r = addBI(r, base);
-                base = addBI(base, base);
+                if (n & 1n) r = add(r, base);
+                base = add(base, base);
                 n >>= 1n;
             }
             return r;
         }
 
+        // =======================================================
+        // ⚡ ZERO-GC PRE-ALLOCATED BUFFERS & CONSTANTS
+        // =======================================================
         const sha256_K = new Uint32Array([
             0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
             0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -393,18 +278,23 @@
         const hl = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
         const hr = [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000];
 
+        // Statische werkbuffers voor Zero-GC inner-loop
         const pubKeyBuffer = new Uint8Array(33);
         const sha256Buffer = new Uint8Array(32);
         const ripemdBuffer = new Uint8Array(20);
+
         const pubKeyView = new DataView(pubKeyBuffer.buffer);
         const sha256View = new DataView(sha256Buffer.buffer);
         const ripemdView = new DataView(ripemdBuffer.buffer);
+
         const w_sha = new Uint32Array(64);
         const w_ripemd = new Uint32Array(16);
 
+        // Geoptimaliseerde in-place SHA-256 (altijd exact 33 bytes input = 1 block van 512 bits)
         function sha256_33_inplace() {
             let a = 0x6a09e667, b = 0xbb67ae85, c = 0x3c6ef372, d = 0xa54ff53a;
             let e = 0x510e527f, f = 0x9b05688c, g = 0x1f83d9ab, _h = 0x5be0cd19;
+
             w_sha[0] = pubKeyView.getUint32(0, false);
             w_sha[1] = pubKeyView.getUint32(4, false);
             w_sha[2] = pubKeyView.getUint32(8, false);
@@ -416,12 +306,14 @@
             w_sha[8] = (pubKeyBuffer[32] << 24) | 0x800000;
             w_sha[9] = 0; w_sha[10] = 0; w_sha[11] = 0;
             w_sha[12] = 0; w_sha[13] = 0; w_sha[14] = 0;
-            w_sha[15] = 264;
+            w_sha[15] = 264; // 33 bytes * 8 = 264 bits
+
             for (let j = 16; j < 64; j++) {
                 let s0 = (w_sha[j-15] >>> 7 | w_sha[j-15] << 25) ^ (w_sha[j-15] >>> 18 | w_sha[j-15] << 14) ^ (w_sha[j-15] >>> 3);
                 let s1 = (w_sha[j-2] >>> 17 | w_sha[j-2] << 15) ^ (w_sha[j-2] >>> 19 | w_sha[j-2] << 13) ^ (w_sha[j-2] >>> 10);
                 w_sha[j] = (w_sha[j-16] + s0 + w_sha[j-7] + s1) | 0;
             }
+
             for (let j = 0; j < 64; j++) {
                 let S1 = (e >>> 6 | e << 26) ^ (e >>> 11 | e << 21) ^ (e >>> 25 | e << 7);
                 let ch = (e & f) ^ (~e & g);
@@ -431,6 +323,7 @@
                 let temp2 = (S0 + maj) | 0;
                 _h = g; g = f; f = e; e = (d + temp1) | 0; d = c; c = b; b = a; a = (temp1 + temp2) | 0;
             }
+
             sha256View.setUint32(0, (0x6a09e667 + a) | 0, false);
             sha256View.setUint32(4, (0xbb67ae85 + b) | 0, false);
             sha256View.setUint32(8, (0x3c6ef372 + c) | 0, false);
@@ -441,6 +334,7 @@
             sha256View.setUint32(28, (0x5be0cd19 + _h) | 0, false);
         }
 
+        // Geoptimaliseerde in-place RIPEMD-160 (altijd exact 32 bytes input = 1 block van 512 bits)
         function ripemd160_32_inplace() {
             w_ripemd[0] = sha256View.getUint32(0, true);
             w_ripemd[1] = sha256View.getUint32(4, true);
@@ -453,9 +347,12 @@
             w_ripemd[8] = 0x00000080;
             w_ripemd[9] = 0; w_ripemd[10] = 0; w_ripemd[11] = 0;
             w_ripemd[12] = 0; w_ripemd[13] = 0;
-            w_ripemd[14] = 256; w_ripemd[15] = 0;
+            w_ripemd[14] = 256; // 32 bytes * 8 = 256 bits
+            w_ripemd[15] = 0;
+
             let al = 0x67452301, bl = 0xefcdab89, cl = 0x98badcfe, dl = 0x10325476, el = 0xc3d2e1f0;
             let ar = 0x67452301, br = 0xefcdab89, cr = 0x98badcfe, dr = 0x10325476, er = 0xc3d2e1f0;
+
             for (let j = 0; j < 80; j++) {
                 let round = j >> 4, tL, tR;
                 if (round === 0) { tL = al + (bl ^ cl ^ dl); tR = ar + (br ^ (cr | ~dr)); }
@@ -463,11 +360,14 @@
                 else if (round === 2) { tL = al + ((bl | ~cl) ^ dl); tR = ar + ((br | ~cr) ^ dr); }
                 else if (round === 3) { tL = al + ((bl & dl) | (cl & ~dl)); tR = ar + ((br & cr) | (~br & dr)); }
                 else { tL = al + (bl ^ (cl | ~dl)); tR = ar + (br ^ cr ^ dr); }
+
                 tL = (tL + w_ripemd[zl[j]] + hl[round]) | 0; tL = (tL << sl[j] | tL >>> (32 - sl[j])) + el;
                 al = el; el = dl; dl = (cl << 10 | cl >>> 22); cl = bl; bl = tL;
+
                 tR = (tR + w_ripemd[zr[j]] + hr[round]) | 0; tR = (tR << sr[j] | tR >>> (32 - sr[j])) + er;
                 ar = er; er = dr; dr = (cr << 10 | cr >>> 22); cr = br; br = tR;
             }
+
             let t = (0xefcdab89 + cl + dr) | 0;
             ripemdView.setUint32(0, t, true);
             ripemdView.setUint32(4, (0x98badcfe + dl + er) | 0, true);
@@ -476,6 +376,7 @@
             ripemdView.setUint32(16, (0x67452301 + bl + cr) | 0, true);
         }
 
+        // Generieke SHA-256 alleen voor WIF export bij match
         function sha256_generic(data) {
             const h = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
             let mLen = data.length;
@@ -531,7 +432,7 @@
         }
 
         // ==========================================
-        // ⚡ ZERO-GC BATCH ENGINE (LIMB-TURBO)
+        // ⚡ ZERO-GC BATCH ENGINE
         // ==========================================
         self.onmessage = function(e) {
             const data = e.data;
@@ -543,60 +444,39 @@
                 const targetInt0 = targetH160View.getUint32(0, true);
                 const targetAddr = data.targetAddress;
                 const workerId = data.workerId;
+                const BATCH = 10000;
                 
-                // Temps for hot loop
-                const T1 = OFF_TEMPS, T2 = OFF_TEMPS + 10, T3 = OFF_TEMPS + 20, T4 = OFF_TEMPS + 30;
-                const T5 = OFF_TEMPS + 40, T6 = OFF_TEMPS + 50, T7 = OFF_TEMPS + 60, T8 = OFF_TEMPS + 70;
-                const JX = OFF_TEMPS + 80, JY = OFF_TEMPS + 90, JZ = OFF_TEMPS + 100;
+                let currentPoint = mul(G, currentKey);
 
-                let startPoint = mulBI({x: G_x_BI, y: G_y_BI}, currentKey);
-                fe_from_bi(startPoint.x, JX);
-                fe_from_bi(startPoint.y, JY);
-                fe_from_bi(1n, JZ);
+                // Pre-allocatie van arrays buiten de stappen-loop
+                let pX = new Array(BATCH);
+                let pY = new Array(BATCH);
+                let pZ = new Array(BATCH);
+                let partials = new Array(BATCH);
+                let invZ = new Array(BATCH);
 
                 function fastStep() {
                     let batchCount = 0;
+                    let jX = currentPoint.x;
+                    let jY = currentPoint.y;
+                    let jZ = 1n;
+
                     for (let i = 0; i < BATCH && currentKey + BigInt(i) <= endKey; i++) {
-                        // Store current point
-                        fe_copy(JX, OFF_PX + i * FE_SIZE);
-                        fe_copy(JY, OFF_PY + i * FE_SIZE);
-                        fe_copy(JZ, OFF_PZ + i * FE_SIZE);
+                        pX[i] = jX; pY[i] = jY; pZ[i] = jZ;
                         
-                        // Jacobian Mixed Addition: currentPoint + G
-                        // G is (G_X_OFF, G_Y_OFF, 1)
-                        // Z1Z1 = jZ * jZ
-                        fe_sqr(JZ, T1); 
-                        // U2 = G_x * Z1Z1
-                        fe_mul(G_X_OFF, T1, T2);
-                        // S2 = G_y * jZ * Z1Z1
-                        fe_mul(JZ, T1, T3);
-                        fe_mul(G_Y_OFF, T3, T4);
-                        // H = U2 - jX
-                        fe_sub(T2, JX, T5);
-                        // R = S2 - jY
-                        fe_sub(T4, JY, T6);
+                        let Z1Z1 = mod(jZ * jZ);
+                        let U2 = mod(G_x * Z1Z1);
+                        let S2 = mod(G_y * mod(jZ * Z1Z1));
+                        let H = mod(U2 - jX);
+                        let R = mod(S2 - jY);
                         
-                        // HH = H * H
-                        fe_sqr(T5, T7);
-                        // HHH = H * HH
-                        fe_mul(T5, T7, T8);
-                        // V = jX * HH
-                        fe_mul(JX, T7, T1);
+                        let HH = mod(H * H);
+                        let HHH = mod(H * HH);
+                        let V = mod(jX * HH);
                         
-                        // jX = R*R - HHH - 2*V
-                        fe_sqr(T6, T2);
-                        fe_sub(T2, T8, T2);
-                        fe_sub(T2, T1, T2);
-                        fe_sub(T2, T1, JX);
-                        
-                        // jY = R*(V - jX) - jY*HHH
-                        fe_sub(T1, JX, T2);
-                        fe_mul(T6, T2, T3);
-                        fe_mul(JY, T8, T4);
-                        fe_sub(T3, T4, JY);
-                        
-                        // jZ = jZ * H
-                        fe_mul(JZ, T5, JZ);
+                        jX = mod(R * R - HHH - 2n * V);
+                        jY = mod(R * (V - jX) - jY * HHH);
+                        jZ = mod(jZ * H);
                         
                         batchCount++;
                     }
@@ -607,48 +487,39 @@
                     }
                     
                     // Batch Inversion
-                    fe_from_bi(1n, T1); // acc
+                    let acc = 1n;
                     for(let i = 0; i < batchCount; i++) {
-                        fe_copy(T1, OFF_PARTIALS + i * FE_SIZE);
-                        fe_mul(T1, OFF_PZ + i * FE_SIZE, T1);
+                        partials[i] = acc;
+                        acc = mod(acc * pZ[i]);
                     }
                     
-                    let invAccBI = inverse(fe_to_bi(T1));
-                    fe_from_bi(invAccBI, T2); // invAcc
+                    let invAcc = inverse(acc);
                     
                     for(let i = batchCount - 1; i >= 0; i--) {
-                        fe_mul(T2, OFF_PARTIALS + i * FE_SIZE, OFF_INVZ + i * FE_SIZE);
-                        fe_mul(T2, OFF_PZ + i * FE_SIZE, T2);
+                        invZ[i] = mod(invAcc * partials[i]);
+                        invAcc = mod(invAcc * pZ[i]);
                     }
                     
-                    // Affine Conversion & Hashing
+                    // Validatie en conversie (ZERO-GC & 32-bit Match)
                     for (let i = 0; i < batchCount; i++) {
-                        const iz = OFF_INVZ + i * FE_SIZE;
-                        fe_sqr(iz, T1); // iz2
-                        fe_mul(OFF_PX + i * FE_SIZE, T1, T2); // ax
-                        fe_mul(iz, T1, T3); // iz3
-                        fe_mul(OFF_PY + i * FE_SIZE, T3, T4); // ay
+                        let iz = invZ[i];
+                        let iz2 = mod(iz * iz);
+                        let ax = mod(pX[i] * iz2);
+                        let ay = mod(pY[i] * mod(iz * iz2));
                         
-                        // Normalize ax, ay strictly < P
-                        fe_normalize(T2);
-                        let axBI = fe_to_bi(T2);
-                        if (axBI >= P_BI) axBI -= P_BI;
-                        
-                        fe_normalize(T4);
-                        let ayBI = fe_to_bi(T4);
-                        if (ayBI >= P_BI) ayBI -= P_BI;
-
-                        // Fill pubKeyBuffer
-                        pubKeyBuffer[0] = (ayBI & 1n) === 0n ? 0x02 : 0x03;
-                        let tmp = axBI;
+                        // Vul de pre-gealloceerde pubkey buffer in-place
+                        pubKeyBuffer[0] = (ay & 1n) === 0n ? 0x02 : 0x03;
+                        let tmp = ax;
                         for (let b = 32; b >= 1; b--) { 
                             pubKeyBuffer[b] = Number(tmp & 0xffn); 
                             tmp >>= 8n; 
                         }
                         
+                        // In-place hashing
                         sha256_33_inplace();
                         ripemd160_32_inplace();
 
+                        // Fast Bitwise Check (vergelijk eerste 32 bits direct als integer)
                         if (ripemdView.getUint32(0, true) === targetInt0) {
                             let match = true;
                             for (let k = 4; k < 20; k++) {
@@ -657,6 +528,7 @@
                                     break; 
                                 }
                             }
+
                             if (match) {
                                 const privHex = (currentKey + BigInt(i)).toString(16).padStart(64, '0');
                                 const payloadBytes = ("80" + privHex + "01").match(/.{2}/g).map(b => parseInt(b, 16));
@@ -669,11 +541,18 @@
                     }
                     
                     currentKey += BigInt(batchCount);
+                    
                     if (currentKey > endKey) {
                         self.postMessage({ type: "SCAN_DONE", workerId });
                         return;
                     }
                     
+                    let lastZ = invZ[batchCount - 1];
+                    let lastZ2 = mod(lastZ * lastZ);
+                    let lastAX = mod(pX[batchCount - 1] * lastZ2);
+                    let lastAY = mod(pY[batchCount - 1] * mod(lastZ * lastZ2));
+                    currentPoint = add({x: lastAX, y: lastAY}, G);
+
                     self.postMessage({ type: "PROGRESS", count: batchCount, workerId });
                     setTimeout(fastStep, 0);
                 }
@@ -740,7 +619,7 @@
                 const code = document.getElementById('workerCode').textContent;
                 const worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
                 worker.onerror = function(e) {
-                    log(`❌ Fout in verwerking.`, 'ev-stop');
+                    log(`❌ Fout in verwerking. Controleer browser-limieten.`, 'ev-stop');
                     setStatus('Gestopt', '');
                     killWorkers();
                     setRunning(false);
@@ -849,7 +728,7 @@
                     worker.onmessage = (ev) => {
                         if (ev.data.type === "PROGRESS") {
                             if (!isRunning) return;
-                            cumulativeScanned += ev.data.count; currentSliceScanned += ev.data.count;
+                            totalJumps += ev.data.count; cumulativeScanned += ev.data.count; currentSliceScanned += ev.data.count;
                             if (currentSliceScanned >= targetLimit) {
                                 killWorkers(); generateRandomSlice(); slicesVisited++; currentSliceScanned = 0;
                                 setTimeout(() => { if (isRunning) spawnWorkers(); }, 50);
@@ -875,15 +754,18 @@
                 if (isRunning) return;
                 startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = cumulativeScanned;
                 setRunning(true);
-                setStatus('⚡ Limb-Turbo Engine v4 Actief', 'running');
-                log('Limb-Turbo Scan v4 gestart.', 'ev-epoch');
+                setStatus('⚡ Zero-GC Engine v3 Actief', 'running');
+                log('Zero-GC Turbo Scan v3 gestart.', 'ev-epoch');
                 spawnWorkers();
             }
 
             startBtn.onclick = () => { if (!isRunning) startAddressScan(); };
             stopBtn.onclick = () => { setRunning(false); killWorkers(); setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop'); };
+            
+            // Automatisch initialiseren en direct starten voor GitHub Pages
             generateRandomSlice();
-            log('Systeem klaar. Limb-Turbo Engine v4 geladen.', 'ts');
+            log('Systeem klaar. Zero-GC Turbo Engine v3 geladen.', 'ts');
+            startAddressScan();
 
             setInterval(() => { if (isRunning) updateAllStats(); }, 800);
         })();
