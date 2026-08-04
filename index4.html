@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Quantum Sniper V3 ⚡ (BSGS + Binary Search)</title>
+    <title>Quantum Sniper V4 ⚡ (Hash Map + Zero GC)</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -89,21 +89,19 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🌌 Quantum Sniper V3</h1>
-            <div class="sub">Baby-Step Giant-Step + Binary Search Batching</div>
-            <span class="badge">🚀 VOLLEDIG AANPASBARE TARGETS + CACHE</span>
+            <h1>🌌 Quantum Sniper V4</h1>
+            <div class="sub">Baby-Step Giant-Step + Hash Map + Zero-GC O(1)</div>
+            <span class="badge">🚀 MAXIMUM JAVASCRIPT PERFORMANCE</span>
         </div>
 
         <div class="card">
             <div class="card-title">⚙ Actieve Configuratie</div>
             <div class="field">
                 <label>Target Public Key</label>
-                <!-- Readonly verwijderd, aanpasbaar gemaakt! -->
                 <input id="pubKey" value="03afdda497369e219a2c1c369954a930e4d3740968e5e4352475bcffce3140dae5" type="text" style="color: var(--accent2);">
             </div>
             <div class="field">
                 <label>Target BTC Adres</label>
-                <!-- Readonly verwijderd, aanpasbaar gemaakt! -->
                 <input id="btcAddr" value="19GpszRNUej5yYqxXoLnbZWKew3KdVLkXg" type="text" style="color: var(--accent2);">
             </div>
             <div class="field">
@@ -148,10 +146,10 @@
                 <tbody id="matchTable"><tr class="empty-row"><td colspan="2">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Wiskundige Wonder Engine · BSGS V3 (Binary Search) 24/7 Editie</div>
+        <div class="footer">Wiskundige Wonder Engine · BSGS V4 (O(1) Hash Map) 24/7 Editie</div>
     </div>
 
-    <!-- ⚡ BABY-STEP GIANT-STEP WORKER V3 (BINARY SEARCH BATCHING) -->
+    <!-- ⚡ BABY-STEP GIANT-STEP WORKER V4 (O(1) HASH MAP + ZERO GC) -->
     <script id="workerCode" type="javascript/worker">
         self.onerror = function(e) { self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' }); };
 
@@ -160,22 +158,29 @@
         const G_y = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n;
         const G = { x: G_x, y: G_y };
 
-        function mod(a, b = P) { const r = a % b; return r >= 0n ? r : r + b; }
-        function inverse(a, n = P) {
+        // Geoptimaliseerde mod zonder default params = V8 inline optimization
+        function mod(a) { 
+            let r = a % P; 
+            return r >= 0n ? r : r + P; 
+        }
+        
+        function inverse(a) {
             if (a === 0n) return 0n;
-            let t = 0n, newt = 1n; let r = n, newr = a;
+            let t = 0n, newt = 1n; let r = P, newr = a;
             while (newr !== 0n) {
                 let q = r / newr;
                 let tmp = t - q * newt; t = newt; newt = tmp;
                 tmp = r - q * newr; r = newr; newr = tmp;
             }
-            return t < 0n ? t + n : t;
+            return t < 0n ? t + P : t;
         }
+        
         function expMod(base, exp) {
             let res = 1n; base = base % P;
             while (exp > 0n) { if (exp & 1n) res = (res * base) % P; base = (base * base) % P; exp >>= 1n; }
             return res;
         }
+        
         function add(p, q) {
             if (!p) return q; if (!q) return p;
             if (p.x === q.x) {
@@ -186,11 +191,13 @@
             let lam = mod(mod(q.y - p.y) * inverse(mod(q.x - p.x)));
             let x3 = mod(lam * lam - p.x - q.x); return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
         }
+        
         function mul(p, n) {
             let r = null, base = p;
             while (n > 0n) { if (n & 1n) r = add(r, base); base = add(base, base); n >>= 1n; }
             return r;
         }
+        
         function isqrt(n) {
             if (n < 0n) throw new Error('Negatieve wortel'); if (n < 2n) return n;
             let x = n >> 1n; let y = (x + n / x) >> 1n;
@@ -198,21 +205,13 @@
             return x;
         }
 
-        // Binaire zoekopdracht voor de Giant Steps
-        function binarySearch(arr, targetX) {
-            let left = 0, right = arr.length - 1;
-            while (left <= right) {
-                let mid = (left + right) >> 1;
-                if (arr[mid].x === targetX) return arr[mid];
-                if (arr[mid].x < targetX) left = mid + 1;
-                else right = mid - 1;
-            }
-            return null;
-        }
-
+        // --- CACHE & ZERO-ALLOCATION ARRAYS ---
         let cachedM = 0n;
-        let cachedBabyArray = null; 
+        let cachedBabyMap = null; // Gebruikt Map ipv Array voor O(1) lookups
         let cachedNeg_G_giant = null;
+        
+        // Re-use arrays om Garbage Collection stotters (Memory Leaks) te elimineren
+        let qX, qY, qZ, qPartials, qInvZ;
 
         self.onmessage = function(e) {
             if (e.data.type === "BSGS_SCAN") {
@@ -230,26 +229,22 @@
 
                 const W = endKey - startKey + 1n;
                 const M = isqrt(W) + 1n; 
+                const M_num = Number(M);
 
                 let S = mul(G, startKey);
                 if (S && S.x === P_target.x && S.y === P_target.y) {
                     self.postMessage({ type: "FOUND", privHex: startKey.toString(16).padStart(64, '0') }); return;
                 }
 
-                let babyArray, Neg_G_giant;
-
-                // CACHE: Eén keer rekenen, converteren naar Array, sorteren voor Binary Search!
-                if (cachedM === M && cachedBabyArray !== null) {
-                    babyArray = cachedBabyArray;
-                    Neg_G_giant = cachedNeg_G_giant;
-                } else {
-                    let bX = new Array(Number(M)), bY = new Array(Number(M)), bZ = new Array(Number(M));
+                // CACHE BABY STEPS MET O(1) MAP (Enkel eerste keer per grootte)
+                if (cachedM !== M || cachedBabyMap === null) {
+                    let bX = new Array(M_num), bY = new Array(M_num), bZ = new Array(M_num);
                     bX[0] = G.x; bY[0] = G.y; bZ[0] = 1n;
                     
-                    if (Number(M) > 1) {
+                    if (M_num > 1) {
                         let G2 = add(G, G); bX[1] = G2.x; bY[1] = G2.y; bZ[1] = 1n;
                         let jX = G2.x, jY = G2.y, jZ = 1n;
-                        for (let i = 2; i < Number(M); i++) {
+                        for (let i = 2; i < M_num; i++) {
                             let Z1Z1 = mod(jZ * jZ); let U2 = mod(G_x * Z1Z1); let S2 = mod(G_y * mod(jZ * Z1Z1));
                             let H = mod(U2 - jX); let R = mod(S2 - jY);
                             if (H === 0n) {
@@ -259,82 +254,85 @@
                                 jX = aff.x; jY = aff.y; jZ = 1n;
                             } else {
                                 let HH = mod(H * H); let HHH = mod(H * HH); let V = mod(jX * HH);
-                                jX = mod(R * R - HHH - 2n * V); jY = mod(R * (V - jX) - jY * HHH); jZ = mod(jZ * H);
+                                jX = mod(R * R - HHH - V - V); jY = mod(R * (V - jX) - jY * HHH); jZ = mod(jZ * H);
                             }
                             bX[i] = jX; bY[i] = jY; bZ[i] = jZ;
                         }
                     }
 
                     // Montgomery Batch Inversie
-                    let acc = 1n; let partials = new Array(Number(M));
-                    for(let i=0; i<Number(M); i++) { partials[i] = acc; if (bZ[i] !== 0n) acc = mod(acc * bZ[i]); }
-                    let invAcc = inverse(acc); let invZ = new Array(Number(M));
-                    for(let i=Number(M)-1; i>=0; i--) { 
+                    let acc = 1n; let partials = new Array(M_num);
+                    for(let i=0; i<M_num; i++) { partials[i] = acc; if (bZ[i] !== 0n) acc = mod(acc * bZ[i]); }
+                    let invAcc = inverse(acc); let invZ = new Array(M_num);
+                    for(let i=M_num-1; i>=0; i--) { 
                         if (bZ[i] !== 0n) { invZ[i] = mod(invAcc * partials[i]); invAcc = mod(invAcc * bZ[i]); } 
                         else { invZ[i] = 0n; }
                     }
 
-                    babyArray = [];
-                    for(let i=0; i<Number(M); i++) {
+                    // Map vullen i.p.v. Array voor super snelle O(1) lookups
+                    cachedBabyMap = new Map();
+                    for(let i=0; i<M_num; i++) {
                         if (bZ[i] === 0n) continue;
                         let iz = invZ[i]; let iz2 = mod(iz * iz);
                         let ax = mod(bX[i] * iz2); let ay = mod(bY[i] * mod(iz * iz2));
-                        babyArray.push({ x: ax, y: ay, i: i });
+                        cachedBabyMap.set(ax, { y: ay, i: i });
                     }
                     
-                    // Sorteren op X-coördinaat voor Binaire Search Batching
-                    babyArray.sort((a, b) => a.x < b.x ? -1 : (a.x > b.x ? 1 : 0));
-                    
                     let G_giant = mul(G, M);
-                    Neg_G_giant = { x: G_giant.x, y: mod(P - G_giant.y) };
-
-                    cachedBabyArray = babyArray;
+                    cachedNeg_G_giant = { x: G_giant.x, y: mod(P - G_giant.y) };
                     cachedM = M;
-                    cachedNeg_G_giant = Neg_G_giant;
                 }
 
-                // Giant Steps (Jacobiaanse iteratie)
+                // Initialiseer arrays als ze nog niet bestaan (of grootte is veranderd)
+                if (!qX || qX.length !== M_num) {
+                    qX = new Array(M_num); qY = new Array(M_num); qZ = new Array(M_num);
+                    qPartials = new Array(M_num); qInvZ = new Array(M_num);
+                }
+
                 let Q0 = add(P_target, { x: S.x, y: mod(P - S.y) });
                 if (!Q0) Q0 = { x: 0n, y: 0n };
 
-                let qX = new Array(Number(M)), qY = new Array(Number(M)), qZ = new Array(Number(M));
                 qX[0] = Q0.x; qY[0] = Q0.y; qZ[0] = (Q0.x === 0n && Q0.y === 0n) ? 0n : 1n;
                 let cX = Q0.x, cY = Q0.y, cZ = qZ[0];
 
-                for (let j = 1; j < Number(M); j++) {
+                for (let j = 1; j < M_num; j++) {
                     if (cZ === 0n) {
-                        cX = Neg_G_giant.x; cY = Neg_G_giant.y; cZ = 1n;
+                        cX = cachedNeg_G_giant.x; cY = cachedNeg_G_giant.y; cZ = 1n;
                     } else {
-                        let Z1Z1 = mod(cZ * cZ); let U2 = mod(Neg_G_giant.x * Z1Z1); let S2 = mod(Neg_G_giant.y * mod(cZ * Z1Z1));
+                        let Z1Z1 = mod(cZ * cZ); let U2 = mod(cachedNeg_G_giant.x * Z1Z1); let S2 = mod(cachedNeg_G_giant.y * mod(cZ * Z1Z1));
                         let H = mod(U2 - cX); let R = mod(S2 - cY);
                         if (H === 0n) { 
                             let iz = inverse(cZ); let iz2 = mod(iz * iz); let ax = mod(cX * iz2); let ay = mod(cY * mod(iz * iz2));
-                            let aff = add({x: ax, y: ay}, Neg_G_giant);
+                            let aff = add({x: ax, y: ay}, cachedNeg_G_giant);
                             if (!aff) { cX = 0n; cY = 0n; cZ = 0n; } else { cX = aff.x; cY = aff.y; cZ = 1n; }
                         } else {
                             let HH = mod(H * H); let HHH = mod(H * HH); let V = mod(cX * HH);
-                            cX = mod(R * R - HHH - 2n * V); cY = mod(R * (V - cX) - cY * HHH); cZ = mod(cZ * H);
+                            // V + V is sneller dan 2n * V in javascript
+                            cX = mod(R * R - HHH - V - V); cY = mod(R * (V - cX) - cY * HHH); cZ = mod(cZ * H);
                         }
                     }
                     qX[j] = cX; qY[j] = cY; qZ[j] = cZ;
                 }
 
-                let acc = 1n; let qPartials = new Array(Number(M));
-                for(let j=0; j<Number(M); j++) { qPartials[j] = acc; if (qZ[j] !== 0n) acc = mod(acc * qZ[j]); }
-                let invAcc = inverse(acc); let qInvZ = new Array(Number(M));
-                for(let j=Number(M)-1; j>=0; j--) { 
+                let acc = 1n;
+                for(let j=0; j<M_num; j++) { qPartials[j] = acc; if (qZ[j] !== 0n) acc = mod(acc * qZ[j]); }
+                let invAcc = inverse(acc);
+                for(let j=M_num-1; j>=0; j--) { 
                     if (qZ[j] !== 0n) { qInvZ[j] = mod(invAcc * qPartials[j]); invAcc = mod(invAcc * qZ[j]); } 
                     else { qInvZ[j] = 0n; }
                 }
 
-                // Match Check met BINARY SEARCH (Bliksemsnel!)
-                for(let j=0; j<Number(M); j++) {
+                // BLIKSEMSNELLE O(1) MAP CHECK MET LAZY-Y EVALUATIE
+                for(let j=0; j<M_num; j++) {
                     if (qZ[j] === 0n) continue;
                     let iz = qInvZ[j]; let iz2 = mod(iz * iz);
-                    let ax = mod(qX[j] * iz2); let ay = mod(qY[j] * mod(iz * iz2));
+                    let ax = mod(qX[j] * iz2); 
                     
-                    let match = binarySearch(babyArray, ax);
-                    if (match) {
+                    let match = cachedBabyMap.get(ax); // O(1) Lookup
+                    
+                    if (match !== undefined) {
+                        // LAZY EVALUATION: Bereken Y alleen als X een hit is!
+                        let ay = mod(qY[j] * mod(iz * iz2));
                         if (match.y === ay) {
                             let found = startKey + BigInt(j) * M + BigInt(match.i) + 1n;
                             self.postMessage({ type: "FOUND", privHex: found.toString(16).padStart(64, '0') }); return;
@@ -374,7 +372,7 @@
             function getWorkerUrl() {
                 if (!workerBlobUrl) {
                     const code = document.getElementById('workerCode').textContent;
-                    workerBlobUrl = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+                    workerBlobUrl = URL.createObjectURL(new Blob([code], { type: 'application/javascript' }));
                 }
                 return workerBlobUrl;
             }
@@ -438,8 +436,6 @@
 
             function startWorkers() {
                 const numW = Math.max(1, parseInt(document.getElementById('numW').value) || 4);
-                
-                // Hier haalt hij de target dynamisch op zodra je op Start klikt!
                 const targetPubKey = document.getElementById('pubKey').value.trim();
                 
                 killWorkers();
@@ -476,7 +472,6 @@
             document.getElementById('startBtn').onclick = () => {
                 if (isRunning) return;
                 
-                // Kleine validatie
                 const targetPubKey = document.getElementById('pubKey').value.trim();
                 if (!targetPubKey || targetPubKey.length < 66) {
                     alert("Vul een geldige gecomprimeerde Public Key in (startend met 02 of 03, 66 karakters lang)!");
@@ -487,7 +482,7 @@
                 lastUpdateTime = Date.now(); lastUpdateScanned = totalScanned;
                 document.getElementById('startBtn').disabled = true;
                 document.getElementById('stopBtn').disabled = false;
-                setStatus('⚡ V3 Engine Actief (Binary Search)', 'running');
+                setStatus('⚡ V4 Engine Actief (O(1) Map)', 'running');
                 log(`🚀 Start zoeken naar target pubkey: ${targetPubKey.substring(0,8)}...`, 'ev-epoch');
                 startWorkers();
             };
