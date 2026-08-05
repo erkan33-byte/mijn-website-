@@ -124,6 +124,17 @@
                 <input id="keysLimit" value="10000000" type="number" min="1000">
             </div>
             <hr class="divider">
+            <!-- TOEGEVOEGDE INVOERVELDEN VOOR BEGIN EN EIND -->
+            <div class="field">
+                <label>Beginwaarde (HEX)</label>
+                <input id="customStart" value="400000000000000000" type="text" style="color: var(--accent2);">
+            </div>
+            <div class="field">
+                <label>Eindwaarde (HEX)</label>
+                <input id="customEnd" value="7fffffffffffffffff" type="text" style="color: var(--accent2);">
+            </div>
+            <!-- EINDE TOEGEVOEGDE VELDEN -->
+            <hr class="divider">
             <div class="field"><label>GPU Batch Size</label><input id="numW" value="1048576" type="number" disabled title="Bepaald door WebGPU"></div>
             <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);" readonly></div>
             <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);" readonly></div>
@@ -464,7 +475,7 @@
 
         const SECP_P = (1n << 256n) - (1n << 32n) - 977n;
         const SECP_GX = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
-        const SECP_GY = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n;
+        const SECP_GY = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199c47d08ffb10d4b8n;
 
         function modinv(a, m) {
           a = ((a % m) + m) % m; let [oldR, r] = [a, m], [oldS, s] = [1n, 0n];
@@ -538,7 +549,7 @@
           let digits = [0];
           for (let i = 0; i < bytes.length; i++) {
             let carry = bytes[i];
-            for (let j = 0; j < digits.length; j++) { carry += digits[j] << 8; digits[j] = carry % 58; carry = Math.floor(carry / 58); }
+            for (let j = 0; j < digits.length; j++) { carry += digits[j] * 8; digits[j] = carry % 58; carry = Math.floor(carry / 58); }
             while (carry > 0) { digits.push(carry % 58); carry = Math.floor(carry / 58); }
           }
           let str = ""; for (let i = 0; i < bytes.length && bytes[i] === 0; i++) str += "1";
@@ -564,13 +575,23 @@
         const BATCH_SIZE = 1048576;
         
         const PUZ71_MIN = 0x400000000000000000n;
-        const PUZ71_MAX = 0x7fffffffffffffffffn;
+        const PUZ71_MAX = 0x7fffffffffffffffffpr; // Fallback
 
-        // Bepaal een ECHTE random sleutel met Web Crypto API
         function getRandomSliceStart(limitStr) {
-            const limit = BigInt(limitStr);
-            const range = PUZ71_MAX - PUZ71_MIN - limit;
+            const userStartInput = document.getElementById('customStart').value.trim();
+            const userEndInput = document.getElementById('customEnd').value.trim();
             
+            let rangeMin = userStartInput ? BigInt(userStartInput.startsWith('0x') ? userStartInput : '0x' + userStartInput) : 0x400000000000000000n;
+            let rangeMax = userEndInput ? BigInt(userEndInput.startsWith('0x') ? userEndInput : '0x' + userEndInput) : 0x7fffffffffffffffffn;
+            
+            const limit = BigInt(limitStr);
+            const totalSpan = rangeMax - rangeMin;
+            
+            if (totalSpan <= limit) {
+                return rangeMin;
+            }
+            
+            const maxOffset = totalSpan - limit;
             const randBytes = new Uint8Array(16);
             window.crypto.getRandomValues(randBytes);
             
@@ -579,7 +600,7 @@
                 randHex += randBytes[i].toString(16).padStart(2, '0');
             }
             let randInt = BigInt('0x' + randHex);
-            return PUZ71_MIN + (randInt % range);
+            return rangeMin + (randInt % maxOffset);
         }
 
         function log(msg, type="info") {
@@ -626,7 +647,6 @@
             const targetAddress = document.getElementById('btcAddr').value.trim();
             const targetHashBytes = getTargetHash160Bytes(targetAddress);
             
-            // Corrigeer de HASH160 endianness voor de WGSL-uniforms
             const targetHashU32 = new Uint32Array(5);
             for (let i = 0; i < 5; i++) {
                 targetHashU32[i] = (targetHashBytes[i*4]) | (targetHashBytes[i*4+1] << 8) | (targetHashBytes[i*4+2] << 16) | (targetHashBytes[i*4+3] << 24);
@@ -646,6 +666,13 @@
             const runSlice = async () => {
                 currentSliceStart = getRandomSliceStart(limitStr);
                 currentSliceEnd = currentSliceStart + keysLimit;
+                
+                const userEndInput = document.getElementById('customEnd').value.trim();
+                if (userEndInput) {
+                    let absoluteMax = BigInt(userEndInput.startsWith('0x') ? userEndInput : '0x' + userEndInput);
+                    if (currentSliceEnd > absoluteMax) currentSliceEnd = absoluteMax;
+                }
+
                 currentKeyVal = currentSliceStart;
                 keysCheckedSlice = 0;
                 slicesVisited++;
