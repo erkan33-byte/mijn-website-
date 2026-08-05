@@ -544,8 +544,15 @@ fn ripemd160_32(H: array<u32,8>) -> array<u32,5> {
   return array<u32,5>(t, h2 + dl + er, h3 + el + ar, h4 + al + br, h0 + bl + cr);
 }
 
+// OPLOSSING: De WGSL-uniform buffer heeft 16-bytes spacing per element nodig als we 'array<u32, 5>' gebruiken.
+// Om dat te voorkomen vervangen we dit met individuele u32 variabelen (h0 t/m h4),
+// wat perfect matcht met de 20 bytes aan input vanuit Javascript!
 struct Uniforms {
-  targetHash: array<u32, 5>,
+  h0: u32,
+  h1: u32,
+  h2: u32,
+  h3: u32,
+  h4: u32,
 };
 
 @group(0) @binding(0) var<storage, read> privkeys: array<u32>;
@@ -567,13 +574,13 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let H = sha256_33(prefix, xy[0]);
   let hash = ripemd160_32(H);
 
+  // Vergelijk nu veilig de losse velden
   var match = true;
-  for (var i = 0u; i < 5u; i = i + 1u) {
-    if (hash[i] != uniforms.targetHash[i]) {
-      match = false;
-      break;
-    }
-  }
+  if (hash[0] != uniforms.h0) { match = false; }
+  if (hash[1] != uniforms.h1) { match = false; }
+  if (hash[2] != uniforms.h2) { match = false; }
+  if (hash[3] != uniforms.h3) { match = false; }
+  if (hash[4] != uniforms.h4) { match = false; }
 
   if (match) {
     resultBuffer[0] = 1u;
@@ -626,6 +633,7 @@ async function initWebGPU() {
     tableBuffer = gpuDevice.createBuffer({ size: table.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
     gpuDevice.queue.writeBuffer(tableBuffer, 0, table);
 
+    // Uniform buffer reserveren
     uniformsBuffer = gpuDevice.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
     statusEl.textContent = 'WebGPU gereed.';
@@ -652,6 +660,7 @@ document.getElementById('btnStart').addEventListener('click', async () => {
   const targetAddress = document.getElementById('targetAddressInput').value.trim();
   const targetHashBytes = getTargetHash160Bytes(targetAddress);
   
+  // Hash in 5 integers gieten, die perfect matchen met h0 t/m h4 in de WGSL Uniform struct!
   const targetHashU32 = new Uint32Array(5);
   for (let i = 0; i < 5; i++) {
     targetHashU32[i] = (targetHashBytes[i*4]) | (targetHashBytes[i*4+1] << 8) | (targetHashBytes[i*4+2] << 16) | (targetHashBytes[i*4+3] << 24);
