@@ -30,25 +30,19 @@
         .badge { display: inline-block; background: linear-gradient(90deg,#1a2a1a,#0d2010);
             border: 1px solid var(--accent); color: var(--accent); font-size: .62rem;
             letter-spacing: .15em; padding: 3px 10px; border-radius: 2px; margin-top: 10px; }
-        .card, .calc-card, .chance-card {
+        .card, .chance-card {
             background: var(--panel); border: 1px solid var(--border);
             border-radius: 6px; padding: 20px; margin-bottom: 16px;
         }
-        .calc-card, .chance-card {
+        .chance-card {
             background: linear-gradient(135deg, #0a0f1a 0%, #0d1520 100%);
-            border-color: #1a3a5c;
+            border-color: #1a3a5c; position: relative; overflow: hidden;
         }
-        .chance-card { position: relative; overflow: hidden; }
-        .chance-card::before {
-            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
-            background: radial-gradient(ellipse at center, rgba(0,195,255,.04) 0%, transparent 60%);
-            pointer-events: none;
-        }
-        .card-title, .calc-title, .chance-title {
+        .card-title, .chance-title {
             font-size: .65rem; letter-spacing: .18em; text-transform: uppercase;
             border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px;
         }
-        .calc-title, .chance-title { color: var(--accent2); border-color: #1a3a5c; }
+        .chance-title { color: var(--accent2); border-color: #1a3a5c; }
         .field { display: grid; grid-template-columns: 210px 1fr; align-items: center; gap: 10px; margin-bottom: 12px; }
         .field label { font-size: .72rem; color: var(--muted); letter-spacing: .06em; }
         .field input, select {
@@ -88,11 +82,6 @@
         .chance-info .big-number { font-size: 1.1rem; color: var(--accent2); font-weight: bold; letter-spacing: .05em; margin-bottom: 4px; }
         .chance-info .label-small { font-size: .62rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px; }
         .chance-info .kans-uitleg { font-size: .68rem; color: var(--text); line-height: 1.6; }
-        .comparison-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
-        .cmp-cell { background: rgba(0,0,0,.4); border: 1px solid #1a3a5c; border-radius: 4px; padding: 9px 12px; }
-        .cmp-cell .cmp-label { font-size: .58rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 3px; }
-        .cmp-cell .cmp-val { font-size: .78rem; color: var(--accent2); font-weight: bold; }
-        .cmp-cell .cmp-desc { font-size: .62rem; color: var(--muted); margin-top: 2px; }
         .kans-progress { margin-top: 14px; }
         .kans-progress .kp-label { display: flex; justify-content: space-between; font-size: .62rem; color: var(--muted); margin-bottom: 5px; }
         .kans-track { height: 18px; background: #0a1520; border: 1px solid #1a3a5c; border-radius: 3px; overflow: hidden; position: relative; }
@@ -101,10 +90,6 @@
         .log { background: #000; color: var(--accent); height: 150px; overflow-y: scroll;
             padding: 10px 12px; font-size: .72rem; line-height: 1.6; border-radius: 4px; border: 1px solid var(--border); }
         .log .ts { color: var(--muted); }
-        .log .ev-found { color: var(--warn); font-weight: bold; }
-        .log .ev-epoch { color: var(--accent2); }
-        .log .ev-stop { color: var(--danger); }
-        .log .ev-hop { color: var(--warn); font-style: italic; }
         .result-table { width: 100%; border-collapse: collapse; font-size: .72rem; }
         .result-table th { background: var(--surface); color: var(--accent2); letter-spacing: .1em; font-size: .62rem;
             text-transform: uppercase; padding: 10px 12px; border: 1px solid var(--border); text-align: left; }
@@ -126,7 +111,6 @@
             <div class="card-title">⚙ Actieve Plakje Configuratie</div>
             <div class="field">
                 <label>Target BTC Adres</label>
-                <!-- Default Puzzel 71 adres: -->
                 <input id="btcAddr" value="1PWo3aEvgjjHbtgfbS7Yf99F2t55T95UfK" type="text">
             </div>
             <div class="field">
@@ -194,9 +178,7 @@
         <div class="footer">Random Slice Sniper · WEBGPU TURBO ENGINE ⚡</div>
     </div>
 
-    <!-- WebGPU Shader Code & Logica -->
     <script>
-        // WEBGPU WGSL BRONCODE
         const WGSL_SOURCE = `
         struct R8  { v: array<u32,8>,  c: u32 };
         const P: array<u32,8> = array<u32,8>(0xFFFFFC2Fu,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
@@ -480,7 +462,6 @@
         }
         `;
 
-        // GPU Helpers
         const SECP_P = (1n << 256n) - (1n << 32n) - 977n;
         const SECP_GX = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
         const SECP_GY = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n;
@@ -552,7 +533,6 @@
           return new Uint8Array(hashBuffer);
         }
 
-        // Simpele Base58 check (vereist browser sha256 wegens async)
         const B58ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
         function base58encode(bytes) {
           let digits = [0];
@@ -577,22 +557,27 @@
           return base58encode(full);
         }
 
-        // Logica en State
         let gpuDevice = null, gpuPipeline = null, tableBuffer = null, uniformsBuffer = null;
         let isRunning = false, keysCheckedGlobal = 0, slicesVisited = 0;
         let keysCheckedSlice = 0;
         let currentSliceStart = 0n, currentSliceEnd = 0n, currentKeyVal = 0n;
-        const BATCH_SIZE = 1048576; // 1M keys per iteratie in WebGPU
+        const BATCH_SIZE = 1048576;
         
-        // Puzzel 71 Bereik: 2^70 tot 2^71 - 1
-        const PUZ71_MIN = 0x400000000000000000n; // 4 * 16^17
-        const PUZ71_MAX = 0x7fffffffffffffffffn; // (8-1) * 16^17
+        const PUZ71_MIN = 0x400000000000000000n;
+        const PUZ71_MAX = 0x7fffffffffffffffffn;
 
+        // Bepaal een ECHTE random sleutel met Web Crypto API
         function getRandomSliceStart(limitStr) {
             const limit = BigInt(limitStr);
             const range = PUZ71_MAX - PUZ71_MIN - limit;
+            
+            const randBytes = new Uint8Array(16);
+            window.crypto.getRandomValues(randBytes);
+            
             let randHex = '';
-            for(let i=0; i<18; i++) randHex += Math.floor(Math.random()*16).toString(16);
+            for (let i = 0; i < 16; i++) {
+                randHex += randBytes[i].toString(16).padStart(2, '0');
+            }
             let randInt = BigInt('0x' + randHex);
             return PUZ71_MIN + (randInt % range);
         }
@@ -640,6 +625,8 @@
 
             const targetAddress = document.getElementById('btcAddr').value.trim();
             const targetHashBytes = getTargetHash160Bytes(targetAddress);
+            
+            // Corrigeer de HASH160 endianness voor de WGSL-uniforms
             const targetHashU32 = new Uint32Array(5);
             for (let i = 0; i < 5; i++) {
                 targetHashU32[i] = (targetHashBytes[i*4]) | (targetHashBytes[i*4+1] << 8) | (targetHashBytes[i*4+2] << 16) | (targetHashBytes[i*4+3] << 24);
@@ -670,7 +657,7 @@
                 document.getElementById('chanceUitleg').textContent = "Bezig met verwerken van slice...";
             };
 
-            if(!currentSliceStart) await runSlice();
+            await runSlice();
 
             let startTime = performance.now();
             let lastUpdate = startTime;
@@ -724,7 +711,6 @@
                 keysCheckedSlice += actualBatchCount;
                 keysCheckedGlobal += actualBatchCount;
                 
-                // UI Updates (niet elke frame om overhead te besparen, maar via timing)
                 const now = performance.now();
                 if(now - lastUpdate > 100) {
                     let elapsed = (now - startTime) / 1000;
@@ -774,7 +760,6 @@
             log("Sessie gestopt door gebruiker.", "stop");
         });
         
-        // Auto-Init WebGPU (optional)
         initWebGPU();
     </script>
 </body>
