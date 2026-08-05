@@ -111,7 +111,6 @@
             <div class="card-title">⚙ Actieve Plakje Configuratie</div>
             <div class="field">
                 <label>Target BTC Adres</label>
-                <!-- Aangepast naar jouw adres -->
                 <input id="btcAddr" value="1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU" type="text">
             </div>
             <div class="field">
@@ -127,12 +126,10 @@
             <hr class="divider">
             <div class="field">
                 <label>Beginwaarde (HEX)</label>
-                <!-- Aangepast naar jouw beginwaarde -->
                 <input id="customStart" value="400000000000000000" type="text" style="color: var(--accent2);">
             </div>
             <div class="field">
                 <label>Eindwaarde (HEX)</label>
-                <!-- Aangepast naar jouw eindwaarde -->
                 <input id="customEnd" value="7fffffffffffffffff" type="text" style="color: var(--accent2);">
             </div>
             <hr class="divider">
@@ -439,17 +436,17 @@
           return array<u32,5>(t, h2 + dl + er, h3 + el + ar, h4 + al + br, h0 + bl + cr);
         }
 
-        struct Uniforms { h0: u32, h1: u32, h2: u32, h3: u32, h4: u32 };
+        struct Uniforms { h0: u32, h1: u32, h2: u32, h3: u32, h4: u32, batch_count: u32 };
 
         @group(0) @binding(0) var<storage, read> privkeys: array<u32>;
         @group(0) @binding(1) var<storage, read> combTable: array<u32>;
         @group(0) @binding(2) var<uniform> uniforms: Uniforms;
         @group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>;
 
-        @compute @workgroup_size(64)
+        @compute @workgroup_size(256) // Verhoogd voor efficiëntie
         fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
           let idx = gid.x;
-          let count = arrayLength(&privkeys) / 8u;
+          let count = uniforms.batch_count;
           if (idx >= count) { return; }
 
           var k: array<u32,8>;
@@ -575,12 +572,18 @@
         let currentSliceStart = 0n, currentSliceEnd = 0n, currentKeyVal = 0n;
         const BATCH_SIZE = 1048576;
         
+        // Globale herbruikbare GPU-buffers voor prestaties
+        let inBuf = null, resBuf = null, readBuf = null, bindGroup = null;
+        let batchLimbs = new Uint32Array(BATCH_SIZE * 8);
+        const zeroRes = new Uint32Array([0, 0]);
+        let baseLimbs = new Uint32Array(8);
+        
         function getRandomSliceStart(limitStr) {
             const userStartInput = document.getElementById('customStart').value.trim();
             const userEndInput = document.getElementById('customEnd').value.trim();
             
             let rangeMin = userStartInput ? BigInt(userStartInput.startsWith('0x') ? userStartInput : '0x' + userStartInput) : 0x400000000000000000n;
-            let rangeMax = userEndInput ? BigInt(userEndInput.startsWith('0x') ? userEndInput : '0x' + userEndInput) : 0x7fffffffffffffffffpr;
+            let rangeMax = userEndInput ? BigInt(userEndInput.startsWith('0x') ? userEndInput : '0x' + userEndInput) : 0x7fffffffffffffffffn; // <-- Syntax fout gefixt
             
             const limit = BigInt(limitStr);
             const totalSpan = rangeMax - rangeMin;
@@ -645,11 +648,30 @@
             const targetAddress = document.getElementById('btcAddr').value.trim();
             const targetHashBytes = getTargetHash160Bytes(targetAddress);
             
-            const targetHashU32 = new Uint32Array(5);
+            // Uniform buffertje opzetten met target hashes
+            const targetHashU32 = new Uint32Array(8);
             for (let i = 0; i < 5; i++) {
                 targetHashU32[i] = (targetHashBytes[i*4]) | (targetHashBytes[i*4+1] << 8) | (targetHashBytes[i*4+2] << 16) | (targetHashBytes[i*4+3] << 24);
             }
-            gpuDevice.queue.writeBuffer(uniformsBuffer, 0, targetHashU32);
+
+            // Buffer hergebruik voor extreme snelheid (no-garbage)
+            if (inBuf) inBuf.destroy();
+            if (resBuf) resBuf.destroy();
+            if (readBuf) readBuf.destroy();
+            
+            inBuf = gpuDevice.createBuffer({ size: BATCH_SIZE * 32, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+            resBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
+            readBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+
+            bindGroup = gpuDevice.createBindGroup({
+              layout: gpuPipeline.getBindGroupLayout(0),
+              entries: [
+                { binding: 0, resource: { buffer: inBuf } },
+                { binding: 1, resource: { buffer: tableBuffer } },
+                { binding: 2, resource: { buffer: uniformsBuffer } },
+                { binding: 3, resource: { buffer: resBuf } }
+              ]
+            });
 
             isRunning = true;
             document.getElementById('startBtn').disabled = true;
@@ -674,6 +696,7 @@
                 currentKeyVal = currentSliceStart;
                 keysCheckedSlice = 0;
                 slicesVisited++;
+                baseLimbs.set(bigIntToLimbsLE(currentKeyVal));
                 
                 document.getElementById('rangeStart').value = "0x" + currentSliceStart.toString(16);
                 document.getElementById('rangeEnd').value = "0x" + currentSliceEnd.toString(16);
@@ -694,36 +717,44 @@
                     await runSlice();
                 }
 
-                const batchLimbs = new Uint32Array(BATCH_SIZE * 8);
                 const startValForBatch = currentKeyVal;
                 const actualBatchCount = Math.min(BATCH_SIZE, Number(currentSliceEnd - currentKeyVal));
                 
+                // CPU TURBO: Direct uint32 rekenen ipv string-allocaties & toString(16)
                 for (let i = 0; i < actualBatchCount; i++) {
-                  batchLimbs.set(bigIntToLimbsLE(currentKeyVal), i * 8);
-                  currentKeyVal += 1n;
+                    const offset = i * 8;
+                    batchLimbs[offset] = baseLimbs[0];
+                    batchLimbs[offset+1] = baseLimbs[1];
+                    batchLimbs[offset+2] = baseLimbs[2];
+                    batchLimbs[offset+3] = baseLimbs[3];
+                    batchLimbs[offset+4] = baseLimbs[4];
+                    batchLimbs[offset+5] = baseLimbs[5];
+                    batchLimbs[offset+6] = baseLimbs[6];
+                    batchLimbs[offset+7] = baseLimbs[7];
+
+                    let carry = 1, sum = 0;
+                    sum = baseLimbs[0] + carry; baseLimbs[0] = sum >>> 0; carry = sum > 0xffffffff ? 1 : 0;
+                    if(carry){ sum = baseLimbs[1] + carry; baseLimbs[1] = sum >>> 0; carry = sum > 0xffffffff ? 1 : 0; }
+                    if(carry){ sum = baseLimbs[2] + carry; baseLimbs[2] = sum >>> 0; carry = sum > 0xffffffff ? 1 : 0; }
+                    if(carry){ sum = baseLimbs[3] + carry; baseLimbs[3] = sum >>> 0; carry = sum > 0xffffffff ? 1 : 0; }
+                    if(carry){ sum = baseLimbs[4] + carry; baseLimbs[4] = sum >>> 0; carry = sum > 0xffffffff ? 1 : 0; }
+                    if(carry){ sum = baseLimbs[5] + carry; baseLimbs[5] = sum >>> 0; carry = sum > 0xffffffff ? 1 : 0; }
+                    if(carry){ sum = baseLimbs[6] + carry; baseLimbs[6] = sum >>> 0; carry = sum > 0xffffffff ? 1 : 0; }
+                    if(carry){ sum = baseLimbs[7] + carry; baseLimbs[7] = sum >>> 0; }
                 }
+                currentKeyVal += BigInt(actualBatchCount);
 
-                const inBuf = gpuDevice.createBuffer({ size: actualBatchCount * 32, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+                targetHashU32[5] = actualBatchCount;
+                gpuDevice.queue.writeBuffer(uniformsBuffer, 0, targetHashU32);
+
                 gpuDevice.queue.writeBuffer(inBuf, 0, batchLimbs.buffer, 0, actualBatchCount * 32);
-                const resBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
-                gpuDevice.queue.writeBuffer(resBuf, 0, new Uint32Array([0, 0]));
-                const readBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
-
-                const bindGroup = gpuDevice.createBindGroup({
-                  layout: gpuPipeline.getBindGroupLayout(0),
-                  entries: [
-                    { binding: 0, resource: { buffer: inBuf } },
-                    { binding: 1, resource: { buffer: tableBuffer } },
-                    { binding: 2, resource: { buffer: uniformsBuffer } },
-                    { binding: 3, resource: { buffer: resBuf } }
-                  ]
-                });
+                gpuDevice.queue.writeBuffer(resBuf, 0, zeroRes);
 
                 const encoder = gpuDevice.createCommandEncoder();
                 const pass = encoder.beginComputePass();
                 pass.setPipeline(gpuPipeline);
                 pass.setBindGroup(0, bindGroup);
-                pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 64));
+                pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 256));
                 pass.end();
                 encoder.copyBufferToBuffer(resBuf, 0, readBuf, 0, 8);
                 gpuDevice.queue.submit([encoder.finish()]);
@@ -731,7 +762,6 @@
                 await readBuf.mapAsync(GPUMapMode.READ);
                 const gpuResult = new Uint32Array(readBuf.getMappedRange().slice(0));
                 readBuf.unmap();
-                inBuf.destroy(); resBuf.destroy(); readBuf.destroy();
 
                 keysCheckedSlice += actualBatchCount;
                 keysCheckedGlobal += actualBatchCount;
