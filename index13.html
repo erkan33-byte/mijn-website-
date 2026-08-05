@@ -111,7 +111,8 @@
             <div class="card-title">⚙ Actieve Plakje Configuratie</div>
             <div class="field">
                 <label>Target BTC Adres</label>
-                <input id="btcAddr" value="1PWo3aEvgjjHbtgfbS7Yf99F2t55T95UfK" type="text">
+                <!-- Aangepast naar jouw adres -->
+                <input id="btcAddr" value="1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU" type="text">
             </div>
             <div class="field">
                 <label>Scan methode</label>
@@ -124,16 +125,16 @@
                 <input id="keysLimit" value="10000000" type="number" min="1000">
             </div>
             <hr class="divider">
-            <!-- TOEGEVOEGDE INVOERVELDEN VOOR BEGIN EN EIND -->
             <div class="field">
                 <label>Beginwaarde (HEX)</label>
+                <!-- Aangepast naar jouw beginwaarde -->
                 <input id="customStart" value="400000000000000000" type="text" style="color: var(--accent2);">
             </div>
             <div class="field">
                 <label>Eindwaarde (HEX)</label>
+                <!-- Aangepast naar jouw eindwaarde -->
                 <input id="customEnd" value="7fffffffffffffffff" type="text" style="color: var(--accent2);">
             </div>
-            <!-- EINDE TOEGEVOEGDE VELDEN -->
             <hr class="divider">
             <div class="field"><label>GPU Batch Size</label><input id="numW" value="1048576" type="number" disabled title="Bepaald door WebGPU"></div>
             <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);" readonly></div>
@@ -574,15 +575,12 @@
         let currentSliceStart = 0n, currentSliceEnd = 0n, currentKeyVal = 0n;
         const BATCH_SIZE = 1048576;
         
-        const PUZ71_MIN = 0x400000000000000000n;
-        const PUZ71_MAX = 0x7fffffffffffffffffpr; // Fallback
-
         function getRandomSliceStart(limitStr) {
             const userStartInput = document.getElementById('customStart').value.trim();
             const userEndInput = document.getElementById('customEnd').value.trim();
             
             let rangeMin = userStartInput ? BigInt(userStartInput.startsWith('0x') ? userStartInput : '0x' + userStartInput) : 0x400000000000000000n;
-            let rangeMax = userEndInput ? BigInt(userEndInput.startsWith('0x') ? userEndInput : '0x' + userEndInput) : 0x7fffffffffffffffffn;
+            let rangeMax = userEndInput ? BigInt(userEndInput.startsWith('0x') ? userEndInput : '0x' + userEndInput) : 0x7fffffffffffffffffpr;
             
             const limit = BigInt(limitStr);
             const totalSpan = rangeMax - rangeMin;
