@@ -111,12 +111,13 @@
             <div class="card-title">⚙ Actieve Plakje Configuratie</div>
             <div class="field">
                 <label>Target BTC Adres</label>
-                <input id="btcAddr" value="1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU" type="text">
+                <input id="btcAddr" value="19EEC52krRUK1RkUAEZmQdjTyHT7Gp1TYT" type="text">
             </div>
             <div class="field">
                 <label>Scan methode</label>
                 <select id="scanMethod">
-                    <option value="linear" selected>📏 WebGPU Jacobian Batch (Auto-Hop)</option>
+                    <option value="linear" selected>📏 Sequentiële Scan (Zekerheid voor kleine tests)</option>
+                    <option value="random">🎲 Random Slices (Auto-Hop voor grote ranges)</option>
                 </select>
             </div>
             <div class="field">
@@ -126,11 +127,11 @@
             <hr class="divider">
             <div class="field">
                 <label>Beginwaarde (HEX)</label>
-                <input id="customStart" value="400000000000000000" type="text" style="color: var(--accent2);">
+                <input id="customStart" value="10000000" type="text" style="color: var(--accent2);">
             </div>
             <div class="field">
                 <label>Eindwaarde (HEX)</label>
-                <input id="customEnd" value="7fffffffffffffffff" type="text" style="color: var(--accent2);">
+                <input id="customEnd" value="1fffffff" type="text" style="color: var(--accent2);">
             </div>
             <hr class="divider">
             <div class="field"><label>GPU Batch Size</label><input id="numW" value="1048576" type="number" disabled title="Bepaald door WebGPU"></div>
@@ -138,7 +139,7 @@
             <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);" readonly></div>
             <div style="font-size: 0.65rem; color: var(--muted); margin-top: 6px; text-align: right;">ℹ️ Deze HEX-waarden vernieuwen automatisch als het limiet is bereikt.</div>
             <div class="btn-row">
-                <button class="btn btn-start" id="startBtn">▶ Start Auto-Hop Scan</button>
+                <button class="btn btn-start" id="startBtn">▶ Start Scan</button>
                 <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
             </div>
         </div>
@@ -443,7 +444,7 @@
         @group(0) @binding(2) var<uniform> uniforms: Uniforms;
         @group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>;
 
-        @compute @workgroup_size(256) // Verhoogd voor efficiëntie
+        @compute @workgroup_size(256) 
         fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
           let idx = gid.x;
           let count = uniforms.batch_count;
@@ -571,38 +572,12 @@
         let keysCheckedSlice = 0;
         let currentSliceStart = 0n, currentSliceEnd = 0n, currentKeyVal = 0n;
         const BATCH_SIZE = 1048576;
+        let isFirstSlice = true;
         
-        // Globale herbruikbare GPU-buffers voor prestaties
         let inBuf = null, resBuf = null, readBuf = null, bindGroup = null;
         let batchLimbs = new Uint32Array(BATCH_SIZE * 8);
         const zeroRes = new Uint32Array([0, 0]);
         let baseLimbs = new Uint32Array(8);
-        
-        function getRandomSliceStart(limitStr) {
-            const userStartInput = document.getElementById('customStart').value.trim();
-            const userEndInput = document.getElementById('customEnd').value.trim();
-            
-            let rangeMin = userStartInput ? BigInt(userStartInput.startsWith('0x') ? userStartInput : '0x' + userStartInput) : 0x400000000000000000n;
-            let rangeMax = userEndInput ? BigInt(userEndInput.startsWith('0x') ? userEndInput : '0x' + userEndInput) : 0x7fffffffffffffffffn; // <-- Syntax fout gefixt
-            
-            const limit = BigInt(limitStr);
-            const totalSpan = rangeMax - rangeMin;
-            
-            if (totalSpan <= limit) {
-                return rangeMin;
-            }
-            
-            const maxOffset = totalSpan - limit;
-            const randBytes = new Uint8Array(16);
-            window.crypto.getRandomValues(randBytes);
-            
-            let randHex = '';
-            for (let i = 0; i < 16; i++) {
-                randHex += randBytes[i].toString(16).padStart(2, '0');
-            }
-            let randInt = BigInt('0x' + randHex);
-            return rangeMin + (randInt % maxOffset);
-        }
 
         function log(msg, type="info") {
             const box = document.getElementById('logBox');
@@ -648,13 +623,11 @@
             const targetAddress = document.getElementById('btcAddr').value.trim();
             const targetHashBytes = getTargetHash160Bytes(targetAddress);
             
-            // Uniform buffertje opzetten met target hashes
             const targetHashU32 = new Uint32Array(8);
             for (let i = 0; i < 5; i++) {
                 targetHashU32[i] = (targetHashBytes[i*4]) | (targetHashBytes[i*4+1] << 8) | (targetHashBytes[i*4+2] << 16) | (targetHashBytes[i*4+3] << 24);
             }
 
-            // Buffer hergebruik voor extreme snelheid (no-garbage)
             if (inBuf) inBuf.destroy();
             if (resBuf) resBuf.destroy();
             if (readBuf) readBuf.destroy();
@@ -682,27 +655,60 @@
             let limitStr = document.getElementById('keysLimit').value;
             let keysLimit = BigInt(limitStr);
             document.getElementById('limitDisplay').textContent = Number(keysLimit).toLocaleString();
+            
+            isFirstSlice = true;
+            slicesVisited = 0;
 
             const runSlice = async () => {
-                currentSliceStart = getRandomSliceStart(limitStr);
-                currentSliceEnd = currentSliceStart + keysLimit;
-                
+                const scanMode = document.getElementById('scanMethod').value;
+                const userStartInput = document.getElementById('customStart').value.trim();
                 const userEndInput = document.getElementById('customEnd').value.trim();
-                if (userEndInput) {
-                    let absoluteMax = BigInt(userEndInput.startsWith('0x') ? userEndInput : '0x' + userEndInput);
+                
+                let rangeMin = userStartInput ? BigInt(userStartInput.startsWith('0x') ? userStartInput : '0x' + userStartInput) : 0x400000000000000000n;
+                let absoluteMax = userEndInput ? BigInt(userEndInput.startsWith('0x') ? userEndInput : '0x' + userEndInput) : 0x7fffffffffffffffffn;
+                
+                if (scanMode === 'linear') {
+                    if (isFirstSlice) {
+                        currentSliceStart = rangeMin;
+                    } else {
+                        currentSliceStart = currentSliceEnd;
+                    }
+                    if (currentSliceStart >= absoluteMax) {
+                        log("Einde van lineair scanbereik bereikt!", "success");
+                        document.getElementById('stopBtn').click();
+                        return false;
+                    }
+                    currentSliceEnd = currentSliceStart + keysLimit;
                     if (currentSliceEnd > absoluteMax) currentSliceEnd = absoluteMax;
+                    log(`📏 Lineaire Scan: Slice gestart op 0x${currentSliceStart.toString(16)}`, 'hop');
+                } else {
+                    const totalSpan = absoluteMax - rangeMin;
+                    if (totalSpan <= keysLimit) {
+                        currentSliceStart = rangeMin;
+                    } else {
+                        const maxOffset = totalSpan - keysLimit;
+                        const randBytes = new Uint8Array(16);
+                        window.crypto.getRandomValues(randBytes);
+                        let randHex = '';
+                        for (let i = 0; i < 16; i++) randHex += randBytes[i].toString(16).padStart(2, '0');
+                        let randInt = BigInt('0x' + randHex);
+                        currentSliceStart = rangeMin + (randInt % maxOffset);
+                    }
+                    currentSliceEnd = currentSliceStart + keysLimit;
+                    log(`🚀 HOP! Nieuwe random slice: 0x${currentSliceStart.toString(16)}`, 'hop');
                 }
-
+                
                 currentKeyVal = currentSliceStart;
                 keysCheckedSlice = 0;
                 slicesVisited++;
+                isFirstSlice = false;
                 baseLimbs.set(bigIntToLimbsLE(currentKeyVal));
                 
                 document.getElementById('rangeStart').value = "0x" + currentSliceStart.toString(16);
                 document.getElementById('rangeEnd').value = "0x" + currentSliceEnd.toString(16);
                 document.getElementById('slicesVisitedCount').textContent = slicesVisited;
-                log(`🚀 HOP! Nieuwe slice: 0x${currentSliceStart.toString(16)}`, 'hop');
                 document.getElementById('chanceUitleg').textContent = "Bezig met verwerken van slice...";
+                return true;
             };
 
             await runSlice();
@@ -714,13 +720,13 @@
                 if (!isRunning) return;
 
                 if (currentKeyVal >= currentSliceEnd) {
-                    await runSlice();
+                    let ok = await runSlice();
+                    if (!ok) return;
                 }
 
                 const startValForBatch = currentKeyVal;
                 const actualBatchCount = Math.min(BATCH_SIZE, Number(currentSliceEnd - currentKeyVal));
                 
-                // CPU TURBO: Direct uint32 rekenen ipv string-allocaties & toString(16)
                 for (let i = 0; i < actualBatchCount; i++) {
                     const offset = i * 8;
                     batchLimbs[offset] = baseLimbs[0];
@@ -774,6 +780,7 @@
                     document.getElementById('speed').textContent = rate.toLocaleString() + " /s";
                     document.getElementById('currentSliceKeys').textContent = keysCheckedSlice.toLocaleString();
                     
+                    let keysLimit = BigInt(document.getElementById('keysLimit').value);
                     let slicePct = (keysCheckedSlice / Number(keysLimit)) * 100;
                     document.getElementById('progressBar').style.width = slicePct + "%";
                     document.getElementById('kansBar').style.width = slicePct + "%";
