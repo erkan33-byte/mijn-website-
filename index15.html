@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #71 – Random Slice Sniper (WebGPU TURBO) ⚡</title>
+    <title>Puzzel #67 – Random Slice Sniper (WebGPU TURBO) ⚡</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -104,14 +104,14 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – WebGPU Turbo (Auto-Hop)</div>
+            <div class="sub">Puzzel #67 – WebGPU Turbo (Auto-Hop geoptimaliseerd)</div>
             <span class="badge" id="gpuBadge">⚙️ INITIALISEREN...</span>
         </div>
         <div class="card">
             <div class="card-title">⚙ Actieve Plakje Configuratie</div>
             <div class="field">
                 <label>Target BTC Adres</label>
-                <input id="btcAddr" value="19EEC52krRUK1RkUAEZmQdjTyHT7Gp1TYT" type="text">
+                <input id="btcAddr" value="1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU" type="text">
             </div>
             <div class="field">
                 <label>Scan methode</label>
@@ -121,16 +121,16 @@
             </div>
             <div class="field">
                 <label>Keys per Plakje</label>
-                <input id="keysLimit" value="10000000" type="number" min="1000">
+                <input id="keysLimit" value="300000000" type="number" min="1000">
             </div>
             <hr class="divider">
             <div class="field">
                 <label>Beginwaarde (HEX)</label>
-                <input id="customStart" value="10000000" type="text" style="color: var(--accent2);">
+                <input id="customStart" value="400000000000000000" type="text" style="color: var(--accent2);">
             </div>
             <div class="field">
                 <label>Eindwaarde (HEX)</label>
-                <input id="customEnd" value="1fffffff" type="text" style="color: var(--accent2);">
+                <input id="customEnd" value="7fffffffffffffffff" type="text" style="color: var(--accent2);">
             </div>
             <hr class="divider">
             <div class="field"><label>GPU Batch Size</label><input id="numW" value="1048576" type="number" disabled title="Bepaald door WebGPU"></div>
@@ -400,7 +400,7 @@
         const RMD_ZL: array<u32,80> = array<u32,80>(0u,1u,2u,3u,4u,5u,6u,7u,8u,9u,10u,11u,12u,13u,14u,15u,7u,4u,13u,1u,10u,6u,15u,3u,12u,0u,9u,5u,2u,14u,11u,8u,3u,10u,14u,4u,9u,15u,8u,1u,2u,7u,0u,6u,13u,11u,5u,12u,1u,9u,11u,10u,0u,8u,12u,4u,13u,3u,7u,15u,14u,5u,6u,2u,4u,0u,5u,9u,7u,12u,2u,10u,14u,1u,3u,8u,11u,6u,15u,13u);
         const RMD_ZR: array<u32,80> = array<u32,80>(5u,14u,7u,0u,9u,2u,11u,4u,13u,6u,15u,8u,1u,10u,3u,12u,6u,11u,3u,7u,0u,13u,5u,10u,14u,15u,8u,12u,4u,9u,1u,2u,15u,5u,1u,3u,7u,14u,6u,9u,11u,8u,12u,2u,10u,0u,4u,13u,8u,6u,4u,1u,3u,11u,15u,0u,5u,12u,2u,13u,9u,7u,10u,14u,12u,15u,10u,4u,1u,5u,8u,7u,6u,2u,13u,14u,0u,3u,9u,11u);
         const RMD_SL: array<u32,80> = array<u32,80>(11u,14u,15u,12u,5u,8u,7u,9u,11u,13u,14u,15u,6u,7u,9u,8u,7u,6u,8u,13u,11u,9u,7u,15u,7u,12u,15u,9u,11u,7u,13u,12u,11u,13u,6u,7u,14u,9u,13u,15u,14u,8u,13u,6u,5u,12u,7u,5u,11u,12u,14u,15u,14u,15u,9u,8u,9u,14u,5u,6u,8u,6u,5u,12u,9u,15u,5u,11u,6u,8u,13u,12u,5u,12u,13u,14u,11u,8u,5u,6u);
-        const RMD_SR: array<u32,80> = array<u32,80>(8u,9u,9u,11u,13u,15u,15u,5u,7u,7u,8u,11u,14u,14u,12u,6u,9u,13u,15u,7u,12u,8u,9u,11u,7u,7u,12u,7u,6u,15u,13u,11u,9u,7u,15u,11u,8u,6u,6u,14u,12u,13u,5u,14u,13u,13u,7u,5u,15u,5u,8u,11u,14u,14u,6u,14u,6u,9u,12u,9u,12u,5u,15u,8u,8u,5u,12u,9u,15u,5u,11u,6u,8u,13u,12u,5u,12u,13u,14u,11u,8u,5u,6u);
+        const RMD_SR: array<u32,80> = array<u32,80>(8u,9u,9u,11u,13u,15u,15u,5u,7u,7u,8u,11u,14u,14u,12u,6u,9u,13u,15u,7u,12u,8u,9u,11u,7u,7u,12u,7u,6u,15u,13u,11u,9u,7u,15u,11u,8u,6u,6u,14u,12u,13u,5u,14u,13u,13u,7u,5u,15u,5u,8u,11u,14u,14u,6u,14u,6u,9u,12u,9u,12u,5u,15u,8u,8u,5u,12u,9u,12u,5u,14u,6u,8u,13u,6u,5u,15u,13u,11u,11u);
         const RMD_HL: array<u32,5> = array<u32,5>(0x00000000u,0x5a827999u,0x6ed9eba1u,0x8f1bbcdcu,0xa953fd4eu);
         const RMD_HR: array<u32,5> = array<u32,5>(0x50a28be6u,0x5c4dd124u,0x6d703ef3u,0x7a6d76e9u,0x00000000u);
 
@@ -457,14 +457,14 @@
           let H = sha256_33(prefix, xy[0]);
           let hash = ripemd160_32(H);
 
-          var match = true;
-          if (hash[0] != uniforms.h0) { match = false; }
-          if (hash[1] != uniforms.h1) { match = false; }
-          if (hash[2] != uniforms.h2) { match = false; }
-          if (hash[3] != uniforms.h3) { match = false; }
-          if (hash[4] != uniforms.h4) { match = false; }
+          var isMatch = true;
+          if (hash[0] != uniforms.h0) { isMatch = false; }
+          if (hash[1] != uniforms.h1) { isMatch = false; }
+          if (hash[2] != uniforms.h2) { isMatch = false; }
+          if (hash[3] != uniforms.h3) { isMatch = false; }
+          if (hash[4] != uniforms.h4) { isMatch = false; }
 
-          if (match) {
+          if (isMatch) {
             resultBuffer[0] = 1u;
             resultBuffer[1] = idx;
           }
@@ -548,7 +548,7 @@
           for (let i = 0; i < bytes.length; i++) {
             let carry = bytes[i];
             for (let j = 0; j < digits.length; j++) { 
-                carry += digits[j] * 256; // FIX: Was * 8, moet * 256 zijn voor bytes
+                carry += digits[j] * 256; 
                 digits[j] = carry % 58; 
                 carry = Math.floor(carry / 58); 
             }
@@ -575,9 +575,13 @@
 
         let gpuDevice = null, gpuPipeline = null, tableBuffer = null, uniformsBuffer = null;
         let isRunning = false, keysCheckedGlobal = 0, slicesVisited = 0;
+        let firstBatchErrorChecked = false;
         let keysCheckedSlice = 0;
         let currentSliceStart = 0n, currentSliceEnd = 0n, currentKeyVal = 0n;
         const BATCH_SIZE = 1048576;
+        
+        // --- NIEUW: Globale buffers voor optimaal hergebruik ---
+        let inBuf, resBuf, readBuf, bindGroup, batchLimbs, zeroRes;
         
         function getRandomSliceStart(limitStr) {
             const userStartInput = document.getElementById('customStart').value.trim();
@@ -587,7 +591,7 @@
             let rangeMax = userEndInput ? BigInt(userEndInput.startsWith('0x') ? userEndInput : '0x' + userEndInput) : 0x7fffffffffffffffffn;
             
             const limit = BigInt(limitStr);
-            const totalSpan = rangeMax - rangeMin;
+            const totalSpan = rangeMax - rangeMin + 1n;
             
             if (totalSpan <= limit) {
                 return rangeMin;
@@ -621,24 +625,68 @@
             if (!navigator.gpu) { document.getElementById('gpuBadge').textContent = 'WebGPU NIET ONDERSTEUND'; return false; }
             try {
                 const adapter = await navigator.gpu.requestAdapter();
+                if (!adapter) { log('❌ Geen GPU adapter gevonden (requestAdapter gaf null).', 'warn'); return false; }
+
                 gpuDevice = await adapter.requestDevice();
+
+                gpuDevice.addEventListener('uncapturederror', (event) => {
+                    log('❌ GPU FOUT (uncaptured): ' + event.error.message, 'warn');
+                });
+                gpuDevice.lost.then((info) => {
+                    log(`❌ GPU DEVICE LOST (reden: ${info.reason}): ${info.message}`, 'warn');
+                });
+
+                gpuDevice.pushErrorScope('validation');
+                gpuDevice.pushErrorScope('internal');
+
                 const module = gpuDevice.createShaderModule({ code: WGSL_SOURCE });
+
+                const compilationInfo = await module.getCompilationInfo();
+                let hasShaderErrors = false;
+                for (const msg of compilationInfo.messages) {
+                    const isError = msg.type === 'error';
+                    if (isError) hasShaderErrors = true;
+                    const label = isError ? '❌ SHADER ERROR' : (msg.type === 'warning' ? '⚠️ SHADER WARNING' : 'ℹ️ SHADER INFO');
+                    log(`${label} [regel ${msg.lineNum}:${msg.linePos}]: ${msg.message}`, isError ? 'warn' : 'info');
+                }
+                if (compilationInfo.messages.length === 0) {
+                    log('✅ Shader compileerde zonder meldingen.', 'success');
+                }
+                if (hasShaderErrors) {
+                    log('🛑 Shader bevat compile-fouten, initialisatie gestopt.', 'warn');
+                    await gpuDevice.popErrorScope();
+                    await gpuDevice.popErrorScope();
+                    document.getElementById('gpuBadge').textContent = '❌ SHADER FOUT';
+                    return false;
+                }
+
                 gpuPipeline = gpuDevice.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
-                
+
+                const internalErr = await gpuDevice.popErrorScope();
+                const validationErr = await gpuDevice.popErrorScope();
+                if (internalErr || validationErr) {
+                    document.getElementById('gpuBadge').textContent = '❌ PIPELINE FOUT';
+                    return false;
+                }
+
                 log("Genereer Jacobian ECDSA Tabel...", "info");
                 const table = buildPrecomputedTable();
+
+                gpuDevice.pushErrorScope('validation');
                 tableBuffer = gpuDevice.createBuffer({ size: table.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
                 gpuDevice.queue.writeBuffer(tableBuffer, 0, table);
-
                 uniformsBuffer = gpuDevice.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-                
+                const bufErr = await gpuDevice.popErrorScope();
+                if (bufErr) { log('❌ VALIDATION ERROR (buffers aanmaken): ' + bufErr.message, 'warn'); return false; }
+
                 document.getElementById('gpuBadge').textContent = '🚀 WEBGPU GEREED (TURBO)';
                 document.getElementById('gpuBadge').style.borderColor = 'var(--success)';
                 document.getElementById('gpuBadge').style.color = 'var(--success)';
                 log("WebGPU Backend Succesvol Geladen.", "success");
                 return true;
             } catch (e) {
-                log('Fout bij WebGPU init: ' + e.message, 'warn');
+                log('❌ Fout bij WebGPU init: ' + e.message, 'warn');
+                console.error(e);
                 return false;
             }
         }
@@ -654,6 +702,26 @@
                 targetHashU32[i] = (targetHashBytes[i*4]) | (targetHashBytes[i*4+1] << 8) | (targetHashBytes[i*4+2] << 16) | (targetHashBytes[i*4+3] << 24);
             }
             gpuDevice.queue.writeBuffer(uniformsBuffer, 0, targetHashU32);
+
+            // --- NIEUW: Maak de iteratie-buffers slechts 1 keer aan (hergebruik) ---
+            if (!inBuf) {
+                inBuf = gpuDevice.createBuffer({ size: BATCH_SIZE * 32, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+                resBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
+                readBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+
+                bindGroup = gpuDevice.createBindGroup({
+                  layout: gpuPipeline.getBindGroupLayout(0),
+                  entries: [
+                    { binding: 0, resource: { buffer: inBuf } },
+                    { binding: 1, resource: { buffer: tableBuffer } },
+                    { binding: 2, resource: { buffer: uniformsBuffer } },
+                    { binding: 3, resource: { buffer: resBuf } }
+                  ]
+                });
+                
+                batchLimbs = new Uint32Array(BATCH_SIZE * 8);
+                zeroRes = new Uint32Array([0, 0]);
+            }
 
             isRunning = true;
             document.getElementById('startBtn').disabled = true;
@@ -672,7 +740,7 @@
                 const userEndInput = document.getElementById('customEnd').value.trim();
                 if (userEndInput) {
                     let absoluteMax = BigInt(userEndInput.startsWith('0x') ? userEndInput : '0x' + userEndInput);
-                    if (currentSliceEnd > absoluteMax) currentSliceEnd = absoluteMax;
+                    if (currentSliceEnd > absoluteMax + 1n) currentSliceEnd = absoluteMax + 1n;
                 }
 
                 currentKeyVal = currentSliceStart;
@@ -698,35 +766,28 @@
                     await runSlice();
                 }
 
-                const batchLimbs = new Uint32Array(BATCH_SIZE * 8);
                 const startValForBatch = currentKeyVal;
                 const actualBatchCount = Math.min(BATCH_SIZE, Number(currentSliceEnd - currentKeyVal));
                 
+                // --- GEOPTIMALISEERD: Gebruik de bestaande buffer i.p.v. een nieuwe te maken ---
                 for (let i = 0; i < actualBatchCount; i++) {
                   batchLimbs.set(bigIntToLimbsLE(currentKeyVal), i * 8);
                   currentKeyVal += 1n;
                 }
 
-                const inBuf = gpuDevice.createBuffer({ size: actualBatchCount * 32, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+                // Schrijf alleen de nodige data naar de GPU (en reset de resultaatbuffer via VRAM -> VRAM kopie/schrijven)
                 gpuDevice.queue.writeBuffer(inBuf, 0, batchLimbs.buffer, 0, actualBatchCount * 32);
-                const resBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
-                gpuDevice.queue.writeBuffer(resBuf, 0, new Uint32Array([0, 0]));
-                const readBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+                gpuDevice.queue.writeBuffer(resBuf, 0, zeroRes.buffer);
 
-                const bindGroup = gpuDevice.createBindGroup({
-                  layout: gpuPipeline.getBindGroupLayout(0),
-                  entries: [
-                    { binding: 0, resource: { buffer: inBuf } },
-                    { binding: 1, resource: { buffer: tableBuffer } },
-                    { binding: 2, resource: { buffer: uniformsBuffer } },
-                    { binding: 3, resource: { buffer: resBuf } }
-                  ]
-                });
+                if (!firstBatchErrorChecked) {
+                    gpuDevice.pushErrorScope('validation');
+                    gpuDevice.pushErrorScope('internal');
+                }
 
                 const encoder = gpuDevice.createCommandEncoder();
                 const pass = encoder.beginComputePass();
                 pass.setPipeline(gpuPipeline);
-                pass.setBindGroup(0, bindGroup);
+                pass.setBindGroup(0, bindGroup); // Gebruik herbruikbare bindGroup
                 pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 64));
                 pass.end();
                 encoder.copyBufferToBuffer(resBuf, 0, readBuf, 0, 8);
@@ -734,8 +795,20 @@
 
                 await readBuf.mapAsync(GPUMapMode.READ);
                 const gpuResult = new Uint32Array(readBuf.getMappedRange().slice(0));
+                
+                // Sla de uitkomst op en unmap DIRECT. We gooien de buffers niet meer weg!
+                const isMatch = gpuResult[0] === 1;
+                const matchIdx = gpuResult[1];
                 readBuf.unmap();
-                inBuf.destroy(); resBuf.destroy(); readBuf.destroy();
+                
+                if (!firstBatchErrorChecked) {
+                    firstBatchErrorChecked = true;
+                    const internalErr = await gpuDevice.popErrorScope();
+                    const validationErr = await gpuDevice.popErrorScope();
+                    if (internalErr) log('❌ INTERNAL ERROR (eerste dispatch): ' + internalErr.message, 'warn');
+                    if (validationErr) log('❌ VALIDATION ERROR (eerste dispatch): ' + validationErr.message, 'warn');
+                    if (!internalErr && !validationErr) log('✅ Eerste GPU-dispatch zonder validatiefouten.', 'success');
+                }
 
                 keysCheckedSlice += actualBatchCount;
                 keysCheckedGlobal += actualBatchCount;
@@ -760,9 +833,8 @@
                     lastUpdate = now;
                 }
 
-                if (gpuResult[0] === 1) {
-                    const foundIdx = gpuResult[1];
-                    const foundPrivInt = startValForBatch + BigInt(foundIdx);
+                if (isMatch) {
+                    const foundPrivInt = startValForBatch + BigInt(matchIdx);
                     const privHex = foundPrivInt.toString(16).padStart(64, '0');
                     const wifStr = await wifCompressed(hexToBytes(privHex));
                     
