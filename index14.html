@@ -226,7 +226,7 @@
         const G = { x: G_x, y: G_y };
 
         // Globale pre-allocatie: arrays worden één keer gemaakt en altijd herbruikt
-        const BATCH = 10000;
+        const BATCH = 20000;
         const pX = new Array(BATCH);
         const pY = new Array(BATCH);
         const pZ = new Array(BATCH);
@@ -446,100 +446,108 @@
                 
                 let currentPoint = mul(G, currentKey);
 
-                function fastStep() {
-                    let batchCount = 0;
-                    let jX = currentPoint.x;
-                    let jY = currentPoint.y;
-                    let jZ = 1n;
+                // ⚡ FIX: geen setTimeout(fastStep, 0) meer tussen batches — dat kost door
+                // browser-clamping minstens ~4ms PER BATCH aan pure wachttijd, zonder dat
+                // er iets gebeurt. We draaien nu een aaneengesloten while-loop in de worker
+                // (blokkeert alleen deze worker-thread, nooit de hoofdpagina) en posten
+                // alleen nog periodiek een voortgangsbericht naar de hoofdpagina.
+                function runLoop() {
+                    while (true) {
+                        let batchCount = 0;
+                        let jX = currentPoint.x;
+                        let jY = currentPoint.y;
+                        let jZ = 1n;
 
-                    for (let i = 0; i < BATCH && currentKey + BigInt(i) <= endKey; i++) {
-                        pX[i] = jX; pY[i] = jY; pZ[i] = jZ;
-                        
-                        // INLINE MATH - Weg met functie aanroepen voor modulo
-                        let Z1Z1 = (jZ * jZ) % P;
-                        let U2 = (G_x * Z1Z1) % P;
-                        let S2 = (G_y * ((jZ * Z1Z1) % P)) % P;
-                        
-                        let H = (U2 - jX) % P; if (H < 0n) H += P;
-                        let R = (S2 - jY) % P; if (R < 0n) R += P;
-                        
-                        let HH = (H * H) % P;
-                        let HHH = (H * HH) % P;
-                        let V = (jX * HH) % P;
-                        
-                        jX = (R * R - HHH - 2n * V) % P; if (jX < 0n) jX += P;
-                        jY = (R * (V - jX) - jY * HHH) % P; if (jY < 0n) jY += P;
-                        jZ = (jZ * H) % P; if (jZ < 0n) jZ += P;
-                        
-                        batchCount++;
-                    }
+                        for (let i = 0; i < BATCH && currentKey + BigInt(i) <= endKey; i++) {
+                            pX[i] = jX; pY[i] = jY; pZ[i] = jZ;
 
-                    if (batchCount === 0) {
-                        self.postMessage({ type: "SCAN_DONE", workerId });
-                        return;
-                    }
-                    
-                    let acc = 1n;
-                    for(let i = 0; i < batchCount; i++) {
-                        partials[i] = acc;
-                        acc = (acc * pZ[i]) % P;
-                    }
-                    
-                    let invAcc = inverse(acc);
-                    
-                    for(let i = batchCount - 1; i >= 0; i--) {
-                        invZ[i] = (invAcc * partials[i]) % P;
-                        invAcc = (invAcc * pZ[i]) % P;
-                    }
-                    
-                    for (let i = 0; i < batchCount; i++) {
-                        let iz = invZ[i];
-                        let iz2 = (iz * iz) % P;
-                        let ax = (pX[i] * iz2) % P;
-                        let ay = (pY[i] * ((iz * iz2) % P)) % P;
-                        
-                        pubKeyBuffer[0] = (ay & 1n) === 0n ? 0x02 : 0x03;
-                        let tmp = ax;
-                        for (let b = 32; b >= 1; b--) { 
-                            pubKeyBuffer[b] = Number(tmp & 0xffn); 
-                            tmp >>= 8n; 
+                            // INLINE MATH - Weg met functie aanroepen voor modulo
+                            let Z1Z1 = (jZ * jZ) % P;
+                            let U2 = (G_x * Z1Z1) % P;
+                            let S2 = (G_y * ((jZ * Z1Z1) % P)) % P;
+
+                            let H = (U2 - jX) % P; if (H < 0n) H += P;
+                            let R = (S2 - jY) % P; if (R < 0n) R += P;
+
+                            let HH = (H * H) % P;
+                            let HHH = (H * HH) % P;
+                            let V = (jX * HH) % P;
+
+                            jX = (R * R - HHH - 2n * V) % P; if (jX < 0n) jX += P;
+                            jY = (R * (V - jX) - jY * HHH) % P; if (jY < 0n) jY += P;
+                            jZ = (jZ * H) % P; if (jZ < 0n) jZ += P;
+
+                            batchCount++;
                         }
-                        
-                        sha256_33_inplace();
-                        ripemd160_32_inplace();
 
-                        if (ripemdView.getUint32(0, true) === targetInt0) {
-                            let match = true;
-                            for (let k = 4; k < 20; k++) {
-                                if (ripemdBuffer[k] !== targetH160[k]) { match = false; break; }
+                        if (batchCount === 0) {
+                            self.postMessage({ type: "SCAN_DONE", workerId });
+                            return;
+                        }
+
+                        let acc = 1n;
+                        for(let i = 0; i < batchCount; i++) {
+                            partials[i] = acc;
+                            acc = (acc * pZ[i]) % P;
+                        }
+
+                        let invAcc = inverse(acc);
+
+                        for(let i = batchCount - 1; i >= 0; i--) {
+                            invZ[i] = (invAcc * partials[i]) % P;
+                            invAcc = (invAcc * pZ[i]) % P;
+                        }
+
+                        for (let i = 0; i < batchCount; i++) {
+                            let iz = invZ[i];
+                            let iz2 = (iz * iz) % P;
+                            let ax = (pX[i] * iz2) % P;
+                            let ay = (pY[i] * ((iz * iz2) % P)) % P;
+
+                            pubKeyBuffer[0] = (ay & 1n) === 0n ? 0x02 : 0x03;
+                            let tmp = ax;
+                            for (let b = 32; b >= 1; b--) {
+                                pubKeyBuffer[b] = Number(tmp & 0xffn);
+                                tmp >>= 8n;
                             }
-                            if (match) {
-                                const privHex = (currentKey + BigInt(i)).toString(16).padStart(64, '0');
-                                const payloadBytes = ("80" + privHex + "01").match(/.{2}/g).map(b => parseInt(b, 16));
-                                const doubleSha = sha256_generic(sha256_generic(new Uint8Array(payloadBytes)));
-                                const wif = toBase58("80" + privHex + "01" + Array.from(doubleSha).slice(0, 4).map(b => b.toString(16).padStart(2,'0')).join(''));
-                                self.postMessage({ type: "FOUND", privHex, wif, address: targetAddr });
-                                return;
+
+                            sha256_33_inplace();
+                            ripemd160_32_inplace();
+
+                            if (ripemdView.getUint32(0, true) === targetInt0) {
+                                let match = true;
+                                for (let k = 4; k < 20; k++) {
+                                    if (ripemdBuffer[k] !== targetH160[k]) { match = false; break; }
+                                }
+                                if (match) {
+                                    const privHex = (currentKey + BigInt(i)).toString(16).padStart(64, '0');
+                                    const payloadBytes = ("80" + privHex + "01").match(/.{2}/g).map(b => parseInt(b, 16));
+                                    const doubleSha = sha256_generic(sha256_generic(new Uint8Array(payloadBytes)));
+                                    const wif = toBase58("80" + privHex + "01" + Array.from(doubleSha).slice(0, 4).map(b => b.toString(16).padStart(2,'0')).join(''));
+                                    self.postMessage({ type: "FOUND", privHex, wif, address: targetAddr });
+                                    return;
+                                }
                             }
                         }
-                    }
-                    
-                    currentKey += BigInt(batchCount);
-                    if (currentKey > endKey) {
-                        self.postMessage({ type: "SCAN_DONE", workerId });
-                        return;
-                    }
-                    
-                    let lastZ = invZ[batchCount - 1];
-                    let lastZ2 = (lastZ * lastZ) % P;
-                    let lastAX = (pX[batchCount - 1] * lastZ2) % P;
-                    let lastAY = (pY[batchCount - 1] * ((lastZ * lastZ2) % P)) % P;
-                    currentPoint = add({x: lastAX, y: lastAY}, G);
 
-                    self.postMessage({ type: "PROGRESS", count: batchCount, workerId });
-                    setTimeout(fastStep, 0);
+                        currentKey += BigInt(batchCount);
+
+                        let lastZ = invZ[batchCount - 1];
+                        let lastZ2 = (lastZ * lastZ) % P;
+                        let lastAX = (pX[batchCount - 1] * lastZ2) % P;
+                        let lastAY = (pY[batchCount - 1] * ((lastZ * lastZ2) % P)) % P;
+                        currentPoint = add({x: lastAX, y: lastAY}, G);
+
+                        self.postMessage({ type: "PROGRESS", count: batchCount, workerId });
+
+                        if (currentKey > endKey) {
+                            self.postMessage({ type: "SCAN_DONE", workerId });
+                            return;
+                        }
+                        // geen setTimeout: direct door naar de volgende batch
+                    }
                 }
-                fastStep();
+                runLoop();
             }
         };
     </script>
@@ -559,7 +567,14 @@
                   startBtn = document.getElementById('startBtn'),
                   stopBtn = document.getElementById('stopBtn'),
                   statusVal = document.getElementById('statusVal'),
-                  progressBar = document.getElementById('progressBar');
+                  progressBar = document.getElementById('progressBar'),
+                  numWInput = document.getElementById('numW');
+
+            // ⚡ Aantal workers automatisch op het aantal logische CPU-kernen zetten
+            // (in plaats van vast op 4), zodat je apparaat volledig benut wordt.
+            if (navigator.hardwareConcurrency) {
+                numWInput.value = Math.max(1, navigator.hardwareConcurrency);
+            }
 
             function log(msg, cls = '') {
                 const ts = new Date().toLocaleTimeString('nl-NL');
@@ -738,7 +753,7 @@
             startBtn.onclick = () => { if (!isRunning) startAddressScan(); };
             stopBtn.onclick = () => { setRunning(false); killWorkers(); setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop'); };
             generateRandomSlice();
-            log('Systeem klaar. Turbo Engine v4 geladen.', 'ts');
+            log(`Systeem klaar. Turbo Engine v4 geladen. (${numWInput.value} workers gedetecteerd)`, 'ts');
 
             setInterval(() => { if (isRunning) updateAllStats(); }, 800);
         })();
