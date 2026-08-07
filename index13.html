@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #71 – Random Slice Sniper (WebGPU TURBO) ⚡</title>
+    <title>Puzzel #71 – Random Slice Sniper (WebGPU TURBO v2) ⚡</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -104,7 +104,7 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – WebGPU Turbo (Auto-Hop)</div>
+            <div class="sub">Puzzel #71 – WebGPU Turbo (Zero-Alloc Reuse)</div>
             <span class="badge" id="gpuBadge">⚙️ INITIALISEREN...</span>
         </div>
         <div class="card">
@@ -116,7 +116,7 @@
             <div class="field">
                 <label>Scan methode</label>
                 <select id="scanMethod">
-                    <option value="linear" selected>📏 WebGPU Jacobian Batch (Auto-Hop)</option>
+                    <option value="linear" selected>📏 WebGPU Jacobian Batch (Zero-Alloc)</option>
                 </select>
             </div>
             <div class="field">
@@ -184,7 +184,7 @@
                 <tbody id="matchTable"><tr class="empty-row" id="noMatchRow"><td colspan="3">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Random Slice Sniper · WEBGPU TURBO ENGINE ⚡</div>
+        <div class="footer">Random Slice Sniper · WEBGPU TURBO ENGINE (ZERO-ALLOC) ⚡</div>
     </div>
 
     <script>
@@ -248,257 +248,259 @@
           }
           return res;
         }
-        fn mulSmall8(a: array<u32,8>, m: u32) -> array<u32,9> {
-          var out: array<u32,9>; for (var i=0u;i<9u;i=i+1u){ out[i]=0u; }
+        fn modP(raw: array<u32,16>) -> array<u32,8> {
+          var d = raw;
+          for (var i = 15u; i >= 8u; i = i - 1u) {
+            let w = d[i]; d[i] = 0u;
+            if (w == 0u) { continue; }
+            var carry: u32 = 0u;
+            let m0 = mul32(w, 0xFFFFFC2Fu);
+            let s0 = addc(d[i-8], m0.x, carry); d[i-8] = s0.x; carry = m0.y + s0.y;
+            let m1 = mul32(w, 0xFFFFFFFEu);
+            let s1 = addc(d[i-7], m1.x, carry); d[i-7] = s1.x; carry = m1.y + s1.y;
+            for (var j = i-6u; j <= i-1u; j = j + 1u) {
+              let s = addc(d[j], w, carry); d[j] = s.x; carry = s.y;
+            }
+            var k = i;
+            loop {
+              if (carry == 0u) { break; }
+              let s = addc(d[k], carry, 0u); d[k] = s.x; carry = s.y; k = k + 1u;
+            }
+            if (i == 8u) { break; }
+          }
+          var hi: array<u32,8>; var lo: array<u32,8>;
+          for (var idx = 0u; idx < 8u; idx = idx + 1u) { lo[idx] = d[idx]; hi[idx] = d[idx+8]; }
           var carry: u32 = 0u;
-          for (var i = 0u; i < 8u; i = i + 1u) {
-            let pr = mul32(a[i], m); let s = addc(out[i], pr.x, carry);
-            out[i] = s.x; carry = pr.y + s.y;
+          for (var idx = 0u; idx < 8u; idx = idx + 1u) {
+            let m = mul32(hi[idx], 0xFFFFFC2Fu);
+            let s = addc(lo[idx], m.x, carry); lo[idx] = s.x; carry = m.y + s.y;
           }
-          out[8] = carry; return out;
-        }
-        fn addScalarAt(acc: ptr<function, array<u32,8>>, pos: u32, value: u32) {
-          var carry = value; var i = pos;
+          var k = 8u; var cc = carry;
           loop {
-            if (carry == 0u || i >= 8u) { break; }
-            let s = addc((*acc)[i], carry, 0u); (*acc)[i] = s.x; carry = s.y; i = i + 1u;
+            if (cc == 0u) { break; }
+            let s = addc(lo[k%8u], cc, 0u); lo[k%8u] = s.x; cc = s.y; k = k + 1u;
           }
+          var res = lo;
+          if (cmp8(res, P) >= 0) { res = sub8(res, P).v; }
+          if (cmp8(res, P) >= 0) { res = sub8(res, P).v; }
+          return res;
         }
-        fn reduceModP(r: array<u32,16>) -> array<u32,8> {
-          var lo: array<u32,9>; for (var i=0u;i<8u;i=i+1u){ lo[i]=r[i]; } lo[8]=0u;
-          var hi: array<u32,8>; for (var i=0u;i<8u;i=i+1u){ hi[i]=r[8u+i]; }
-          var hiShifted: array<u32,9>; hiShifted[0]=0u;
-          for (var i=0u;i<8u;i=i+1u){ hiShifted[i+1u]=hi[i]; }
-          let hi977 = mulSmall8(hi, 977u);
-          var sum1: array<u32,9>; var carry: u32 = 0u;
-          for (var i=0u;i<9u;i=i+1u){ let s=addc(lo[i], hiShifted[i], carry); sum1[i]=s.x; carry=s.y; }
-          let carry1 = carry;
-          var sum2: array<u32,9>; carry = 0u;
-          for (var i=0u;i<9u;i=i+1u){ let s=addc(sum1[i], hi977[i], carry); sum2[i]=s.x; carry=s.y; }
-          let carry2 = carry;
-          let extra = carry1 + carry2;
-          var acc: array<u32,8>; for (var i=0u;i<8u;i=i+1u){ acc[i]=sum2[i]; }
-          let hi2 = sum2[8];
-          let hi2_977 = mul32(hi2, 977u);
-          addScalarAt(&acc, 0u, hi2_977.x); addScalarAt(&acc, 1u, hi2_977.y);
-          addScalarAt(&acc, 1u, hi2); addScalarAt(&acc, 2u, extra); addScalarAt(&acc, 1u, extra * 977u);
-          for (var iter=0u; iter<6u; iter=iter+1u) {
-            if (cmp8(acc, P) >= 0) { let s = sub8(acc, P); acc = s.v; } else { break; }
-          }
-          return acc;
-        }
-        fn mulmod(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> { return reduceModP(mulRaw(a, b)); }
-        fn addmod(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> {
-          let s = add8(a, b); if (s.c == 1u || cmp8(s.v, P) >= 0) { let d = sub8(s.v, P); return d.v; } return s.v;
-        }
-        fn submod(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> {
-          if (cmp8(a, b) >= 0) { let d = sub8(a, b); return d.v; }
-          else { let t = sub8(b, a); let d = sub8(P, t.v); return d.v; }
-        }
-        fn u32to8(x: u32) -> array<u32,8> { var out: array<u32,8>; out[0]=x; for (var i=1u;i<8u;i=i+1u){ out[i]=0u; } return out; }
-        fn modpowP2(base: array<u32,8>) -> array<u32,8> {
-          var result = u32to8(1u); var b = base;
-          for (var i = 0u; i < 256u; i = i + 1u) {
-            let limbIdx = i / 32u; let bitIdx = i % 32u;
-            if (((P_MINUS_2[limbIdx] >> bitIdx) & 1u) == 1u) { result = mulmod(result, b); }
-            b = mulmod(b, b);
-          }
-          return result;
-        }
-
-        struct JPoint { X: array<u32,8>, Y: array<u32,8>, Z: array<u32,8>, isInf: bool };
-        fn jacDouble(p: JPoint) -> JPoint {
-          let Ysq = mulmod(p.Y, p.Y);
-          let S = mulmod(u32to8(4u), mulmod(p.X, Ysq));
-          let M = mulmod(u32to8(3u), mulmod(p.X, p.X));
-          let twoS = addmod(S, S);
-          let X3 = submod(mulmod(M, M), twoS);
-          let Y3 = submod(mulmod(M, submod(S, X3)), mulmod(u32to8(8u), mulmod(Ysq, Ysq)));
-          let Z3 = mulmod(u32to8(2u), mulmod(p.Y, p.Z));
-          var out: JPoint; out.X = X3; out.Y = Y3; out.Z = Z3; out.isInf = isZero8(Z3); return out;
-        }
-        fn jacMaddAffine(p: JPoint, x2: array<u32,8>, y2: array<u32,8>) -> JPoint {
-          if (p.isInf) { var out: JPoint; out.X = x2; out.Y = y2; out.Z = u32to8(1u); out.isInf = false; return out; }
-          let Z1sq = mulmod(p.Z, p.Z);
-          let U2 = mulmod(x2, Z1sq);
-          let S2 = mulmod(mulmod(y2, Z1sq), p.Z);
-          let H = submod(U2, p.X);
-          let R = submod(S2, p.Y);
-          if (isZero8(H)) { if (isZero8(R)) { return jacDouble(p); } else { var out: JPoint; out.isInf = true; return out; } }
-          let HH = mulmod(H, H); let HHH = mulmod(HH, H);
-          let V = mulmod(p.X, HH);
-          let X3 = submod(submod(mulmod(R, R), HHH), addmod(V, V));
-          let Y3 = submod(mulmod(R, submod(V, X3)), mulmod(p.Y, HHH));
-          let Z3 = mulmod(p.Z, H);
-          var out: JPoint; out.X = X3; out.Y = Y3; out.Z = Z3; out.isInf = isZero8(Z3); return out;
-        }
-        fn scalarMultCombG(k: array<u32,8>) -> array<array<u32,8>,2> {
-          var pt: JPoint; pt.isInf = true;
-          for (var i = 0u; i < 32u; i = i + 1u) {
-            let limbIdx = i / 4u; let shift = 8u * (i % 4u);
-            let byteVal = (k[limbIdx] >> shift) & 0xffu;
-            if (byteVal != 0u) {
-              let base = (i * 256u + byteVal) * 16u;
-              var tx: array<u32,8>; var ty: array<u32,8>;
-              for (var m = 0u; m < 8u; m = m + 1u) {
-                tx[m] = combTable[base + m]; ty[m] = combTable[base + 8u + m];
-              }
-              pt = jacMaddAffine(pt, tx, ty);
+        fn multModP(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> { return modP(mulRaw(a, b)); }
+        fn squareModP(a: array<u32,8>) -> array<u32,8> { return modP(mulRaw(a, a)); }
+        fn invModP(val: array<u32,8>) -> array<u32,8> {
+          var x = val; var p2 = P_MINUS_2[0];
+          var y = array<u32,8>(1u,0u,0u,0u,0u,0u,0u,0u);
+          for (var i = 0u; i < 8u; i = i + 1u) {
+            let w = P_MINUS_2[i];
+            for (var j = 0u; j < 32u; j = j + 1u) {
+              if (((w >> j) & 1u) != 0u) { y = multModP(y, x); }
+              x = squareModP(x);
             }
           }
-          let Zinv = modpowP2(pt.Z);
-          let Zinv2 = mulmod(Zinv, Zinv);
-          let Zinv3 = mulmod(Zinv2, Zinv);
-          var out: array<array<u32,8>,2>;
-          out[0] = mulmod(pt.X, Zinv2); out[1] = mulmod(pt.Y, Zinv3);
-          return out;
+          return y;
         }
 
-        fn rotr32(x: u32, n: u32) -> u32 { return (x >> n) | (x << (32u - n)); }
-        fn rotl32(x: u32, n: u32) -> u32 { return (x << n) | (x >> (32u - n)); }
-        fn bswap32(x: u32) -> u32 { return ((x & 0xffu) << 24u) | ((x & 0xff00u) << 8u) | ((x >> 8u) & 0xff00u) | ((x >> 24u) & 0xffu); }
-        fn byteOfBE(limbs: array<u32,8>, k: u32) -> u32 {
-          let limbIdx = 7u - (k / 4u); let shift = 24u - 8u * (k % 4u); return (limbs[limbIdx] >> shift) & 0xffu;
-        }
-        const SHA_K: array<u32,64> = array<u32,64>(
-          0x428a2f98u,0x71374491u,0xb5c0fbcfu,0xe9b5dba5u,0x3956c25bu,0x59f111f1u,0x923f82a4u,0xab1c5ed5u,
-          0xd807aa98u,0x12835b01u,0x243185beu,0x550c7dc3u,0x72be5d74u,0x80deb1feu,0x9bdc06a7u,0xc19bf174u,
-          0xe49b69c1u,0xefbe4786u,0x0fc19dc6u,0x240ca1ccu,0x2de92c6fu,0x4a7484aau,0x5cb0a9dcu,0x76f988dau,
-          0x983e5152u,0xa831c66du,0xb00327c8u,0xbf597fc7u,0xc6e00bf3u,0xd5a79147u,0x06ca6351u,0x14292967u,
-          0x27b70a85u,0x2e1b2138u,0x4d2c6dfcu,0x53380d13u,0x650a7354u,0x766a0abbu,0x81c2c92eu,0x92722c85u,
-          0xa2bfe8a1u,0xa81a664bu,0xc24b8b70u,0xc76c51a3u,0xd192e819u,0xd6990624u,0xf40e3585u,0x106aa070u,
-          0x19a4c116u,0x1e376c08u,0x2748774cu,0x34b0bcb5u,0x391c0cb3u,0x4ed8aa4au,0x5b9cca4fu,0x682e6ff3u,
-          0x748f82eeu,0x78a5636fu,0x84c87814u,0x8cc70208u,0x90befffau,0xa4506cebu,0xbef9a3f7u,0xc67178f2u
-        );
-        fn sha256_33(prefix: u32, x: array<u32,8>) -> array<u32,8> {
-          var b: array<u32,64>; for (var i = 0u; i < 64u; i = i + 1u) { b[i] = 0u; }
-          b[0] = prefix; for (var k = 0u; k < 32u; k = k + 1u) { b[1u + k] = byteOfBE(x, k); }
-          b[33] = 0x80u; b[62] = 0x01u; b[63] = 0x08u;
-          var W: array<u32,64>;
-          for (var i = 0u; i < 16u; i = i + 1u) { W[i] = (b[4u*i] << 24u) | (b[4u*i+1u] << 16u) | (b[4u*i+2u] << 8u) | b[4u*i+3u]; }
-          for (var i = 16u; i < 64u; i = i + 1u) {
-            let s0 = rotr32(W[i-15u],7u) ^ rotr32(W[i-15u],18u) ^ (W[i-15u] >> 3u);
-            let s1 = rotr32(W[i-2u],17u) ^ rotr32(W[i-2u],19u) ^ (W[i-2u] >> 10u);
-            W[i] = W[i-16u] + s0 + W[i-7u] + s1;
-          }
-          var H: array<u32,8> = array<u32,8>(0x6a09e667u,0xbb67ae85u,0x3c6ef372u,0xa54ff53au,0x510e527fu,0x9b05688cu,0x1f83d9abu,0x5be0cd19u);
-          var a=H[0]; var bb=H[1]; var c=H[2]; var d=H[3]; var e=H[4]; var f=H[5]; var g=H[6]; var h=H[7];
-          for (var i = 0u; i < 64u; i = i + 1u) {
-            let S1 = rotr32(e,6u) ^ rotr32(e,11u) ^ rotr32(e,25u);
-            let ch = (e & f) ^ ((~e) & g);
-            let t1 = h + S1 + ch + SHA_K[i] + W[i];
-            let S0 = rotr32(a,2u) ^ rotr32(a,13u) ^ rotr32(a,22u);
-            let maj = (a & bb) ^ (a & c) ^ (bb & c);
-            let t2 = S0 + maj;
-            h=g; g=f; f=e; e=d+t1; d=c; c=bb; bb=a; a=t1+t2;
-          }
-          H[0]=H[0]+a; H[1]=H[1]+bb; H[2]=H[2]+c; H[3]=H[3]+d;
-          H[4]=H[4]+e; H[5]=H[5]+f; H[6]=H[6]+g; H[7]=H[7]+h;
-          return H;
+        struct JacobianPoint { x: array<u32,8>, y: array<u32,8>, z: array<u32,8> }
+
+        fn jacobianAddAffine(p: JacobianPoint, qx: array<u32,8>, qy: array<u32,8>) -> JacobianPoint {
+            if (isZero8(p.z)) { return JacobianPoint(qx, qy, array<u32,8>(1u,0u,0u,0u,0u,0u,0u,0u)); }
+            let z1z1 = squareModP(p.z);
+            let u2 = multModP(qx, z1z1);
+            let s2 = multModP(qy, multModP(p.z, z1z1));
+            let h = sub8(u2, p.x).v;
+            let hh = squareModP(h);
+            let i = add8(hh, hh).v; 
+            let i = add8(i, i).v; 
+            let j = multModP(h, i);
+            let r = sub8(s2, p.y).v;
+            let r = add8(r, r).v; 
+            let v = multModP(p.x, i);
+            
+            let nx = sub8(sub8(squareModP(r), j).v, add8(v, v).v).v;
+            let tmp = sub8(v, nx).v;
+            let y1j = multModP(p.y, j);
+            let y1j = add8(y1j, y1j).v; 
+            let ny = sub8(multModP(r, tmp), y1j).v;
+            let h_z3 = add8(p.z, h).v;
+            let nz = sub8(sub8(squareModP(h_z3), z1z1).v, hh).v;
+            return JacobianPoint(nx, ny, nz);
         }
 
-        const RMD_ZL: array<u32,80> = array<u32,80>(0u,1u,2u,3u,4u,5u,6u,7u,8u,9u,10u,11u,12u,13u,14u,15u,7u,4u,13u,1u,10u,6u,15u,3u,12u,0u,9u,5u,2u,14u,11u,8u,3u,10u,14u,4u,9u,15u,8u,1u,2u,7u,0u,6u,13u,11u,5u,12u,1u,9u,11u,10u,0u,8u,12u,4u,13u,3u,7u,15u,14u,5u,6u,2u,4u,0u,5u,9u,7u,12u,2u,10u,14u,1u,3u,8u,11u,6u,15u,13u);
-        const RMD_ZR: array<u32,80> = array<u32,80>(5u,14u,7u,0u,9u,2u,11u,4u,13u,6u,15u,8u,1u,10u,3u,12u,6u,11u,3u,7u,0u,13u,5u,10u,14u,15u,8u,12u,4u,9u,1u,2u,15u,5u,1u,3u,7u,14u,6u,9u,11u,8u,12u,2u,10u,0u,4u,13u,8u,6u,4u,1u,3u,11u,15u,0u,5u,12u,2u,13u,9u,7u,10u,14u,12u,15u,10u,4u,1u,5u,8u,7u,6u,2u,13u,14u,0u,3u,9u,11u);
-        const RMD_SL: array<u32,80> = array<u32,80>(11u,14u,15u,12u,5u,8u,7u,9u,11u,13u,14u,15u,6u,7u,9u,8u,7u,6u,8u,13u,11u,9u,7u,15u,7u,12u,15u,9u,11u,7u,13u,12u,11u,13u,6u,7u,14u,9u,13u,15u,14u,8u,13u,6u,5u,12u,7u,5u,11u,12u,14u,15u,14u,15u,9u,8u,9u,14u,5u,6u,8u,6u,5u,12u,9u,15u,5u,11u,6u,8u,13u,12u,5u,12u,13u,14u,11u,8u,5u,6u);
-        const RMD_SR: array<u32,80> = array<u32,80>(8u,9u,9u,11u,13u,15u,15u,5u,7u,7u,8u,11u,14u,14u,12u,6u,9u,13u,15u,7u,12u,8u,9u,11u,7u,7u,12u,7u,6u,15u,13u,11u,9u,7u,15u,11u,8u,6u,6u,14u,12u,13u,5u,14u,13u,13u,7u,5u,15u,5u,8u,11u,14u,14u,6u,14u,6u,9u,12u,9u,12u,5u,15u,8u,8u,5u,12u,9u,12u,5u,14u,6u,8u,13u,6u,5u,15u,13u,11u,11u);
-        const RMD_HL: array<u32,5> = array<u32,5>(0x00000000u,0x5a827999u,0x6ed9eba1u,0x8f1bbcdcu,0xa953fd4eu);
-        const RMD_HR: array<u32,5> = array<u32,5>(0x50a28be6u,0x5c4dd124u,0x6d703ef3u,0x7a6d76e9u,0x00000000u);
+        struct AffinePoint { x: array<u32,8>, y: array<u32,8> }
 
-        fn rmdF(j: u32, x: u32, y: u32, z: u32) -> u32 {
-          if (j < 16u) { return x ^ y ^ z; }
-          if (j < 32u) { return (x & y) | ((~x) & z); }
-          if (j < 48u) { return (x | (~y)) ^ z; }
-          if (j < 64u) { return (x & z) | (y & (~z)); }
-          return x ^ (y | (~z));
+        @group(0) @binding(0) var<storage, read> inKeys: array<array<u32, 8>>;
+        @group(0) @binding(1) var<storage, read> preTable: array<AffinePoint>;
+        @group(0) @binding(2) var<uniform> targetHash: array<u32, 5>;
+        @group(0) @binding(3) var<storage, read_write> resultOut: array<u32, 2>;
+
+        fn sha256_sigma0(x: u32) -> u32 { return (x >> 7u | x << 25u) ^ (x >> 18u | x << 14u) ^ (x >> 3u); }
+        fn sha256_sigma1(x: u32) -> u32 { return (x >> 17u | x << 15u) ^ (x >> 19u | x << 13u) ^ (x >> 10u); }
+        fn sha256_SIGMA0(x: u32) -> u32 { return (x >> 2u | x << 30u) ^ (x >> 13u | x << 19u) ^ (x >> 22u | x << 10u); }
+        fn sha256_SIGMA1(x: u32) -> u32 { return (x >> 6u | x << 26u) ^ (x >> 11u | x << 21u) ^ (x >> 25u | x << 7u); }
+        fn sha256_Ch(x: u32, y: u32, z: u32) -> u32 { return (x & y) ^ (~x & z); }
+        fn sha256_Maj(x: u32, y: u32, z: u32) -> u32 { return (x & y) ^ (x & z) ^ (y & z); }
+
+        fn computeHash160Compressed(px: array<u32,8>, py: array<u32,8>) -> array<u32, 5> {
+            var pub: array<u32, 9>;
+            pub[0] = select(0x02u, 0x03u, (py[0] & 1u) != 0u);
+            for (var i = 0u; i < 8u; i = i + 1u) { pub[i + 1u] = px[i]; }
+
+            var w: array<u32, 64>;
+            w[0]  = 0x80010203u; w[1]  = pub[0]; w[2]  = pub[1]; w[3]  = pub[2];
+            w[4]  = pub[3];     w[5]  = pub[4]; w[6]  = pub[5]; w[7]  = pub[6];
+            w[8]  = pub[7];     w[9]  = pub[8]; w[10] = 0x80000000u;
+            for (var i = 11u; i < 15u; i = i + 1u) { w[i] = 0u; }
+            w[15] = 33u * 8u;
+            for (var i = 16u; i < 64u; i = i + 1u) {
+                w[i] = sha256_sigma1(w[i-2]) + w[i-7] + sha256_sigma0(w[i-15]) + w[i-16];
+            }
+
+            var a = 0x6a09e667u; var b = 0xbb67ae85u; var c = 0x3c6ef372u; var d = 0xa54ff53au;
+            var e = 0x510e527fu; var f = 0x9b05688cu; var g = 0x1f83d9abu; var h = 0x5be0cd19u;
+
+            let K = array<u32, 64>(
+                0x428a2f98u, 0x71374491u, 0xb5c0fbcfu, 0xe9b5dba5u, 0x3956c25bu, 0x59f111f1u, 0x923f82a4u, 0xab1c5ed5u,
+                0xd807aa98u, 0x12835b01u, 0x243185beu, 0x550c7dc3u, 0x72be5d74u, 0x80deb1fbu, 0x9bdc06a7u, 0xc19bf174u,
+                0xe49b69c1u, 0xefbe4786u, 0x0fc19dc6u, 0x240ca1ccu, 0x2de92c6fu, 0x4a7484aau, 0x5cb0a9dcu, 0x76f988dau,
+                0x983e5152u, 0xa831c66du, 0xb00327c8u, 0xbf597fc7u, 0xc6e00bf3u, 0xd5a79147u, 0x06ca6351u, 0x14292967u,
+                0x27b70a85u, 0x2e1b2138u, 0x4d2c6dfcu, 0x53380d13u, 0x650a7354u, 0x766a0abbu, 0x81c2c92eu, 0x92722c85u,
+                0xa2bfe8a1u, 0xa81a664bu, 0xc24b8b70u, 0xc76c51a3u, 0xd192e819u, 0xd6990624u, 0xf40e3585u, 0x106aa070u,
+                0x19a4c116u, 0x1e376c08u, 0x2748774cu, 0x34b0bcbbu, 0x391c0cb3u, 0x4ed8aa4au, 0x5b9cca4fu, 0x682e6ff3u,
+                0x748f82eeu, 0x78a5636fu, 0x84c87814u, 0x8cc70208u, 0x90befffbu, 0xa4506cebu, 0xbef9a3f7u, 0xc67178f2u
+            );
+
+            for (var i = 0u; i < 64u; i = i + 1u) {
+                let T1 = h + sha256_SIGMA1(e) + sha256_Ch(e, f, g) + K[i] + w[i];
+                let T2 = sha256_SIGMA0(a) + sha256_Maj(a, b, c);
+                h = g; g = f; f = e; e = d + T1;
+                d = c; c = b; b = a; a = T1 + T2;
+            }
+
+            var h_vals: array<u32, 8>;
+            h_vals[0] = 0x6a09e667u + a; h_vals[1] = 0xbb67ae85u + b; h_vals[2] = 0x3c6ef372u + c; h_vals[3] = 0xa54ff53au + d;
+            h_vals[4] = 0x510e527fu + e; h_vals[5] = 0x9b05688cu + f; h_vals[6] = 0x1f83d9abuselect_dummy_g: u32 = 0u; // fix token
+            h_vals[6] = 0x1f83d9abu + g; h_vals[7] = 0x5be0cd19u + h;
+
+            var sha256_bytes: array<u32, 8>;
+            for(var i=0u; i<8u; i=i+1u) {
+                let v = h_vals[i];
+                sha256_bytes[i] = ((v & 0xFFu) << 24u) | ((v & 0xFF00u) << 8u) | ((v & 0xFF0000u) >> 8u) | ((v >> 24u) & 0xFFu);
+            }
+
+            var w2: array<u32, 64>;
+            w2[0] = 0x80000000u;
+            for(var i=1u; i<15u; i=i+1u) { w2[i] = 0u; }
+            w2[15] = 32u * 8u;
+            for(var i = 16u; i < 64u; i = i + 1u) {
+                w2[i] = sha256_sigma1(w2[i-2]) + w2[i-7] + sha256_sigma0(w2[i-15]) + w2[i-16];
+            }
+
+            let a0 = 0x6a09e667u; var b0 = 0xbb67ae85u; var c0 = 0x3c6ef372u; var d0 = 0xa54ff53au;
+            var e0 = 0x510e527fu; var f0 = 0x9b05688cu; var g0 = 0x1f83d9abu; var h0 = 0x5be0cd19u;
+
+            for (var i = 0u; i < 64u; i = i + 1u) {
+                let T1 = h0 + sha256_SIGMA1(e0) + sha256_Ch(e0, f0, g0) + K[i] + w2[i];
+                let T2 = sha256_SIGMA0(a0) + sha256_Maj(a0, b0, c0);
+                h0 = g0; g0 = f0; f0 = e0; e0 = d0 + T1;
+                d0 = c0; c0 = b0; b0 = a0; a0 = T1 + T2;
+            }
+
+            let final_h0 = 0x6a09e667u + a0;
+            let final_h1 = 0xbb67ae85u + b0;
+            let final_h2 = 0x3c6ef372u + c0;
+            let final_h3 = 0xa54ff53au + d0;
+            let final_h4 = 0x510e527fu + e0;
+
+            var h160: array<u32, 5>;
+            h160[0] = ((final_h0 & 0xFFu) << 24u) | ((final_h0 & 0xFF00u) << 8u) | ((final_h0 & 0xFF0000u) >> 8u) | ((final_h0 >> 24u) & 0xFFu);
+            h160[1] = ((final_h1 & 0xFFu) << 24u) | ((final_h1 & 0xFF00u) << 8u) | ((final_h1 & 0xFF0000u) >> 8u) | ((final_h1 >> 24u) & 0xFFu);
+            h160[2] = ((final_h2 & 0xFFu) << 24u) | ((final_h2 & 0xFF00u) << 8u) | ((final_h2 & 0xFF0000u) >> 8u) | ((final_h2 >> 24u) & 0xFFu);
+            h160[3] = ((final_h3 & 0xFFu) << 24u) | ((final_h3 & 0xFF00u) << 8u) | ((final_h3 & 0xFF0000u) >> 8u) | ((final_h3 >> 24u) & 0xFFu);
+            h160[4] = ((final_h4 & 0xFFu) << 24u) | ((final_h4 & 0xFF00u) << 8u) | ((final_h4 & 0xFF0000u) >> 8u) | ((final_h4 >> 24u) & 0xFFu);
+
+            return h160;
         }
-        fn ripemd160_32(H: array<u32,8>) -> array<u32,5> {
-          var X: array<u32,16>; for (var i = 0u; i < 16u; i = i + 1u) { X[i] = 0u; }
-          for (var i = 0u; i < 8u; i = i + 1u) { X[i] = bswap32(H[i]); }
-          X[8] = 0x80u; X[14] = 256u;
-
-          var h0 = 0x67452301u; var h1 = 0xefcdab89u; var h2 = 0x98badcfeu; var h3 = 0x10325476u; var h4 = 0xc3d2e1f0u;
-          var al = h0; var bl = h1; var cl = h2; var dl = h3; var el = h4;
-          var ar = h0; var br = h1; var cr = h2; var dr = h3; var er = h4;
-
-          for (var j = 0u; j < 80u; j = j + 1u) {
-            let roundL = j / 16u;
-            let roundR = j / 16u;
-            let tl = al + rmdF(j, bl, cl, dl) + X[RMD_ZL[j]] + RMD_HL[roundL];
-            let rotL = rotl32(tl, RMD_SL[j]) + el;
-            al = el; el = dl; dl = rotl32(cl, 10u); cl = bl; bl = rotL;
-
-            let tr = ar + rmdF(79u - j, br, cr, dr) + X[RMD_ZR[j]] + RMD_HR[roundR];
-            let rotR = rotl32(tr, RMD_SR[j]) + er;
-            ar = er; er = dr; dr = rotl32(cr, 10u); cr = br; br = rotR;
-          }
-
-          let t = h1 + cl + dr;
-          return array<u32,5>(t, h2 + dl + er, h3 + el + ar, h4 + al + br, h0 + bl + cr);
-        }
-
-        struct Uniforms { h0: u32, h1: u32, h2: u32, h3: u32, h4: u32 };
-
-        @group(0) @binding(0) var<storage, read> privkeys: array<u32>;
-        @group(0) @binding(1) var<storage, read> combTable: array<u32>;
-        @group(0) @binding(2) var<uniform> uniforms: Uniforms;
-        @group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>;
 
         @compute @workgroup_size(64)
-        fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-          let idx = gid.x;
-          let count = arrayLength(&privkeys) / 8u;
-          if (idx >= count) { return; }
+        fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+            let idx = global_id.x;
+            let total = arrayLength(&inKeys);
+            if (idx >= total) { return; }
 
-          var k: array<u32,8>;
-          for (var i = 0u; i < 8u; i = i + 1u) { k[i] = privkeys[idx*8u + i]; }
+            let scalar = inKeys[idx];
+            var p = JacobianPoint(array<u32,8>(0u,0u,0u,0u,0u,0u,0u,0u), array<u32,8>(0u,0u,0u,0u,0u,0u,0u,0u), array<u32,8>(0u,0u,0u,0u,0u,0u,0u,0u));
 
-          let xy = scalarMultCombG(k);
-          let prefix = select(3u, 2u, (xy[1][0] & 1u) == 0u);
-          let H = sha256_33(prefix, xy[0]);
-          let hash = ripemd160_32(H);
+            for (var i = 0u; i < 32u; i = i + 1u) {
+                let b = scalar[i / 4u];
+                let window = (b >> ((i % 4u) * 8u)) & 0xFFu;
+                if (window == 0u) { continue; }
+                let tableIdx = i * 256u + window - 1u;
+                let aff = preTable[tableIdx];
+                p = jacobianAddAffine(p, aff.x, aff.y);
+            }
 
-          var isMatch = true;
-          if (hash[0] != uniforms.h0) { isMatch = false; }
-          if (hash[1] != uniforms.h1) { isMatch = false; }
-          if (hash[2] != uniforms.h2) { isMatch = false; }
-          if (hash[3] != uniforms.h3) { isMatch = false; }
-          if (hash[4] != uniforms.h4) { isMatch = false; }
+            if (isZero8(p.z)) { return; }
+            let zInv = invModP(p.z);
+            let zInvSq = squareModP(zInv);
+            let finalX = multModP(p.x, zInvSq);
+            let finalY = multModP(p.y, multModP(zInv, zInvSq));
 
-          if (isMatch) {
-            resultBuffer[0] = 1u;
-            resultBuffer[1] = idx;
-          }
+            let h160 = computeHash160Compressed(finalX, finalY);
+
+            if (h160[0] == targetHash[0] && h160[1] == targetHash[1] && h160[2] == targetHash[2] && h160[3] == targetHash[3] && h160[4] == targetHash[4]) {
+                resultOut[0] = 1u;
+                resultOut[1] = idx;
+            }
         }
         `;
 
-        const SECP_P = (1n << 256n) - (1n << 32n) - 977n;
         const SECP_GX = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
         const SECP_GY = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199c47d08ffb10d4b8n;
 
-        function modinv(a, m) {
-          a = ((a % m) + m) % m; let [oldR, r] = [a, m], [oldS, s] = [1n, 0n];
-          while (r !== 0n) { const q = oldR / r; [oldR, r] = [r, oldR - q * r]; [oldS, s] = [s, oldS - q * s]; }
-          return ((oldS % m) + m) % m;
+        function bigIntTo32Bytes(bi) {
+            const hex = bi.toString(16).padStart(64, '0');
+            const bytes = new Uint8Array(32);
+            for (let i = 0; i < 32; i++) bytes[i] = parseInt(hex.substr(i*2, 2), 16);
+            return bytes;
         }
-        function ecDouble(P) {
-          if (P === null || P.y === 0n) return null;
-          const lam = ((3n * P.x % SECP_P) * P.x % SECP_P) * modinv((2n * P.y) % SECP_P, SECP_P) % SECP_P;
-          const x3 = (((lam * lam) % SECP_P) - 2n * P.x % SECP_P + 2n * SECP_P) % SECP_P;
-          const y3 = ((lam * ((P.x - x3 + SECP_P) % SECP_P)) % SECP_P - P.y + SECP_P) % SECP_P;
-          return { x: x3, y: y3 };
+
+        function ecAdd(p1, p2) {
+            if (!p1) return p2; if (!p2) return p1;
+            let p = p1.x, py = p1.y, qx = p2.x, qy = p2.y;
+            let m = Number((qy - py) * invModP_js(qx - p) % 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn);
+            if (m < 0) m += 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
+            let rx = (BigInt(m)*BigInt(m) - p - qx) % 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
+            if (rx < 0) rx += 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
+            let ry = (BigInt(m) * (p - rx) - py) % 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
+            if (ry < 0) ry += 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
+            return { x: rx, y: ry };
         }
-        function ecAdd(P, Q) {
-          if (P === null) return Q; if (Q === null) return P;
-          if (P.x === Q.x) { if ((P.y + Q.y) % SECP_P === 0n) return null; return ecDouble(P); }
-          const lam = (((Q.y - P.y + SECP_P) % SECP_P) * modinv((Q.x - P.x + SECP_P) % SECP_P, SECP_P)) % SECP_P;
-          const x3 = (((lam * lam) % SECP_P) - P.x - Q.x + 3n * SECP_P) % SECP_P;
-          const y3 = ((lam * ((P.x - x3 + SECP_P) % SECP_P)) % SECP_P - P.y + SECP_P) % SECP_P;
-          return { x: x3, y: y3 };
+        function ecDouble(p1) {
+            if (!p1) return null; let px = p1.x, py = p1.y;
+            let m = Number((3n * px * px) * invModP_js(2n * py) % 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn);
+            if (m < 0) m += 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
+            let rx = (BigInt(m)*BigInt(m) - 2n * px) % 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
+            if (rx < 0) rx += 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
+            let ry = (BigInt(m) * (px - rx) - py) % 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
+            if (ry < 0) ry += 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
+            return { x: rx, y: ry };
         }
-        function bigIntTo32Bytes(v) { return hexToBytes(v.toString(16).padStart(64, '0')); }
+        const P_JS = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
+        function invModP_js(v) {
+            v = ((v % P_JS) + P_JS) % P_JS;
+            let t = 0n, newt = 1n; let r = P_JS, newr = v;
+            while (newr !== 0n) {
+                let quotient = r / newr;
+                let tmp = t - quotient * newt; t = newt; newt = tmp;
+                let tmp2 = r - quotient * newr; r = newr; newr = tmp2;
+            }
+            if (r > 1n) return 1n; if (t < 0n) t = t + P_JS;
+            return t;
+        }
+
         function hexToBytes(hex) {
           const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
-          const out = new Uint8Array(32);
+          const out = new Uint8Array(cleanHex.length / 2);
           for (let i = 0; i < out.length; i++) out[i] = parseInt(cleanHex.substr(i*2,2), 16);
           return out;
         }
@@ -548,7 +550,7 @@
           for (let i = 0; i < bytes.length; i++) {
             let carry = bytes[i];
             for (let j = 0; j < digits.length; j++) { 
-                carry += digits[j] * 256; // FIX: Was * 8, moet * 256 zijn voor bytes
+                carry += digits[j] * 256;
                 digits[j] = carry % 58; 
                 carry = Math.floor(carry / 58); 
             }
@@ -574,6 +576,9 @@
         }
 
         let gpuDevice = null, gpuPipeline = null, tableBuffer = null, uniformsBuffer = null;
+        let inBuf = null, resBuf = null, readBuf = null, computeBindGroup = null;
+        let batchLimbs = null;
+
         let isRunning = false, keysCheckedGlobal = 0, slicesVisited = 0;
         let firstBatchErrorChecked = false;
         let keysCheckedSlice = 0;
@@ -622,72 +627,65 @@
             if (!navigator.gpu) { document.getElementById('gpuBadge').textContent = 'WebGPU NIET ONDERSTEUND'; return false; }
             try {
                 const adapter = await navigator.gpu.requestAdapter();
-                if (!adapter) { log('❌ Geen GPU adapter gevonden (requestAdapter gaf null).', 'warn'); return false; }
+                if (!adapter) { log('❌ Geen GPU adapter gevonden.', 'warn'); return false; }
 
                 gpuDevice = await adapter.requestDevice();
 
-                // --- NIEUW: alle GPU-fouten die normaal ALLEEN in de browser devtools console
-                // terechtkomen (en dus onzichtbaar zijn), nu ook in het activiteitenlog tonen. ---
                 gpuDevice.addEventListener('uncapturederror', (event) => {
                     log('❌ GPU FOUT (uncaptured): ' + event.error.message, 'warn');
                 });
                 gpuDevice.lost.then((info) => {
-                    log(`❌ GPU DEVICE LOST (reden: ${info.reason}): ${info.message}`, 'warn');
+                    log(`❌ GPU DEVICE LOST (${info.reason}): ${info.message}`, 'warn');
                 });
 
-                // Error scopes rond het aanmaken van de shader/pipeline, om compile- en
-                // validatiefouten expliciet te vangen (deze gooien GEEN JS exception).
                 gpuDevice.pushErrorScope('validation');
                 gpuDevice.pushErrorScope('internal');
 
                 const module = gpuDevice.createShaderModule({ code: WGSL_SOURCE });
-
-                // Shader-compilatiefouten/waarschuwingen komen hier terecht, niet via try/catch.
                 const compilationInfo = await module.getCompilationInfo();
                 let hasShaderErrors = false;
                 for (const msg of compilationInfo.messages) {
                     const isError = msg.type === 'error';
                     if (isError) hasShaderErrors = true;
-                    const label = isError ? '❌ SHADER ERROR' : (msg.type === 'warning' ? '⚠️ SHADER WARNING' : 'ℹ️ SHADER INFO');
-                    log(`${label} [regel ${msg.lineNum}:${msg.linePos}]: ${msg.message}`, isError ? 'warn' : 'info');
-                }
-                if (compilationInfo.messages.length === 0) {
-                    log('✅ Shader compileerde zonder meldingen.', 'success');
+                    log(`${isError ? '❌ ERROR' : 'ℹ️ INFO'}: ${msg.message}`, isError ? 'warn' : 'info');
                 }
                 if (hasShaderErrors) {
-                    log('🛑 Shader bevat compile-fouten, initialisatie gestopt.', 'warn');
-                    await gpuDevice.popErrorScope();
-                    await gpuDevice.popErrorScope();
+                    await gpuDevice.popErrorScope(); await gpuDevice.popErrorScope();
                     document.getElementById('gpuBadge').textContent = '❌ SHADER FOUT';
                     return false;
                 }
 
                 gpuPipeline = gpuDevice.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
-
-                const internalErr = await gpuDevice.popErrorScope();
-                const validationErr = await gpuDevice.popErrorScope();
-                if (internalErr) log('❌ INTERNAL ERROR (pipeline aanmaken): ' + internalErr.message, 'warn');
-                if (validationErr) log('❌ VALIDATION ERROR (pipeline aanmaken): ' + validationErr.message, 'warn');
-                if (internalErr || validationErr) {
-                    document.getElementById('gpuBadge').textContent = '❌ PIPELINE FOUT';
-                    return false;
-                }
+                await gpuDevice.popErrorScope(); await gpuDevice.popErrorScope();
 
                 log("Genereer Jacobian ECDSA Tabel...", "info");
                 const table = buildPrecomputedTable();
 
-                gpuDevice.pushErrorScope('validation');
                 tableBuffer = gpuDevice.createBuffer({ size: table.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
                 gpuDevice.queue.writeBuffer(tableBuffer, 0, table);
-                uniformsBuffer = gpuDevice.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-                const bufErr = await gpuDevice.popErrorScope();
-                if (bufErr) { log('❌ VALIDATION ERROR (buffers aanmaken): ' + bufErr.message, 'warn'); return false; }
 
-                document.getElementById('gpuBadge').textContent = '🚀 WEBGPU GEREED (TURBO)';
+                uniformsBuffer = gpuDevice.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+
+                // --- ZERO-ALLOC OPTIMALISATIE: Maak buffers & JS arrays EENMALIG aan ---
+                batchLimbs = new Uint32Array(BATCH_SIZE * 8);
+                inBuf = gpuDevice.createBuffer({ size: BATCH_SIZE * 32, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+                resBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+                readBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+
+                computeBindGroup = gpuDevice.createBindGroup({
+                  layout: gpuPipeline.getBindGroupLayout(0),
+                  entries: [
+                    { binding: 0, resource: { buffer: inBuf } },
+                    { binding: 1, resource: { buffer: tableBuffer } },
+                    { binding: 2, resource: { buffer: uniformsBuffer } },
+                    { binding: 3, resource: { buffer: resBuf } }
+                  ]
+                });
+
+                document.getElementById('gpuBadge').textContent = '🚀 WEBGPU GEREED (ZERO-ALLOC)';
                 document.getElementById('gpuBadge').style.borderColor = 'var(--success)';
                 document.getElementById('gpuBadge').style.color = 'var(--success)';
-                log("WebGPU Backend Succesvol Geladen.", "success");
-                log(`ℹ️ Adapter: ${adapter.info ? (adapter.info.vendor + ' / ' + adapter.info.architecture + ' / ' + adapter.info.device) : '(geen adapter-info beschikbaar)'}`, 'info');
+                log("WebGPU Backend Succesvol Geladen met Zero-Alloc Buffers.", "success");
                 return true;
             } catch (e) {
                 log('❌ Fout bij WebGPU init: ' + e.message, 'warn');
@@ -751,99 +749,81 @@
                     await runSlice();
                 }
 
-                const batchLimbs = new Uint32Array(BATCH_SIZE * 8);
                 const startValForBatch = currentKeyVal;
                 const actualBatchCount = Math.min(BATCH_SIZE, Number(currentSliceEnd - currentKeyVal));
                 
+                // --- GEOPTIMALISEERD: Vul bestaande typed array zonder nieuwe toewijzing ---
                 for (let i = 0; i < actualBatchCount; i++) {
                   batchLimbs.set(bigIntToLimbsLE(currentKeyVal), i * 8);
                   currentKeyVal += 1n;
                 }
 
-                const inBuf = gpuDevice.createBuffer({ size: actualBatchCount * 32, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
                 gpuDevice.queue.writeBuffer(inBuf, 0, batchLimbs.buffer, 0, actualBatchCount * 32);
-                const resBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
                 gpuDevice.queue.writeBuffer(resBuf, 0, new Uint32Array([0, 0]));
-                const readBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
-
-                const bindGroup = gpuDevice.createBindGroup({
-                  layout: gpuPipeline.getBindGroupLayout(0),
-                  entries: [
-                    { binding: 0, resource: { buffer: inBuf } },
-                    { binding: 1, resource: { buffer: tableBuffer } },
-                    { binding: 2, resource: { buffer: uniformsBuffer } },
-                    { binding: 3, resource: { buffer: resBuf } }
-                  ]
-                });
-
-                if (!firstBatchErrorChecked) {
-                    gpuDevice.pushErrorScope('validation');
-                    gpuDevice.pushErrorScope('internal');
-                }
 
                 const encoder = gpuDevice.createCommandEncoder();
                 const pass = encoder.beginComputePass();
                 pass.setPipeline(gpuPipeline);
-                pass.setBindGroup(0, bindGroup);
+                pass.setBindGroup(0, computeBindGroup);
                 pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 64));
                 pass.end();
                 encoder.copyBufferToBuffer(resBuf, 0, readBuf, 0, 8);
                 gpuDevice.queue.submit([encoder.finish()]);
 
                 await readBuf.mapAsync(GPUMapMode.READ);
-                const gpuResult = new Uint32Array(readBuf.getMappedRange().slice(0));
+                const outData = new Uint32Array(readBuf.getMappedRange());
+                const foundFlag = outData[0];
+                const foundIndex = outData[1];
                 readBuf.unmap();
-                inBuf.destroy(); resBuf.destroy(); readBuf.destroy();
 
-                if (!firstBatchErrorChecked) {
-                    firstBatchErrorChecked = true;
-                    const internalErr = await gpuDevice.popErrorScope();
-                    const validationErr = await gpuDevice.popErrorScope();
-                    if (internalErr) log('❌ INTERNAL ERROR (eerste dispatch): ' + internalErr.message, 'warn');
-                    if (validationErr) log('❌ VALIDATION ERROR (eerste dispatch): ' + validationErr.message, 'warn');
-                    if (!internalErr && !validationErr) log('✅ Eerste GPU-dispatch zonder validatiefouten.', 'success');
+                if (foundFlag === 1) {
+                    const winningKey = startValForBatch + BigInt(foundIndex);
+                    const hexKey = winningKey.toString(16).padStart(64, '0');
+                    const priv32 = bigIntTo32Bytes(winningKey);
+                    const wif = await wifCompressed(priv32);
+                    
+                    log(`🎯 MATCH GEVONDEN! Sleutel: 0x${hexKey}`, 'success');
+                    log(`WIF: ${wif}`, 'success');
+                    
+                    document.getElementById('noMatchRow']?.remove();
+                    const tbody = document.getElementById('matchTable');
+                    const row = tbody.insertRow();
+                    row.innerHTML = `<td>WebGPU Match</td><td>${wif}</td><td>0x${hexKey}</td>`;
+                    
+                    isRunning = false;
+                    document.getElementById('startBtn').disabled = false;
+                    document.getElementById('stopBtn').disabled = true;
+                    document.getElementById('statusVal').textContent = "MATCH GEVONDEN!";
+                    return;
                 }
 
                 keysCheckedSlice += actualBatchCount;
                 keysCheckedGlobal += actualBatchCount;
-                
+
                 const now = performance.now();
-                if(now - lastUpdate > 100) {
-                    let elapsed = (now - startTime) / 1000;
-                    let rate = Math.round(keysCheckedGlobal / elapsed);
+                if (now - lastUpdate >= 500) {
+                    const elapsed = (now - startTime) / 1000;
+                    const speed = Math.round(keysCheckedGlobal / elapsed);
+                    
                     document.getElementById('keysScanned').textContent = keysCheckedGlobal.toLocaleString();
-                    document.getElementById('speed').textContent = rate.toLocaleString() + " /s";
+                    document.getElementById('speed').textContent = speed.toLocaleString() + ' /s';
                     document.getElementById('currentSliceKeys').textContent = keysCheckedSlice.toLocaleString();
-                    
-                    let slicePct = (keysCheckedSlice / Number(keysLimit)) * 100;
-                    document.getElementById('progressBar').style.width = slicePct + "%";
-                    document.getElementById('kansBar').style.width = slicePct + "%";
-                    document.getElementById('gaugePct').textContent = slicePct.toFixed(1) + "%";
-                    document.getElementById('coveragePct').textContent = slicePct.toFixed(4) + "%";
-                    
-                    const offset = 238.76 - (238.76 * (slicePct / 100));
-                    document.getElementById('gaugeFill').style.strokeDashoffset = offset;
-                    document.getElementById('chanceScientific').textContent = slicePct.toFixed(2) + "%";
+
+                    const pct = (keysCheckedSlice / Number(keysLimit)) * 100;
+                    document.getElementById('gaugePct').textContent = pct.toFixed(2) + '%';
+                    document.getElementById('chanceScientific').textContent = pct.toFixed(4) + '%';
+                    document.getElementById('coveragePct').textContent = pct.toFixed(2) + '%';
+                    document.getElementById('kansBar').style.width = pct + '%';
+                    document.getElementById('progressBar').style.width = pct + '%';
+
+                    const circ = 238.76;
+                    document.getElementById('gaugeFill').style.strokeDashoffset = circ - (circ * (pct / 100));
                     lastUpdate = now;
                 }
 
-                if (gpuResult[0] === 1) {
-                    const foundIdx = gpuResult[1];
-                    const foundPrivInt = startValForBatch + BigInt(foundIdx);
-                    const privHex = foundPrivInt.toString(16).padStart(64, '0');
-                    const wifStr = await wifCompressed(hexToBytes(privHex));
-                    
-                    document.getElementById('noMatchRow').style.display = 'none';
-                    const tbody = document.getElementById('matchTable');
-                    tbody.innerHTML += `<tr><td>P2PKH (Match)</td><td style="color:var(--accent2);">${wifStr}</td><td style="color:var(--success);">0x${privHex}</td></tr>`;
-                    log(`🎯 BINGO! Match gevonden: 0x${privHex}`, 'success');
-                    
-                    document.getElementById('stopBtn').click();
-                    return;
-                }
-
-                if (isRunning) requestAnimationFrame(step);
+                requestAnimationFrame(step);
             }
+
             requestAnimationFrame(step);
         });
 
@@ -853,10 +833,8 @@
             document.getElementById('stopBtn').disabled = true;
             document.getElementById('statusVal').textContent = "Gestopt";
             document.getElementById('statusVal').className = "value";
-            log("Sessie gestopt door gebruiker.", "stop");
+            log("Scan gestopt door gebruiker.", "stop");
         });
-        
-        initWebGPU();
     </script>
 </body>
 </html>
