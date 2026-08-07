@@ -126,11 +126,11 @@
             <hr class="divider">
             <div class="field">
                 <label>Beginwaarde (HEX)</label>
-                <input id="customStart" value="40000000000000000" type="text" style="color: var(--accent2);">
+                <input id="customStart" value="10000000" type="text" style="color: var(--accent2);">
             </div>
             <div class="field">
                 <label>Eindwaarde (HEX)</label>
-                <input id="customEnd" value="7ffffffffffffffff" type="text" style="color: var(--accent2);">
+                <input id="customEnd" value="1fffffff" type="text" style="color: var(--accent2);">
             </div>
             <hr class="divider">
             <div class="field"><label>GPU Batch Size</label><input id="numW" value="1048576" type="number" disabled title="Bepaald door WebGPU"></div>
@@ -264,7 +264,7 @@
           var d = raw;
           for (var i = 15u; i >= 8u; i = i - 1u) {
             let w = d[i]; d[i] = 0u;
-            if (w == 0u) { continue; }
+            if (w == 0u) { if (i == 8u) { break; } continue; }
             var carry: u32 = 0u;
             let m0 = mul32(w, 0xFFFFFC2Fu);
             let s0 = addc(d[i-8u], m0.x, carry); d[i-8u] = s0.x; carry = m0.y + s0.y;
@@ -345,10 +345,10 @@
             return ((x & 0xFFu) << 24u) | ((x & 0xFF00u) << 8u) | ((x & 0xFF0000u) >> 8u) | ((x >> 24u) & 0xFFu);
         }
 
-        fn sha256_sigma0(x: u32) -> u32 { return (x >> 7u | x << 25u) ^ (x >> 18u | x << 14u) ^ (x >> 3u); }
-        fn sha256_sigma1(x: u32) -> u32 { return (x >> 17u | x << 15u) ^ (x >> 19u | x << 13u) ^ (x >> 10u); }
-        fn sha256_SIGMA0(x: u32) -> u32 { return (x >> 2u | x << 30u) ^ (x >> 13u | x << 19u) ^ (x >> 22u | x << 10u); }
-        fn sha256_SIGMA1(x: u32) -> u32 { return (x >> 6u | x << 26u) ^ (x >> 11u | x << 21u) ^ (x >> 25u | x << 7u); }
+        fn sha256_sigma0(x: u32) -> u32 { return ((x >> 7u) | (x << 25u)) ^ ((x >> 18u) | (x << 14u)) ^ (x >> 3u); }
+        fn sha256_sigma1(x: u32) -> u32 { return ((x >> 17u) | (x << 15u)) ^ ((x >> 19u) | (x << 13u)) ^ (x >> 10u); }
+        fn sha256_SIGMA0(x: u32) -> u32 { return ((x >> 2u) | (x << 30u)) ^ ((x >> 13u) | (x << 19u)) ^ ((x >> 22u) | (x << 10u)); }
+        fn sha256_SIGMA1(x: u32) -> u32 { return ((x >> 6u) | (x << 26u)) ^ ((x >> 11u) | (x << 21u)) ^ ((x >> 25u) | (x << 7u)); }
         fn sha256_Ch(x: u32, y: u32, z: u32) -> u32 { return (x & y) ^ (~x & z); }
         fn sha256_Maj(x: u32, y: u32, z: u32) -> u32 { return (x & y) ^ (x & z) ^ (y & z); }
 
@@ -497,7 +497,6 @@
             let h2 = 0x10325476u + E + A_p;
             let h3 = 0xC3D2E1F0u + A + B_p;
             let h4 = 0x67452301u + B + C_p;
-
             return array<u32, 5>(h0, h1, h2, h3, h4);
         }
 
@@ -726,60 +725,47 @@
             if (!navigator.gpu) { document.getElementById('gpuBadge').textContent = 'WebGPU NIET ONDERSTEUND'; return false; }
             try {
                 const adapter = await navigator.gpu.requestAdapter();
-                if (!adapter) { log('❌ Geen GPU adapter gevonden.', 'warn'); return false; }
-
                 gpuDevice = await adapter.requestDevice();
-
-                gpuDevice.addEventListener('uncapturederror', (event) => {
-                    log('❌ GPU FOUT (uncaptured): ' + event.error.message, 'warn');
-                });
-
+                
+                gpuDevice.pushErrorScope('validation');
                 const module = gpuDevice.createShaderModule({ code: WGSL_SOURCE });
-                const compilationInfo = await module.getCompilationInfo();
-                let hasShaderErrors = false;
-                for (const msg of compilationInfo.messages) {
-                    const isError = msg.type === 'error';
-                    if (isError) hasShaderErrors = true;
-                    log(`${isError ? '❌ ERROR' : 'ℹ️ INFO'}: ${msg.message}`, isError ? 'warn' : 'info');
-                }
-                if (hasShaderErrors) {
-                    document.getElementById('gpuBadge').textContent = '❌ SHADER FOUT';
+                const error = await gpuDevice.popErrorScope();
+                if (error) {
+                    log(`❌ GPU FOUT (shader): ${error.message}`, 'warn');
                     return false;
                 }
 
                 gpuPipeline = gpuDevice.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
-
+                
                 log("Genereer Jacobian ECDSA Tabel...", "info");
                 const table = buildPrecomputedTable();
-
                 tableBuffer = gpuDevice.createBuffer({ size: table.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
                 gpuDevice.queue.writeBuffer(tableBuffer, 0, table);
 
-                uniformsBuffer = gpuDevice.createBuffer({ size: 20, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-
-                batchLimbs = new Uint32Array(BATCH_SIZE * 8);
+                uniformsBuffer = gpuDevice.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+                
                 inBuf = gpuDevice.createBuffer({ size: BATCH_SIZE * 32, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-                resBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+                resBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
                 readBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+                batchLimbs = new Uint32Array(BATCH_SIZE * 8);
 
                 computeBindGroup = gpuDevice.createBindGroup({
-                  layout: gpuPipeline.getBindGroupLayout(0),
-                  entries: [
-                    { binding: 0, resource: { buffer: inBuf } },
-                    { binding: 1, resource: { buffer: tableBuffer } },
-                    { binding: 2, resource: { buffer: uniformsBuffer } },
-                    { binding: 3, resource: { buffer: resBuf } }
-                  ]
+                    layout: gpuPipeline.getBindGroupLayout(0),
+                    entries: [
+                        { binding: 0, resource: { buffer: inBuf } },
+                        { binding: 1, resource: { buffer: tableBuffer } },
+                        { binding: 2, resource: { buffer: uniformsBuffer } },
+                        { binding: 3, resource: { buffer: resBuf } }
+                    ]
                 });
 
-                document.getElementById('gpuBadge').textContent = '🚀 WEBGPU GEREED (ZERO-ALLOC)';
+                document.getElementById('gpuBadge').textContent = '🚀 WEBGPU GEREED (TURBO)';
                 document.getElementById('gpuBadge').style.borderColor = 'var(--success)';
                 document.getElementById('gpuBadge').style.color = 'var(--success)';
-                log("WebGPU Backend Succesvol Geladen met Zero-Alloc Buffers.", "success");
+                log("WebGPU Backend Succesvol Geladen.", "success");
                 return true;
             } catch (e) {
-                log('❌ Fout bij WebGPU init: ' + e.message, 'warn');
-                console.error(e);
+                log('Fout bij WebGPU init: ' + e.message, 'warn');
                 return false;
             }
         }
@@ -813,7 +799,7 @@
                 const userEndInput = document.getElementById('customEnd').value.trim();
                 if (userEndInput) {
                     let absoluteMax = BigInt(userEndInput.startsWith('0x') ? userEndInput : '0x' + userEndInput);
-                    if (currentSliceEnd > absoluteMax + 1n) currentSliceEnd = absoluteMax + 1n;
+                    if (currentSliceEnd > absoluteMax) currentSliceEnd = absoluteMax;
                 }
 
                 currentKeyVal = currentSliceStart;
@@ -842,12 +828,6 @@
                 const startValForBatch = currentKeyVal;
                 const actualBatchCount = Math.min(BATCH_SIZE, Number(currentSliceEnd - currentKeyVal));
                 
-                if (actualBatchCount <= 0) {
-                    await runSlice();
-                    if (isRunning) requestAnimationFrame(step);
-                    return;
-                }
-
                 for (let i = 0; i < actualBatchCount; i++) {
                   batchLimbs.set(bigIntToLimbsLE(currentKeyVal), i * 8);
                   currentKeyVal += 1n;
@@ -866,59 +846,49 @@
                 gpuDevice.queue.submit([encoder.finish()]);
 
                 await readBuf.mapAsync(GPUMapMode.READ);
-                const outData = new Uint32Array(readBuf.getMappedRange());
-                const foundFlag = outData[0];
-                const foundIndex = outData[1];
+                const gpuResult = new Uint32Array(readBuf.getMappedRange().slice(0));
                 readBuf.unmap();
-
-                if (foundFlag === 1) {
-                    const winningKey = startValForBatch + BigInt(foundIndex);
-                    const hexKey = winningKey.toString(16).padStart(64, '0');
-                    const priv32 = bigIntTo32Bytes(winningKey);
-                    const wif = await wifCompressed(priv32);
-                    
-                    log(`🎯 MATCH GEVONDEN! Sleutel: 0x${hexKey}`, 'success');
-                    log(`WIF: ${wif}`, 'success');
-                    
-                    document.getElementById('noMatchRow')?.remove();
-                    const tbody = document.getElementById('matchTable');
-                    const row = tbody.insertRow();
-                    row.innerHTML = `<td>WebGPU Match</td><td>${wif}</td><td>0x${hexKey}</td>`;
-                    
-                    isRunning = false;
-                    document.getElementById('startBtn').disabled = false;
-                    document.getElementById('stopBtn').disabled = true;
-                    document.getElementById('statusVal').textContent = "MATCH GEVONDEN!";
-                    return;
-                }
 
                 keysCheckedSlice += actualBatchCount;
                 keysCheckedGlobal += actualBatchCount;
-
+                
                 const now = performance.now();
-                if (now - lastUpdate >= 500) {
-                    const elapsed = (now - startTime) / 1000;
-                    const speed = Math.round(keysCheckedGlobal / elapsed);
-                    
+                if(now - lastUpdate > 100) {
+                    let elapsed = (now - startTime) / 1000;
+                    let rate = Math.round(keysCheckedGlobal / elapsed);
                     document.getElementById('keysScanned').textContent = keysCheckedGlobal.toLocaleString();
-                    document.getElementById('speed').textContent = speed.toLocaleString() + ' /s';
+                    document.getElementById('speed').textContent = rate.toLocaleString() + " /s";
                     document.getElementById('currentSliceKeys').textContent = keysCheckedSlice.toLocaleString();
-
-                    const pct = (keysCheckedSlice / Number(keysLimit)) * 100;
-                    document.getElementById('gaugePct').textContent = pct.toFixed(2) + '%';
-                    document.getElementById('chanceScientific').textContent = pct.toFixed(4) + '%';
-                    document.getElementById('coveragePct').textContent = pct.toFixed(2) + '%';
-                    document.getElementById('kansBar').style.width = pct + '%';
-                    document.getElementById('progressBar').style.width = pct + '%';
-
-                    const circ = 238.76;
-                    document.getElementById('gaugeFill').style.strokeDashoffset = circ - (circ * (pct / 100));
+                    
+                    let slicePct = (keysCheckedSlice / Number(keysLimit)) * 100;
+                    document.getElementById('progressBar').style.width = slicePct + "%";
+                    document.getElementById('kansBar').style.width = slicePct + "%";
+                    document.getElementById('gaugePct').textContent = slicePct.toFixed(1) + "%";
+                    document.getElementById('coveragePct').textContent = slicePct.toFixed(4) + "%";
+                    
+                    const offset = 238.76 - (238.76 * (slicePct / 100));
+                    document.getElementById('gaugeFill').style.strokeDashoffset = offset;
+                    document.getElementById('chanceScientific').textContent = slicePct.toFixed(2) + "%";
                     lastUpdate = now;
                 }
 
-                requestAnimationFrame(step);
-            }
+                if (gpuResult[0] === 1) {
+                    const foundIdx = gpuResult[1];
+                    const foundPrivInt = startValForBatch + BigInt(foundIdx);
+                    const privHex = foundPrivInt.toString(16).padStart(64, '0');
+                    const wifStr = await wifCompressed(hexToBytes(privHex));
+                    
+                    document.getElementById('noMatchRow').style.display = 'none';
+                    const tbody = document.getElementById('matchTable');
+                    tbody.innerHTML += `<tr><td>P2PKH (Match)</td><td style="color:var(--accent2);">${wifStr}</td><td style="color:var(--success);">0x${privHex}</td></tr>`;
+                    log(`🎯 BINGO! Match gevonden: 0x${privHex}`, 'success');
+                    
+                    document.getElementById('stopBtn').click();
+                    return;
+                }
 
+                if (isRunning) requestAnimationFrame(step);
+            }
             requestAnimationFrame(step);
         });
 
@@ -928,8 +898,10 @@
             document.getElementById('stopBtn').disabled = true;
             document.getElementById('statusVal').textContent = "Gestopt";
             document.getElementById('statusVal').className = "value";
-            log("Scan gestopt door gebruiker.", "stop");
+            log("Sessie gestopt door gebruiker.", "stop");
         });
+        
+        initWebGPU();
     </script>
 </body>
 </html>
