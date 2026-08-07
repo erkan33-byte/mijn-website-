@@ -126,11 +126,11 @@
             <hr class="divider">
             <div class="field">
                 <label>Beginwaarde (HEX)</label>
-                <input id="customStart" value="10000000" type="text" style="color: var(--accent2);">
+                <input id="customStart" value="40000000000000000" type="text" style="color: var(--accent2);">
             </div>
             <div class="field">
                 <label>Eindwaarde (HEX)</label>
-                <input id="customEnd" value="1fffffff" type="text" style="color: var(--accent2);">
+                <input id="customEnd" value="7ffffffffffffffff" type="text" style="color: var(--accent2);">
             </div>
             <hr class="divider">
             <div class="field"><label>GPU Batch Size</label><input id="numW" value="1048576" type="number" disabled title="Bepaald door WebGPU"></div>
@@ -162,7 +162,7 @@
             <div class="kans-progress">
                 <div class="kp-label"><span>Dekkingsgraad tot Volgende Hop</span><span id="coveragePct">0.00%</span></div>
                 <div class="kans-track"><div class="kans-fill" id="kansBar" style="width:0%"></div></div>
-                <div class="kans-pct-label"><span id="currentSliceKeys">0</span> / <span id="limitDisplay">10000000</span> keys in dit plakje</div>
+                <div class="kans-pct-label"><span id="currentSliceKeys">0</span> / <span id="limitDisplay">300000000</span> keys in dit plakje</div>
             </div>
         </div>
         
@@ -189,7 +189,18 @@
 
     <script>
         const WGSL_SOURCE = `
-        struct R8  { v: array<u32,8>,  c: u32 };
+        struct TargetHash {
+            h0: u32,
+            h1: u32,
+            h2: u32,
+            h3: u32,
+            h4: u32,
+        };
+
+        struct JacobianPoint { x: array<u32,8>, y: array<u32,8>, z: array<u32,8> };
+        struct AffinePoint { x: array<u32,8>, y: array<u32,8> };
+        struct R8 { v: array<u32,8>, c: u32 };
+
         const P: array<u32,8> = array<u32,8>(0xFFFFFC2Fu,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
         const P_MINUS_2: array<u32,8> = array<u32,8>(0xFFFFFC2Du,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
 
@@ -212,6 +223,7 @@
           let hi = hihi + (mr.x >> 16u) + (mr.y << 16u) + lr.y;
           return vec2<u32>(lr.x, hi);
         }
+
         fn add8(a: array<u32,8>, b: array<u32,8>) -> R8 {
           var out: array<u32,8>; var carry: u32 = 0u;
           for (var i = 0u; i < 8u; i = i + 1u) { let r = addc(a[i], b[i], carry); out[i] = r.x; carry = r.y; }
@@ -255,9 +267,9 @@
             if (w == 0u) { continue; }
             var carry: u32 = 0u;
             let m0 = mul32(w, 0xFFFFFC2Fu);
-            let s0 = addc(d[i-8], m0.x, carry); d[i-8] = s0.x; carry = m0.y + s0.y;
+            let s0 = addc(d[i-8u], m0.x, carry); d[i-8u] = s0.x; carry = m0.y + s0.y;
             let m1 = mul32(w, 0xFFFFFFFEu);
-            let s1 = addc(d[i-7], m1.x, carry); d[i-7] = s1.x; carry = m1.y + s1.y;
+            let s1 = addc(d[i-7u], m1.x, carry); d[i-7u] = s1.x; carry = m1.y + s1.y;
             for (var j = i-6u; j <= i-1u; j = j + 1u) {
               let s = addc(d[j], w, carry); d[j] = s.x; carry = s.y;
             }
@@ -269,16 +281,16 @@
             if (i == 8u) { break; }
           }
           var hi: array<u32,8>; var lo: array<u32,8>;
-          for (var idx = 0u; idx < 8u; idx = idx + 1u) { lo[idx] = d[idx]; hi[idx] = d[idx+8]; }
+          for (var idx = 0u; idx < 8u; idx = idx + 1u) { lo[idx] = d[idx]; hi[idx] = d[idx+8u]; }
           var carry: u32 = 0u;
           for (var idx = 0u; idx < 8u; idx = idx + 1u) {
             let m = mul32(hi[idx], 0xFFFFFC2Fu);
             let s = addc(lo[idx], m.x, carry); lo[idx] = s.x; carry = m.y + s.y;
           }
-          var k = 8u; var cc = carry;
+          var k_mod = 8u; var cc_mod = carry;
           loop {
-            if (cc == 0u) { break; }
-            let s = addc(lo[k%8u], cc, 0u); lo[k%8u] = s.x; cc = s.y; k = k + 1u;
+            if (cc_mod == 0u) { break; }
+            let s = addc(lo[k_mod%8u], cc_mod, 0u); lo[k_mod%8u] = s.x; cc_mod = s.y; k_mod = k_mod + 1u;
           }
           var res = lo;
           if (cmp8(res, P) >= 0) { res = sub8(res, P).v; }
@@ -288,7 +300,7 @@
         fn multModP(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> { return modP(mulRaw(a, b)); }
         fn squareModP(a: array<u32,8>) -> array<u32,8> { return modP(mulRaw(a, a)); }
         fn invModP(val: array<u32,8>) -> array<u32,8> {
-          var x = val; var p2 = P_MINUS_2[0];
+          var x = val;
           var y = array<u32,8>(1u,0u,0u,0u,0u,0u,0u,0u);
           for (var i = 0u; i < 8u; i = i + 1u) {
             let w = P_MINUS_2[i];
@@ -300,8 +312,6 @@
           return y;
         }
 
-        struct JacobianPoint { x: array<u32,8>, y: array<u32,8>, z: array<u32,8> }
-
         fn jacobianAddAffine(p: JacobianPoint, qx: array<u32,8>, qy: array<u32,8>) -> JacobianPoint {
             if (isZero8(p.z)) { return JacobianPoint(qx, qy, array<u32,8>(1u,0u,0u,0u,0u,0u,0u,0u)); }
             let z1z1 = squareModP(p.z);
@@ -309,29 +319,31 @@
             let s2 = multModP(qy, multModP(p.z, z1z1));
             let h = sub8(u2, p.x).v;
             let hh = squareModP(h);
-            let i = add8(hh, hh).v; 
-            let i = add8(i, i).v; 
-            let j = multModP(h, i);
-            let r = sub8(s2, p.y).v;
-            let r = add8(r, r).v; 
-            let v = multModP(p.x, i);
+            let i_tmp1 = add8(hh, hh).v; 
+            let i_val = add8(i_tmp1, i_tmp1).v; 
+            let j_val = multModP(h, i_val);
+            let r_tmp1 = sub8(s2, p.y).v;
+            let r_val = add8(r_tmp1, r_tmp1).v; 
+            let v_val = multModP(p.x, i_val);
             
-            let nx = sub8(sub8(squareModP(r), j).v, add8(v, v).v).v;
-            let tmp = sub8(v, nx).v;
-            let y1j = multModP(p.y, j);
-            let y1j = add8(y1j, y1j).v; 
-            let ny = sub8(multModP(r, tmp), y1j).v;
+            let nx = sub8(sub8(squareModP(r_val), j_val).v, add8(v_val, v_val).v).v;
+            let tmp = sub8(v_val, nx).v;
+            let y1j_tmp1 = multModP(p.y, j_val);
+            let y1j_val = add8(y1j_tmp1, y1j_tmp1).v; 
+            let ny = sub8(multModP(r_val, tmp), y1j_val).v;
             let h_z3 = add8(p.z, h).v;
             let nz = sub8(sub8(squareModP(h_z3), z1z1).v, hh).v;
             return JacobianPoint(nx, ny, nz);
         }
 
-        struct AffinePoint { x: array<u32,8>, y: array<u32,8> }
-
         @group(0) @binding(0) var<storage, read> inKeys: array<array<u32, 8>>;
         @group(0) @binding(1) var<storage, read> preTable: array<AffinePoint>;
-        @group(0) @binding(2) var<uniform> targetHash: array<u32, 5>;
+        @group(0) @binding(2) var<uniform> targetHash: TargetHash;
         @group(0) @binding(3) var<storage, read_write> resultOut: array<u32, 2>;
+
+        fn swap32(x: u32) -> u32 {
+            return ((x & 0xFFu) << 24u) | ((x & 0xFF00u) << 8u) | ((x & 0xFF0000u) >> 8u) | ((x >> 24u) & 0xFFu);
+        }
 
         fn sha256_sigma0(x: u32) -> u32 { return (x >> 7u | x << 25u) ^ (x >> 18u | x << 14u) ^ (x >> 3u); }
         fn sha256_sigma1(x: u32) -> u32 { return (x >> 17u | x << 15u) ^ (x >> 19u | x << 13u) ^ (x >> 10u); }
@@ -340,19 +352,32 @@
         fn sha256_Ch(x: u32, y: u32, z: u32) -> u32 { return (x & y) ^ (~x & z); }
         fn sha256_Maj(x: u32, y: u32, z: u32) -> u32 { return (x & y) ^ (x & z) ^ (y & z); }
 
-        fn computeHash160Compressed(px: array<u32,8>, py: array<u32,8>) -> array<u32, 5> {
-            var pub: array<u32, 9>;
-            pub[0] = select(0x02u, 0x03u, (py[0] & 1u) != 0u);
-            for (var i = 0u; i < 8u; i = i + 1u) { pub[i + 1u] = px[i]; }
+        fn sha256_33bytes(px: array<u32,8>, py: array<u32,8>) -> array<u32, 8> {
+            let H = select(0x02u, 0x03u, (py[0] & 1u) != 0u);
+            let x0 = swap32(px[7]);
+            let x1 = swap32(px[6]);
+            let x2 = swap32(px[5]);
+            let x3 = swap32(px[4]);
+            let x4 = swap32(px[3]);
+            let x5 = swap32(px[2]);
+            let x6 = swap32(px[1]);
+            let x7 = swap32(px[0]);
 
             var w: array<u32, 64>;
-            w[0]  = 0x80010203u; w[1]  = pub[0]; w[2]  = pub[1]; w[3]  = pub[2];
-            w[4]  = pub[3];     w[5]  = pub[4]; w[6]  = pub[5]; w[7]  = pub[6];
-            w[8]  = pub[7];     w[9]  = pub[8]; w[10] = 0x80000000u;
-            for (var i = 11u; i < 15u; i = i + 1u) { w[i] = 0u; }
-            w[15] = 33u * 8u;
+            w[0] = (H << 24u) | (x0 >> 8u);
+            w[1] = (x0 << 24u) | (x1 >> 8u);
+            w[2] = (x1 << 24u) | (x2 >> 8u);
+            w[3] = (x2 << 24u) | (x3 >> 8u);
+            w[4] = (x3 << 24u) | (x4 >> 8u);
+            w[5] = (x4 << 24u) | (x5 >> 8u);
+            w[6] = (x5 << 24u) | (x6 >> 8u);
+            w[7] = (x6 << 24u) | (x7 >> 8u);
+            w[8] = (x7 << 24u) | 0x00800000u;
+            for (var i = 9u; i < 15u; i = i + 1u) { w[i] = 0u; }
+            w[15] = 264u;
+
             for (var i = 16u; i < 64u; i = i + 1u) {
-                w[i] = sha256_sigma1(w[i-2]) + w[i-7] + sha256_sigma0(w[i-15]) + w[i-16];
+                w[i] = sha256_sigma1(w[i-2u]) + w[i-7u] + sha256_sigma0(w[i-15u]) + w[i-16u];
             }
 
             var a = 0x6a09e667u; var b = 0xbb67ae85u; var c = 0x3c6ef372u; var d = 0xa54ff53au;
@@ -378,47 +403,102 @@
 
             var h_vals: array<u32, 8>;
             h_vals[0] = 0x6a09e667u + a; h_vals[1] = 0xbb67ae85u + b; h_vals[2] = 0x3c6ef372u + c; h_vals[3] = 0xa54ff53au + d;
-            h_vals[4] = 0x510e527fu + e; h_vals[5] = 0x9b05688cu + f; h_vals[6] = 0x1f83d9abuselect_dummy_g: u32 = 0u; // fix token
-            h_vals[6] = 0x1f83d9abu + g; h_vals[7] = 0x5be0cd19u + h;
+            h_vals[4] = 0x510e527fu + e; h_vals[5] = 0x9b05688cu + f; h_vals[6] = 0x1f83d9abu + g; h_vals[7] = 0x5be0cd19u + h;
+            return h_vals;
+        }
 
-            var sha256_bytes: array<u32, 8>;
-            for(var i=0u; i<8u; i=i+1u) {
-                let v = h_vals[i];
-                sha256_bytes[i] = ((v & 0xFFu) << 24u) | ((v & 0xFF00u) << 8u) | ((v & 0xFF0000u) >> 8u) | ((v >> 24u) & 0xFFu);
+        fn rol(x: u32, n: u32) -> u32 { return (x << n) | (x >> (32u - n)); }
+
+        fn ripemd160_32bytes(in_words: array<u32, 8>) -> array<u32, 5> {
+            var X: array<u32, 16>;
+            for (var i = 0u; i < 8u; i = i + 1u) {
+                X[i] = swap32(in_words[i]);
+            }
+            X[8] = 0x00000080u;
+            for (var i = 9u; i < 14u; i = i + 1u) { X[i] = 0u; }
+            X[14] = 256u;
+            X[15] = 0u;
+
+            var A = 0x67452301u; var B = 0xEFCDAB89u; var C = 0x98BADCFEu; var D = 0x10325476u; var E = 0xC3D2E1F0u;
+            var A_p = A; var B_p = B; var C_p = C; var D_p = D; var E_p = E;
+
+            let r1 = array<u32,16>(0u,1u,2u,3u,4u,5u,6u,7u,8u,9u,10u,11u,12u,13u,14u,15u);
+            let s1 = array<u32,16>(11u,14u,15u,12u,5u,8u,7u,9u,11u,13u,14u,15u,6u,7u,9u,8u);
+            for (var i = 0u; i < 16u; i = i + 1u) {
+                let t = rol(A + (B ^ C ^ D) + X[r1[i]], s1[i]) + E;
+                A = E; E = D; D = rol(C, 10u); C = B; B = t;
             }
 
-            var w2: array<u32, 64>;
-            w2[0] = 0x80000000u;
-            for(var i=1u; i<15u; i=i+1u) { w2[i] = 0u; }
-            w2[15] = 32u * 8u;
-            for(var i = 16u; i < 64u; i = i + 1u) {
-                w2[i] = sha256_sigma1(w2[i-2]) + w2[i-7] + sha256_sigma0(w2[i-15]) + w2[i-16];
+            let r2 = array<u32,16>(7u,4u,13u,1u,10u,6u,15u,3u,12u,0u,9u,5u,2u,14u,11u,8u);
+            let s2 = array<u32,16>(7u,6u,8u,13u,11u,9u,7u,15u,7u,12u,15u,9u,11u,7u,13u,12u);
+            for (var i = 0u; i < 16u; i = i + 1u) {
+                let t = rol(A + ((B & C) | (~B & D)) + X[r2[i]] + 0x5A827999u, s2[i]) + E;
+                A = E; E = D; D = rol(C, 10u); C = B; B = t;
             }
 
-            let a0 = 0x6a09e667u; var b0 = 0xbb67ae85u; var c0 = 0x3c6ef372u; var d0 = 0xa54ff53au;
-            var e0 = 0x510e527fu; var f0 = 0x9b05688cu; var g0 = 0x1f83d9abu; var h0 = 0x5be0cd19u;
-
-            for (var i = 0u; i < 64u; i = i + 1u) {
-                let T1 = h0 + sha256_SIGMA1(e0) + sha256_Ch(e0, f0, g0) + K[i] + w2[i];
-                let T2 = sha256_SIGMA0(a0) + sha256_Maj(a0, b0, c0);
-                h0 = g0; g0 = f0; f0 = e0; e0 = d0 + T1;
-                d0 = c0; c0 = b0; b0 = a0; a0 = T1 + T2;
+            let r3 = array<u32,16>(3u,10u,14u,4u,9u,15u,8u,1u,2u,7u,0u,6u,13u,11u,5u,12u);
+            let s3 = array<u32,16>(11u,13u,6u,7u,14u,9u,13u,15u,14u,8u,13u,6u,5u,12u,7u,5u);
+            for (var i = 0u; i < 16u; i = i + 1u) {
+                let t = rol(A + ((B | ~C) ^ D) + X[r3[i]] + 0x6ED9EBA1u, s3[i]) + E;
+                A = E; E = D; D = rol(C, 10u); C = B; B = t;
             }
 
-            let final_h0 = 0x6a09e667u + a0;
-            let final_h1 = 0xbb67ae85u + b0;
-            let final_h2 = 0x3c6ef372u + c0;
-            let final_h3 = 0xa54ff53au + d0;
-            let final_h4 = 0x510e527fu + e0;
+            let r4 = array<u32,16>(1u,9u,11u,10u,0u,8u,12u,4u,13u,3u,7u,15u,14u,5u,6u,2u);
+            let s4 = array<u32,16>(11u,12u,14u,15u,14u,15u,9u,8u,9u,14u,5u,6u,8u,6u,5u,12u);
+            for (var i = 0u; i < 16u; i = i + 1u) {
+                let t = rol(A + ((B & D) | (C & ~D)) + X[r4[i]] + 0x8F1BBCDCu, s4[i]) + E;
+                A = E; E = D; D = rol(C, 10u); C = B; B = t;
+            }
 
-            var h160: array<u32, 5>;
-            h160[0] = ((final_h0 & 0xFFu) << 24u) | ((final_h0 & 0xFF00u) << 8u) | ((final_h0 & 0xFF0000u) >> 8u) | ((final_h0 >> 24u) & 0xFFu);
-            h160[1] = ((final_h1 & 0xFFu) << 24u) | ((final_h1 & 0xFF00u) << 8u) | ((final_h1 & 0xFF0000u) >> 8u) | ((final_h1 >> 24u) & 0xFFu);
-            h160[2] = ((final_h2 & 0xFFu) << 24u) | ((final_h2 & 0xFF00u) << 8u) | ((final_h2 & 0xFF0000u) >> 8u) | ((final_h2 >> 24u) & 0xFFu);
-            h160[3] = ((final_h3 & 0xFFu) << 24u) | ((final_h3 & 0xFF00u) << 8u) | ((final_h3 & 0xFF0000u) >> 8u) | ((final_h3 >> 24u) & 0xFFu);
-            h160[4] = ((final_h4 & 0xFFu) << 24u) | ((final_h4 & 0xFF00u) << 8u) | ((final_h4 & 0xFF0000u) >> 8u) | ((final_h4 >> 24u) & 0xFFu);
+            let r5 = array<u32,16>(4u,0u,5u,9u,7u,12u,2u,10u,14u,1u,3u,8u,11u,6u,15u,13u);
+            let s5 = array<u32,16>(9u,15u,5u,11u,6u,8u,13u,12u,5u,12u,13u,14u,11u,8u,5u,6u);
+            for (var i = 0u; i < 16u; i = i + 1u) {
+                let t = rol(A + (B ^ (C | ~D)) + X[r5[i]] + 0xA953FD4Eu, s5[i]) + E;
+                A = E; E = D; D = rol(C, 10u); C = B; B = t;
+            }
 
-            return h160;
+            let r1_p = array<u32,16>(5u,14u,7u,0u,9u,2u,11u,4u,13u,6u,15u,8u,1u,10u,3u,12u);
+            let s1_p = array<u32,16>(8u,9u,9u,11u,13u,15u,15u,5u,7u,7u,8u,11u,14u,14u,12u,6u);
+            for (var i = 0u; i < 16u; i = i + 1u) {
+                let t = rol(A_p + (B_p ^ (C_p | ~D_p)) + X[r1_p[i]] + 0x50A28BE6u, s1_p[i]) + E_p;
+                A_p = E_p; E_p = D_p; D_p = rol(C_p, 10u); C_p = B_p; B_p = t;
+            }
+
+            let r2_p = array<u32,16>(6u,11u,3u,7u,0u,13u,5u,10u,14u,15u,8u,12u,4u,9u,1u,2u);
+            let s2_p = array<u32,16>(9u,13u,15u,7u,12u,8u,9u,11u,7u,7u,12u,7u,6u,15u,13u,11u);
+            for (var i = 0u; i < 16u; i = i + 1u) {
+                let t = rol(A_p + ((B_p & D_p) | (C_p & ~D_p)) + X[r2_p[i]] + 0x5C4DD124u, s2_p[i]) + E_p;
+                A_p = E_p; E_p = D_p; D_p = rol(C_p, 10u); C_p = B_p; B_p = t;
+            }
+
+            let r3_p = array<u32,16>(15u,5u,1u,3u,7u,14u,6u,9u,11u,8u,12u,2u,10u,0u,4u,13u);
+            let s3_p = array<u32,16>(9u,7u,15u,11u,8u,6u,6u,14u,12u,13u,5u,14u,13u,13u,7u,5u);
+            for (var i = 0u; i < 16u; i = i + 1u) {
+                let t = rol(A_p + ((B_p | ~C_p) ^ D_p) + X[r3_p[i]] + 0x6D703EF3u, s3_p[i]) + E_p;
+                A_p = E_p; E_p = D_p; D_p = rol(C_p, 10u); C_p = B_p; B_p = t;
+            }
+
+            let r4_p = array<u32,16>(8u,6u,4u,1u,3u,11u,15u,0u,5u,12u,2u,13u,9u,7u,10u,14u);
+            let s4_p = array<u32,16>(15u,5u,8u,11u,14u,14u,6u,14u,6u,9u,12u,9u,12u,5u,15u,8u);
+            for (var i = 0u; i < 16u; i = i + 1u) {
+                let t = rol(A_p + ((B_p & C_p) | (~B_p & D_p)) + X[r4_p[i]] + 0x7A6D76E9u, s4_p[i]) + E_p;
+                A_p = E_p; E_p = D_p; D_p = rol(C_p, 10u); C_p = B_p; B_p = t;
+            }
+
+            let r5_p = array<u32,16>(12u,15u,10u,4u,1u,5u,8u,7u,6u,2u,13u,14u,0u,3u,9u,11u);
+            let s5_p = array<u32,16>(8u,5u,12u,9u,12u,5u,14u,6u,8u,13u,6u,5u,15u,13u,11u,11u);
+            for (var i = 0u; i < 16u; i = i + 1u) {
+                let t = rol(A_p + (B_p ^ C_p ^ D_p) + X[r5_p[i]], s5_p[i]) + E_p;
+                A_p = E_p; E_p = D_p; D_p = rol(C_p, 10u); C_p = B_p; B_p = t;
+            }
+
+            let h0 = 0xEFCDAB89u + C + D_p;
+            let h1 = 0x98BADCFEu + D + E_p;
+            let h2 = 0x10325476u + E + A_p;
+            let h3 = 0xC3D2E1F0u + A + B_p;
+            let h4 = 0x67452301u + B + C_p;
+
+            return array<u32, 5>(h0, h1, h2, h3, h4);
         }
 
         @compute @workgroup_size(64)
@@ -434,7 +514,7 @@
                 let b = scalar[i / 4u];
                 let window = (b >> ((i % 4u) * 8u)) & 0xFFu;
                 if (window == 0u) { continue; }
-                let tableIdx = i * 256u + window - 1u;
+                let tableIdx = i * 256u + window;
                 let aff = preTable[tableIdx];
                 p = jacobianAddAffine(p, aff.x, aff.y);
             }
@@ -445,9 +525,10 @@
             let finalX = multModP(p.x, zInvSq);
             let finalY = multModP(p.y, multModP(zInv, zInvSq));
 
-            let h160 = computeHash160Compressed(finalX, finalY);
+            let sha_res = sha256_33bytes(finalX, finalY);
+            let h160 = ripemd160_32bytes(sha_res);
 
-            if (h160[0] == targetHash[0] && h160[1] == targetHash[1] && h160[2] == targetHash[2] && h160[3] == targetHash[3] && h160[4] == targetHash[4]) {
+            if (h160[0] == targetHash.h0 && h160[1] == targetHash.h1 && h160[2] == targetHash.h2 && h160[3] == targetHash.h3 && h160[4] == targetHash.h4) {
                 resultOut[0] = 1u;
                 resultOut[1] = idx;
             }
@@ -456,6 +537,7 @@
 
         const SECP_GX = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
         const SECP_GY = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199c47d08ffb10d4b8n;
+        const P_JS = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
 
         function bigIntTo32Bytes(bi) {
             const hex = bi.toString(16).padStart(64, '0');
@@ -464,28 +546,6 @@
             return bytes;
         }
 
-        function ecAdd(p1, p2) {
-            if (!p1) return p2; if (!p2) return p1;
-            let p = p1.x, py = p1.y, qx = p2.x, qy = p2.y;
-            let m = Number((qy - py) * invModP_js(qx - p) % 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn);
-            if (m < 0) m += 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
-            let rx = (BigInt(m)*BigInt(m) - p - qx) % 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
-            if (rx < 0) rx += 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
-            let ry = (BigInt(m) * (p - rx) - py) % 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
-            if (ry < 0) ry += 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
-            return { x: rx, y: ry };
-        }
-        function ecDouble(p1) {
-            if (!p1) return null; let px = p1.x, py = p1.y;
-            let m = Number((3n * px * px) * invModP_js(2n * py) % 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn);
-            if (m < 0) m += 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
-            let rx = (BigInt(m)*BigInt(m) - 2n * px) % 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
-            if (rx < 0) rx += 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
-            let ry = (BigInt(m) * (px - rx) - py) % 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
-            if (ry < 0) ry += 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
-            return { x: rx, y: ry };
-        }
-        const P_JS = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
         function invModP_js(v) {
             v = ((v % P_JS) + P_JS) % P_JS;
             let t = 0n, newt = 1n; let r = P_JS, newr = v;
@@ -494,8 +554,35 @@
                 let tmp = t - quotient * newt; t = newt; newt = tmp;
                 let tmp2 = r - quotient * newr; r = newr; newr = tmp2;
             }
-            if (r > 1n) return 1n; if (t < 0n) t = t + P_JS;
+            if (r > 1n) return 0n;
+            if (t < 0n) t = t + P_JS;
             return t;
+        }
+
+        function ecDouble(p1) {
+            if (!p1) return null;
+            let px = p1.x, py = p1.y;
+            if (py === 0n) return null;
+            let num = (3n * px * px) % P_JS;
+            let den = (2n * py) % P_JS;
+            let m = (num * invModP_js(den)) % P_JS;
+            let rx = (m * m - 2n * px) % P_JS; if (rx < 0n) rx += P_JS;
+            let ry = (m * (px - rx) - py) % P_JS; if (ry < 0n) ry += P_JS;
+            return { x: rx, y: ry };
+        }
+
+        function ecAdd(p1, p2) {
+            if (!p1) return p2;
+            if (!p2) return p1;
+            let px = p1.x, py = p1.y, qx = p2.x, qy = p2.y;
+            if (px === qx && py === qy) return ecDouble(p1);
+            if (px === qx) return null;
+            let num = (qy - py) % P_JS; if (num < 0n) num += P_JS;
+            let den = (qx - px) % P_JS; if (den < 0n) den += P_JS;
+            let m = (num * invModP_js(den)) % P_JS;
+            let rx = (m * m - px - qx) % P_JS; if (rx < 0n) rx += P_JS;
+            let ry = (m * (px - rx) - py) % P_JS; if (ry < 0n) ry += P_JS;
+            return { x: rx, y: ry };
         }
 
         function hexToBytes(hex) {
@@ -504,39 +591,54 @@
           for (let i = 0; i < out.length; i++) out[i] = parseInt(cleanHex.substr(i*2,2), 16);
           return out;
         }
+
         function bytesToLimbsLE(bytes32) {
           const limbs = new Uint32Array(8);
           for (let i = 0; i < 8; i++) {
-            const off = 28 - 4*i; limbs[i] = ((bytes32[off]<<24) | (bytes32[off+1]<<16) | (bytes32[off+2]<<8) | (bytes32[off+3])) >>> 0;
+            const off = 28 - 4*i;
+            limbs[i] = ((bytes32[off]<<24) | (bytes32[off+1]<<16) | (bytes32[off+2]<<8) | (bytes32[off+3])) >>> 0;
           }
           return limbs;
         }
-        function bigIntToLimbsLE(bi) { return bytesToLimbsLE(hexToBytes(bi.toString(16).padStart(64, '0'))); }
+
+        function bigIntToLimbsLE(bi) { return bytesToLimbsLE(bigIntTo32Bytes(bi)); }
 
         function buildPrecomputedTable() {
-          const flat = new Uint32Array(32 * 256 * 16); let base = { x: SECP_GX, y: SECP_GY };
+          const flat = new Uint32Array(32 * 256 * 16);
+          let base = { x: SECP_GX, y: SECP_GY };
           for (let i = 0; i < 32; i++) {
             let acc = null;
             for (let j = 1; j < 256; j++) {
               acc = ecAdd(acc, base);
               const off = (i * 256 + j) * 16;
-              flat.set(bytesToLimbsLE(bigIntTo32Bytes(acc.x)), off); flat.set(bytesToLimbsLE(bigIntTo32Bytes(acc.y)), off + 8);
+              flat.set(bigIntToLimbsLE(acc.x), off);
+              flat.set(bigIntToLimbsLE(acc.y), off + 8);
             }
-            for (let d = 0; d < 8; d++) base = ecDouble(base);
+            base = ecDouble(base);
+            for (let d = 0; d < 7; d++) base = ecDouble(base);
           }
           return flat;
         }
 
         function getTargetHash160Bytes(address) {
           const B58ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-          let digits = [0];
+          let num = 0n;
           for (let i = 0; i < address.length; i++) {
-            let p = B58ALPHABET.indexOf(address[i]); if (p < 0) continue; let carry = p;
-            for (let j = 0; j < digits.length; j++) { carry += digits[j] * 58; digits[j] = carry & 0xff; carry = carry >> 8; }
-            while (carry > 0) { digits.push(carry & 0xff); carry = carry >> 8; }
+            let p = B58ALPHABET.indexOf(address[i]);
+            if (p < 0) continue;
+            num = num * 58n + BigInt(p);
           }
-          for (let i = 0; i < address.length && address[i] === '1'; i++) digits.push(0);
-          digits.reverse(); return new Uint8Array(digits).slice(1, 21);
+          let hex = num.toString(16);
+          if (hex.length % 2 !== 0) hex = '0' + hex;
+          let bytes = hexToBytes(hex);
+          let leadingOnes = 0;
+          for (let i = 0; i < address.length && address[i] === '1'; i++) leadingOnes++;
+          let full = new Uint8Array(leadingOnes + bytes.length);
+          full.set(bytes, leadingOnes);
+          if (full.length >= 25) {
+            return full.slice(full.length - 24, full.length - 4);
+          }
+          return full.slice(1, 21);
         }
 
         async function sha256_browser(msg) {
@@ -546,21 +648,19 @@
 
         const B58ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
         function base58encode(bytes) {
-          let digits = [0];
+          let num = 0n;
           for (let i = 0; i < bytes.length; i++) {
-            let carry = bytes[i];
-            for (let j = 0; j < digits.length; j++) { 
-                carry += digits[j] * 256;
-                digits[j] = carry % 58; 
-                carry = Math.floor(carry / 58); 
-            }
-            while (carry > 0) { 
-                digits.push(carry % 58); 
-                carry = Math.floor(carry / 58); 
-            }
+            num = num * 256n + BigInt(bytes[i]);
           }
-          let str = ""; for (let i = 0; i < bytes.length && bytes[i] === 0; i++) str += "1";
-          for (let i = digits.length - 1; i >= 0; i--) str += B58ALPHA[digits[i]];
+          let str = "";
+          while (num > 0n) {
+            let mod = num % 58n;
+            str = B58ALPHA[Number(mod)] + str;
+            num = num / 58n;
+          }
+          for (let i = 0; i < bytes.length && bytes[i] === 0; i++) {
+            str = "1" + str;
+          }
           return str;
         }
 
@@ -580,7 +680,6 @@
         let batchLimbs = null;
 
         let isRunning = false, keysCheckedGlobal = 0, slicesVisited = 0;
-        let firstBatchErrorChecked = false;
         let keysCheckedSlice = 0;
         let currentSliceStart = 0n, currentSliceEnd = 0n, currentKeyVal = 0n;
         const BATCH_SIZE = 1048576;
@@ -589,8 +688,8 @@
             const userStartInput = document.getElementById('customStart').value.trim();
             const userEndInput = document.getElementById('customEnd').value.trim();
             
-            let rangeMin = userStartInput ? BigInt(userStartInput.startsWith('0x') ? userStartInput : '0x' + userStartInput) : 0x400000000000000000n;
-            let rangeMax = userEndInput ? BigInt(userEndInput.startsWith('0x') ? userEndInput : '0x' + userEndInput) : 0x7fffffffffffffffffn;
+            let rangeMin = userStartInput ? BigInt(userStartInput.startsWith('0x') ? userStartInput : '0x' + userStartInput) : 0x40000000000000000n;
+            let rangeMax = userEndInput ? BigInt(userEndInput.startsWith('0x') ? userEndInput : '0x' + userEndInput) : 0x7ffffffffffffffffn;
             
             const limit = BigInt(limitStr);
             const totalSpan = rangeMax - rangeMin + 1n;
@@ -634,12 +733,6 @@
                 gpuDevice.addEventListener('uncapturederror', (event) => {
                     log('❌ GPU FOUT (uncaptured): ' + event.error.message, 'warn');
                 });
-                gpuDevice.lost.then((info) => {
-                    log(`❌ GPU DEVICE LOST (${info.reason}): ${info.message}`, 'warn');
-                });
-
-                gpuDevice.pushErrorScope('validation');
-                gpuDevice.pushErrorScope('internal');
 
                 const module = gpuDevice.createShaderModule({ code: WGSL_SOURCE });
                 const compilationInfo = await module.getCompilationInfo();
@@ -650,13 +743,11 @@
                     log(`${isError ? '❌ ERROR' : 'ℹ️ INFO'}: ${msg.message}`, isError ? 'warn' : 'info');
                 }
                 if (hasShaderErrors) {
-                    await gpuDevice.popErrorScope(); await gpuDevice.popErrorScope();
                     document.getElementById('gpuBadge').textContent = '❌ SHADER FOUT';
                     return false;
                 }
 
                 gpuPipeline = gpuDevice.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
-                await gpuDevice.popErrorScope(); await gpuDevice.popErrorScope();
 
                 log("Genereer Jacobian ECDSA Tabel...", "info");
                 const table = buildPrecomputedTable();
@@ -664,9 +755,8 @@
                 tableBuffer = gpuDevice.createBuffer({ size: table.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
                 gpuDevice.queue.writeBuffer(tableBuffer, 0, table);
 
-                uniformsBuffer = gpuDevice.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+                uniformsBuffer = gpuDevice.createBuffer({ size: 20, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
-                // --- ZERO-ALLOC OPTIMALISATIE: Maak buffers & JS arrays EENMALIG aan ---
                 batchLimbs = new Uint32Array(BATCH_SIZE * 8);
                 inBuf = gpuDevice.createBuffer({ size: BATCH_SIZE * 32, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
                 resBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
@@ -752,7 +842,12 @@
                 const startValForBatch = currentKeyVal;
                 const actualBatchCount = Math.min(BATCH_SIZE, Number(currentSliceEnd - currentKeyVal));
                 
-                // --- GEOPTIMALISEERD: Vul bestaande typed array zonder nieuwe toewijzing ---
+                if (actualBatchCount <= 0) {
+                    await runSlice();
+                    if (isRunning) requestAnimationFrame(step);
+                    return;
+                }
+
                 for (let i = 0; i < actualBatchCount; i++) {
                   batchLimbs.set(bigIntToLimbsLE(currentKeyVal), i * 8);
                   currentKeyVal += 1n;
@@ -785,7 +880,7 @@
                     log(`🎯 MATCH GEVONDEN! Sleutel: 0x${hexKey}`, 'success');
                     log(`WIF: ${wif}`, 'success');
                     
-                    document.getElementById('noMatchRow']?.remove();
+                    document.getElementById('noMatchRow')?.remove();
                     const tbody = document.getElementById('matchTable');
                     const row = tbody.insertRow();
                     row.innerHTML = `<td>WebGPU Match</td><td>${wif}</td><td>0x${hexKey}</td>`;
