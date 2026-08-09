@@ -133,7 +133,7 @@
                 <input id="customEnd" value="7fffffffffffffffff" type="text" style="color: var(--accent2);">
             </div>
             <hr class="divider">
-            <div class="field"><label>GPU Batch Size</label><input id="numW" value="1048576" type="number" disabled title="Bepaald door WebGPU"></div>
+            <div class="field"><label>GPU Batch Size</label><input id="numW" value="524288" type="number" disabled title="Bepaald door WebGPU"></div>
             <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);" readonly></div>
             <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);" readonly></div>
             <div style="font-size: 0.65rem; color: var(--muted); margin-top: 6px; text-align: right;">ℹ️ Deze HEX-waarden vernieuwen automatisch als het limiet is bereikt.</div>
@@ -439,13 +439,14 @@
           return array<u32,5>(t, h2 + dl + er, h3 + el + ar, h4 + al + br, h0 + bl + cr);
         }
 
-        // ====== NIEUW: We halen alleen de start offset op, GPU telt zelf verder =======
+        // ====== GEOPTIMALISEERD VOOR APPLE SILICON =======
         @group(0) @binding(0) var<uniform> batch: BatchParams;
         @group(0) @binding(1) var<storage, read> combTable: array<u32>;
         @group(0) @binding(2) var<uniform> targetData: TargetHash;
         @group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>;
 
-        @compute @workgroup_size(64)
+        // Apple Silicon is veel efficiënter met workgroup_size(256)
+        @compute @workgroup_size(256)
         fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
           let idx = gid.x;
 
@@ -589,9 +590,10 @@
         let firstBatchErrorChecked = false;
         let keysCheckedSlice = 0;
         let currentSliceStart = 0n, currentSliceEnd = 0n, currentKeyVal = 0n;
-        const BATCH_SIZE = 1048576;
         
-        // --- NIEUW: Globale buffers voor optimaal hergebruik ---
+        // Aangepaste BATCH_SIZE (voorkomt GPU timeouts op iOS)
+        const BATCH_SIZE = 524288;
+        
         let resBuf, readBuf, bindGroup, zeroRes;
         
         function getRandomSliceStart(limitStr) {
@@ -668,7 +670,6 @@
 
                 log("Genereer Jacobian ECDSA Tabel (dit duurt heel even)...", "info");
                 
-                // Laat UI even ademen voor we de zware berekening doen
                 await new Promise(r => setTimeout(r, 50)); 
                 
                 const table = buildPrecomputedTable();
@@ -676,10 +677,7 @@
                 tableBuffer = gpuDevice.createBuffer({ size: table.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
                 gpuDevice.queue.writeBuffer(tableBuffer, 0, table);
                 
-                // Uniform buffer voor Hash Target: (5 uints + 3 padding = 32 bytes)
                 uniformsBuffer = gpuDevice.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-                
-                // Batch buffer voor de start offset (8 uints = 32 bytes)
                 batchBuffer = gpuDevice.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
                 document.getElementById('gpuBadge').textContent = '🚀 WEBGPU GEREED (TURBO)';
@@ -700,7 +698,6 @@
             const targetAddress = document.getElementById('btcAddr').value.trim();
             const targetHashBytes = getTargetHash160Bytes(targetAddress);
             
-            // Format TargetHash structs: (h0,h1,h2,h3), (h4, pad, pad, pad)
             const targetHashU32 = new Uint32Array(8);
             for (let i = 0; i < 5; i++) {
                 targetHashU32[i] = (targetHashBytes[i*4]) | (targetHashBytes[i*4+1] << 8) | (targetHashBytes[i*4+2] << 16) | (targetHashBytes[i*4+3] << 24);
@@ -712,13 +709,13 @@
                 readBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
 
                 bindGroup = gpuDevice.createBindGroup({
-                  layout: gpuPipeline.getBindGroupLayout(0),
-                  entries: [
+                    layout: gpuPipeline.getBindGroupLayout(0),
+                    entries: [
                     { binding: 0, resource: { buffer: batchBuffer } },
                     { binding: 1, resource: { buffer: tableBuffer } },
                     { binding: 2, resource: { buffer: uniformsBuffer } },
                     { binding: 3, resource: { buffer: resBuf } }
-                  ]
+                    ]
                 });
                 zeroRes = new Uint32Array([0, 0]);
             }
@@ -759,83 +756,84 @@
             let startTime = performance.now();
             let lastUpdate = startTime;
 
-            async function step() {
-                if (!isRunning) return;
+            // TURBO FIX: Een asynchrone while-loop in plaats van rAF
+            async function startComputeLoop() {
+                while (isRunning) {
+                    if (currentKeyVal >= currentSliceEnd) {
+                        await runSlice();
+                    }
 
-                if (currentKeyVal >= currentSliceEnd) {
-                    await runSlice();
+                    const actualBatchCount = Math.min(BATCH_SIZE, Number(currentSliceEnd - currentKeyVal));
+                    
+                    const startLimbs = bigIntToLimbsLE(currentKeyVal); 
+                    gpuDevice.queue.writeBuffer(batchBuffer, 0, startLimbs);
+                    gpuDevice.queue.writeBuffer(resBuf, 0, zeroRes.buffer);
+
+                    const encoder = gpuDevice.createCommandEncoder();
+                    const pass = encoder.beginComputePass();
+                    pass.setPipeline(gpuPipeline);
+                    pass.setBindGroup(0, bindGroup);
+                    
+                    // LET OP: Delen door 256 omdat we de workgroup_size naar 256 hebben gezet in WGSL!
+                    pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 256));
+                    pass.end();
+                    encoder.copyBufferToBuffer(resBuf, 0, readBuf, 0, 8);
+                    gpuDevice.queue.submit([encoder.finish()]);
+
+                    // CPU wacht hier netjes op de GPU zonder de hele browser te blokkeren
+                    await readBuf.mapAsync(GPUMapMode.READ);
+                    const gpuResult = new Uint32Array(readBuf.getMappedRange().slice(0));
+                    
+                    const isMatch = gpuResult[0] === 1;
+                    const matchIdx = gpuResult[1];
+                    readBuf.unmap();
+                    
+                    currentKeyVal += BigInt(actualBatchCount);
+                    keysCheckedSlice += actualBatchCount;
+                    keysCheckedGlobal += actualBatchCount;
+                    
+                    const now = performance.now();
+                    // TURBO FIX: UI slechts elke 500ms updaten in plaats van 100ms
+                    if(now - lastUpdate > 500) {
+                        let elapsed = (now - startTime) / 1000;
+                        let rate = Math.round(keysCheckedGlobal / elapsed);
+                        document.getElementById('keysScanned').textContent = keysCheckedGlobal.toLocaleString();
+                        document.getElementById('speed').textContent = rate.toLocaleString() + " /s";
+                        document.getElementById('currentSliceKeys').textContent = keysCheckedSlice.toLocaleString();
+                        
+                        let slicePct = (keysCheckedSlice / Number(keysLimit)) * 100;
+                        document.getElementById('progressBar').style.width = slicePct + "%";
+                        document.getElementById('kansBar').style.width = slicePct + "%";
+                        document.getElementById('gaugePct').textContent = slicePct.toFixed(1) + "%";
+                        document.getElementById('coveragePct').textContent = slicePct.toFixed(4) + "%";
+                        
+                        const offset = 238.76 - (238.76 * (slicePct / 100));
+                        document.getElementById('gaugeFill').style.strokeDashoffset = offset;
+                        document.getElementById('chanceScientific').textContent = slicePct.toFixed(2) + "%";
+                        lastUpdate = now;
+
+                        // Geef de iPhone de tijd om de nieuwe waarden op het scherm te tekenen
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                    }
+
+                    if (isMatch) {
+                        const foundPrivInt = (currentKeyVal - BigInt(actualBatchCount)) + BigInt(matchIdx);
+                        const privHex = foundPrivInt.toString(16).padStart(64, '0');
+                        const wifStr = await wifCompressed(hexToBytes(privHex));
+                        
+                        document.getElementById('noMatchRow').style.display = 'none';
+                        const tbody = document.getElementById('matchTable');
+                        tbody.innerHTML += `<tr><td>P2PKH (Match)</td><td style="color:var(--accent2);">${wifStr}</td><td style="color:var(--success);">0x${privHex}</td></tr>`;
+                        log(`🎯 BINGO! Match gevonden: 0x${privHex}`, 'success');
+                        
+                        document.getElementById('stopBtn').click();
+                        return;
+                    }
                 }
-
-                const actualBatchCount = Math.min(BATCH_SIZE, Number(currentSliceEnd - currentKeyVal));
-                
-                // --- TURBO FIX: Geen trage loop in JS meer! ---
-                // We sturen nu ALLEEN de start-limbs van de batch (32 bytes).
-                // De videokaart genereert zelf de offsets!
-                const startLimbs = bigIntToLimbsLE(currentKeyVal); 
-                gpuDevice.queue.writeBuffer(batchBuffer, 0, startLimbs);
-                gpuDevice.queue.writeBuffer(resBuf, 0, zeroRes.buffer);
-
-                const encoder = gpuDevice.createCommandEncoder();
-                const pass = encoder.beginComputePass();
-                pass.setPipeline(gpuPipeline);
-                pass.setBindGroup(0, bindGroup);
-                
-                // Dispatch exactly enough workgroups to cover actualBatchCount
-                pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 64));
-                pass.end();
-                encoder.copyBufferToBuffer(resBuf, 0, readBuf, 0, 8);
-                gpuDevice.queue.submit([encoder.finish()]);
-
-                await readBuf.mapAsync(GPUMapMode.READ);
-                const gpuResult = new Uint32Array(readBuf.getMappedRange().slice(0));
-                
-                const isMatch = gpuResult[0] === 1;
-                const matchIdx = gpuResult[1];
-                readBuf.unmap();
-                
-                // Schuif de interne teller direct op na de GPU opdracht
-                currentKeyVal += BigInt(actualBatchCount);
-                keysCheckedSlice += actualBatchCount;
-                keysCheckedGlobal += actualBatchCount;
-                
-                const now = performance.now();
-                if(now - lastUpdate > 100) {
-                    let elapsed = (now - startTime) / 1000;
-                    let rate = Math.round(keysCheckedGlobal / elapsed);
-                    document.getElementById('keysScanned').textContent = keysCheckedGlobal.toLocaleString();
-                    document.getElementById('speed').textContent = rate.toLocaleString() + " /s";
-                    document.getElementById('currentSliceKeys').textContent = keysCheckedSlice.toLocaleString();
-                    
-                    let slicePct = (keysCheckedSlice / Number(keysLimit)) * 100;
-                    document.getElementById('progressBar').style.width = slicePct + "%";
-                    document.getElementById('kansBar').style.width = slicePct + "%";
-                    document.getElementById('gaugePct').textContent = slicePct.toFixed(1) + "%";
-                    document.getElementById('coveragePct').textContent = slicePct.toFixed(4) + "%";
-                    
-                    const offset = 238.76 - (238.76 * (slicePct / 100));
-                    document.getElementById('gaugeFill').style.strokeDashoffset = offset;
-                    document.getElementById('chanceScientific').textContent = slicePct.toFixed(2) + "%";
-                    lastUpdate = now;
-                }
-
-                if (isMatch) {
-                    // Start van batch + match offset = correcte index
-                    const foundPrivInt = (currentKeyVal - BigInt(actualBatchCount)) + BigInt(matchIdx);
-                    const privHex = foundPrivInt.toString(16).padStart(64, '0');
-                    const wifStr = await wifCompressed(hexToBytes(privHex));
-                    
-                    document.getElementById('noMatchRow').style.display = 'none';
-                    const tbody = document.getElementById('matchTable');
-                    tbody.innerHTML += `<tr><td>P2PKH (Match)</td><td style="color:var(--accent2);">${wifStr}</td><td style="color:var(--success);">0x${privHex}</td></tr>`;
-                    log(`🎯 BINGO! Match gevonden: 0x${privHex}`, 'success');
-                    
-                    document.getElementById('stopBtn').click();
-                    return;
-                }
-
-                if (isRunning) requestAnimationFrame(step);
             }
-            requestAnimationFrame(step);
+            
+            // Start de oneindige loop
+            startComputeLoop();
         });
 
         document.getElementById('stopBtn').addEventListener('click', () => {
