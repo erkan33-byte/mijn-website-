@@ -442,7 +442,7 @@
         // ====== NIEUW: We halen alleen de start offset op, GPU telt zelf verder =======
         @group(0) @binding(0) var<uniform> batch: BatchParams;
         @group(0) @binding(1) var<storage, read> combTable: array<u32>;
-        @group(0) @binding(2) var<uniform> target: TargetHash;
+        @group(0) @binding(2) var<uniform> targetData: TargetHash;
         @group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>;
 
         @compute @workgroup_size(64)
@@ -469,11 +469,11 @@
           let hash = ripemd160_32(H);
 
           var isMatch = true;
-          if (hash[0] != target.h.x) { isMatch = false; }
-          if (hash[1] != target.h.y) { isMatch = false; }
-          if (hash[2] != target.h.z) { isMatch = false; }
-          if (hash[3] != target.h.w) { isMatch = false; }
-          if (hash[4] != target.h4.x) { isMatch = false; }
+          if (hash[0] != targetData.h.x) { isMatch = false; }
+          if (hash[1] != targetData.h.y) { isMatch = false; }
+          if (hash[2] != targetData.h.z) { isMatch = false; }
+          if (hash[3] != targetData.h.w) { isMatch = false; }
+          if (hash[4] != targetData.h4.x) { isMatch = false; }
 
           if (isMatch) {
             resultBuffer[0] = 1u;
