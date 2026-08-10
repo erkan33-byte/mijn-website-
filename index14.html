@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #71 – Random Slice Sniper (ZERO-GC TURBO v4) ⚡</title>
+    <title>Puzzel #71 – Random Slice Sniper (Auto 25% Range) ⚡</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -119,8 +119,8 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – Native JS Turbo v4 (Inline JIT Ops)</div>
-            <span class="badge">🚀 ULTRA-TURBO: LOOP INLINING & ZERO-GC</span>
+            <div class="sub">Puzzel #71 – Native JS Turbo (Auto 25% Zone)</div>
+            <span class="badge">🚀 ULTRA-TURBO: WILLEKEURIG 25% GEBIED PER SESSIE</span>
         </div>
         <div class="card">
             <div class="card-title">⚙ Actieve Plakje Configuratie</div>
@@ -131,7 +131,7 @@
             <div class="field">
                 <label>Scan methode</label>
                 <select id="scanMethod">
-                    <option value="linear" selected>📏 Lineair Jacobian Batch (Turbo v4)</option>
+                    <option value="linear" selected>📏 Lineair Jacobian Batch (Zero-GC v3)</option>
                 </select>
             </div>
             <div class="field">
@@ -161,7 +161,7 @@
                 </div>
             </div>
             <div class="formula-box" style="background:rgba(0,0,0,0.5); border-left:3px solid var(--accent2); padding:10px; font-size:.75rem; color:#bfe4ff; line-height:1.5;">
-                Engine v4: Jacobian Mixed Addition + Inline Math + Global Array Pre-allocation
+                Engine: Jacobian Mixed Addition + In-Place Hashing (Actief binnen een uniek 25% fragment)
             </div>
         </div>
         <div class="chance-card">
@@ -188,8 +188,8 @@
             <div class="comparison-grid">
                 <div class="cmp-cell"><div class="cmp-label">🌌 Plakje Grootte</div><div class="cmp-val" id="cmpUniverse">2³⁵ keys</div><div class="cmp-desc">34.359.738.368 opties</div></div>
                 <div class="cmp-cell"><div class="cmp-label">⏱ Tijd tot hop</div><div class="cmp-val" id="cmpTime">—</div><div class="cmp-desc">tijd tot nieuwe zone</div></div>
-                <div class="cmp-cell"><div class="cmp-label">🎰 Globale Puzzel 71 Kans</div><div class="cmp-val" id="cmpLottery">0.00e+0</div><div class="cmp-desc">statistische trefkans</div></div>
-                <div class="cmp-cell"><div class="cmp-label">📡 % van Puzzel 71</div><div class="cmp-val" id="cmpEpochs">0%</div></div>
+                <div class="cmp-cell"><div class="cmp-label">🎰 25% Puzzel 71 Kans</div><div class="cmp-val" id="cmpLottery">0.00e+0</div><div class="cmp-desc">statistische trefkans</div></div>
+                <div class="cmp-cell"><div class="cmp-label">📡 % van 25% Zone</div><div class="cmp-val" id="cmpEpochs">0%</div></div>
             </div>
         </div>
         <div class="card">
@@ -211,10 +211,10 @@
                 <tbody id="matchTable"><tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Random Slice Sniper · ZERO-GC TURBO ENGINE v4</div>
+        <div class="footer">Random Slice Sniper · ZERO-GC TURBO ENGINE v3 (25% Auto-Range)</div>
     </div>
 
-    <!-- ⚡ OPTIMIZED WORKER ENGINE (ZERO-GC, IN-PLACE HASHING & INLINE MATH) -->
+    <!-- ⚡ OPTIMIZED WORKER ENGINE (ZERO-GC & IN-PLACE HASHING) -->
     <script id="workerCode" type="javascript/worker">
         self.onerror = function(e) {
             self.postMessage({ type: 'WORKER_ERROR', message: e.message || 'Fout in worker' });
@@ -225,14 +225,7 @@
         const G_y = 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n;
         const G = { x: G_x, y: G_y };
 
-        // Globale pre-allocatie: arrays worden één keer gemaakt en altijd herbruikt
-        const BATCH = 20000;
-        const pX = new Array(BATCH);
-        const pY = new Array(BATCH);
-        const pZ = new Array(BATCH);
-        const partials = new Array(BATCH);
-        const invZ = new Array(BATCH);
-
+        function mod(a, b = P) { const r = a % b; return r >= 0n ? r : r + b; }
         function inverse(a, n = P) {
             let t = 0n, newt = 1n; let r = n, newr = a;
             while (newr !== 0n) {
@@ -247,19 +240,14 @@
             if (!p) return q; if (!q) return p;
             if (p.x === q.x) {
                 if (p.y !== q.y || p.y === 0n) return null;
-                let inv = inverse(2n * p.y);
-                let lam = ((3n * p.x * p.x) * inv) % P; if(lam < 0n) lam += P;
-                let x3 = (lam * lam - 2n * p.x) % P; if(x3 < 0n) x3 += P;
-                let y3 = (lam * (p.x - x3) - p.y) % P; if(y3 < 0n) y3 += P;
-                return { x: x3, y: y3 };
+                let lam = mod((3n * p.x * p.x) * inverse(2n * p.y));
+                let x3 = mod(lam * lam - 2n * p.x);
+                return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
             }
-            let inv = inverse(q.x - p.x < 0n ? (q.x - p.x) + P : q.x - p.x);
-            let lam = ((q.y - p.y) * inv) % P; if(lam < 0n) lam += P;
-            let x3 = (lam * lam - p.x - q.x) % P; if(x3 < 0n) x3 += P;
-            let y3 = (lam * (p.x - x3) - p.y) % P; if(y3 < 0n) y3 += P;
-            return { x: x3, y: y3 };
+            let lam = mod(mod(q.y - p.y) * inverse(mod(q.x - p.x)));
+            let x3 = mod(lam * lam - p.x - q.x);
+            return { x: x3, y: mod(lam * (p.x - x3) - p.y) };
         }
-        
         function mul(p, n) {
             let r = null, base = p;
             while (n > 0n) {
@@ -271,7 +259,7 @@
         }
 
         // =======================================================
-        // ⚡ SHA & RIPEMD CONSTANTS
+        // ⚡ ZERO-GC PRE-ALLOCATED BUFFERS & CONSTANTS
         // =======================================================
         const sha256_K = new Uint32Array([
             0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -290,15 +278,19 @@
         const hl = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
         const hr = [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000];
 
+        // Statische werkbuffers voor Zero-GC inner-loop
         const pubKeyBuffer = new Uint8Array(33);
         const sha256Buffer = new Uint8Array(32);
         const ripemdBuffer = new Uint8Array(20);
+
         const pubKeyView = new DataView(pubKeyBuffer.buffer);
         const sha256View = new DataView(sha256Buffer.buffer);
         const ripemdView = new DataView(ripemdBuffer.buffer);
+
         const w_sha = new Uint32Array(64);
         const w_ripemd = new Uint32Array(16);
 
+        // Geoptimaliseerde in-place SHA-256 (altijd exact 33 bytes input = 1 block van 512 bits)
         function sha256_33_inplace() {
             let a = 0x6a09e667, b = 0xbb67ae85, c = 0x3c6ef372, d = 0xa54ff53a;
             let e = 0x510e527f, f = 0x9b05688c, g = 0x1f83d9ab, _h = 0x5be0cd19;
@@ -313,7 +305,8 @@
             w_sha[7] = pubKeyView.getUint32(28, false);
             w_sha[8] = (pubKeyBuffer[32] << 24) | 0x800000;
             w_sha[9] = 0; w_sha[10] = 0; w_sha[11] = 0;
-            w_sha[12] = 0; w_sha[13] = 0; w_sha[14] = 0; w_sha[15] = 264;
+            w_sha[12] = 0; w_sha[13] = 0; w_sha[14] = 0;
+            w_sha[15] = 264; // 33 bytes * 8 = 264 bits
 
             for (let j = 16; j < 64; j++) {
                 let s0 = (w_sha[j-15] >>> 7 | w_sha[j-15] << 25) ^ (w_sha[j-15] >>> 18 | w_sha[j-15] << 14) ^ (w_sha[j-15] >>> 3);
@@ -341,6 +334,7 @@
             sha256View.setUint32(28, (0x5be0cd19 + _h) | 0, false);
         }
 
+        // Geoptimaliseerde in-place RIPEMD-160 (altijd exact 32 bytes input = 1 block van 512 bits)
         function ripemd160_32_inplace() {
             w_ripemd[0] = sha256View.getUint32(0, true);
             w_ripemd[1] = sha256View.getUint32(4, true);
@@ -351,8 +345,10 @@
             w_ripemd[6] = sha256View.getUint32(24, true);
             w_ripemd[7] = sha256View.getUint32(28, true);
             w_ripemd[8] = 0x00000080;
-            w_ripemd[9] = 0; w_ripemd[10] = 0; w_ripemd[11] = 0; w_ripemd[12] = 0; w_ripemd[13] = 0;
-            w_ripemd[14] = 256; w_ripemd[15] = 0;
+            w_ripemd[9] = 0; w_ripemd[10] = 0; w_ripemd[11] = 0;
+            w_ripemd[12] = 0; w_ripemd[13] = 0;
+            w_ripemd[14] = 256; // 32 bytes * 8 = 256 bits
+            w_ripemd[15] = 0;
 
             let al = 0x67452301, bl = 0xefcdab89, cl = 0x98badcfe, dl = 0x10325476, el = 0xc3d2e1f0;
             let ar = 0x67452301, br = 0xefcdab89, cr = 0x98badcfe, dr = 0x10325476, er = 0xc3d2e1f0;
@@ -372,13 +368,15 @@
                 ar = er; er = dr; dr = (cr << 10 | cr >>> 22); cr = br; br = tR;
             }
 
-            ripemdView.setUint32(0, (0xefcdab89 + cl + dr) | 0, true);
+            let t = (0xefcdab89 + cl + dr) | 0;
+            ripemdView.setUint32(0, t, true);
             ripemdView.setUint32(4, (0x98badcfe + dl + er) | 0, true);
             ripemdView.setUint32(8, (0x10325476 + el + ar) | 0, true);
             ripemdView.setUint32(12, (0xc3d2e1f0 + al + br) | 0, true);
             ripemdView.setUint32(16, (0x67452301 + bl + cr) | 0, true);
         }
 
+        // Generieke SHA-256 alleen voor WIF export bij match
         function sha256_generic(data) {
             const h = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
             let mLen = data.length;
@@ -433,6 +431,9 @@
             return s;
         }
 
+        // ==========================================
+        // ⚡ ZERO-GC BATCH ENGINE
+        // ==========================================
         self.onmessage = function(e) {
             const data = e.data;
             if (data.type === "ADDRESS_SCAN") {
@@ -443,111 +444,119 @@
                 const targetInt0 = targetH160View.getUint32(0, true);
                 const targetAddr = data.targetAddress;
                 const workerId = data.workerId;
+                const BATCH = 10000;
                 
                 let currentPoint = mul(G, currentKey);
 
-                // ⚡ FIX: geen setTimeout(fastStep, 0) meer tussen batches — dat kost door
-                // browser-clamping minstens ~4ms PER BATCH aan pure wachttijd, zonder dat
-                // er iets gebeurt. We draaien nu een aaneengesloten while-loop in de worker
-                // (blokkeert alleen deze worker-thread, nooit de hoofdpagina) en posten
-                // alleen nog periodiek een voortgangsbericht naar de hoofdpagina.
-                function runLoop() {
-                    while (true) {
-                        let batchCount = 0;
-                        let jX = currentPoint.x;
-                        let jY = currentPoint.y;
-                        let jZ = 1n;
+                // Pre-allocatie van arrays buiten de stappen-loop
+                let pX = new Array(BATCH);
+                let pY = new Array(BATCH);
+                let pZ = new Array(BATCH);
+                let partials = new Array(BATCH);
+                let invZ = new Array(BATCH);
 
-                        for (let i = 0; i < BATCH && currentKey + BigInt(i) <= endKey; i++) {
-                            pX[i] = jX; pY[i] = jY; pZ[i] = jZ;
+                function fastStep() {
+                    let batchCount = 0;
+                    let jX = currentPoint.x;
+                    let jY = currentPoint.y;
+                    let jZ = 1n;
 
-                            // INLINE MATH - Weg met functie aanroepen voor modulo
-                            let Z1Z1 = (jZ * jZ) % P;
-                            let U2 = (G_x * Z1Z1) % P;
-                            let S2 = (G_y * ((jZ * Z1Z1) % P)) % P;
-
-                            let H = (U2 - jX) % P; if (H < 0n) H += P;
-                            let R = (S2 - jY) % P; if (R < 0n) R += P;
-
-                            let HH = (H * H) % P;
-                            let HHH = (H * HH) % P;
-                            let V = (jX * HH) % P;
-
-                            jX = (R * R - HHH - 2n * V) % P; if (jX < 0n) jX += P;
-                            jY = (R * (V - jX) - jY * HHH) % P; if (jY < 0n) jY += P;
-                            jZ = (jZ * H) % P; if (jZ < 0n) jZ += P;
-
-                            batchCount++;
-                        }
-
-                        if (batchCount === 0) {
-                            self.postMessage({ type: "SCAN_DONE", workerId });
-                            return;
-                        }
-
-                        let acc = 1n;
-                        for(let i = 0; i < batchCount; i++) {
-                            partials[i] = acc;
-                            acc = (acc * pZ[i]) % P;
-                        }
-
-                        let invAcc = inverse(acc);
-
-                        for(let i = batchCount - 1; i >= 0; i--) {
-                            invZ[i] = (invAcc * partials[i]) % P;
-                            invAcc = (invAcc * pZ[i]) % P;
-                        }
-
-                        for (let i = 0; i < batchCount; i++) {
-                            let iz = invZ[i];
-                            let iz2 = (iz * iz) % P;
-                            let ax = (pX[i] * iz2) % P;
-                            let ay = (pY[i] * ((iz * iz2) % P)) % P;
-
-                            pubKeyBuffer[0] = (ay & 1n) === 0n ? 0x02 : 0x03;
-                            let tmp = ax;
-                            for (let b = 32; b >= 1; b--) {
-                                pubKeyBuffer[b] = Number(tmp & 0xffn);
-                                tmp >>= 8n;
-                            }
-
-                            sha256_33_inplace();
-                            ripemd160_32_inplace();
-
-                            if (ripemdView.getUint32(0, true) === targetInt0) {
-                                let match = true;
-                                for (let k = 4; k < 20; k++) {
-                                    if (ripemdBuffer[k] !== targetH160[k]) { match = false; break; }
-                                }
-                                if (match) {
-                                    const privHex = (currentKey + BigInt(i)).toString(16).padStart(64, '0');
-                                    const payloadBytes = ("80" + privHex + "01").match(/.{2}/g).map(b => parseInt(b, 16));
-                                    const doubleSha = sha256_generic(sha256_generic(new Uint8Array(payloadBytes)));
-                                    const wif = toBase58("80" + privHex + "01" + Array.from(doubleSha).slice(0, 4).map(b => b.toString(16).padStart(2,'0')).join(''));
-                                    self.postMessage({ type: "FOUND", privHex, wif, address: targetAddr });
-                                    return;
-                                }
-                            }
-                        }
-
-                        currentKey += BigInt(batchCount);
-
-                        let lastZ = invZ[batchCount - 1];
-                        let lastZ2 = (lastZ * lastZ) % P;
-                        let lastAX = (pX[batchCount - 1] * lastZ2) % P;
-                        let lastAY = (pY[batchCount - 1] * ((lastZ * lastZ2) % P)) % P;
-                        currentPoint = add({x: lastAX, y: lastAY}, G);
-
-                        self.postMessage({ type: "PROGRESS", count: batchCount, workerId });
-
-                        if (currentKey > endKey) {
-                            self.postMessage({ type: "SCAN_DONE", workerId });
-                            return;
-                        }
-                        // geen setTimeout: direct door naar de volgende batch
+                    for (let i = 0; i < BATCH && currentKey + BigInt(i) <= endKey; i++) {
+                        pX[i] = jX; pY[i] = jY; pZ[i] = jZ;
+                        
+                        let Z1Z1 = mod(jZ * jZ);
+                        let U2 = mod(G_x * Z1Z1);
+                        let S2 = mod(G_y * mod(jZ * Z1Z1));
+                        let H = mod(U2 - jX);
+                        let R = mod(S2 - jY);
+                        
+                        let HH = mod(H * H);
+                        let HHH = mod(H * HH);
+                        let V = mod(jX * HH);
+                        
+                        jX = mod(R * R - HHH - 2n * V);
+                        jY = mod(R * (V - jX) - jY * HHH);
+                        jZ = mod(jZ * H);
+                        
+                        batchCount++;
                     }
+
+                    if (batchCount === 0) {
+                        self.postMessage({ type: "SCAN_DONE", workerId });
+                        return;
+                    }
+                    
+                    // Batch Inversion
+                    let acc = 1n;
+                    for(let i = 0; i < batchCount; i++) {
+                        partials[i] = acc;
+                        acc = mod(acc * pZ[i]);
+                    }
+                    
+                    let invAcc = inverse(acc);
+                    
+                    for(let i = batchCount - 1; i >= 0; i--) {
+                        invZ[i] = mod(invAcc * partials[i]);
+                        invAcc = mod(invAcc * pZ[i]);
+                    }
+                    
+                    // Validatie en conversie (ZERO-GC & 32-bit Match)
+                    for (let i = 0; i < batchCount; i++) {
+                        let iz = invZ[i];
+                        let iz2 = mod(iz * iz);
+                        let ax = mod(pX[i] * iz2);
+                        let ay = mod(pY[i] * mod(iz * iz2));
+                        
+                        // Vul de pre-gealloceerde pubkey buffer in-place
+                        pubKeyBuffer[0] = (ay & 1n) === 0n ? 0x02 : 0x03;
+                        let tmp = ax;
+                        for (let b = 32; b >= 1; b--) { 
+                            pubKeyBuffer[b] = Number(tmp & 0xffn); 
+                            tmp >>= 8n; 
+                        }
+                        
+                        // In-place hashing
+                        sha256_33_inplace();
+                        ripemd160_32_inplace();
+
+                        // Fast Bitwise Check (vergelijk eerste 32 bits direct als integer)
+                        if (ripemdView.getUint32(0, true) === targetInt0) {
+                            let match = true;
+                            for (let k = 4; k < 20; k++) {
+                                if (ripemdBuffer[k] !== targetH160[k]) { 
+                                    match = false; 
+                                    break; 
+                                }
+                            }
+
+                            if (match) {
+                                const privHex = (currentKey + BigInt(i)).toString(16).padStart(64, '0');
+                                const payloadBytes = ("80" + privHex + "01").match(/.{2}/g).map(b => parseInt(b, 16));
+                                const doubleSha = sha256_generic(sha256_generic(new Uint8Array(payloadBytes)));
+                                const wif = toBase58("80" + privHex + "01" + Array.from(doubleSha).slice(0, 4).map(b => b.toString(16).padStart(2,'0')).join(''));
+                                self.postMessage({ type: "FOUND", privHex: privHex, wif: wif, address: targetAddr });
+                                return;
+                            }
+                        }
+                    }
+                    
+                    currentKey += BigInt(batchCount);
+                    
+                    if (currentKey > endKey) {
+                        self.postMessage({ type: "SCAN_DONE", workerId });
+                        return;
+                    }
+                    
+                    let lastZ = invZ[batchCount - 1];
+                    let lastZ2 = mod(lastZ * lastZ);
+                    let lastAX = mod(pX[batchCount - 1] * lastZ2);
+                    let lastAY = mod(pY[batchCount - 1] * mod(lastZ * lastZ2));
+                    currentPoint = add({x: lastAX, y: lastAY}, G);
+
+                    self.postMessage({ type: "PROGRESS", count: batchCount, workerId });
+                    setTimeout(fastStep, 0);
                 }
-                runLoop();
+                fastStep();
             }
         };
     </script>
@@ -555,26 +564,42 @@
     <script>
         (function() {
             let workers = [], totalJumps = 0, cumulativeScanned = 0;
-            let currentSliceScanned = 0, slicesVisited = 1;
+            let currentSliceScanned = 0;
+            let slicesVisited = 1;
             let targetLimit = 10000000;
             let startTime = 0, isRunning = false;
             let lastUpdateScanned = 0, lastUpdateTime = 0;
 
             const SLICE_SIZE = 34359738368n;
-            const PUZZLE_71_TOTAL = 1180591620717411303424n;
+
+            // --- AUTOMATISCHE 25% RANGE GENERATIE ---
+            const PUZZLE_MIN = BigInt("0x400000000000000000");
+            const PUZZLE_MAX = BigInt("0x7fffffffffffffffff");
+            const TOTAL_RANGE = PUZZLE_MAX - PUZZLE_MIN + 1n; // 2^70
+            const CHUNK_25_PERCENT = TOTAL_RANGE / 4n; // Exact 25% van de keyspace (2^68)
+
+            // Het 25% bereik voor DEZE geladen sessie
+            let sessionMin = PUZZLE_MIN;
+            let sessionMax = PUZZLE_MIN + CHUNK_25_PERCENT - 1n;
+
+            function initRandom25PercentChunk() {
+                // Bereken een willekeurige offset tussen 0 en 75% van het totale bereik
+                const maxOffset = TOTAL_RANGE - CHUNK_25_PERCENT;
+                const bytes = new Uint8Array(12);
+                window.crypto.getRandomValues(bytes);
+                const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+                const randBigInt = BigInt("0x" + hex);
+                const offset = randBigInt % maxOffset;
+
+                sessionMin = PUZZLE_MIN + offset;
+                sessionMax = sessionMin + CHUNK_25_PERCENT - 1n;
+            }
 
             const logBox = document.getElementById('logBox'),
                   startBtn = document.getElementById('startBtn'),
                   stopBtn = document.getElementById('stopBtn'),
                   statusVal = document.getElementById('statusVal'),
-                  progressBar = document.getElementById('progressBar'),
-                  numWInput = document.getElementById('numW');
-
-            // ⚡ Aantal workers automatisch op het aantal logische CPU-kernen zetten
-            // (in plaats van vast op 4), zodat je apparaat volledig benut wordt.
-            if (navigator.hardwareConcurrency) {
-                numWInput.value = Math.max(1, navigator.hardwareConcurrency);
-            }
+                  progressBar = document.getElementById('progressBar');
 
             function log(msg, cls = '') {
                 const ts = new Date().toLocaleTimeString('nl-NL');
@@ -596,34 +621,37 @@
             }
 
             function generateRandomSlice() {
-                const globalStart = BigInt("0x400000000000000000");
-                const globalEnd = BigInt("0x7fffffffffffffffff");
-                const maxOffset = (globalEnd - globalStart + 1n) - SLICE_SIZE;
+                // Kiest een willekeurig 'plakje' van 2^35 (SLICE_SIZE) binnen ons 25% fragment (sessionMin t/m sessionMax)
+                const maxOffset = (sessionMax - sessionMin + 1n) - SLICE_SIZE;
                 const bytes = new Uint8Array(Math.ceil(maxOffset.toString(2).length / 8));
                 window.crypto.getRandomValues(bytes);
                 const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
                 const rand = BigInt("0x" + hex);
                 const offset = rand % maxOffset;
-                const sliceStart = globalStart + offset;
+                const sliceStart = sessionMin + offset;
                 const sliceEnd = sliceStart + SLICE_SIZE - 1n;
 
                 document.getElementById('rangeStart').value = sliceStart.toString(16);
                 document.getElementById('rangeEnd').value = sliceEnd.toString(16);
-                log(`Zone geladen. Start: ${sliceStart.toString(16).substring(0,8)}...`, 'ev-hop');
+                log(`Slice geladen binnen 25% zone. Start: ${sliceStart.toString(16).substring(0,8)}...`, 'ev-hop');
             }
 
             function makeWorker() {
                 const code = document.getElementById('workerCode').textContent;
                 const worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
-                worker.onerror = function() {
+                worker.onerror = function(e) {
                     log(`❌ Fout in verwerking. Controleer browser-limieten.`, 'ev-stop');
-                    setStatus('Gestopt', ''); killWorkers(); setRunning(false);
+                    setStatus('Gestopt', '');
+                    killWorkers();
+                    setRunning(false);
                 };
                 return worker;
             }
 
             function setRunning(v) {
-                isRunning = v; startBtn.disabled = v; stopBtn.disabled = !v;
+                isRunning = v;
+                startBtn.disabled = v;
+                stopBtn.disabled = !v;
             }
 
             function fromBase58(address) {
@@ -668,8 +696,8 @@
                 document.getElementById('jumpsCoverage').textContent = currentSliceScanned.toLocaleString('nl-NL') + ' keys gescand';
                 document.getElementById('chanceScientific').innerHTML = `${(hopProgress * 100).toFixed(2)}%`;
 
-                document.getElementById('cmpLottery').textContent = (cumulativeScanned / Number(PUZZLE_71_TOTAL)).toExponential(4);
-                document.getElementById('cmpEpochs').textContent = ((Number(SLICE_SIZE) / Number(PUZZLE_71_TOTAL)) * 100).toExponential(6) + '%';
+                document.getElementById('cmpLottery').textContent = (cumulativeScanned / Number(CHUNK_25_PERCENT)).toExponential(4);
+                document.getElementById('cmpEpochs').textContent = ((Number(SLICE_SIZE) / Number(CHUNK_25_PERCENT)) * 100).toExponential(6) + '%';
 
                 const now = Date.now();
                 const elapsedSec = (now - lastUpdateTime) / 1000;
@@ -707,7 +735,8 @@
                 const endBI = BigInt("0x" + document.getElementById('rangeEnd').value);
                 const numW = Math.max(1, parseInt(document.getElementById('numW').value) || 4);
                 
-                killWorkers(); let workersDone = 0;
+                killWorkers();
+                let workersDone = 0;
 
                 for (let i = 0; i < numW; i++) {
                     const worker = makeWorker();
@@ -745,15 +774,22 @@
             function startAddressScan() {
                 if (isRunning) return;
                 startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = cumulativeScanned;
-                setRunning(true); setStatus('⚡ Zero-GC Engine v4 Actief', 'running');
-                log('Turbo Scan v4 gestart (Inline Math & Global Arrays).', 'ev-epoch');
+                setRunning(true);
+                setStatus('⚡ Zero-GC Engine (25%) Actief', 'running');
+                log('Zero-GC Turbo Scan gestart.', 'ev-epoch');
                 spawnWorkers();
             }
 
             startBtn.onclick = () => { if (!isRunning) startAddressScan(); };
             stopBtn.onclick = () => { setRunning(false); killWorkers(); setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop'); };
+            
+            // 1. Genereer een nieuw 25% bereik bij het laden
+            initRandom25PercentChunk();
+            log(`🎯 25% Zoekgebied ingesteld: 0x${sessionMin.toString(16)} ... 0x${sessionMax.toString(16)}`, 'ev-epoch');
+
+            // 2. Laad de eerste slice uit dit gebied
             generateRandomSlice();
-            log(`Systeem klaar. Turbo Engine v4 geladen. (${numWInput.value} workers gedetecteerd)`, 'ts');
+            log('Systeem klaar. Zero-GC Turbo Engine (Auto 25% Edition) geladen.', 'ts');
 
             setInterval(() => { if (isRunning) updateAllStats(); }, 800);
         })();
