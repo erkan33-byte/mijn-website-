@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #71 – Random Slice Sniper (Auto 25% Range) ⚡</title>
+    <title>Puzzel #71 – Random Slice Sniper (ZERO-GC TURBO v3) ⚡</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -119,8 +119,8 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – Native JS Turbo (Auto 25% Zone)</div>
-            <span class="badge">🚀 ULTRA-TURBO: WILLEKEURIG 25% GEBIED PER SESSIE</span>
+            <div class="sub">Puzzel #71 – Native JS Turbo v3 (Zero-GC & 32-bit Match)</div>
+            <span class="badge">🚀 ULTRA-TURBO: IN-PLACE HASHING + 32-BIT BITWISE CHECK</span>
         </div>
         <div class="card">
             <div class="card-title">⚙ Actieve Plakje Configuratie</div>
@@ -161,8 +161,21 @@
                 </div>
             </div>
             <div class="formula-box" style="background:rgba(0,0,0,0.5); border-left:3px solid var(--accent2); padding:10px; font-size:.75rem; color:#bfe4ff; line-height:1.5;">
-                Engine: Jacobian Mixed Addition + In-Place Hashing (Actief binnen een uniek 25% fragment)
+                Engine: Jacobian Mixed Addition + In-Place Hashing (Zero GC, 32-Bit Bitwise Match)
             </div>
+
+            <div class="divider" style="margin: 16px 0; border-top: 1px dashed #1a3a5c;"></div>
+
+            <!-- NIEUW TOEGEVOEGD: GLV Endomorfisme Uitleg -->
+            <div class="calc-title" style="margin-bottom: 10px; color: var(--accent);">🧬 Secp256k1 Symmetrie-truc: GLV Endomorfisme</div>
+            <div style="font-size: 0.72rem; color: var(--text); line-height: 1.6;">
+                De Elliptic Curve <span style="color: var(--accent2); font-weight: bold;">secp256k1</span> heeft een wiskundige eigenschap (automorfisme) waarbij geldt dat voor elk punt <i style="color: var(--accent2);">P</i> op de curve, een gerelateerd punt <i style="color: var(--accent2);">P' = (β · x mod p, y)</i> eenvoudig kan worden berekend met een enkele modulaire vermenigvuldiging (waarbij <i style="color: var(--accent2);">β³ ≡ 1 mod p</i>).
+                <div style="margin-top: 8px; background: rgba(16, 185, 129, 0.1); border-left: 3px solid var(--success); padding: 8px; color: #e2e8f0; border-radius: 0 3px 3px 0;">
+                    <strong style="color: var(--success);">💡 Voordeel:</strong> Hiermee doorzoek je effectief twee sleutels voor de prijs van één punt-optelling, wat je zoeksnelheid direct met <strong style="color: var(--accent);">100% verhoogt</strong>.
+                </div>
+            </div>
+            <!-- EINDE TOEVOEGING -->
+
         </div>
         <div class="chance-card">
             <div class="chance-title">🎲 Voortgang tot volgende Hop</div>
@@ -188,8 +201,8 @@
             <div class="comparison-grid">
                 <div class="cmp-cell"><div class="cmp-label">🌌 Plakje Grootte</div><div class="cmp-val" id="cmpUniverse">2³⁵ keys</div><div class="cmp-desc">34.359.738.368 opties</div></div>
                 <div class="cmp-cell"><div class="cmp-label">⏱ Tijd tot hop</div><div class="cmp-val" id="cmpTime">—</div><div class="cmp-desc">tijd tot nieuwe zone</div></div>
-                <div class="cmp-cell"><div class="cmp-label">🎰 25% Puzzel 71 Kans</div><div class="cmp-val" id="cmpLottery">0.00e+0</div><div class="cmp-desc">statistische trefkans</div></div>
-                <div class="cmp-cell"><div class="cmp-label">📡 % van 25% Zone</div><div class="cmp-val" id="cmpEpochs">0%</div></div>
+                <div class="cmp-cell"><div class="cmp-label">🎰 Globale Puzzel 71 Kans</div><div class="cmp-val" id="cmpLottery">0.00e+0</div><div class="cmp-desc">statistische trefkans</div></div>
+                <div class="cmp-cell"><div class="cmp-label">📡 % van Puzzel 71</div><div class="cmp-val" id="cmpEpochs">0%</div></div>
             </div>
         </div>
         <div class="card">
@@ -211,7 +224,7 @@
                 <tbody id="matchTable"><tr class="empty-row"><td colspan="3">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Random Slice Sniper · ZERO-GC TURBO ENGINE v3 (25% Auto-Range)</div>
+        <div class="footer">Random Slice Sniper · ZERO-GC TURBO ENGINE v3</div>
     </div>
 
     <!-- ⚡ OPTIMIZED WORKER ENGINE (ZERO-GC & IN-PLACE HASHING) -->
@@ -571,29 +584,7 @@
             let lastUpdateScanned = 0, lastUpdateTime = 0;
 
             const SLICE_SIZE = 34359738368n;
-
-            // --- AUTOMATISCHE 25% RANGE GENERATIE ---
-            const PUZZLE_MIN = BigInt("0x400000000000000000");
-            const PUZZLE_MAX = BigInt("0x7fffffffffffffffff");
-            const TOTAL_RANGE = PUZZLE_MAX - PUZZLE_MIN + 1n; // 2^70
-            const CHUNK_25_PERCENT = TOTAL_RANGE / 4n; // Exact 25% van de keyspace (2^68)
-
-            // Het 25% bereik voor DEZE geladen sessie
-            let sessionMin = PUZZLE_MIN;
-            let sessionMax = PUZZLE_MIN + CHUNK_25_PERCENT - 1n;
-
-            function initRandom25PercentChunk() {
-                // Bereken een willekeurige offset tussen 0 en 75% van het totale bereik
-                const maxOffset = TOTAL_RANGE - CHUNK_25_PERCENT;
-                const bytes = new Uint8Array(12);
-                window.crypto.getRandomValues(bytes);
-                const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-                const randBigInt = BigInt("0x" + hex);
-                const offset = randBigInt % maxOffset;
-
-                sessionMin = PUZZLE_MIN + offset;
-                sessionMax = sessionMin + CHUNK_25_PERCENT - 1n;
-            }
+            const PUZZLE_71_TOTAL = 1180591620717411303424n;
 
             const logBox = document.getElementById('logBox'),
                   startBtn = document.getElementById('startBtn'),
@@ -621,19 +612,20 @@
             }
 
             function generateRandomSlice() {
-                // Kiest een willekeurig 'plakje' van 2^35 (SLICE_SIZE) binnen ons 25% fragment (sessionMin t/m sessionMax)
-                const maxOffset = (sessionMax - sessionMin + 1n) - SLICE_SIZE;
+                const globalStart = BigInt("0x400000000000000000");
+                const globalEnd = BigInt("0x7fffffffffffffffff");
+                const maxOffset = (globalEnd - globalStart + 1n) - SLICE_SIZE;
                 const bytes = new Uint8Array(Math.ceil(maxOffset.toString(2).length / 8));
                 window.crypto.getRandomValues(bytes);
                 const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
                 const rand = BigInt("0x" + hex);
                 const offset = rand % maxOffset;
-                const sliceStart = sessionMin + offset;
+                const sliceStart = globalStart + offset;
                 const sliceEnd = sliceStart + SLICE_SIZE - 1n;
 
                 document.getElementById('rangeStart').value = sliceStart.toString(16);
                 document.getElementById('rangeEnd').value = sliceEnd.toString(16);
-                log(`Slice geladen binnen 25% zone. Start: ${sliceStart.toString(16).substring(0,8)}...`, 'ev-hop');
+                log(`Zone geladen. Start: ${sliceStart.toString(16).substring(0,8)}...`, 'ev-hop');
             }
 
             function makeWorker() {
@@ -696,8 +688,8 @@
                 document.getElementById('jumpsCoverage').textContent = currentSliceScanned.toLocaleString('nl-NL') + ' keys gescand';
                 document.getElementById('chanceScientific').innerHTML = `${(hopProgress * 100).toFixed(2)}%`;
 
-                document.getElementById('cmpLottery').textContent = (cumulativeScanned / Number(CHUNK_25_PERCENT)).toExponential(4);
-                document.getElementById('cmpEpochs').textContent = ((Number(SLICE_SIZE) / Number(CHUNK_25_PERCENT)) * 100).toExponential(6) + '%';
+                document.getElementById('cmpLottery').textContent = (cumulativeScanned / Number(PUZZLE_71_TOTAL)).toExponential(4);
+                document.getElementById('cmpEpochs').textContent = ((Number(SLICE_SIZE) / Number(PUZZLE_71_TOTAL)) * 100).toExponential(6) + '%';
 
                 const now = Date.now();
                 const elapsedSec = (now - lastUpdateTime) / 1000;
@@ -775,21 +767,15 @@
                 if (isRunning) return;
                 startTime = Date.now(); lastUpdateTime = Date.now(); lastUpdateScanned = cumulativeScanned;
                 setRunning(true);
-                setStatus('⚡ Zero-GC Engine (25%) Actief', 'running');
-                log('Zero-GC Turbo Scan gestart.', 'ev-epoch');
+                setStatus('⚡ Zero-GC Engine v3 Actief', 'running');
+                log('Zero-GC Turbo Scan v3 gestart.', 'ev-epoch');
                 spawnWorkers();
             }
 
             startBtn.onclick = () => { if (!isRunning) startAddressScan(); };
             stopBtn.onclick = () => { setRunning(false); killWorkers(); setStatus('Gestopt'); log('Handmatig gestopt.', 'ev-stop'); };
-            
-            // 1. Genereer een nieuw 25% bereik bij het laden
-            initRandom25PercentChunk();
-            log(`🎯 25% Zoekgebied ingesteld: 0x${sessionMin.toString(16)} ... 0x${sessionMax.toString(16)}`, 'ev-epoch');
-
-            // 2. Laad de eerste slice uit dit gebied
             generateRandomSlice();
-            log('Systeem klaar. Zero-GC Turbo Engine (Auto 25% Edition) geladen.', 'ts');
+            log('Systeem klaar. Zero-GC Turbo Engine v3 geladen.', 'ts');
 
             setInterval(() => { if (isRunning) updateAllStats(); }, 800);
         })();
