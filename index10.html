@@ -313,7 +313,7 @@ select:focus{
 
     <div class="header">
         <h1>📫 Random Slice Sniper</h1>
-        <div class="sub">Puzzel #71 – WebGPU Turbo (Hybrid Apple GPU Edition) ⚡</div>
+        <div class="sub">Puzzel #71 – WebGPU Turbo (ULTRA SPEED) ⚡</div>
         <span class="badge" id="gpuBadge">⚙️ INITIALISEREN...</span>
     </div>
 
@@ -354,7 +354,7 @@ select:focus{
 
         <div class="field">
             <label>GPU Batch Size</label>
-            <input id="numW" value="1048576" type="number" disabled title="Bepaald door WebGPU">
+            <input id="numW" value="2097152" type="number" disabled title="Bepaald door WebGPU">
         </div>
 
         <div class="field">
@@ -685,8 +685,12 @@ fn ripemd160_32(H: array<u32,8>) -> array<u32,5> {
     ar = er; er = dr; dr = rotl32(cr, 10u); cr = br; br = rotR;
   }
 
-  let t = h1 + cl + dr;
-  return array<u32,5>(t, h2 + dl + er, h3 + el + ar, h4 + al + br, h0 + bl + cr);
+  let h0_out = h0 + bl + cr;
+  let h1_out = h1 + cl + dr;
+  let h2_out = h2 + dl + er;
+  let h3_out = h3 + el + ar;
+  let h4_out = h4 + al + br;
+  return array<u32,5>(h0_out, h1_out, h2_out, h3_out, h4_out);
 }
 
 @group(0) @binding(0) var<uniform> batch: BatchParams;
@@ -694,11 +698,10 @@ fn ripemd160_32(H: array<u32,8>) -> array<u32,5> {
 @group(0) @binding(2) var<uniform> targetData: TargetHash;
 @group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>;
 
-@compute @workgroup_size(64)
+@compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let idx = gid.x;
 
-  // Initialiseer Jacobian punt met het op de CPU berekende startPunt (X_start, Y_start, Z=1)
   var pt: JPoint;
   pt.X = array<u32,8>(batch.gx.x, batch.gx.y, batch.gx.z, batch.gx.w,
                      batch.gx2.x, batch.gx2.y, batch.gx2.z, batch.gx2.w);
@@ -707,7 +710,6 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   pt.Z = u32to8(1u);
   pt.isInf = false;
 
-  // Tel enkel de 32-bit thread offset (idx) op via de precomputed comb-tabel (slechts 4 iteraties!)
   for (var i = 0u; i < 4u; i = i + 1u) {
     let shift = 8u * i;
     let byteVal = (idx >> shift) & 0xffu;
@@ -860,10 +862,14 @@ let isRunning = false, keysCheckedGlobal = 0, slicesVisited = 0;
 let keysCheckedSlice = 0;
 let currentSliceStart = 0n, currentSliceEnd = 0n, currentKeyVal = 0n;
 
-const BATCH_SIZE = 1048576; // 1 Miljoen per batch (geoptimaliseerd voor iPhone 17)
+const BATCH_SIZE = 2097152; // Maximaal vullen van GPU pipeline (2.1M per tik)
 const PIPELINE_DEPTH = 3;
 let pipelineStages = [];
 let zeroRes;
+
+// Vaste sprong-punt voor de CPU (2097152 * G)
+const BATCH_G = ecScalarMul(BigInt(BATCH_SIZE), { x: SECP_GX, y: SECP_GY });
+let currentBatchPoint = null;
 
 function getRandomSliceStart(limitStr) {
     const userStartInput = document.getElementById('customStart').value.trim();
@@ -944,7 +950,7 @@ async function initWebGPU() {
         
         uniformsBuffer = gpuDevice.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
-        document.getElementById('gpuBadge').textContent = '🚀 WEBGPU GEREED (HYBRID TURBO)';
+        document.getElementById('gpuBadge').textContent = '🚀 WEBGPU GEREED (ULTRA TURBO)';
         document.getElementById('gpuBadge').style.borderColor = 'var(--success)';
         document.getElementById('gpuBadge').style.color = 'var(--success)';
         log("WebGPU Backend Succesvol Geladen.", "success");
@@ -981,7 +987,6 @@ document.getElementById('startBtn').addEventListener('click', async () => {
     if (pipelineStages.length === 0) {
         zeroRes = new Uint32Array([0, 0]);
         for (let i = 0; i < PIPELINE_DEPTH; i++) {
-            // Buffer-grootte gecorrigeerd naar 96 bytes (24x uint32)
             let bBuf = gpuDevice.createBuffer({ size: 96, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
             let rsBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
             let rdBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
@@ -1020,6 +1025,10 @@ document.getElementById('startBtn').addEventListener('click', async () => {
         }
 
         currentKeyVal = currentSliceStart;
+        
+        // Bereken alleen bij het opstarten van een NIEUWE slice het eerste punt
+        currentBatchPoint = ecScalarMul(currentSliceStart, { x: SECP_GX, y: SECP_GY });
+        
         keysCheckedSlice = 0;
         slicesVisited++;
         
@@ -1055,8 +1064,10 @@ document.getElementById('startBtn').addEventListener('click', async () => {
 
             const batchStartKey = currentKeyVal;
 
-            // Bereken het exacte (X, Y) startpunt op de CPU voor deze specifieke batch
-            const startPoint = ecScalarMul(batchStartKey, { x: SECP_GX, y: SECP_GY });
+            // HET PUNT VAN DEZE BATCH: Pak huidig punt en schuif door voor de volgende batch met 1 simpele ecAdd
+            const startPoint = currentBatchPoint;
+            currentBatchPoint = ecAdd(currentBatchPoint, BATCH_G);
+
             const startKeyLimbs = bigIntToLimbsLE(batchStartKey);
             const gxLimbs = bigIntToLimbsLE(startPoint.x);
             const gyLimbs = bigIntToLimbsLE(startPoint.y);
@@ -1073,7 +1084,7 @@ document.getElementById('startBtn').addEventListener('click', async () => {
             const pass = encoder.beginComputePass();
             pass.setPipeline(gpuPipeline);
             pass.setBindGroup(0, stage.bindGroup);
-            pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 64));
+            pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 256));
             pass.end();
             encoder.copyBufferToBuffer(stage.resBuf, 0, stage.readBuf, 0, 8);
             gpuDevice.queue.submit([encoder.finish()]);
