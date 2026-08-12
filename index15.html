@@ -523,7 +523,7 @@
         }
         function bigIntToLimbsLE(bi) { return bytesToLimbsLE(hexToBytes(bi.toString(16).padStart(64, '0'))); }
 
-        function buildPrecomputedTable() {
+        async function buildPrecomputedTable() {
           const flat = new Uint32Array(32 * 256 * 16); let base = { x: SECP_GX, y: SECP_GY };
           for (let i = 0; i < 32; i++) {
             let acc = null;
@@ -533,6 +533,10 @@
               flat.set(bytesToLimbsLE(bigIntTo32Bytes(acc.x)), off); flat.set(bytesToLimbsLE(bigIntTo32Bytes(acc.y)), off + 8);
             }
             for (let d = 0; d < 8; d++) base = ecDouble(base);
+            // Laat de browser ademen tijdens het genereren van de tabel
+            if (i % 4 === 0) {
+                await new Promise(r => setTimeout(r, 0));
+            }
           }
           return flat;
         }
@@ -672,9 +676,8 @@
                 gpuPipeline = gpuDevice.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
 
                 log("Genereer Jacobian ECDSA Tabel...", "info");
-                await new Promise(r => setTimeout(r, 50)); 
                 
-                const table = buildPrecomputedTable();
+                const table = await buildPrecomputedTable();
 
                 tableBuffer = gpuDevice.createBuffer({ size: table.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
                 gpuDevice.queue.writeBuffer(tableBuffer, 0, table);
@@ -780,7 +783,6 @@
 
                     const batchStartKey = currentKeyVal;
 
-                    // Stuur direct de 256-bit startKey limbs naar de GPU (volledig opgelijnd op 16 bytes)
                     const batchBufArr = new Uint32Array(8);
                     batchBufArr.set(bigIntToLimbsLE(batchStartKey), 0);
 
@@ -822,7 +824,7 @@
                     })();
 
                     const now = performance.now();
-                    if (now - lastUpdate > 500) {
+                    if (now - lastUpdate > 100) {
                         let elapsed = (now - startTime) / 1000;
                         let rate = Math.round(keysCheckedGlobal / elapsed);
                         document.getElementById('keysScanned').textContent = keysCheckedGlobal.toLocaleString();
@@ -839,9 +841,10 @@
                         document.getElementById('gaugeFill').style.strokeDashoffset = offset;
                         document.getElementById('chanceScientific').textContent = slicePct.toFixed(2) + "%";
                         lastUpdate = now;
-
-                        await new Promise(resolve => setTimeout(resolve, 0));
                     }
+
+                    // Korte pauze inbouwen zodat de browser responsief blijft en niet vastloopt
+                    await new Promise(resolve => setTimeout(resolve, 0));
                 }
             }
             
