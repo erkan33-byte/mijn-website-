@@ -104,14 +104,14 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – WebGPU Turbo (GPU Basepoint)</div>
+            <div class="sub">Puzzel #25 / #71 – WebGPU Turbo (Optimized Basepoint)</div>
             <span class="badge" id="gpuBadge">⚙️ INITIALISEREN...</span>
         </div>
         <div class="card">
             <div class="card-title">⚙ Actieve Plakje Configuratie</div>
             <div class="field">
                 <label>Target BTC Adres</label>
-                <input id="btcAddr" value="1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU" type="text">
+                <input id="btcAddr" value="15JhYXn6Mx3oF4Y7PcTAv2wVVAuCFFQNiP" type="text">
             </div>
             <div class="field">
                 <label>Scan methode</label>
@@ -121,16 +121,16 @@
             </div>
             <div class="field">
                 <label>Keys per Plakje</label>
-                <input id="keysLimit" value="1000000000" type="number" min="1000">
+                <input id="keysLimit" value="16777216" type="number" min="1000">
             </div>
             <hr class="divider">
             <div class="field">
                 <label>Beginwaarde (HEX)</label>
-                <input id="customStart" value="400000000000000000" type="text" style="color: var(--accent2);">
+                <input id="customStart" value="1000000" type="text" style="color: var(--accent2);">
             </div>
             <div class="field">
                 <label>Eindwaarde (HEX)</label>
-                <input id="customEnd" value="7fffffffffffffffff" type="text" style="color: var(--accent2);">
+                <input id="customEnd" value="1ffffff" type="text" style="color: var(--accent2);">
             </div>
             <hr class="divider">
             <div class="field"><label>GPU Batch Size</label><input id="numW" value="2097152" type="number" disabled title="Bepaald door WebGPU"></div>
@@ -162,7 +162,7 @@
             <div class="kans-progress">
                 <div class="kp-label"><span>Dekkingsgraad tot Volgende Hop</span><span id="coveragePct">0.00%</span></div>
                 <div class="kans-track"><div class="kans-fill" id="kansBar" style="width:0%"></div></div>
-                <div class="kans-pct-label"><span id="currentSliceKeys">0</span> / <span id="limitDisplay">1000000000</span> keys in dit plakje</div>
+                <div class="kans-pct-label"><span id="currentSliceKeys">0</span> / <span id="limitDisplay">16777216</span> keys in dit plakje</div>
             </div>
         </div>
         
@@ -184,23 +184,20 @@
                 <tbody id="matchTable"><tr class="empty-row" id="noMatchRow"><td colspan="3">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Random Slice Sniper · WEBGPU TURBO ENGINE (Puzzel 71) ⚡</div>
+        <div class="footer">Random Slice Sniper · WEBGPU TURBO ENGINE ⚡</div>
     </div>
 
     <script>
         const WGSL_SOURCE = `
         struct TargetHash { h: vec4<u32>, h4: vec4<u32> };
         struct BatchParams { 
-            startKey: vec4<u32>, startKey2: vec4<u32>,
-            gx: vec4<u32>, gx2: vec4<u32>,
-            gy: vec4<u32>, gy2: vec4<u32>
+            baseX: array<u32, 8>,
+            baseY: array<u32, 8>
         };
 
         struct R8  { v: array<u32,8>,  c: u32 };
         const P: array<u32,8> = array<u32,8>(0xFFFFFC2Fu,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
         const P_MINUS_2: array<u32,8> = array<u32,8>(0xFFFFFC2Du,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
-        const GX = array<u32,8>(0x79BE667Eu,0xF9DCBBACu,0x55A06295u,0xCE870B07u,0x029BFCDBu,0x2DCE28D9u,0x59F2815Bu,0x16F81798u);
-        const GY = array<u32,8>(0x483ADA77u,0x26A3C465u,0x5DA4FBFCu,0x0E1108A8u,0xFD17B448u,0xA6855419u,0x9C47D08Fu,0xFB10D4B8u);
 
         fn addc(a: u32, b: u32, cin: u32) -> vec2<u32> {
           let s1 = a + b; let c1 = select(0u, 1u, s1 < a);
@@ -447,28 +444,12 @@
         fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
           let idx = gid.x;
 
-          // TURBO OPTIMIZATION: GPU berekent basepoint (geen CPU bottleneck!)
-          var k: array<u32,8>;
-          k[0] = batch.startKey.x; k[1] = batch.startKey.y; 
-          k[2] = batch.startKey.z; k[3] = batch.startKey.w;
-          k[4] = batch.startKey2.x; k[5] = batch.startKey2.y;
-          k[6] = batch.startKey2.z; k[7] = batch.startKey2.w;
-
-          // Double-and-add op GPU (256 iteraties)
           var pt: JPoint;
-          pt.X = GX; pt.Y = GY; pt.Z = u32to8(1u); pt.isInf = false;
-          
-          for (var i = 0u; i < 256u; i = i + 1u) {
-            let limbIdx = i / 32u;
-            let bitIdx = i % 32u;
-            let bit = (k[limbIdx] >> bitIdx) & 1u;
-            if (bit == 1u) {
-                pt = jacMaddAffine(pt, GX, GY);
-            }
-            pt = jacDouble(pt);
-          }
+          pt.X = batch.baseX;
+          pt.Y = batch.baseY;
+          pt.Z = u32to8(1u);
+          pt.isInf = false;
 
-          // Verwerk de offset (idx) met de comb-tabel (4 iteraties i.p.v. 32)
           for (var i = 0u; i < 4u; i = i + 1u) {
             let shift = 8u * i;
             let byteVal = (idx >> shift) & 0xffu;
@@ -557,6 +538,16 @@
           const y3 = ((lam * ((P.x - x3 + SECP_P) % SECP_P)) % SECP_P - P.y + SECP_P) % SECP_P;
           return { x: x3, y: y3 };
         }
+        function scalarMultiply(k) {
+            let P = null; let base = { x: SECP_GX, y: SECP_GY };
+            let temp = k;
+            while (temp > 0n) {
+                if (temp & 1n) P = ecAdd(P, base);
+                base = ecDouble(base);
+                temp >>= 1n;
+            }
+            return P;
+        }
         function modinv(a, m) {
           a = ((a % m) + m) % m; let [oldR, r] = [a, m], [oldS, s] = [1n, 0n];
           while (r !== 0n) { const q = oldR / r; [oldR, r] = [r, oldR - q * r]; [oldS, s] = [s, oldS - q * s]; }
@@ -616,8 +607,7 @@
         let keysCheckedSlice = 0;
         let currentSliceStart = 0n, currentSliceEnd = 0n, currentKeyVal = 0n;
         
-        const BATCH_SIZE = 2097152; // 2M per batch voor minder overhead
-        
+        const BATCH_SIZE = 2097152; 
         const PIPELINE_DEPTH = 3;
         let pipelineStages = [];
         let zeroRes;
@@ -626,8 +616,8 @@
             const userStartInput = document.getElementById('customStart').value.trim();
             const userEndInput = document.getElementById('customEnd').value.trim();
             
-            let rangeMin = userStartInput ? BigInt(userStartInput.startsWith('0x') ? userStartInput : '0x' + userStartInput) : 0x400000000000000000n;
-            let rangeMax = userEndInput ? BigInt(userEndInput.startsWith('0x') ? userEndInput : '0x' + userEndInput) : 0x7fffffffffffffffffn;
+            let rangeMin = userStartInput ? BigInt(userStartInput.startsWith('0x') ? userStartInput : '0x' + userStartInput) : 0x1000000n;
+            let rangeMax = userEndInput ? BigInt(userEndInput.startsWith('0x') ? userEndInput : '0x' + userEndInput) : 0x1ffffffn;
             
             const limit = BigInt(limitStr);
             const totalSpan = rangeMax - rangeMin + 1n;
@@ -713,7 +703,6 @@
             if (pipelineStages.length === 0) {
                 zeroRes = new Uint32Array([0, 0]);
                 for (let i = 0; i < PIPELINE_DEPTH; i++) {
-                    // TURBO OPTIMIZATION: 64 bytes voor startKey (8 limbs)
                     let bBuf = gpuDevice.createBuffer({ size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
                     let rsBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
                     let rdBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
@@ -787,9 +776,13 @@
 
                     const batchStartKey = currentKeyVal;
 
-                    // TURBO OPTIMIZATION: Stuur alleen de startKey naar GPU (geen basepoint meer!)
+                    // Bereken basepoint op CPU voor deze batch
+                    const basePoint = scalarMultiply(batchStartKey);
                     const batchBufArr = new Uint32Array(16);
-                    batchBufArr.set(bigIntToLimbsLE(batchStartKey), 0);
+                    if (basePoint) {
+                        batchBufArr.set(bytesToLimbsLE(bigIntTo32Bytes(basePoint.x)), 0);
+                        batchBufArr.set(bytesToLimbsLE(bigIntTo32Bytes(basePoint.y)), 8);
+                    }
 
                     gpuDevice.queue.writeBuffer(stage.batchBuffer, 0, batchBufArr);
                     gpuDevice.queue.writeBuffer(stage.resBuf, 0, zeroRes.buffer);
