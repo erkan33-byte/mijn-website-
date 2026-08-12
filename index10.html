@@ -343,9 +343,6 @@
         fn rotr32(x: u32, n: u32) -> u32 { return (x >> n) | (x << (32u - n)); }
         fn rotl32(x: u32, n: u32) -> u32 { return (x << n) | (x >> (32u - n)); }
         fn bswap32(x: u32) -> u32 { return ((x & 0xffu) << 24u) | ((x & 0xff00u) << 8u) | ((x >> 8u) & 0xff00u) | ((x >> 24u) & 0xffu); }
-        fn byteOfBE(limbs: array<u32,8>, k: u32) -> u32 {
-          let limbIdx = 7u - (k / 4u); let shift = 24u - 8u * (k % 4u); return (limbs[limbIdx] >> shift) & 0xffu;
-        }
         
         const SHA_K: array<u32,64> = array<u32,64>(
           0x428a2f98u,0x71374491u,0xb5c0fbcfu,0xe9b5dba5u,0x3956c25bu,0x59f111f1u,0x923f82a4u,0xab1c5ed5u,
@@ -358,15 +355,20 @@
           0x748f82eeu,0x78a5636fu,0x84c87814u,0x8cc70208u,0x90befffau,0xa4506cebu,0xbef9a3f7u,0xc67178f2u
         );
         
-        fn sha256_33(prefix: u32, x: array<u32,8>) -> array<u32,8> {
-          var b: array<u32,64>; for (var i = 0u; i < 64u; i = i + 1u) { b[i] = 0u; }
-          b[0] = prefix; for (var k = 0u; k < 32u; k = k + 1u) { b[1u + k] = byteOfBE(x, k); }
-          b[33] = 0x80u; b[62] = 0x01u; b[63] = 0x08u;
-          
+        // Zwaar geoptimaliseerde SHA-256 die onnodige lokale arrays overslaat
+        fn sha256_33(prefix: u32, finalX: array<u32,8>) -> array<u32,8> {
           var W: array<u32,16>;
-          for (var i = 0u; i < 16u; i = i + 1u) { 
-            W[i] = (b[4u*i] << 24u) | (b[4u*i+1u] << 16u) | (b[4u*i+2u] << 8u) | b[4u*i+3u]; 
-          }
+          W[0] = (prefix << 24u) | (finalX[7] >> 8u);
+          W[1] = (finalX[7] << 24u) | (finalX[6] >> 8u);
+          W[2] = (finalX[6] << 24u) | (finalX[5] >> 8u);
+          W[3] = (finalX[5] << 24u) | (finalX[4] >> 8u);
+          W[4] = (finalX[4] << 24u) | (finalX[3] >> 8u);
+          W[5] = (finalX[3] << 24u) | (finalX[2] >> 8u);
+          W[6] = (finalX[2] << 24u) | (finalX[1] >> 8u);
+          W[7] = (finalX[1] << 24u) | (finalX[0] >> 8u);
+          W[8] = (finalX[0] << 24u) | 0x00800000u;
+          W[9] = 0u; W[10] = 0u; W[11] = 0u; W[12] = 0u; W[13] = 0u; W[14] = 0u;
+          W[15] = 264u;
           
           var H: array<u32,8> = array<u32,8>(0x6a09e667u,0xbb67ae85u,0x3c6ef372u,0xa54ff53au,0x510e527fu,0x9b05688cu,0x1f83d9abu,0x5be0cd19u);
           var a=H[0]; var bb=H[1]; var c=H[2]; var d=H[3]; var e=H[4]; var f=H[5]; var g=H[6]; var h=H[7];
@@ -441,9 +443,15 @@
         @group(0) @binding(2) var<uniform> targetData: TargetHash;
         @group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>;
 
-        @compute @workgroup_size(256)
-        fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+        // Montgomery Batch Inversion Geheugen Arrays
+        var<workgroup> z_vals: array<array<u32,8>, 128>;
+        var<workgroup> c_vals: array<array<u32,8>, 128>;
+
+        // Workgroup teruggebracht naar 128 threads voor batch inversie
+        @compute @workgroup_size(128)
+        fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
           let idx = gid.x;
+          let lid_x = lid.x;
 
           var pt: JPoint;
           pt.X = array<u32,8>(batch.gx.x, batch.gx.y, batch.gx.z, batch.gx.w,
@@ -467,7 +475,32 @@
             }
           }
 
-          let Zinv = modpowP2(pt.Z);
+          // ===== MONTGOMERY BATCH INVERSION =====
+          // Dit is de absolute turbo! We voorkomen ~30.000 vermenigvuldigingen 
+          // door dit werk met de hele groep gezamenlijk te delen!
+          z_vals[lid_x] = pt.Z;
+          workgroupBarrier();
+
+          if (lid_x == 0u) {
+              c_vals[0] = z_vals[0];
+              for (var i = 1u; i < 128u; i = i + 1u) {
+                  c_vals[i] = mulmod(c_vals[i - 1u], z_vals[i]);
+              }
+              // Eén zware inversie voor 128 threads!
+              var u = modpowP2(c_vals[127]);
+              
+              for (var i = 127u; i > 0u; i = i - 1u) {
+                  let prev_c = c_vals[i - 1u];
+                  let orig_z = z_vals[i];
+                  z_vals[i] = mulmod(u, prev_c);
+                  u = mulmod(u, orig_z);
+              }
+              z_vals[0] = u;
+          }
+          workgroupBarrier();
+          let Zinv = z_vals[lid_x];
+          // =======================================
+
           let Zinv2 = mulmod(Zinv, Zinv);
           let Zinv3 = mulmod(Zinv2, Zinv);
           
@@ -704,7 +737,6 @@
             if (pipelineStages.length === 0) {
                 zeroRes = new Uint32Array([0, 0]);
                 for (let i = 0; i < PIPELINE_DEPTH; i++) {
-                    // FIX: buffer-grootte verhoogd van 64 naar 96 bytes conform BatchParams WGSL structuur
                     let bBuf = gpuDevice.createBuffer({ size: 96, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
                     let rsBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
                     let rdBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
@@ -794,7 +826,10 @@
                     const pass = encoder.beginComputePass();
                     pass.setPipeline(gpuPipeline);
                     pass.setBindGroup(0, stage.bindGroup);
-                    pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 256));
+                    
+                    // BELANGRIJK: Hier is deling door 128 ingevoerd omdat we de Batch Inversion truc op 128 threads tegelijk loslaten.
+                    pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 128));
+                    
                     pass.end();
                     encoder.copyBufferToBuffer(stage.resBuf, 0, stage.readBuf, 0, 8);
                     gpuDevice.queue.submit([encoder.finish()]);
