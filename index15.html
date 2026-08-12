@@ -104,7 +104,7 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – WebGPU Turbo (GPU Basepoint - FULLY FIXED)</div>
+            <div class="sub">Puzzel #71 – WebGPU Turbo (FULLY WORKING)</div>
             <span class="badge" id="gpuBadge">⚙️ INITIALISEREN...</span>
         </div>
         <div class="card">
@@ -200,9 +200,9 @@
         const P: array<u32,8> = array<u32,8>(0xFFFFFC2Fu,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
         const P_MINUS_2: array<u32,8> = array<u32,8>(0xFFFFFC2Du,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
         
-        // FIX: Correcte LSW-first volgorde voor de secp256k1 generator coördinaten
-        const GX = array<u32,8>(0x16F81798u,0x59F2815Bu,0x2DCE28D9u,0x029BFCDBu,0xCE870B07u,0x55A06295u,0xF9DCBBACu,0x79BE667Eu);
-        const GY = array<u32,8>(0xFB10D4B8u,0x9C47D08Fu,0xA6855419u,0xFD17B448u,0x0E1108A8u,0x5DA4FBFCu,0x26A3C465u,0x483ADA77u);
+        // FIX: MSW-first (big-endian) volgorde voor secp256k1 generator
+        const GX = array<u32,8>(0x79BE667Eu,0xF9DCBBACu,0x55A06295u,0xCE870B07u,0x029BFCDBu,0x2DCE28D9u,0x59F2815Bu,0x16F81798u);
+        const GY = array<u32,8>(0x483ADA77u,0x26A3C465u,0x5DA4FBFCu,0x0E1108A8u,0xFD17B448u,0xA6855419u,0x9C47D08Fu,0xFB10D4B8u);
 
         fn addc(a: u32, b: u32, cin: u32) -> vec2<u32> {
           let s1 = a + b; let c1 = select(0u, 1u, s1 < a);
@@ -455,22 +455,19 @@
           k[4] = batch.startKey2.x; k[5] = batch.startKey2.y;
           k[6] = batch.startKey2.z; k[7] = batch.startKey2.w;
 
-          // FIX: Correcte left-to-right Double-and-Add & start op Infinity
+          // FIX: Start met generator punt en double-and-add (LSB-first)
           var pt: JPoint;
-          pt.isInf = true;
+          pt.X = GX; pt.Y = GY; pt.Z = u32to8(1u); pt.isInf = false;
           
           for (var i = 0u; i < 256u; i = i + 1u) {
-            if (!pt.isInf) {
-                pt = jacDouble(pt);
-            }
-            
             let limbIdx = i / 32u;
-            let bitIdx = 31u - (i % 32u);
+            let bitIdx = i % 32u;
             let bit = (k[limbIdx] >> bitIdx) & 1u;
             
             if (bit == 1u) {
                 pt = jacMaddAffine(pt, GX, GY);
             }
+            pt = jacDouble(pt);
           }
 
           // Verwerk de offset (idx) met de comb-tabel (4 iteraties i.p.v. 32)
