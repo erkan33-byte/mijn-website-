@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
-    <title>Puzzel #71 – Random Slice Sniper (WebGPU TURBO) ⚡</title>
+    <title>Puzzel #25 / #71 – Random Slice Sniper (WebGPU TURBO) ⚡</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -191,8 +191,8 @@
         const WGSL_SOURCE = `
         struct TargetHash { h: vec4<u32>, h4: vec4<u32> };
         struct BatchParams { 
-            baseX: array<u32, 8>,
-            baseY: array<u32, 8>
+            baseX1: vec4<u32>, baseX2: vec4<u32>,
+            baseY1: vec4<u32>, baseY2: vec4<u32>
         };
 
         struct R8  { v: array<u32,8>,  c: u32 };
@@ -445,8 +445,8 @@
           let idx = gid.x;
 
           var pt: JPoint;
-          pt.X = batch.baseX;
-          pt.Y = batch.baseY;
+          pt.X = array<u32, 8>(batch.baseX1.x, batch.baseX1.y, batch.baseX1.z, batch.baseX1.w, batch.baseX2.x, batch.baseX2.y, batch.baseX2.z, batch.baseX2.w);
+          pt.Y = array<u32, 8>(batch.baseY1.x, batch.baseY1.y, batch.baseY1.z, batch.baseY1.w, batch.baseY2.x, batch.baseY2.y, batch.baseY2.z, batch.baseY2.w);
           pt.Z = u32to8(1u);
           pt.isInf = false;
 
