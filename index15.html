@@ -104,7 +104,7 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #71 – WebGPU Turbo (FULLY WORKING)</div>
+            <div class="sub">Puzzel #29 – WebGPU Turbo (test/verificatie)</div>
             <span class="badge" id="gpuBadge">⚙️ INITIALISEREN...</span>
         </div>
         <div class="card">
@@ -184,7 +184,7 @@
                 <tbody id="matchTable"><tr class="empty-row" id="noMatchRow"><td colspan="3">Nog geen match gevonden...</td></tr></tbody>
             </table>
         </div>
-        <div class="footer">Random Slice Sniper · WEBGPU TURBO ENGINE (Puzzel 71) ⚡</div>
+        <div class="footer">Random Slice Sniper · WEBGPU TURBO ENGINE (Puzzel 29 test) ⚡</div>
     </div>
 
     <script>
@@ -449,28 +449,19 @@
         fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
           let idx = gid.x;
 
-          var k: array<u32,8>;
-          k[0] = batch.startKey.x; k[1] = batch.startKey.y; 
-          k[2] = batch.startKey.z; k[3] = batch.startKey.w;
-          k[4] = batch.startKey2.x; k[5] = batch.startKey2.y;
-          k[6] = batch.startKey2.z; k[7] = batch.startKey2.w;
-
-          // FIX: Start met generator punt en double-and-add (LSB-first)
+          // ⚡ FIX: startKey*G wordt nu op de CPU vooraf berekend en als kant-en-klaar
+          // punt (startX/startY) meegegeven, in plaats van dat elke GPU-thread hem apart
+          // met 256 puntverdubbelingen herberekent. Dat was zuivere verspilling: alle
+          // threads in een dispatch rekenden exact hetzelfde uit.
           var pt: JPoint;
-          pt.X = GX; pt.Y = GY; pt.Z = u32to8(1u); pt.isInf = false;
-          
-          for (var i = 0u; i < 256u; i = i + 1u) {
-            let limbIdx = i / 32u;
-            let bitIdx = i % 32u;
-            let bit = (k[limbIdx] >> bitIdx) & 1u;
-            
-            if (bit == 1u) {
-                pt = jacMaddAffine(pt, GX, GY);
-            }
-            pt = jacDouble(pt);
-          }
+          pt.X = array<u32,8>(batch.gx.x, batch.gx.y, batch.gx.z, batch.gx.w,
+                               batch.gx2.x, batch.gx2.y, batch.gx2.z, batch.gx2.w);
+          pt.Y = array<u32,8>(batch.gy.x, batch.gy.y, batch.gy.z, batch.gy.w,
+                               batch.gy2.x, batch.gy2.y, batch.gy2.z, batch.gy2.w);
+          pt.Z = u32to8(1u);
+          pt.isInf = false;
 
-          // Verwerk de offset (idx) met de comb-tabel (4 iteraties i.p.v. 32)
+          // Verwerk de offset (idx) met de comb-tabel (4 iteraties voor tot 2^32 threads)
           for (var i = 0u; i < 4u; i = i + 1u) {
             let shift = 8u * i;
             let byteVal = (idx >> shift) & 0xffu;
@@ -564,6 +555,11 @@
           while (r !== 0n) { const q = oldR / r; [oldR, r] = [r, oldR - q * r]; [oldS, s] = [s, oldS - q * s]; }
           return ((oldS % m) + m) % m;
         }
+        function ecScalarMul(k, base) {
+          let r = null, addend = base;
+          while (k > 0n) { if (k & 1n) r = ecAdd(r, addend); addend = ecDouble(addend); k >>= 1n; }
+          return r;
+        }
 
         function getTargetHash160Bytes(address) {
           const B58ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -628,7 +624,7 @@
             const userEndInput = document.getElementById('customEnd').value.trim();
             
             let rangeMin = userStartInput ? BigInt(userStartInput.startsWith('0x') ? userStartInput : '0x' + userStartInput) : 0x10000000n;
-            let rangeMax = userEndInput ? BigInt(userEndInput.startsWith('0x') ? userEndInput : '0x' + userEndInput) : 0x1fffffffns;
+            let rangeMax = userEndInput ? BigInt(userEndInput.startsWith('0x') ? userEndInput : '0x' + userEndInput) : 0x1fffffffn;
             
             const limit = BigInt(limitStr);
             const totalSpan = rangeMax - rangeMin + 1n;
@@ -672,9 +668,11 @@
 
                 const module = gpuDevice.createShaderModule({ code: WGSL_SOURCE });
                 const compilationInfo = await module.getCompilationInfo();
+                let hasErr = false;
                 for (const msg of compilationInfo.messages) {
-                    if (msg.type === 'error') { log(`❌ SHADER ERROR: ${msg.message}`, 'warn'); return false; }
+                    if (msg.type === 'error') { log(`❌ SHADER ERROR [regel ${msg.lineNum}:${msg.linePos}]: ${msg.message}`, 'warn'); hasErr = true; }
                 }
+                if (hasErr) return false;
 
                 gpuPipeline = gpuDevice.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
 
@@ -695,6 +693,7 @@
                 return true;
             } catch (e) {
                 log('❌ Fout bij WebGPU init: ' + e.message, 'warn');
+                console.error(e);
                 return false;
             }
         }
@@ -787,17 +786,25 @@
 
                     const batchStartKey = currentKeyVal;
 
-                    const batchBufArr = new Uint32Array(16);
-                    const startKeyBytes = hexToBytes(batchStartKey.toString(16).padStart(64, '0'));
-                    for (let i = 0; i < 8; i++) {
-                        const off = 4 * i;
-                        batchBufArr[i] = (startKeyBytes[off] << 24) | 
-                                         (startKeyBytes[off+1] << 16) | 
-                                         (startKeyBytes[off+2] << 8) | 
-                                         startKeyBytes[off+3];
-                    }
+                    // ⚡ FIX: startKey*G wordt hier op de CPU (BigInt) berekend — één keer
+                    // per batch — en als kant-en-klaar punt meegegeven aan de GPU, in
+                    // plaats van dat 2 miljoen GPU-threads het elk apart herberekenen.
+                    const startPoint = ecScalarMul(batchStartKey, { x: SECP_GX, y: SECP_GY });
+                    const gxLimbs = bigIntToLimbsLE(startPoint.x);
+                    const gyLimbs = bigIntToLimbsLE(startPoint.y);
 
-                    gpuDevice.queue.writeBuffer(stage.batchBuffer, 0, batchBufArr);
+                    const batchBufArr = new Uint32Array(16);
+                    // startKey (ongebruikt door de shader nu, maar laten staan voor toekomstig debug-gebruik)
+                    batchBufArr.set(bigIntToLimbsLE(batchStartKey), 0);
+                    batchBufArr.set(gxLimbs, 8 - 8); // placeholder, overschreven hieronder
+                    // Layout: [0..7]=startKey (ongebruikt), maar struct BatchParams verwacht
+                    // startKey(8) + gx(8) + gy(8) = 24 woorden -> buffer moet 96 bytes zijn.
+                    const fullBuf = new Uint32Array(24);
+                    fullBuf.set(bigIntToLimbsLE(batchStartKey), 0);
+                    fullBuf.set(gxLimbs, 8);
+                    fullBuf.set(gyLimbs, 16);
+
+                    gpuDevice.queue.writeBuffer(stage.batchBuffer, 0, fullBuf);
                     gpuDevice.queue.writeBuffer(stage.resBuf, 0, zeroRes.buffer);
 
                     const encoder = gpuDevice.createCommandEncoder();
