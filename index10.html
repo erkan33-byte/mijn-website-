@@ -313,7 +313,7 @@ select:focus{
 
     <div class="header">
         <h1>📫 Random Slice Sniper</h1>
-        <div class="sub">Puzzel #71 – WebGPU Turbo (Auto-Hop geoptimaliseerd)</div>
+        <div class="sub">Puzzel #71 – WebGPU Turbo (Hybrid Apple GPU Edition) ⚡</div>
         <span class="badge" id="gpuBadge">⚙️ INITIALISEREN...</span>
     </div>
 
@@ -354,7 +354,7 @@ select:focus{
 
         <div class="field">
             <label>GPU Batch Size</label>
-            <input id="numW" value="524288" type="number" disabled title="Bepaald door WebGPU">
+            <input id="numW" value="1048576" type="number" disabled title="Bepaald door WebGPU">
         </div>
 
         <div class="field">
@@ -453,9 +453,13 @@ select:focus{
 
 const WGSL_SOURCE = `
 struct TargetHash { h: vec4<u32>, h4: vec4<u32> };
-struct BatchParams { p1: vec4<u32>, p2: vec4<u32> };
+struct BatchParams { 
+  startKey: vec4<u32>, startKey2: vec4<u32>,
+  gx: vec4<u32>, gx2: vec4<u32>,
+  gy: vec4<u32>, gy2: vec4<u32>
+};
 
-struct R8  { v: array<u32,8>,  c: u32 };
+struct R8 { v: array<u32,8>, c: u32 };
 const P: array<u32,8> = array<u32,8>(0xFFFFFC2Fu,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
 const P_MINUS_2: array<u32,8> = array<u32,8>(0xFFFFFC2Du,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
 
@@ -598,27 +602,6 @@ fn jacMaddAffine(p: JPoint, x2: array<u32,8>, y2: array<u32,8>) -> JPoint {
   let Z3 = mulmod(p.Z, H);
   var out: JPoint; out.X = X3; out.Y = Y3; out.Z = Z3; out.isInf = isZero8(Z3); return out;
 }
-fn scalarMultCombG(k: array<u32,8>) -> array<array<u32,8>,2> {
-  var pt: JPoint; pt.isInf = true;
-  for (var i = 0u; i < 32u; i = i + 1u) {
-    let limbIdx = i / 4u; let shift = 8u * (i % 4u);
-    let byteVal = (k[limbIdx] >> shift) & 0xffu;
-    if (byteVal != 0u) {
-      let base = (i * 256u + byteVal) * 16u;
-      var tx: array<u32,8>; var ty: array<u32,8>;
-      for (var m = 0u; m < 8u; m = m + 1u) {
-        tx[m] = combTable[base + m]; ty[m] = combTable[base + 8u + m];
-      }
-      pt = jacMaddAffine(pt, tx, ty);
-    }
-  }
-  let Zinv = modpowP2(pt.Z);
-  let Zinv2 = mulmod(Zinv, Zinv);
-  let Zinv3 = mulmod(Zinv2, Zinv);
-  var out: array<array<u32,8>,2>;
-  out[0] = mulmod(pt.X, Zinv2); out[1] = mulmod(pt.Y, Zinv3);
-  return out;
-}
 
 fn rotr32(x: u32, n: u32) -> u32 { return (x >> n) | (x << (32u - n)); }
 fn rotl32(x: u32, n: u32) -> u32 { return (x << n) | (x >> (32u - n)); }
@@ -626,6 +609,7 @@ fn bswap32(x: u32) -> u32 { return ((x & 0xffu) << 24u) | ((x & 0xff00u) << 8u) 
 fn byteOfBE(limbs: array<u32,8>, k: u32) -> u32 {
   let limbIdx = 7u - (k / 4u); let shift = 24u - 8u * (k % 4u); return (limbs[limbIdx] >> shift) & 0xffu;
 }
+
 const SHA_K: array<u32,64> = array<u32,64>(
   0x428a2f98u,0x71374491u,0xb5c0fbcfu,0xe9b5dba5u,0x3956c25bu,0x59f111f1u,0x923f82a4u,0xab1c5ed5u,
   0xd807aa98u,0x12835b01u,0x243185beu,0x550c7dc3u,0x72be5d74u,0x80deb1feu,0x9bdc06a7u,0xc19bf174u,
@@ -636,10 +620,12 @@ const SHA_K: array<u32,64> = array<u32,64>(
   0x19a4c116u,0x1e376c08u,0x2748774cu,0x34b0bcb5u,0x391c0cb3u,0x4ed8aa4au,0x5b9cca4fu,0x682e6ff3u,
   0x748f82eeu,0x78a5636fu,0x84c87814u,0x8cc70208u,0x90befffau,0xa4506cebu,0xbef9a3f7u,0xc67178f2u
 );
+
 fn sha256_33(prefix: u32, x: array<u32,8>) -> array<u32,8> {
   var b: array<u32,64>; for (var i = 0u; i < 64u; i = i + 1u) { b[i] = 0u; }
   b[0] = prefix; for (var k = 0u; k < 32u; k = k + 1u) { b[1u + k] = byteOfBE(x, k); }
   b[33] = 0x80u; b[62] = 0x01u; b[63] = 0x08u;
+  
   var W: array<u32,64>;
   for (var i = 0u; i < 16u; i = i + 1u) { W[i] = (b[4u*i] << 24u) | (b[4u*i+1u] << 16u) | (b[4u*i+2u] << 8u) | b[4u*i+3u]; }
   for (var i = 16u; i < 64u; i = i + 1u) {
@@ -647,6 +633,7 @@ fn sha256_33(prefix: u32, x: array<u32,8>) -> array<u32,8> {
     let s1 = rotr32(W[i-2u],17u) ^ rotr32(W[i-2u],19u) ^ (W[i-2u] >> 10u);
     W[i] = W[i-16u] + s0 + W[i-7u] + s1;
   }
+  
   var H: array<u32,8> = array<u32,8>(0x6a09e667u,0xbb67ae85u,0x3c6ef372u,0xa54ff53au,0x510e527fu,0x9b05688cu,0x1f83d9abu,0x5be0cd19u);
   var a=H[0]; var bb=H[1]; var c=H[2]; var d=H[3]; var e=H[4]; var f=H[5]; var g=H[6]; var h=H[7];
   for (var i = 0u; i < 64u; i = i + 1u) {
@@ -707,26 +694,43 @@ fn ripemd160_32(H: array<u32,8>) -> array<u32,5> {
 @group(0) @binding(2) var<uniform> targetData: TargetHash;
 @group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>;
 
-@compute @workgroup_size(256)
+@compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let idx = gid.x;
 
-  var k: array<u32,8>;
-  k[0] = batch.p1.x; k[1] = batch.p1.y; k[2] = batch.p1.z; k[3] = batch.p1.w;
-  k[4] = batch.p2.x; k[5] = batch.p2.y; k[6] = batch.p2.z; k[7] = batch.p2.w;
+  // Initialiseer Jacobian punt met het op de CPU berekende startPunt (X_start, Y_start, Z=1)
+  var pt: JPoint;
+  pt.X = array<u32,8>(batch.gx.x, batch.gx.y, batch.gx.z, batch.gx.w,
+                     batch.gx2.x, batch.gx2.y, batch.gx2.z, batch.gx2.w);
+  pt.Y = array<u32,8>(batch.gy.x, batch.gy.y, batch.gy.z, batch.gy.w,
+                     batch.gy2.x, batch.gy2.y, batch.gy2.z, batch.gy2.w);
+  pt.Z = u32to8(1u);
+  pt.isInf = false;
 
-  var carry: u32 = idx;
-  for (var i = 0u; i < 8u; i = i + 1u) {
-    let sum = k[i] + carry;
-    let new_carry = select(0u, 1u, sum < k[i]);
-    k[i] = sum;
-    carry = new_carry;
-    if (carry == 0u) { break; }
+  // Tel enkel de 32-bit thread offset (idx) op via de precomputed comb-tabel (slechts 4 iteraties!)
+  for (var i = 0u; i < 4u; i = i + 1u) {
+    let shift = 8u * i;
+    let byteVal = (idx >> shift) & 0xffu;
+    if (byteVal != 0u) {
+      let base_idx = (i * 256u + byteVal) * 16u;
+      var tx: array<u32,8>; var ty: array<u32,8>;
+      for (var m = 0u; m < 8u; m = m + 1u) {
+        tx[m] = combTable[base_idx + m]; 
+        ty[m] = combTable[base_idx + 8u + m];
+      }
+      pt = jacMaddAffine(pt, tx, ty);
+    }
   }
 
-  let xy = scalarMultCombG(k);
-  let prefix = select(3u, 2u, (xy[1][0] & 1u) == 0u);
-  let H = sha256_33(prefix, xy[0]);
+  let Zinv = modpowP2(pt.Z);
+  let Zinv2 = mulmod(Zinv, Zinv);
+  let Zinv3 = mulmod(Zinv2, Zinv);
+  
+  let finalX = mulmod(pt.X, Zinv2);
+  let finalY = mulmod(pt.Y, Zinv3);
+
+  let prefix = select(3u, 2u, (finalY[0] & 1u) == 0u);
+  let H = sha256_33(prefix, finalX);
   let hash = ripemd160_32(H);
 
   var isMatch = true;
@@ -767,6 +771,11 @@ function ecAdd(P, Q) {
   const y3 = ((lam * ((P.x - x3 + SECP_P) % SECP_P)) % SECP_P - P.y + SECP_P) % SECP_P;
   return { x: x3, y: y3 };
 }
+function ecScalarMul(k, base) {
+  let r = null, addend = base;
+  while (k > 0n) { if (k & 1n) r = ecAdd(r, addend); addend = ecDouble(addend); k >>= 1n; }
+  return r;
+}
 function bigIntTo32Bytes(v) { return hexToBytes(v.toString(16).padStart(64, '0')); }
 function hexToBytes(hex) {
   const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
@@ -790,7 +799,8 @@ function buildPrecomputedTable() {
     for (let j = 1; j < 256; j++) {
       acc = ecAdd(acc, base);
       const off = (i * 256 + j) * 16;
-      flat.set(bytesToLimbsLE(bigIntTo32Bytes(acc.x)), off); flat.set(bytesToLimbsLE(bigIntTo32Bytes(acc.y)), off + 8);
+      flat.set(bytesToLimbsLE(bigIntTo32Bytes(acc.x)), off); 
+      flat.set(bytesToLimbsLE(bigIntTo32Bytes(acc.y)), off + 8);
     }
     for (let d = 0; d < 8; d++) base = ecDouble(base);
   }
@@ -850,7 +860,7 @@ let isRunning = false, keysCheckedGlobal = 0, slicesVisited = 0;
 let keysCheckedSlice = 0;
 let currentSliceStart = 0n, currentSliceEnd = 0n, currentKeyVal = 0n;
 
-const BATCH_SIZE = 524288;
+const BATCH_SIZE = 1048576; // 1 Miljoen per batch (geoptimaliseerd voor iPhone 17)
 const PIPELINE_DEPTH = 3;
 let pipelineStages = [];
 let zeroRes;
@@ -934,7 +944,7 @@ async function initWebGPU() {
         
         uniformsBuffer = gpuDevice.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
-        document.getElementById('gpuBadge').textContent = '🚀 WEBGPU GEREED';
+        document.getElementById('gpuBadge').textContent = '🚀 WEBGPU GEREED (HYBRID TURBO)';
         document.getElementById('gpuBadge').style.borderColor = 'var(--success)';
         document.getElementById('gpuBadge').style.color = 'var(--success)';
         log("WebGPU Backend Succesvol Geladen.", "success");
@@ -971,7 +981,8 @@ document.getElementById('startBtn').addEventListener('click', async () => {
     if (pipelineStages.length === 0) {
         zeroRes = new Uint32Array([0, 0]);
         for (let i = 0; i < PIPELINE_DEPTH; i++) {
-            let bBuf = gpuDevice.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+            // Buffer-grootte gecorrigeerd naar 96 bytes (24x uint32)
+            let bBuf = gpuDevice.createBuffer({ size: 96, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
             let rsBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
             let rdBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
 
@@ -1042,21 +1053,30 @@ document.getElementById('startBtn').addEventListener('click', async () => {
             }
             if (!isRunning) break;
 
-            const startLimbs = bigIntToLimbsLE(currentKeyVal); 
-            gpuDevice.queue.writeBuffer(stage.batchBuffer, 0, startLimbs);
+            const batchStartKey = currentKeyVal;
+
+            // Bereken het exacte (X, Y) startpunt op de CPU voor deze specifieke batch
+            const startPoint = ecScalarMul(batchStartKey, { x: SECP_GX, y: SECP_GY });
+            const startKeyLimbs = bigIntToLimbsLE(batchStartKey);
+            const gxLimbs = bigIntToLimbsLE(startPoint.x);
+            const gyLimbs = bigIntToLimbsLE(startPoint.y);
+
+            const fullBuf = new Uint32Array(24);
+            fullBuf.set(startKeyLimbs, 0); // 0..7
+            fullBuf.set(gxLimbs, 8);       // 8..15
+            fullBuf.set(gyLimbs, 16);      // 16..23
+
+            gpuDevice.queue.writeBuffer(stage.batchBuffer, 0, fullBuf);
             gpuDevice.queue.writeBuffer(stage.resBuf, 0, zeroRes.buffer);
 
             const encoder = gpuDevice.createCommandEncoder();
             const pass = encoder.beginComputePass();
             pass.setPipeline(gpuPipeline);
             pass.setBindGroup(0, stage.bindGroup);
-            pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 256));
+            pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 64));
             pass.end();
             encoder.copyBufferToBuffer(stage.resBuf, 0, stage.readBuf, 0, 8);
             gpuDevice.queue.submit([encoder.finish()]);
-
-            const batchStartKey = currentKeyVal;
-            const batchCount = actualBatchCount;
 
             stage.inFlight = (async () => {
                 await stage.readBuf.mapAsync(GPUMapMode.READ);
@@ -1065,8 +1085,8 @@ document.getElementById('startBtn').addEventListener('click', async () => {
                 const matchIdx = gpuResult[1];
                 stage.readBuf.unmap();
                 
-                keysCheckedSlice += batchCount;
-                keysCheckedGlobal += batchCount;
+                keysCheckedSlice += actualBatchCount;
+                keysCheckedGlobal += actualBatchCount;
 
                 if (isMatch) {
                     const foundPrivInt = batchStartKey + BigInt(matchIdx);
