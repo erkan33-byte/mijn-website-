@@ -104,7 +104,7 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">Puzzel #29 – WebGPU Turbo (test/verificatie)</div>
+            <div class="sub">Puzzel #29 – WebGPU Turbo (Optimal Flow)</div>
             <span class="badge" id="gpuBadge">⚙️ INITIALISEREN...</span>
         </div>
         <div class="card">
@@ -133,7 +133,7 @@
                 <input id="customEnd" value="1fffffff" type="text" style="color: var(--accent2);">
             </div>
             <hr class="divider">
-            <div class="field"><label>GPU Batch Size</label><input id="numW" value="2097152" type="number" disabled title="Bepaald door WebGPU"></div>
+            <div class="field"><label>GPU Batch Size</label><input id="numW" value="4194304" type="number" disabled title="Bepaald door WebGPU"></div>
             <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--accent2);" readonly></div>
             <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--accent2);" readonly></div>
             <div style="font-size: 0.65rem; color: var(--muted); margin-top: 6px; text-align: right;">ℹ️ Deze HEX-waarden vernieuwen automatisch als het limiet is bereikt.</div>
@@ -607,7 +607,8 @@
         let keysCheckedSlice = 0;
         let currentSliceStart = 0n, currentSliceEnd = 0n, currentKeyVal = 0n;
         
-        const BATCH_SIZE = 2097152; 
+        // ⚡ GULDEN MIDDENWEG: BATCH_SIZE verhoogd naar 4.194.304 voor minder CPU-overhead en hogere GPU-throughput
+        const BATCH_SIZE = 4194304; 
         const PIPELINE_DEPTH = 3;
         let pipelineStages = [];
         let zeroRes;
@@ -706,7 +707,6 @@
             if (pipelineStages.length === 0) {
                 zeroRes = new Uint32Array([0, 0]);
                 for (let i = 0; i < PIPELINE_DEPTH; i++) {
-                    // FIX: Buffergrootte gecorrigeerd naar 96 bytes (overeenkomstig BatchParams struct)
                     let bBuf = gpuDevice.createBuffer({ size: 96, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
                     let rsBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
                     let rdBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
