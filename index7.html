@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <title>Puzzel #29 / #71 – Random Slice Sniper (WebGPU TURBO) ⚡</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -44,16 +43,14 @@
             border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px;
         }
         .chance-title { color: var(--accent2); border-color: #1a3a5c; }
-        .field { display: grid; grid-template-columns: 1fr; gap: 4px; margin-bottom: 12px; }
-        @media(min-width: 500px) {
-            .field { grid-template-columns: 210px 1fr; align-items: center; gap: 10px; }
-        }
+        .field { display: grid; grid-template-columns: 210px 1fr; align-items: center; gap: 10px; margin-bottom: 12px; }
         .field label { font-size: .72rem; color: var(--muted); letter-spacing: .06em; }
         .field input, select {
             background: var(--surface); color: var(--accent); border: 1px solid var(--dim);
             border-radius: 3px; padding: 7px 10px; font-family: inherit; font-size: .78rem; outline: none; width: 100%;
         }
         .field input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,255,153,.12); }
+        .field input[type="number"] { max-width: 150px; }
         .divider { border: none; border-top: 1px dashed var(--dim); margin: 14px 0; }
         .btn-row { display: flex; gap: 10px; margin-top: 4px; }
         .btn {
@@ -119,12 +116,12 @@
             <div class="field">
                 <label>Scan methode</label>
                 <select id="scanMethod">
-                    <option value="linear" selected>📏 100% Parallel GPU (Direct Fermat)</option>
+                    <option value="linear" selected>📏 WebGPU Pipelined (Geen CPU Lag)</option>
                 </select>
             </div>
             <div class="field">
                 <label>Keys per Plakje</label>
-                <input id="keysLimit" value="10000000" type="number" min="1000">
+                <input id="keysLimit" value="1000000" type="number" min="1000">
             </div>
             <hr class="divider">
             <div class="field">
@@ -203,6 +200,7 @@
         const P: array<u32,8> = array<u32,8>(0xFFFFFC2Fu,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
         const P_MINUS_2: array<u32,8> = array<u32,8>(0xFFFFFC2Du,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
 
+        // Geoptimaliseerde carry logic
         fn addc(a: u32, b: u32, cin: u32) -> vec2<u32> {
           let s1 = a + b; let c1 = select(0u, 1u, s1 < a);
           let s2 = s1 + cin; let c2 = select(0u, 1u, s2 < s1);
@@ -222,26 +220,54 @@
           let hi = hihi + (mr.x >> 16u) + (mr.y << 16u) + lr.y;
           return vec2<u32>(lr.x, hi);
         }
+        
+        // VOLLEDIG UNROLLED ADD & SUB VOOR REGISTER PRESSURE VERLAGING
         fn add8(a: array<u32,8>, b: array<u32,8>) -> R8 {
-          var out: array<u32,8>; var carry: u32 = 0u;
-          for (var i = 0u; i < 8u; i = i + 1u) { let r = addc(a[i], b[i], carry); out[i] = r.x; carry = r.y; }
-          var res: R8; res.v = out; res.c = carry; return res;
+            let r0 = addc(a[0], b[0], 0u);
+            let r1 = addc(a[1], b[1], r0.y);
+            let r2 = addc(a[2], b[2], r1.y);
+            let r3 = addc(a[3], b[3], r2.y);
+            let r4 = addc(a[4], b[4], r3.y);
+            let r5 = addc(a[5], b[5], r4.y);
+            let r6 = addc(a[6], b[6], r5.y);
+            let r7 = addc(a[7], b[7], r6.y);
+            var res: R8; 
+            res.v = array<u32,8>(r0.x, r1.x, r2.x, r3.x, r4.x, r5.x, r6.x, r7.x); 
+            res.c = r7.y;
+            return res;
         }
+        
         fn sub8(a: array<u32,8>, b: array<u32,8>) -> R8 {
-          var out: array<u32,8>; var borrow: u32 = 0u;
-          for (var i = 0u; i < 8u; i = i + 1u) { let r = subb(a[i], b[i], borrow); out[i] = r.x; borrow = r.y; }
-          var res: R8; res.v = out; res.c = borrow; return res;
+            let r0 = subb(a[0], b[0], 0u);
+            let r1 = subb(a[1], b[1], r0.y);
+            let r2 = subb(a[2], b[2], r1.y);
+            let r3 = subb(a[3], b[3], r2.y);
+            let r4 = subb(a[4], b[4], r3.y);
+            let r5 = subb(a[5], b[5], r4.y);
+            let r6 = subb(a[6], b[6], r5.y);
+            let r7 = subb(a[7], b[7], r6.y);
+            var res: R8; 
+            res.v = array<u32,8>(r0.x, r1.x, r2.x, r3.x, r4.x, r5.x, r6.x, r7.x); 
+            res.c = r7.y;
+            return res;
         }
+
         fn cmp8(a: array<u32,8>, b: array<u32,8>) -> i32 {
-          for (var ii = 0u; ii < 8u; ii = ii + 1u) {
-            let i = 7u - ii; if (a[i] != b[i]) { return select(-1, 1, a[i] > b[i]); }
-          }
+          if (a[7] != b[7]) { return select(-1, 1, a[7] > b[7]); }
+          if (a[6] != b[6]) { return select(-1, 1, a[6] > b[6]); }
+          if (a[5] != b[5]) { return select(-1, 1, a[5] > b[5]); }
+          if (a[4] != b[4]) { return select(-1, 1, a[4] > b[4]); }
+          if (a[3] != b[3]) { return select(-1, 1, a[3] > b[3]); }
+          if (a[2] != b[2]) { return select(-1, 1, a[2] > b[2]); }
+          if (a[1] != b[1]) { return select(-1, 1, a[1] > b[1]); }
+          if (a[0] != b[0]) { return select(-1, 1, a[0] > b[0]); }
           return 0;
         }
+
         fn isZero8(a: array<u32,8>) -> bool {
-          for (var i = 0u; i < 8u; i = i + 1u) { if (a[i] != 0u) { return false; } }
-          return true;
+          return (a[0]|a[1]|a[2]|a[3]|a[4]|a[5]|a[6]|a[7]) == 0u;
         }
+
         fn mulRaw(a: array<u32,8>, b: array<u32,8>) -> array<u32,16> {
           var res: array<u32,16>; for (var i = 0u; i < 16u; i = i + 1u) { res[i] = 0u; }
           for (var i = 0u; i < 8u; i = i + 1u) {
@@ -292,7 +318,7 @@
           let hi2_977 = mul32(hi2, 977u);
           addScalarAt(&acc, 0u, hi2_977.x); addScalarAt(&acc, 1u, hi2_977.y);
           addScalarAt(&acc, 1u, hi2); addScalarAt(&acc, 2u, extra); addScalarAt(&acc, 1u, extra * 977u);
-          for (var iter=0u; iter<3u; iter=iter+1u) {
+          for (var iter=0u; iter<6u; iter=iter+1u) {
             if (cmp8(acc, P) >= 0) { let s = sub8(acc, P); acc = s.v; } else { break; }
           }
           return acc;
@@ -306,6 +332,8 @@
           else { let t = sub8(b, a); let d = sub8(P, t.v); return d.v; }
         }
         fn u32to8(x: u32) -> array<u32,8> { var out: array<u32,8>; out[0]=x; for (var i=1u;i<8u;i=i+1u){ out[i]=0u; } return out; }
+        
+        // Aangepaste modpowP2 die veilig is voor gelijktijdige threads.
         fn modpowP2(base: array<u32,8>) -> array<u32,8> {
           var result = u32to8(1u); var b = base;
           for (var i = 0u; i < 256u; i = i + 1u) {
@@ -377,8 +405,9 @@
           
           for (var i = 0u; i < 64u; i = i + 1u) {
             var w: u32;
-            if (i < 16u) { w = W[i]; } 
-            else {
+            if (i < 16u) {
+                w = W[i];
+            } else {
                 let w15 = W[(i - 15u) & 15u];
                 let w2  = W[(i - 2u) & 15u];
                 let s0 = rotr32(w15, 7u) ^ rotr32(w15, 18u) ^ (w15 >> 3u);
@@ -386,6 +415,7 @@
                 w = W[(i - 16u) & 15u] + s0 + W[(i - 7u) & 15u] + s1;
                 W[i & 15u] = w;
             }
+
             let S1 = rotr32(e,6u) ^ rotr32(e,11u) ^ rotr32(e,25u);
             let ch = (e & f) ^ ((~e) & g);
             let t1 = h + S1 + ch + SHA_K[i] + w;
@@ -423,7 +453,8 @@
           var ar = h0; var br = h1; var cr = h2; var dr = h3; var er = h4;
 
           for (var j = 0u; j < 80u; j = j + 1u) {
-            let roundL = j / 16u; let roundR = j / 16u;
+            let roundL = j / 16u;
+            let roundR = j / 16u;
             let tl = al + rmdF(j, bl, cl, dl) + X[RMD_ZL[j]] + RMD_HL[roundL];
             let rotL = rotl32(tl, RMD_SL[j]) + el;
             al = el; el = dl; dl = rotl32(cl, 10u); cl = bl; bl = rotL;
@@ -442,7 +473,7 @@
         @group(0) @binding(2) var<uniform> targetData: TargetHash;
         @group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>;
 
-        // 🔥 FIX: Workgroup size vergroot naar 256 voor maximale Apple Silicon occupancy
+        // Workgroup teruggebracht naar maximale power van 256 threads voor high occupancy
         @compute @workgroup_size(256)
         fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
           let idx = gid.x;
@@ -469,10 +500,11 @@
             }
           }
 
-          // 🔥 FIX: Directe Fermat Inversie per thread! 
-          // Dit voorkomt dat 99% van de GPU cores staat te niksen zoals in de oude code.
+          // ===== PURE PARALLEL INVERSION FIX =====
+          // Elke thread voert dit gelijktijdig uit. Geen threads die op elkaar wachten, 
+          // geen register spills naar gedeeld (workgroup) geheugen.
           let Zinv = modpowP2(pt.Z);
-
+          
           let Zinv2 = mulmod(Zinv, Zinv);
           let Zinv3 = mulmod(Zinv2, Zinv);
           
@@ -501,6 +533,7 @@
         const SECP_GX = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
         const SECP_GY = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199c47d08ffb10d4b8n;
 
+        function bigIntTo32Bytes(v) { return hexToBytes(v.toString(16).padStart(64, '0')); }
         function hexToBytes(hex) {
           const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
           const out = new Uint8Array(32);
@@ -515,7 +548,6 @@
           return limbs;
         }
         function bigIntToLimbsLE(bi) { return bytesToLimbsLE(hexToBytes(bi.toString(16).padStart(64, '0'))); }
-        function bigIntTo32Bytes(v) { return hexToBytes(v.toString(16).padStart(64, '0')); }
 
         function buildPrecomputedTable() {
           const flat = new Uint32Array(32 * 256 * 16); let base = { x: SECP_GX, y: SECP_GY };
@@ -580,9 +612,14 @@
           for (let i = 0; i < bytes.length; i++) {
             let carry = bytes[i];
             for (let j = 0; j < digits.length; j++) { 
-                carry += digits[j] * 256; digits[j] = carry % 58; carry = Math.floor(carry / 58); 
+                carry += digits[j] * 256; 
+                digits[j] = carry % 58; 
+                carry = Math.floor(carry / 58); 
             }
-            while (carry > 0) { digits.push(carry % 58); carry = Math.floor(carry / 58); }
+            while (carry > 0) { 
+                digits.push(carry % 58); 
+                carry = Math.floor(carry / 58); 
+            }
           }
           let str = ""; for (let i = 0; i < bytes.length && bytes[i] === 0; i++) str += "1";
           for (let i = digits.length - 1; i >= 0; i--) str += B58ALPHA[digits[i]];
@@ -590,15 +627,19 @@
         }
 
         async function wifCompressed(priv32) {
-          const payload = new Uint8Array(33); payload.set(priv32, 0); payload[32] = 0x01;
+          const payload = new Uint8Array(33);
+          payload.set(priv32, 0); payload[32] = 0x01;
           const data = new Uint8Array(34); data[0] = 0x80; data.set(payload, 1);
-          const h1 = await sha256_browser(data); const h2 = await sha256_browser(h1);
-          const full = new Uint8Array(38); full.set(data); full.set(h2.slice(0, 4), 34);
+          const h1 = await sha256_browser(data);
+          const h2 = await sha256_browser(h1);
+          const full = new Uint8Array(38);
+          full.set(data); full.set(h2.slice(0, 4), 34);
           return base58encode(full);
         }
 
         let gpuDevice = null, gpuPipeline = null, tableBuffer = null, uniformsBuffer = null;
-        let isRunning = false, keysCheckedGlobal = 0, slicesVisited = 0, keysCheckedSlice = 0;
+        let isRunning = false, keysCheckedGlobal = 0, slicesVisited = 0;
+        let keysCheckedSlice = 0;
         let currentSliceStart = 0n, currentSliceEnd = 0n, currentKeyVal = 0n;
         
         const BATCH_SIZE = 2097152; 
@@ -609,17 +650,23 @@
         function getRandomSliceStart(limitStr) {
             const userStartInput = document.getElementById('customStart').value.trim();
             const userEndInput = document.getElementById('customEnd').value.trim();
+            
             let rangeMin = userStartInput ? BigInt(userStartInput.startsWith('0x') ? userStartInput : '0x' + userStartInput) : 0x10000000n;
             let rangeMax = userEndInput ? BigInt(userEndInput.startsWith('0x') ? userEndInput : '0x' + userEndInput) : 0x1fffffffn;
+            
             const limit = BigInt(limitStr);
             const totalSpan = rangeMax - rangeMin + 1n;
             
             if (totalSpan <= limit) return rangeMin;
+            
             const maxOffset = totalSpan - limit;
             const randBytes = new Uint8Array(16);
             window.crypto.getRandomValues(randBytes);
+            
             let randHex = '';
-            for (let i = 0; i < 16; i++) randHex += randBytes[i].toString(16).padStart(2, '0');
+            for (let i = 0; i < 16; i++) {
+                randHex += randBytes[i].toString(16).padStart(2, '0');
+            }
             let randInt = BigInt('0x' + randHex);
             return rangeMin + (randInt % maxOffset);
         }
@@ -628,8 +675,10 @@
             const box = document.getElementById('logBox');
             const d = new Date(); const ts = d.toLocaleTimeString('nl-NL') + '.' + String(d.getMilliseconds()).padStart(3,'0');
             let color = 'var(--text)';
-            if(type === 'warn') color = 'var(--warn)'; if(type === 'success') color = 'var(--success)';
-            if(type === 'hop') color = 'var(--accent2)'; if(type === 'stop') color = 'var(--danger)';
+            if(type === 'warn') color = 'var(--warn)';
+            if(type === 'success') color = 'var(--success)';
+            if(type === 'hop') color = 'var(--accent2)';
+            if(type === 'stop') color = 'var(--danger)';
             box.innerHTML += `<div><span class="ts">[${ts}]</span> <span style="color:${color}">${msg}</span></div>`;
             box.scrollTop = box.scrollHeight;
         }
@@ -639,23 +688,27 @@
             try {
                 const adapter = await navigator.gpu.requestAdapter();
                 if (!adapter) { log('❌ Geen GPU adapter gevonden.', 'warn'); return false; }
+
                 gpuDevice = await adapter.requestDevice();
-                gpuDevice.addEventListener('uncapturederror', (e) => { log('❌ GPU FOUT: ' + e.error.message, 'warn'); });
+
+                gpuDevice.addEventListener('uncapturederror', (event) => { log('❌ GPU FOUT: ' + event.error.message, 'warn'); });
+                gpuDevice.lost.then((info) => { log(`❌ GPU DEVICE LOST: ${info.message}`, 'warn'); });
 
                 const module = gpuDevice.createShaderModule({ code: WGSL_SOURCE });
                 const compilationInfo = await module.getCompilationInfo();
                 let hasErr = false;
                 for (const msg of compilationInfo.messages) {
-                    if (msg.type === 'error') { log(`❌ SHADER FOUT: ${msg.message}`, 'warn'); hasErr = true; }
+                    if (msg.type === 'error') { log(`❌ SHADER ERROR [regel ${msg.lineNum}:${msg.linePos}]: ${msg.message}`, 'warn'); hasErr = true; }
                 }
                 if (hasErr) return false;
 
                 gpuPipeline = gpuDevice.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
 
-                log("Precomputing Jacobian Tabellen...", "info");
+                log("Genereer Jacobian ECDSA Tabel...", "info");
                 await new Promise(r => setTimeout(r, 50)); 
                 
                 const table = buildPrecomputedTable();
+
                 tableBuffer = gpuDevice.createBuffer({ size: table.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
                 gpuDevice.queue.writeBuffer(tableBuffer, 0, table);
                 
@@ -664,10 +717,11 @@
                 document.getElementById('gpuBadge').textContent = '🚀 WEBGPU GEREED (TURBO)';
                 document.getElementById('gpuBadge').style.borderColor = 'var(--success)';
                 document.getElementById('gpuBadge').style.color = 'var(--success)';
-                log("WebGPU Backend Succesvol Geladen met Per-Thread optimalisatie.", "success");
+                log("WebGPU Backend Succesvol Geladen.", "success");
                 return true;
             } catch (e) {
                 log('❌ Fout bij WebGPU init: ' + e.message, 'warn');
+                console.error(e);
                 return false;
             }
         }
@@ -677,6 +731,7 @@
 
             const targetAddress = document.getElementById('btcAddr').value.trim();
             const targetHashBytes = getTargetHash160Bytes(targetAddress);
+            
             const targetHashU32 = new Uint32Array(8);
             for (let i = 0; i < 5; i++) {
                 targetHashU32[i] = (targetHashBytes[i*4]) | (targetHashBytes[i*4+1] << 8) | (targetHashBytes[i*4+2] << 16) | (targetHashBytes[i*4+3] << 24);
@@ -752,16 +807,21 @@
                     const stage = pipelineStages[stageIndex];
                     stageIndex = (stageIndex + 1) % PIPELINE_DEPTH;
 
-                    if (stage.inFlight) await stage.inFlight;
+                    if (stage.inFlight) {
+                        await stage.inFlight;
+                    }
                     if (!isRunning) break;
 
                     const batchStartKey = currentKeyVal;
+
                     const startPoint = ecScalarMul(batchStartKey, { x: SECP_GX, y: SECP_GY });
-                    
+                    const gxLimbs = bigIntToLimbsLE(startPoint.x);
+                    const gyLimbs = bigIntToLimbsLE(startPoint.y);
+
                     const fullBuf = new Uint32Array(24);
                     fullBuf.set(bigIntToLimbsLE(batchStartKey), 0);
-                    fullBuf.set(bigIntToLimbsLE(startPoint.x), 8);
-                    fullBuf.set(bigIntToLimbsLE(startPoint.y), 16);
+                    fullBuf.set(gxLimbs, 8);
+                    fullBuf.set(gyLimbs, 16);
 
                     gpuDevice.queue.writeBuffer(stage.batchBuffer, 0, fullBuf);
                     gpuDevice.queue.writeBuffer(stage.resBuf, 0, zeroRes.buffer);
@@ -771,7 +831,7 @@
                     pass.setPipeline(gpuPipeline);
                     pass.setBindGroup(0, stage.bindGroup);
                     
-                    // 🔥 FIX: Aangepast naar 256 threads per workgroup voor max saturatie!
+                    // Aangepast naar 256 workgroup size!
                     pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 256));
                     
                     pass.end();
@@ -796,7 +856,7 @@
                             
                             document.getElementById('noMatchRow').style.display = 'none';
                             const tbody = document.getElementById('matchTable');
-                            tbody.innerHTML += `<tr><td>P2PKH</td><td style="color:var(--accent2);">${wifStr}</td><td style="color:var(--success);">0x${privHex}</td></tr>`;
+                            tbody.innerHTML += `<tr><td>P2PKH (Match)</td><td style="color:var(--accent2);">${wifStr}</td><td style="color:var(--success);">0x${privHex}</td></tr>`;
                             log(`🎯 BINGO! Match gevonden: 0x${privHex}`, 'success');
                             
                             document.getElementById('stopBtn').click();
@@ -826,6 +886,7 @@
                     }
                 }
             }
+            
             startComputeLoop();
         });
 
