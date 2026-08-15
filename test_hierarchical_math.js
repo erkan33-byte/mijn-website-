@@ -1,59 +1,41 @@
 const P = (1n << 256n) - (1n << 32n) - 977n;
-const GX = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
-const GY = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n;
-const G = { x: GX, y: GY };
+const N = 128;
 
 function inv(a) {
-  let [oldR, r, oldS, s] = [((a % P) + P) % P, P, 1n, 0n];
-  while (r !== 0n) {
-    const q = oldR / r;
-    [oldR, r] = [r, oldR - q * r];
-    [oldS, s] = [s, oldS - q * s];
+  let r0 = ((a % P) + P) % P;
+  let r1 = P;
+  let s0 = 1n;
+  let s1 = 0n;
+  while (r1 !== 0n) {
+    const q = r0 / r1;
+    [r0, r1] = [r1, r0 - q * r1];
+    [s0, s1] = [s1, s0 - q * s1];
   }
-  return ((oldS % P) + P) % P;
+  return (s0 + P) % P;
 }
-function add(a, b) {
-  if (a === null) return b;
-  if (b === null) return a;
-  if (a.x === b.x) {
-    if ((a.y + b.y) % P === 0n) return null;
-    const m = (3n * a.x * a.x * inv(2n * a.y)) % P;
-    const x = (m * m - 2n * a.x) % P;
-    const y = (m * (a.x - x) - a.y) % P;
-    return { x: (x + P) % P, y: (y + P) % P };
-  }
-  const m = ((b.y - a.y) * inv(b.x - a.x)) % P;
-  const x = (m * m - a.x - b.x) % P;
-  const y = (m * (a.x - x) - a.y) % P;
-  return { x: (x + P) % P, y: (y + P) % P };
-}
-function mul(n, base = G) {
-  let acc = null;
-  let cur = base;
-  while (n > 0n) {
-    if (n & 1n) acc = add(acc, cur);
-    cur = add(cur, cur);
-    n >>= 1n;
-  }
-  return acc;
-}
-function eq(a, b) { return a !== null && b !== null && a.x === b.x && a.y === b.y; }
+function mul(a, b) { return (a * b) % P; }
 
-const start = 0x123456789abcdefn;
-const p0 = mul(start);
-const g256 = mul(256n);
-const g65536 = mul(65536n);
-const g16777216 = mul(16777216n);
-const samples = [0n, 1n, 255n, 256n, 257n, 65535n, 65536n, 131071n, 0x123456n, 0x20fffe7n];
-for (const idx of samples) {
-  const group = idx >> 8n;
-  const lane = idx & 255n;
-  let h = p0;
-  const bytes = [group & 255n, (group >> 8n) & 255n, (group >> 16n) & 255n];
-  const bases = [g256, g65536, g16777216];
-  for (let i = 0; i < 3; i++) if (bytes[i] !== 0n) h = add(h, mul(bytes[i], bases[i]));
-  if (lane !== 0n) h = add(h, mul(lane));
-  const direct = mul(start + idx);
-  if (!eq(h, direct)) throw new Error(`mismatch bij idx=0x${idx.toString(16)}`);
+const tree = Array.from({ length: 2 * N }, () => 0n);
+const values = Array.from({ length: N }, (_, i) => BigInt((i + 1) * (i + 17) + 31));
+for (let i = 0; i < N; i++) tree[N + i] = values[i];
+for (let width = N / 2; width > 0; width >>= 1) {
+  for (let lane = 0; lane < width; lane++) {
+    const node = width + lane;
+    tree[node] = mul(tree[node * 2], tree[node * 2 + 1]);
+  }
 }
-console.log(`OK: ${samples.length} hiërarchische decomposities zijn algebraïsch gelijk aan (start + idx)·G.`);
+tree[1] = inv(tree[1]);
+for (let width = 1; width < N; width <<= 1) {
+  for (let lane = 0; lane < width; lane++) {
+    const node = width + lane;
+    const parentInverse = tree[node];
+    const leftProduct = tree[node * 2];
+    const rightProduct = tree[node * 2 + 1];
+    tree[node * 2] = mul(parentInverse, rightProduct);
+    tree[node * 2 + 1] = mul(parentInverse, leftProduct);
+  }
+}
+for (let i = 0; i < N; i++) {
+  if (mul(values[i], tree[N + i]) !== 1n) throw new Error(`inverse mismatch bij lane ${i}`);
+}
+console.log(`OK: productboom retourneert ${N} correcte inversen met één modulaire inverse.`);
