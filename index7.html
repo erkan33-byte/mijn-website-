@@ -489,11 +489,11 @@
         @group(0) @binding(2) var<uniform> targetData: TargetHash;
         @group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>;
 
-        // 1-based binaire boom: knopen 1..255, bladeren 128..255.
-        // 256 × 8 × 4 = 8192 bytes; dit blijft ruim onder de 16-KiB-limiet.
-        var<workgroup> product_tree: array<array<u32,8>, 256>;
+        // 1-based binaire boom: knopen 1..511, bladeren 256..511.
+        // 512 × 8 × 4 = 16384 bytes; exact de Apple-limiet, zonder andere workgroup-variabelen.
+        var<workgroup> product_tree: array<array<u32,8>, 512>;
 
-        @compute @workgroup_size(128)
+        @compute @workgroup_size(256)
         fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
           let idx = gid.x;
           let lid_x = lid.x;
@@ -531,11 +531,11 @@
 
           // Parallelle Montgomery-productboom voor 128 Z-waarden.
           // Inactieve lanes voeren Z=1 in, maar passeren de barriers uniform.
-          product_tree[128u + lid_x] = pt.Z;
+          product_tree[256u + lid_x] = pt.Z;
           workgroupBarrier();
 
           // Upsweep: elke laag produceert de producten voor de bovenliggende knopen.
-          for (var width = 64u; width > 0u; width = width / 2u) {
+          for (var width = 128u; width > 0u; width = width / 2u) {
             if (lid_x < width) {
               let node = width + lid_x;
               product_tree[node] = mulmod(product_tree[node * 2u], product_tree[node * 2u + 1u]);
@@ -548,7 +548,7 @@
           workgroupBarrier();
 
           // Downsweep: verspreid de inverse van elk subproduct parallel naar de bladeren.
-          for (var width = 1u; width < 128u; width = width * 2u) {
+          for (var width = 1u; width < 256u; width = width * 2u) {
             if (lid_x < width) {
               let node = width + lid_x;
               let parent_inv = product_tree[node];
@@ -561,7 +561,7 @@
           }
 
           if (!is_active_lane) { return; }
-          let Zinv = product_tree[128u + lid_x];
+          let Zinv = product_tree[256u + lid_x];
 
           let Zinv2 = mulmod(Zinv, Zinv);
           let Zinv3 = mulmod(Zinv2, Zinv);
@@ -969,7 +969,7 @@
                     const pass = encoder.beginComputePass();
                     pass.setPipeline(gpuPipeline);
                     pass.setBindGroup(0, stage.bindGroup);
-                    pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 128));
+                    pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 256));
                     pass.end();
                     
                     encoder.copyBufferToBuffer(stage.resBuf, 0, stage.readBuf, 0, 8);
