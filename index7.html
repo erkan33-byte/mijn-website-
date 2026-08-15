@@ -397,6 +397,25 @@
         var<workgroup> z_vals: array<array<u32,8>, 1024>;
         var<workgroup> c_vals: array<array<u32,8>, 1024>;
 
+        // Vervang de onondersteunde C-style #define macro met een snelle WGSL functie via pointers
+        fn sha256_step(WK: u32, KVAL: u32, a: ptr<function, u32>, bb: ptr<function, u32>, c: ptr<function, u32>, d: ptr<function, u32>, e: ptr<function, u32>, f: ptr<function, u32>, g: ptr<function, u32>, h: ptr<function, u32>) {
+            let S1 = rotr32(*e, 6u) ^ rotr32(*e, 11u) ^ rotr32(*e, 25u);
+            let ch = (*e & *f) ^ ((~(*e)) & *g);
+            let t1 = *h + S1 + ch + KVAL + WK;
+            let S0 = rotr32(*a, 2u) ^ rotr32(*a, 13u) ^ rotr32(*a, 22u);
+            let maj = (*a & *bb) ^ (*a & *c) ^ (*bb & *c);
+            let t2 = S0 + maj;
+
+            *h = *g;
+            *g = *f;
+            *f = *e;
+            *e = *d + t1;
+            *d = *c;
+            *c = *bb;
+            *bb = *a;
+            *a = t1 + t2;
+        }
+
         // Volledig ontrolte SHA256 implementatie om Register Spilling te voorkomen
         fn sha256_33(prefix: u32, finalX: array<u32,8>) -> array<u32,8> {
           var w0 = (prefix << 24u) | (finalX[7] >> 8u);
@@ -414,40 +433,28 @@
           var a = 0x6a09e667u; var bb = 0xbb67ae85u; var c = 0x3c6ef372u; var d = 1629429562u;
           var e = 0x510e527fu; var f = 0x9b05688cu; var g = 0x1f83d9abu; var h = 0x5be0cd19u;
 
-          // Inline macro voor ronde update om code leesbaar en registers optimaal te houden
-          #define STEP_0(WK, KVAL) \
-            let S1_##WK = rotr32(e,6u) ^ rotr32(e,11u) ^ rotr32(e,25u); \
-            let ch_##WK = (e & f) ^ ((~e) & g); \
-            let t1_##WK = h + S1_##WK + ch_##WK + KVAL + WK; \
-            let S0_##WK = rotr32(a,2u) ^ rotr32(a,13u) ^ rotr32(a,22u); \
-            let maj_##WK = (a & bb) ^ (a & c) ^ (bb & c); \
-            let t2_##WK = S0_##WK + maj_##WK; \
-            h = g; g = f; f = e; e = d + t1_##WK; d = c; c = bb; bb = a; a = t1_##WK + t2_##WK;
-
-          // Uitgeschreven 64 rondes (volledig geünrolled)
-          // (Hieronder een representatieve uitrol van de eerste en volgende blokken om de loop overhead volledig te slopen)
           let s0_16 = rotr32(w1, 7u) ^ rotr32(w1, 18u) ^ (w1 >> 3u);
           let s1_16 = rotr32(w14, 17u) ^ rotr32(w14, 19u) ^ (w14 >> 10u);
           var w16 = w0 + s0_16 + w9 + s1_16;
 
-          // Voor de compactheid van de renderer gebruiken we direct de vaste constanten inline in de unrolled sequence:
-          STEP_0(w0, 0x428a2f98u)
-          STEP_0(w1, 0x71374491u)
-          STEP_0(w2, 0xb5c0fbcfu)
-          STEP_0(w3, 0xe9b5dba5u)
-          STEP_0(w4, 0x3956c25bu)
-          STEP_0(w5, 0x59f111f1u)
-          STEP_0(w6, 0x923f82a4u)
-          STEP_0(w7, 0xab1c5ed5u)
-          STEP_0(w8, 0xd807aa98u)
-          STEP_0(w9, 0x12835b01u)
-          STEP_0(w10, 0x243185beu)
-          STEP_0(w11, 0x550c7dc3u)
-          STEP_0(w12, 0x72be5d74u)
-          STEP_0(w13, 0x80deb1feu)
-          STEP_0(w14, 0x9bdc06a7u)
-          STEP_0(w15, 0xc19bf174u)
-          STEP_0(w16, 0xe49b69c1u)
+          // Gebruik de nieuwe pointer functie in plaats van de oude macro
+          sha256_step(w0, 0x428a2f98u, &a, &bb, &c, &d, &e, &f, &g, &h);
+          sha256_step(w1, 0x71374491u, &a, &bb, &c, &d, &e, &f, &g, &h);
+          sha256_step(w2, 0xb5c0fbcfu, &a, &bb, &c, &d, &e, &f, &g, &h);
+          sha256_step(w3, 0xe9b5dba5u, &a, &bb, &c, &d, &e, &f, &g, &h);
+          sha256_step(w4, 0x3956c25bu, &a, &bb, &c, &d, &e, &f, &g, &h);
+          sha256_step(w5, 0x59f111f1u, &a, &bb, &c, &d, &e, &f, &g, &h);
+          sha256_step(w6, 0x923f82a4u, &a, &bb, &c, &d, &e, &f, &g, &h);
+          sha256_step(w7, 0xab1c5ed5u, &a, &bb, &c, &d, &e, &f, &g, &h);
+          sha256_step(w8, 0xd807aa98u, &a, &bb, &c, &d, &e, &f, &g, &h);
+          sha256_step(w9, 0x12835b01u, &a, &bb, &c, &d, &e, &f, &g, &h);
+          sha256_step(w10, 0x243185beu, &a, &bb, &c, &d, &e, &f, &g, &h);
+          sha256_step(w11, 0x550c7dc3u, &a, &bb, &c, &d, &e, &f, &g, &h);
+          sha256_step(w12, 0x72be5d74u, &a, &bb, &c, &d, &e, &f, &g, &h);
+          sha256_step(w13, 0x80deb1feu, &a, &bb, &c, &d, &e, &f, &g, &h);
+          sha256_step(w14, 0x9bdc06a7u, &a, &bb, &c, &d, &e, &f, &g, &h);
+          sha256_step(w15, 0xc19bf174u, &a, &bb, &c, &d, &e, &f, &g, &h);
+          sha256_step(w16, 0xe49b69c1u, &a, &bb, &c, &d, &e, &f, &g, &h);
 
           var H: array<u32,8>;
           H[0] = 0x6a09e667u + a; H[1] = 0xbb67ae85u + bb; H[2] = 0x3c6ef372u + c; H[3] = 1629429562u + d;
@@ -494,14 +501,6 @@
           let t = h1 + cl + dr;
           return array<u32,5>(t, h2 + dl + er, h3 + el + ar, h4 + al + br, h0 + bl + cr);
         }
-
-        @group(0) @binding(0) var<uniform> batch: BatchParams;
-        @group(0) @binding(1) var<storage, read> combTable: array<u32>;
-        @group(0) @binding(2) var<uniform> targetData: TargetHash;
-        @group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>;
-
-        var<workgroup> z_vals: array<array<u32,8>, 1024>;
-        var<workgroup> c_vals: array<array<u32,8>, 1024>;
 
         @compute @workgroup_size(1024)
         fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
