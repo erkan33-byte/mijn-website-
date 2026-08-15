@@ -492,6 +492,9 @@
         fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
           let idx = gid.x;
           let lid_x = lid.x;
+          // De laatste workgroup kan gedeeltelijk gevuld zijn. Inactieve lanes krijgen
+          // de neutrale Z-waarde 1, maar doorlopen beide barriers wel uniform.
+          let is_active_lane = idx < batch.startKey2.w;
 
           var pt: JPoint;
           pt.X = array<u32,8>(batch.gx.x, batch.gx.y, batch.gx.z, batch.gx.w,
@@ -501,18 +504,24 @@
           pt.Z = u32to8(1u);
           pt.isInf = false;
 
-          for (var i = 0u; i < 4u; i = i + 1u) {
-            let shift = 8u * i;
-            let byteVal = (idx >> shift) & 0xffu;
-            if (byteVal != 0u) {
-              let base_idx = (i * 256u + byteVal) * 16u;
-              var tx: array<u32,8>; var ty: array<u32,8>;
-              for (var m = 0u; m < 8u; m = m + 1u) {
-                tx[m] = combTable[base_idx + m]; 
-                ty[m] = combTable[base_idx + 8u + m];
+          if (is_active_lane) {
+            for (var i = 0u; i < 4u; i = i + 1u) {
+              let shift = 8u * i;
+              let byteVal = (idx >> shift) & 0xffu;
+              if (byteVal != 0u) {
+                let base_idx = (i * 256u + byteVal) * 16u;
+                var tx: array<u32,8>; var ty: array<u32,8>;
+                for (var m = 0u; m < 8u; m = m + 1u) {
+                  tx[m] = combTable[base_idx + m];
+                  ty[m] = combTable[base_idx + 8u + m];
+                }
+                pt = jacMaddAffine(pt, tx, ty);
               }
-              pt = jacMaddAffine(pt, tx, ty);
             }
+          } else {
+            pt.X = u32to8(0u);
+            pt.Y = u32to8(1u);
+            pt.Z = u32to8(1u);
           }
 
           z_vals[lid_x] = pt.Z;
@@ -533,6 +542,7 @@
               z_vals[0] = u;
           }
           workgroupBarrier();
+          if (!is_active_lane) { return; }
           let Zinv = z_vals[lid_x];
 
           let Zinv2 = mulmod(Zinv, Zinv);
@@ -751,6 +761,8 @@
                 if (!adapter) { log('❌ Geen GPU adapter gevonden.', 'warn'); return false; }
 
                 gpuDevice = await adapter.requestDevice();
+                const limits = gpuDevice.limits;
+                log(`GPU-limieten: workgroup X=${limits.maxComputeWorkgroupSizeX}, invocations=${limits.maxComputeInvocationsPerWorkgroup}, workgroup-geheugen=${limits.maxComputeWorkgroupStorageSize} bytes.`, 'info');
                 gpuDevice.addEventListener('uncapturederror', (event) => { log('❌ GPU FOUT: ' + event.error.message, 'warn'); });
                 
                 const module = gpuDevice.createShaderModule({ code: WGSL_SOURCE });
@@ -926,6 +938,9 @@
                     
                     // Zero-Allocation: hergebruik preallocatedFullBuf i.p.v. `new Uint32Array`
                     preallocatedFullBuf.set(bigIntToLimbsLE(batchStartKey), 0);
+                    // De shader gebruikt de privésleutel zelf niet; reserveer het anders
+                    // ongebruikte hoogste startKey-lid als actieve dispatchlengte.
+                    preallocatedFullBuf[7] = actualBatchCount;
                     preallocatedFullBuf.set(bigIntToLimbsLE(batchStartPoint.x), 8);
                     preallocatedFullBuf.set(bigIntToLimbsLE(batchStartPoint.y), 16);
 
