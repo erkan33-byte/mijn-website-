@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Puzzel — WebGPU Hiërarchisch Experiment</title>
+    <title>WebGPU 128-lane parallelle productboom — experiment</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -145,7 +145,7 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">WebGPU — hiërarchische vaste-basispuntproef</div>
+            <div class="sub">128-lane Montgomery-productboom — 8 KiB workgroup-geheugen</div>
             <span class="badge" id="gpuBadge">⚙️ INITIALISEREN...</span>
         </div>
         
@@ -485,91 +485,79 @@
         @group(0) @binding(2) var<uniform> targetData: TargetHash;
         @group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>;
 
-        var<workgroup> z_vals: array<array<u32,8>, 256>;
-        var<workgroup> c_vals: array<array<u32,8>, 256>;
-        var<workgroup> group_x: array<u32,8>;
-        var<workgroup> group_y: array<u32,8>;
-        var<workgroup> group_z: array<u32,8>;
-        var<workgroup> group_inf: u32;
+        // 1-based binaire boom: knopen 1..255, bladeren 128..255.
+        // 256 × 8 × 4 = 8192 bytes; dit blijft ruim onder de 16-KiB-limiet.
+        var<workgroup> product_tree: array<array<u32,8>, 256>;
 
-        @compute @workgroup_size(256)
-        fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>, @builtin(workgroup_id) wgid: vec3<u32>) {
+        @compute @workgroup_size(128)
+        fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
           let idx = gid.x;
           let lid_x = lid.x;
           // De laatste workgroup kan gedeeltelijk gevuld zijn. Inactieve lanes krijgen
           // de neutrale Z-waarde 1, maar doorlopen beide barriers wel uniform.
           let is_active_lane = idx < batch.startKey2.w;
 
-          // Bouw één basispunt per workgroup: P0 + workgroup_id * 256G.
-          // Daarna doet iedere actieve lane hoogstens één gemengde optelling met lane_id * G.
-          if (lid_x == 0u) {
-            var group_pt: JPoint;
-            group_pt.X = array<u32,8>(batch.gx.x, batch.gx.y, batch.gx.z, batch.gx.w,
-                                       batch.gx2.x, batch.gx2.y, batch.gx2.z, batch.gx2.w);
-            group_pt.Y = array<u32,8>(batch.gy.x, batch.gy.y, batch.gy.z, batch.gy.w,
-                                       batch.gy2.x, batch.gy2.y, batch.gy2.z, batch.gy2.w);
-            group_pt.Z = u32to8(1u);
-            group_pt.isInf = false;
-            for (var window = 0u; window < 3u; window = window + 1u) {
-              let byte_val = (wgid.x >> (8u * window)) & 0xffu;
-              if (byte_val != 0u) {
-                let table_offset = ((window + 1u) * 256u + byte_val) * 16u;
-                var add_x: array<u32,8>; var add_y: array<u32,8>;
-                for (var limb = 0u; limb < 8u; limb = limb + 1u) {
-                  add_x[limb] = combTable[table_offset + limb];
-                  add_y[limb] = combTable[table_offset + 8u + limb];
+          var pt: JPoint;
+          pt.X = array<u32,8>(batch.gx.x, batch.gx.y, batch.gx.z, batch.gx.w,
+                               batch.gx2.x, batch.gx2.y, batch.gx2.z, batch.gx2.w);
+          pt.Y = array<u32,8>(batch.gy.x, batch.gy.y, batch.gy.z, batch.gy.w,
+                               batch.gy2.x, batch.gy2.y, batch.gy2.z, batch.gy2.w);
+          pt.Z = u32to8(1u);
+          pt.isInf = false;
+
+          if (is_active_lane) {
+            for (var i = 0u; i < 4u; i = i + 1u) {
+              let shift = 8u * i;
+              let byteVal = (idx >> shift) & 0xffu;
+              if (byteVal != 0u) {
+                let base_idx = (i * 256u + byteVal) * 16u;
+                var tx: array<u32,8>; var ty: array<u32,8>;
+                for (var m = 0u; m < 8u; m = m + 1u) {
+                  tx[m] = combTable[base_idx + m];
+                  ty[m] = combTable[base_idx + 8u + m];
                 }
-                group_pt = jacMaddAffine(group_pt, add_x, add_y);
+                pt = jacMaddAffine(pt, tx, ty);
               }
             }
-            group_x = group_pt.X;
-            group_y = group_pt.Y;
-            group_z = group_pt.Z;
-            group_inf = select(0u, 1u, group_pt.isInf);
-          }
-          workgroupBarrier();
-
-          var pt: JPoint;
-          pt.X = group_x;
-          pt.Y = group_y;
-          pt.Z = group_z;
-          pt.isInf = group_inf != 0u;
-          if (is_active_lane && lid_x != 0u) {
-            let table_offset = lid_x * 16u;
-            var add_x: array<u32,8>; var add_y: array<u32,8>;
-            for (var limb = 0u; limb < 8u; limb = limb + 1u) {
-              add_x[limb] = combTable[table_offset + limb];
-              add_y[limb] = combTable[table_offset + 8u + limb];
-            }
-            pt = jacMaddAffine(pt, add_x, add_y);
-          }
-          if (!is_active_lane) {
+          } else {
             pt.X = u32to8(0u);
             pt.Y = u32to8(1u);
             pt.Z = u32to8(1u);
-            pt.isInf = false;
           }
 
-          z_vals[lid_x] = pt.Z;
+          // Parallelle Montgomery-productboom voor 128 Z-waarden.
+          // Inactieve lanes voeren Z=1 in, maar passeren de barriers uniform.
+          product_tree[128u + lid_x] = pt.Z;
           workgroupBarrier();
 
-          if (lid_x == 0u) {
-              c_vals[0] = z_vals[0];
-              for (var i = 1u; i < 256u; i = i + 1u) {
-                  c_vals[i] = mulmod(c_vals[i - 1u], z_vals[i]);
-              }
-              var u = modpowP2(c_vals[255]);
-              for (var i = 255u; i > 0u; i = i - 1u) {
-                  let prev_c = c_vals[i - 1u];
-                  let orig_z = z_vals[i];
-                  z_vals[i] = mulmod(u, prev_c);
-                  u = mulmod(u, orig_z);
-              }
-              z_vals[0] = u;
+          // Upsweep: elke laag produceert de producten voor de bovenliggende knopen.
+          for (var width = 64u; width > 0u; width = width / 2u) {
+            if (lid_x < width) {
+              let node = width + lid_x;
+              product_tree[node] = mulmod(product_tree[node * 2u], product_tree[node * 2u + 1u]);
+            }
+            workgroupBarrier();
           }
+
+          // Eén inverse voor het volledige product.
+          if (lid_x == 0u) { product_tree[1u] = modpowP2(product_tree[1u]); }
           workgroupBarrier();
+
+          // Downsweep: verspreid de inverse van elk subproduct parallel naar de bladeren.
+          for (var width = 1u; width < 128u; width = width * 2u) {
+            if (lid_x < width) {
+              let node = width + lid_x;
+              let parent_inv = product_tree[node];
+              let left_product = product_tree[node * 2u];
+              let right_product = product_tree[node * 2u + 1u];
+              product_tree[node * 2u] = mulmod(parent_inv, right_product);
+              product_tree[node * 2u + 1u] = mulmod(parent_inv, left_product);
+            }
+            workgroupBarrier();
+          }
+
           if (!is_active_lane) { return; }
-          let Zinv = z_vals[lid_x];
+          let Zinv = product_tree[128u + lid_x];
 
           let Zinv2 = mulmod(Zinv, Zinv);
           let Zinv3 = mulmod(Zinv2, Zinv);
@@ -977,7 +965,7 @@
                     const pass = encoder.beginComputePass();
                     pass.setPipeline(gpuPipeline);
                     pass.setBindGroup(0, stage.bindGroup);
-                    pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 256));
+                    pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 128));
                     pass.end();
                     
                     encoder.copyBufferToBuffer(stage.resBuf, 0, stage.readBuf, 0, 8);
