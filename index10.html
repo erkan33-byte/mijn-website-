@@ -175,7 +175,7 @@
                 <input id="customEnd" value="7fffffffffffffffff" type="text" style="color: var(--accent2);" placeholder="Bijv. 7fffffffffffffffff">
             </div>
             <hr class="divider">
-            <div class="field"><label>GPU Batch Size</label><input id="numW" value="262144" type="number" disabled title="Bepaald door WebGPU"></div>
+            <div class="field"><label>GPU Batch Size</label><input id="numW" value="16384" type="number" disabled title="Bepaald door WebGPU"></div>
             <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--muted);" readonly></div>
             <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--muted);" readonly></div>
             
@@ -397,7 +397,7 @@
           0x27b70a85u,0x2e1b2138u,0x4d2c6dfcu,0x53380d13u,0x650a7354u,0x766a0abbu,0x81c2c92eu,0x92722c85u,
           0xa2bfe8a1u,0xa81a664bu,0xc24b8b70u,0xc76c51a3u,0xd192e819u,0xd6990624u,0xf40e3585u,0x106aa070u,
           0x19a4c116u,0x1e376c08u,0x2748774cu,0x34b0bcb5u,0x391c0cb3u,0x4ed8aa4au,0x5b9cca4fu,0x682e6ff3u,
-          0x748f82eeu,0x78a5636fu,0x84c87814u,0x8cc70208u,0x90befffau,0xa4506cebu,0xbef9a3f7u,0xc67178f2u
+          0x748f82eeu,0x78a5636fu,0x84c87814u,0x8cc70208u,0x8cc70208u,0x90befffau,0xa4506cebu,0xbef9a3f7u,0xc67178f2u
         );
         
         // Register-geoptimaliseerd: SHA-256 heeft slechts 16 eerdere woorden nodig.
@@ -703,9 +703,7 @@
         let currentSliceStart = 0n, currentSliceEnd = 0n, currentKeyVal = 0n;
         let startTime = 0;
         
-        // BATCH_SIZE is aanzienlijk verlaagd voor laptop/Windows compatibiliteit
-        const BATCH_SIZE = 262144; // Aangepast van 2097152 voor Windows TDR compatibiliteit
-        
+        const BATCH_SIZE = 16384; // Verlaagd van 2097152 voor laptop GPU's om TDR crashes te voorkomen
         // Twee stages dekken de readback-latentie af, zonder de iPhone-GPU te verzadigen.
         const PIPELINE_DEPTH = 2;
         let pipelineStages = [];
@@ -781,6 +779,14 @@
                 if (!adapter) { log('❌ Geen GPU adapter gevonden.', 'warn'); return false; }
 
                 gpuDevice = await adapter.requestDevice();
+                
+                // Toegevoegd: Foutafhandeling voor als de GPU crasht (Device Lost)
+                gpuDevice.lost.then((info) => {
+                    log(`❌ GPU VERBINDING VERBROKEN: ${info.message}`, 'warn');
+                    isRunning = false;
+                    document.getElementById('stopBtn').click();
+                });
+
                 const limits = gpuDevice.limits;
                 log(`GPU-limieten: workgroup X=${limits.maxComputeWorkgroupSizeX}, invocations=${limits.maxComputeInvocationsPerWorkgroup}, workgroup-geheugen=${limits.maxComputeWorkgroupStorageSize} bytes.`, 'info');
                 gpuDevice.addEventListener('uncapturederror', (event) => { log('❌ GPU FOUT: ' + event.error.message, 'warn'); });
@@ -795,7 +801,7 @@
 
                 gpuPipeline = gpuDevice.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
 
-                log("Precomputing Jacobian ECDSA Tabel... (Dit kan even duren op een laptop)", "info");
+                log("Precomputing Jacobian ECDSA Tabel...", "info");
                 await new Promise(r => setTimeout(r, 100)); 
                 
                 const table = buildPrecomputedTable();
@@ -977,30 +983,36 @@
                     encoder.copyBufferToBuffer(stage.resBuf, 0, stage.readBuf, 0, 8);
                     gpuDevice.queue.submit([encoder.finish()]);
 
+                    // Toegevoegd: Foutafhandeling met try/catch rond het GPU map proces
                     stage.inFlight = (async () => {
-                        await stage.readBuf.mapAsync(GPUMapMode.READ);
-                        // Lees rechtstreeks uit de mapped range; een kopie is hier niet nodig.
-                        const gpuResult = new Uint32Array(stage.readBuf.getMappedRange());
-                        const isMatch = gpuResult[0] === 1;
-                        const matchIdx = gpuResult[1];
-                        stage.readBuf.unmap();
-                        
-                        if(isRunning) {
-                            keysCheckedSlice += actualBatchCount;
-                            keysCheckedGlobal += actualBatchCount;
-                        }
+                        try {
+                            await stage.readBuf.mapAsync(GPUMapMode.READ);
+                            const gpuResult = new Uint32Array(stage.readBuf.getMappedRange());
+                            const isMatch = gpuResult[0] === 1;
+                            const matchIdx = gpuResult[1];
+                            stage.readBuf.unmap();
+                            
+                            if(isRunning) {
+                                keysCheckedSlice += actualBatchCount;
+                                keysCheckedGlobal += actualBatchCount;
+                            }
 
-                        if (isMatch && !matchAlGevonden) {
-                            matchAlGevonden = true;
-                            const foundPrivInt = batchStartKey + BigInt(matchIdx);
-                            const privHex = foundPrivInt.toString(16).padStart(64, '0');
-                            const wifStr = await wifCompressed(hexToBytes(privHex));
-                            
-                            document.getElementById('noMatchRow').style.display = 'none';
-                            const tbody = document.getElementById('matchTable');
-                            tbody.innerHTML += `<tr><td>P2PKH (Match)</td><td style="color:var(--accent2);">${wifStr}</td><td style="color:var(--success);">0x${privHex}</td></tr>`;
-                            log(`🎯 BINGO! Match gevonden: 0x${privHex}`, 'success');
-                            
+                            if (isMatch && !matchAlGevonden) {
+                                matchAlGevonden = true;
+                                const foundPrivInt = batchStartKey + BigInt(matchIdx);
+                                const privHex = foundPrivInt.toString(16).padStart(64, '0');
+                                const wifStr = await wifCompressed(hexToBytes(privHex));
+                                
+                                document.getElementById('noMatchRow').style.display = 'none';
+                                const tbody = document.getElementById('matchTable');
+                                tbody.innerHTML += `<tr><td>P2PKH (Match)</td><td style="color:var(--accent2);">${wifStr}</td><td style="color:var(--success);">0x${privHex}</td></tr>`;
+                                log(`🎯 BINGO! Match gevonden: 0x${privHex}`, 'success');
+                                
+                                document.getElementById('stopBtn').click();
+                            }
+                        } catch (err) {
+                            log(`❌ GPU Crash tijdens inlezen. BATCH_SIZE is mogelijk te groot voor deze laptop.`, 'warn');
+                            console.error("MapAsync Error:", err);
                             document.getElementById('stopBtn').click();
                         }
                     })();
