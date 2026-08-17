@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebGPU 128-lane parallelle productboom — experiment</title>
+    <title>WebGPU 256-lane — gemeten throughput</title>
     <style>
         :root {
             --bg: #07090f; --surface: #0d1117; --panel: #111827;
@@ -145,7 +145,7 @@
     <div class="container">
         <div class="header">
             <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">128-lane Montgomery-productboom — 8 KiB workgroup-geheugen</div>
+            <div class="sub">256-lane productboom — 3-stage pipeline — gemeten throughput</div>
             <span class="badge" id="gpuBadge">⚙️ INITIALISEREN...</span>
         </div>
         
@@ -175,7 +175,7 @@
                 <input id="customEnd" value="7fffffffffffffffff" type="text" style="color: var(--accent2);" placeholder="Bijv. 7fffffffffffffffff">
             </div>
             <hr class="divider">
-            <div class="field"><label>GPU Batch Size</label><input id="numW" value="4096" type="number" disabled title="Wordt na een geslaagde probe automatisch verhoogd"></div>
+            <div class="field"><label>GPU Batch Size</label><input id="numW" value="2097152" type="number" disabled title="Bepaald door WebGPU"></div>
             <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--muted);" readonly></div>
             <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--muted);" readonly></div>
             
@@ -489,11 +489,11 @@
         @group(0) @binding(2) var<uniform> targetData: TargetHash;
         @group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>;
 
-        // 1-based binaire boom: knopen 1..255, bladeren 128..255.
-        // 256 × 8 × 4 = 8192 bytes. Dit laat laptops meer bezettingsruimte dan 16 KiB.
-        var<workgroup> product_tree: array<array<u32,8>, 256>;
+        // 1-based binaire boom: knopen 1..511, bladeren 256..511.
+        // 512 × 8 × 4 = 16384 bytes; exact de Apple-limiet, zonder andere workgroup-variabelen.
+        var<workgroup> product_tree: array<array<u32,8>, 512>;
 
-        @compute @workgroup_size(128)
+        @compute @workgroup_size(256)
         fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
           let idx = gid.x;
           let lid_x = lid.x;
@@ -531,11 +531,11 @@
 
           // Parallelle Montgomery-productboom voor 128 Z-waarden.
           // Inactieve lanes voeren Z=1 in, maar passeren de barriers uniform.
-          product_tree[128u + lid_x] = pt.Z;
+          product_tree[256u + lid_x] = pt.Z;
           workgroupBarrier();
 
           // Upsweep: elke laag produceert de producten voor de bovenliggende knopen.
-          for (var width = 64u; width > 0u; width = width / 2u) {
+          for (var width = 128u; width > 0u; width = width / 2u) {
             if (lid_x < width) {
               let node = width + lid_x;
               product_tree[node] = mulmod(product_tree[node * 2u], product_tree[node * 2u + 1u]);
@@ -548,7 +548,7 @@
           workgroupBarrier();
 
           // Downsweep: verspreid de inverse van elk subproduct parallel naar de bladeren.
-          for (var width = 1u; width < 128u; width = width * 2u) {
+          for (var width = 1u; width < 256u; width = width * 2u) {
             if (lid_x < width) {
               let node = width + lid_x;
               let parent_inv = product_tree[node];
@@ -699,16 +699,14 @@
         }
 
         let gpuDevice = null, gpuPipeline = null, tableBuffer = null, uniformsBuffer = null;
-        let gpuReady = false, initPromise = null;
         let isRunning = false, keysCheckedGlobal = 0, slicesVisited = 0, keysCheckedSlice = 0;
         let currentSliceStart = 0n, currentSliceEnd = 0n, currentKeyVal = 0n;
         let startTime = 0;
+        let runId = 0, meterLastTime = 0, meterLastKeys = 0;
         
-        // 2.097.152 kandidaten maakte een eerste dispatch op sommige laptopdrivers minutenlang
-        // onzichtbaar. Een probe van 4.096 maakt storingen snel zichtbaar; daarna verhogen we veilig.
-        let activeBatchSize = 4096;
-        // Twee stages dekken de readback-latentie af zonder het apparaat te verzadigen.
-        const PIPELINE_DEPTH = 2;
+        const BATCH_SIZE = 2097152;
+        // Twee stages dekken de readback-latentie af, zonder de iPhone-GPU te verzadigen.
+        const PIPELINE_DEPTH = 3;
         let pipelineStages = [];
         let zeroRes;
         
@@ -716,7 +714,6 @@
         let preallocatedFullBuf = new Uint32Array(24);
         let currentBatchPoint = null;
         let batchStepPoint = null;
-        let firstBatchCompleted = false;
 
         function getRandomSliceStart(limitStr) {
             const cleanStart = document.getElementById('customStart').value.trim().replace('0x', '');
@@ -776,84 +773,46 @@
             return true;
         }
 
-        function setGpuBadge(text, color = 'var(--accent)') {
-            const badge = document.getElementById('gpuBadge');
-            badge.textContent = text;
-            badge.style.borderColor = color;
-            badge.style.color = color;
-        }
+        async function initWebGPU() {
+            if (!navigator.gpu) { document.getElementById('gpuBadge').textContent = 'WebGPU NIET ONDERSTEUND'; return false; }
+            try {
+                const adapter = await navigator.gpu.requestAdapter();
+                if (!adapter) { log('❌ Geen GPU adapter gevonden.', 'warn'); return false; }
 
-        function failRun(message) {
-            isRunning = false;
-            document.getElementById('startBtn').disabled = false;
-            document.getElementById('stopBtn').disabled = true;
-            const statusEl = document.getElementById('statusVal');
-            statusEl.textContent = 'GPU-fout';
-            statusEl.className = 'value';
-            log('❌ ' + message, 'warn');
-        }
-
-        function initWebGPU() {
-            if (gpuReady) return Promise.resolve(true);
-            if (initPromise) return initPromise;
-            if (!navigator.gpu) {
-                setGpuBadge('WebGPU NIET ONDERSTEUND', 'var(--danger)');
-                log('WebGPU is niet beschikbaar. Gebruik Chrome/Edge met hardwareversnelling.', 'warn');
-                return Promise.resolve(false);
-            }
-
-            document.getElementById('startBtn').disabled = true;
-            setGpuBadge('WEBGPU INITIALISEREN...', 'var(--warn)');
-            initPromise = (async () => {
-                const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
-                if (!adapter) throw new Error('Geen GPU-adapter gevonden. Controleer chrome://gpu en hardwareversnelling.');
-
-                let adapterLabel = 'adapter geselecteerd';
-                try { if (adapter.info?.description) adapterLabel = adapter.info.description; } catch (_) {}
-                log('GPU-adapter: ' + adapterLabel, 'info');
-
-                const device = await adapter.requestDevice();
-                gpuDevice = device;
-                const limits = device.limits;
+                gpuDevice = await adapter.requestDevice();
+                const limits = gpuDevice.limits;
                 log(`GPU-limieten: workgroup X=${limits.maxComputeWorkgroupSizeX}, invocations=${limits.maxComputeInvocationsPerWorkgroup}, workgroup-geheugen=${limits.maxComputeWorkgroupStorageSize} bytes.`, 'info');
-                device.addEventListener('uncapturederror', (event) => failRun('WebGPU-validatiefout: ' + event.error.message));
-                device.lost.then((info) => {
-                    gpuReady = false; gpuDevice = null; gpuPipeline = null; pipelineStages = [];
-                    setGpuBadge('GPU-APPARAAT VERLOREN', 'var(--danger)');
-                    if (info.reason !== 'destroyed') failRun('GPU-apparaat verloren: ' + (info.message || info.reason));
-                });
-
-                setGpuBadge('SHADER COMPILEREN...', 'var(--warn)');
-                const module = device.createShaderModule({ code: WGSL_SOURCE });
+                gpuDevice.addEventListener('uncapturederror', (event) => { log('❌ GPU FOUT: ' + event.error.message, 'warn'); });
+                
+                const module = gpuDevice.createShaderModule({ code: WGSL_SOURCE });
                 const compilationInfo = await module.getCompilationInfo();
-                const errors = compilationInfo.messages.filter(msg => msg.type === 'error');
-                if (errors.length) throw new Error('Shaderfout L' + errors[0].lineNum + ': ' + errors[0].message);
-                gpuPipeline = device.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
+                let hasErr = false;
+                for (const msg of compilationInfo.messages) {
+                    if (msg.type === 'error') { log(`❌ SHADER FOUT [L${msg.lineNum}]: ${msg.message}`, 'warn'); hasErr = true; }
+                }
+                if (hasErr) return false;
 
-                setGpuBadge('VOORBEREKENING TABEL...', 'var(--warn)');
-                log('Precomputing Jacobian ECDSA-tabel...', 'info');
-                await new Promise(r => setTimeout(r, 0));
+                gpuPipeline = gpuDevice.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
+
+                log("Precomputing Jacobian ECDSA Tabel...", "info");
+                await new Promise(r => setTimeout(r, 100)); 
+                
                 const table = buildPrecomputedTable();
-                tableBuffer = device.createBuffer({ size: table.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-                device.queue.writeBuffer(tableBuffer, 0, table);
-                uniformsBuffer = device.createBuffer({ size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+                tableBuffer = gpuDevice.createBuffer({ size: table.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+                gpuDevice.queue.writeBuffer(tableBuffer, 0, table);
+                
+                uniformsBuffer = gpuDevice.createBuffer({ size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
-                // Kleine eerste dispatch voorkomt minuten zonder zichtbare voortgang op laptopdrivers.
-                activeBatchSize = 4096;
-                document.getElementById('numW').value = activeBatchSize;
-                gpuReady = true;
-                setGpuBadge('WEBGPU GEREED · COMPAT-MODUS', 'var(--success)');
-                document.getElementById('startBtn').disabled = false;
-                log('WebGPU gereed. Eerste batch: ' + activeBatchSize.toLocaleString('nl-NL') + ' kandidaten.', 'success');
+                document.getElementById('gpuBadge').textContent = '🚀 WEBGPU ULTRA GEREED';
+                document.getElementById('gpuBadge').style.borderColor = 'var(--success)';
+                document.getElementById('gpuBadge').style.color = 'var(--success)';
+                log("WebGPU Backend Succesvol Geladen & Klaar.", "success");
                 return true;
-            })().catch((e) => {
-                gpuReady = false; gpuDevice = null;
-                setGpuBadge('WEBGPU FOUT', 'var(--danger)');
-                log('WebGPU-initialisatie mislukt: ' + e.message, 'warn');
-                document.getElementById('startBtn').disabled = false;
+            } catch (e) {
+                log('❌ Fout bij WebGPU init: ' + e.message, 'warn');
+                console.error(e);
                 return false;
-            }).finally(() => { if (!gpuReady) initPromise = null; });
-            return initPromise;
+            }
         }
 
         let lastUiUpdate = 0;
@@ -862,9 +821,12 @@
         function updateUI(timestamp) {
             if(!isRunning) return;
             
-            if(timestamp - lastUiUpdate > 200) {
-                const elapsed = (performance.now() - startTime) / 1000;
-                const rate = Math.round(keysCheckedGlobal / Math.max(elapsed, 0.001));
+            if(timestamp - lastUiUpdate > 1000) {
+                const now = performance.now();
+                const elapsed = Math.max((now - meterLastTime) / 1000, 0.001);
+                const rate = Math.round((keysCheckedGlobal - meterLastKeys) / elapsed);
+                meterLastTime = now;
+                meterLastKeys = keysCheckedGlobal;
                 
                 document.getElementById('keysScanned').textContent = keysCheckedGlobal.toLocaleString('nl-NL');
                 document.getElementById('speed').textContent = rate.toLocaleString('nl-NL') + " /s";
@@ -890,7 +852,7 @@
 
         document.getElementById('startBtn').addEventListener('click', async () => {
             if(!validateInputs()) return;
-            if (!gpuReady) { const ok = await initWebGPU(); if (!ok) return; }
+            if (!gpuDevice) { const ok = await initWebGPU(); if (!ok) return; }
 
             let matchAlGevonden = false;
             const targetAddress = document.getElementById('btcAddr').value.trim();
@@ -925,13 +887,19 @@
                 }
             }
 
+            runId++;
+            keysCheckedGlobal = 0;
+            keysCheckedSlice = 0;
+            slicesVisited = 0;
+            lastUiUpdate = 0;
+            meterLastTime = performance.now();
+            meterLastKeys = 0;
             isRunning = true;
-            firstBatchCompleted = false;
             document.getElementById('startBtn').disabled = true;
             document.getElementById('stopBtn').disabled = false;
             
             const statusEl = document.getElementById('statusVal');
-            statusEl.textContent = "Eerste batch gestart...";
+            statusEl.textContent = "Zoeken...";
             statusEl.className = "value running";
             
             let limitStr = document.getElementById('keysLimit').value;
@@ -940,7 +908,7 @@
             document.getElementById('limitDisplay').textContent = keysLimitGlobalForUi.toLocaleString('nl-NL');
 
             // Bereken eenmalig het stap-punt voor O(1) ecAdd optelling
-            batchStepPoint = ecScalarMul(BigInt(activeBatchSize), { x: SECP_GX, y: SECP_GY });
+            batchStepPoint = ecScalarMul(BigInt(BATCH_SIZE), { x: SECP_GX, y: SECP_GY });
 
             const runSlice = async () => {
                 currentSliceStart = getRandomSliceStart(limitStr);
@@ -966,7 +934,6 @@
             };
 
             await runSlice();
-            log('Eerste GPU-batch ingepland: ' + activeBatchSize.toLocaleString('nl-NL') + ' kandidaten. Wacht op de eerste readback.', 'info');
             startTime = performance.now();
             let stageIndex = 0;
             
@@ -981,7 +948,7 @@
                         await runSlice();
                     }
 
-                    const actualBatchCount = Math.min(activeBatchSize, Number(currentSliceEnd - currentKeyVal));
+                    const actualBatchCount = Math.min(BATCH_SIZE, Number(currentSliceEnd - currentKeyVal));
                     const stage = pipelineStages[stageIndex];
                     stageIndex = (stageIndex + 1) % PIPELINE_DEPTH;
 
@@ -994,7 +961,7 @@
                     const batchStartKey = currentKeyVal;
                     const batchStartPoint = currentBatchPoint;
                     currentKeyVal += BigInt(actualBatchCount);
-                    if (actualBatchCount === activeBatchSize) {
+                    if (actualBatchCount === BATCH_SIZE) {
                         currentBatchPoint = ecAdd(batchStartPoint, batchStepPoint);
                     }
                     
@@ -1013,12 +980,13 @@
                     const pass = encoder.beginComputePass();
                     pass.setPipeline(gpuPipeline);
                     pass.setBindGroup(0, stage.bindGroup);
-                    pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 128));
+                    pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 256));
                     pass.end();
                     
                     encoder.copyBufferToBuffer(stage.resBuf, 0, stage.readBuf, 0, 8);
                     gpuDevice.queue.submit([encoder.finish()]);
 
+                    const submittedRunId = runId;
                     stage.inFlight = (async () => {
                         await stage.readBuf.mapAsync(GPUMapMode.READ);
                         // Lees rechtstreeks uit de mapped range; een kopie is hier niet nodig.
@@ -1027,24 +995,12 @@
                         const matchIdx = gpuResult[1];
                         stage.readBuf.unmap();
                         
-                        if(isRunning) {
+                        if(isRunning && submittedRunId === runId) {
                             keysCheckedSlice += actualBatchCount;
                             keysCheckedGlobal += actualBatchCount;
-                            if (!firstBatchCompleted) {
-                                firstBatchCompleted = true;
-                                statusEl.textContent = 'Zoeken...';
-                                log('Eerste GPU-batch voltooid; doorvoer wordt nu gemeten.', 'success');
-                                // Schaal pas na een geslaagde readback op naar een bruikbare batchgrootte.
-                                if (activeBatchSize === 4096) {
-                                    activeBatchSize = 16384;
-                                    batchStepPoint = ecScalarMul(BigInt(activeBatchSize), { x: SECP_GX, y: SECP_GY });
-                                    document.getElementById('numW').value = activeBatchSize;
-                                    log('Compatibiliteitsprobe geslaagd; batch verhoogd naar 16.384.', 'success');
-                                }
-                            }
                         }
 
-                        if (isMatch && !matchAlGevonden) {
+                        if (isMatch && submittedRunId === runId && !matchAlGevonden) {
                             matchAlGevonden = true;
                             const foundPrivInt = batchStartKey + BigInt(matchIdx);
                             const privHex = foundPrivInt.toString(16).padStart(64, '0');
@@ -1057,13 +1013,14 @@
                             
                             document.getElementById('stopBtn').click();
                         }
-                    })().catch((error) => failRun('GPU-readback mislukt: ' + error.message));
+                    })();
                 }
             }
-            startComputeLoop().catch((error) => failRun('Compute-loop gestopt: ' + error.message));
+            startComputeLoop();
         });
 
         document.getElementById('stopBtn').addEventListener('click', () => {
+            runId++;
             isRunning = false;
             document.getElementById('startBtn').disabled = false;
             document.getElementById('stopBtn').disabled = true;
