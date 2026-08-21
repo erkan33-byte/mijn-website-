@@ -361,31 +361,14 @@
           else { let t = sub8(b, a); let d = sub8(P, t.v); return d.v; }
         }
         fn u32to8(x: u32) -> array<u32,8> { var out: array<u32,8>; out[0]=x; for (var i=1u;i<8u;i=i+1u){ out[i]=0u; } return out; }
-        // Vaste addition-chain voor z^(p-2), met p = 2^256 - 2^32 - 977.
-        // De generieke exponentbitloop verdwijnt; alle bewerkingen blijven exact mod p.
-        fn sqrN(a: array<u32,8>, n: u32) -> array<u32,8> {
-          var r = a;
-          for (var i = 0u; i < n; i = i + 1u) { r = mulmod(r, r); }
-          return r;
-        }
         fn modpowP2(base: array<u32,8>) -> array<u32,8> {
-          let x1  = base;
-          let x2  = mulmod(sqrN(x1, 1u), x1);
-          let x3  = mulmod(sqrN(x2, 1u), x1);
-          let x6  = mulmod(sqrN(x3, 3u), x3);
-          let x9  = mulmod(sqrN(x6, 3u), x3);
-          let x11 = mulmod(sqrN(x9, 2u), x2);
-          let x22 = mulmod(sqrN(x11, 11u), x11);
-          let x44 = mulmod(sqrN(x22, 22u), x22);
-          let x88 = mulmod(sqrN(x44, 44u), x44);
-          var r = mulmod(sqrN(x88, 88u), x88);
-          r = mulmod(sqrN(r, 44u), x44);
-          r = mulmod(sqrN(r, 3u), x3);
-          r = mulmod(sqrN(r, 23u), x22);
-          r = mulmod(sqrN(r, 5u), x1);
-          r = mulmod(sqrN(r, 3u), x2);
-          r = sqrN(r, 2u);
-          return mulmod(r, base);
+          var result = u32to8(1u); var b = base;
+          for (var i = 0u; i < 256u; i = i + 1u) {
+            let limbIdx = i / 32u; let bitIdx = i % 32u;
+            if (((P_MINUS_2[limbIdx] >> bitIdx) & 1u) == 1u) { result = mulmod(result, b); }
+            b = mulmod(b, b);
+          }
+          return result;
         }
 
         struct JPoint { X: array<u32,8>, Y: array<u32,8>, Z: array<u32,8>, isInf: bool };
