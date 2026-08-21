@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>secp256k1 BSGS Interval Scanner</title>
+<style>
+:root{color-scheme:dark;--bg:#071018;--panel:#101b27;--line:#294056;--green:#50e3a4;--blue:#47b8f5;--red:#e05252;--amber:#f0b35a;--muted:#9db0c2}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#e5eef7;font:15px system-ui,sans-serif}.app{max-width:980px;margin:auto;padding:28px 16px}.title{margin:0;color:var(--green);font-size:1.35rem}.sub{color:var(--muted);margin:8px 0 24px;line-height:1.5}.card{background:var(--panel);border:1px solid #253749;border-radius:10px;padding:18px;margin:14px 0}.grid{display:grid;grid-template-columns:260px 1fr;gap:12px;align-items:center}.grid label{color:#b9c6d3;font-size:.9rem}input,select{width:100%;background:#071018;border:1px solid #385067;border-radius:6px;padding:10px;color:var(--green);font:14px ui-monospace,monospace}input[readonly]{color:#a9bbcb;background:#0a141e}.buttons{display:flex;gap:10px;margin-top:18px}button{padding:11px 16px;border:0;border-radius:6px;font-weight:700;cursor:pointer;background:var(--green);color:#04130c}button.stop{background:var(--red);color:#fff}button:disabled{opacity:.5;cursor:not-allowed}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.stat{background:#071018;border-radius:6px;padding:12px}.label{font-size:.72rem;color:var(--muted);text-transform:uppercase}.value{font:700 1rem ui-monospace,monospace;color:var(--green);margin-top:5px;word-break:break-all}.note{font-size:.88rem;color:#c4d1dc;line-height:1.5}.notice{border-left:4px solid var(--amber);background:#1d1b16}.notice strong{color:var(--amber)}#log{white-space:pre-wrap;background:#020609;border-radius:6px;padding:12px;min-height:120px;max-height:260px;overflow:auto;color:#b9d8c9;font:12px ui-monospace,monospace}.ok{color:var(--green)}.bad{color:var(--red)}@media(max-width:760px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body><main class="app">
+<h1 class="title">secp256k1 BSGS Interval Scanner</h1>
+<p class="sub">Exacte baby-step giant-step voor een <strong>bekende gecomprimeerde publieke sleutel</strong>. De kern gebruikt Jacobian mixed addition en één batch-inversie per baby- of giantgroep. Workers delen iedere actuele slice zonder overlap op.</p>
+<section class="card notice"><strong>Belangrijk:</strong> deze methode is niet bruikbaar met uitsluitend een Bitcoin P2PKH-adres. Voor Bitcoin Puzzle #71 is de volledige public key niet beschikbaar; laat dit veld dan niet draaien alsof het die puzzel sneller oplost. BSGS is alleen mathematisch geldig wanneer de target public key onafhankelijk bekend is.</section>
+<section class="card"><div class="grid">
+<label for="pubKey">Gecomprimeerde target public key</label><input id="pubKey" value="03afdda497369e219a2c1c369954a930e4d3740968e5e4352475bcffce3140dae5" spellcheck="false">
+<label for="rangeMin">Minimum (hex, inclusief)</label><input id="rangeMin" value="1000000000000000000000000000000000000" spellcheck="false">
+<label for="rangeMax">Maximum (hex, inclusief)</label><input id="rangeMax" value="1ffffffffffffffffffffffffffffffffffff" spellcheck="false">
+<label for="sliceSize">Kandidaten per gezamenlijke slice</label><select id="sliceSize"><option value="1073741824" selected>2³⁰ — mobielvriendelijke start</option><option value="4294967296">2³² — gebalanceerd</option><option value="17179869184">2³⁴ — veel RAM</option><option value="34359738368">2³⁵ — alleen desktop met meerdere cores</option></select>
+<label for="mode">Slice-methode</label><select id="mode"><option value="sequential" selected>Sequentieel — geen herhaling vóór range-einde</option><option value="random">Willekeurig — kan eerdere slice herhalen</option></select>
+<label for="threads">CPU-workers</label><input id="threads" type="number" min="1" max="16" value="4">
+<label>Actuele slice</label><input id="sliceRange" readonly value="Nog niet gereserveerd">
+</div><div class="buttons"><button id="start">Start BSGS-scan</button><button id="stop" class="stop" disabled>Stop</button></div></section>
+<section class="card"><div class="stats"><div class="stat"><div class="label">Status</div><div id="status" class="value">Gereed</div></div><div class="stat"><div class="label">BSGS-kandidaten afgedekt</div><div id="total" class="value">0</div></div><div class="stat"><div class="label">Kandidaatdekking / s</div><div id="speed" class="value">0 /s</div></div><div class="stat"><div class="label">Voltooide slices</div><div id="sliceCount" class="value">0</div></div></div></section>
+<section class="card note"><strong>Betekenis van de teller:</strong> BSGS dekt algebraïsch de weergegeven hoeveelheid kandidaat-sleutels af. Dit is geen aantal SHA-256/RIPEMD-160-berekeningen. De dekking is exact binnen een slice, mits de ingevoerde public key correct is.</section>
+<section class="card"><div id="log">Wacht op start.</div></section>
+</main>
+<script id="workerCode" type="javascript/worker">
+'use strict';
+const P=0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2fn;
+const GX=0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798n;
+const GY=0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8n;
+const G={x:GX,y:GY};
+let cacheM=0n,cacheMap=null,cacheParity=null,cacheNegGiant=null,cacheTargetHex='',cacheTarget=null;
+let gx=[],gy=[],gz=[],prefix=[];
+function mod(a){const r=a%P;return r<0n?r+P:r}
+function inv(a){if(a===0n)throw Error('inverse van nul');let t=0n,nt=1n,r=P,nr=mod(a);while(nr){const q=r/nr;[t,nt]=[nt,t-q*nt];[r,nr]=[nr,r-q*nr]}return t<0n?t+P:t}
+function pow(a,e){let r=1n,b=mod(a);while(e){if(e&1n)r=mod(r*b);b=mod(b*b);e>>=1n}return r}
+function inf(){return null}
+function fromAff(a){return a?{x:a.x,y:a.y,z:1n}:null}
+function neg(p){return p?{x:p.x,y:mod(-p.y),z:p.z}:null}
+function toAff(p){if(!p)return null;const iz=inv(p.z),iz2=mod(iz*iz);return{x:mod(p.x*iz2),y:mod(p.y*iz2*iz)}}
+function dbl(p){if(!p||p.y===0n)return null;const A=mod(p.x*p.x),B=mod(p.y*p.y),C=mod(B*B);const D=mod(2n*(mod((p.x+B)*(p.x+B))-A-C));const E=mod(3n*A),F=mod(E*E);return{x:mod(F-2n*D),y:mod(E*(D-mod(F-2n*D))-8n*C),z:mod(2n*p.y*p.z)}}
+function addAff(p,q){if(!p)return fromAff(q);if(!q)return p;const z2=mod(p.z*p.z),u2=mod(q.x*z2),s2=mod(q.y*z2*p.z),h=mod(u2-p.x),r=mod(s2-p.y);if(h===0n)return r===0n?dbl(p):null;const hh=mod(h*h),hhh=mod(h*hh),v=mod(p.x*hh),x=mod(r*r-hhh-2n*v);return{x,y:mod(r*(v-x)-p.y*hhh),z:mod(p.z*h)}}
+function scalarG(k){let bit=1n;while(bit<=k)bit<<=1n;bit>>=1n;let r=null;for(;bit;bit>>=1n){r=dbl(r);if(k&bit)r=addAff(r,G)}return r}
+function isqrt(n){if(n<2n)return n;let x=1n<<BigInt((n.toString(2).length+1)>>1),y=(x+n/x)>>1n;while(y<x){x=y;y=(x+n/x)>>1n}return x}
+function ceilSqrt(n){const r=isqrt(n);return r*r===n?r:r+1n}
+function decodePub(hex){if(!/^(02|03)[0-9a-f]{64}$/i.test(hex))throw Error('Public key moet 66 hextekens hebben en met 02 of 03 starten');const x=BigInt('0x'+hex.slice(2));if(x>=P)throw Error('Public-key x ligt buiten het veld');let y=pow(mod(x*x*x+7n),(P+1n)>>2n);const odd=hex.slice(0,2)==='03';if(Boolean(y&1n)!==odd)y=P-y;if(mod(y*y)!==mod(x*x*x+7n))throw Error('Public key ligt niet op secp256k1');return{x,y}}
+function targetFor(hex){if(hex!==cacheTargetHex){cacheTarget=decodePub(hex);cacheTargetHex=hex}return cacheTarget}
+function ensureArrays(n){if(gx.length===n)return;gx=new Array(n);gy=new Array(n);gz=new Array(n);prefix=new Array(n)}
+function buildCache(M){if(cacheMap&&cacheM===M)return;const n=Number(M);if(!Number.isSafeInteger(n)||n<1||n>131072)throw Error('Deze workerdeelrange vraagt te veel geheugen; verlaag slicegrootte of verhoog workers');const babyCount=n-1;const bx=new Array(babyCount),by=new Array(babyCount),bz=new Array(babyCount),pre=new Array(babyCount);let p=fromAff(G);for(let i=0;i<babyCount;i++){bx[i]=p.x;by[i]=p.y;bz[i]=p.z;p=addAff(p,G)}let acc=1n;for(let i=0;i<babyCount;i++){pre[i]=acc;acc=mod(acc*bz[i])}let ia=inv(acc);const map=new Map(),parity=new Uint8Array(babyCount+1);for(let i=babyCount-1;i>=0;i--){const iz=mod(ia*pre[i]);ia=mod(ia*bz[i]);const iz2=mod(iz*iz),x=mod(bx[i]*iz2),y=mod(by[i]*iz2*iz);map.set(x,i+1);parity[i+1]=Number(y&1n)}const giant=toAff(scalarG(M));cacheM=M;cacheMap=map;cacheParity=parity;cacheNegGiant={x:giant.x,y:mod(-giant.y)}}
+function checkGiants(count,start,M,end){let acc=1n;for(let j=0;j<count;j++){prefix[j]=acc;if(gz[j]!==0n)acc=mod(acc*gz[j])}let ia=inv(acc);for(let j=count-1;j>=0;j--){const base=start+BigInt(j)*M;if(gz[j]===0n){if(base<=end)return base;continue}const iz=mod(ia*prefix[j]);ia=mod(ia*gz[j]);const iz2=mod(iz*iz),x=mod(gx[j]*iz2);const i=cacheMap.get(x);if(i!==undefined){const y=mod(gy[j]*iz2*iz);if(cacheParity[i]===Number(y&1n)){const found=base+BigInt(i);if(found<=end)return found}}}return null}
+function scan(start,end,pubHex){const pub=targetFor(pubHex),W=end-start+1n,M=ceilSqrt(W);buildCache(M);const n=Number(M);ensureArrays(n);let q=addAff(neg(scalarG(start)),pub);for(let j=0;j<n;j++){if(q){gx[j]=q.x;gy[j]=q.y;gz[j]=q.z}else{gx[j]=0n;gy[j]=0n;gz[j]=0n}q=addAff(q,cacheNegGiant)}return checkGiants(n,start,M,end)}
+self.onmessage=e=>{if(e.data.type!=='scan')return;try{const start=BigInt('0x'+e.data.startHex),end=BigInt('0x'+e.data.endHex);if(start<1n||end<start)throw Error('Ongeldige worker-range');const found=scan(start,end,e.data.pubKey);self.postMessage(found===null?{type:'done',token:e.data.token,count:(end-start+1n).toString()}:{type:'found',token:e.data.token,key:found.toString(16).padStart(64,'0'),count:(end-start+1n).toString()})}catch(error){self.postMessage({type:'error',token:e.data.token,error:String(error&&error.message||error)})}};
+</script>
+<script>
+'use strict';
+const $=id=>document.getElementById(id),LOG_LIMIT=200;
+let workers=[],running=false,session=0,sliceId=0,done=0,active=0,total=0n,slices=0,startAt=0,current=null,cursor=0n,blobUrl=null;
+function log(text,kind=''){const box=$('log'),line=document.createElement('div');line.textContent=new Date().toLocaleTimeString('nl-NL')+'  '+text;if(kind)line.className=kind;box.prepend(line);while(box.children.length>LOG_LIMIT)box.lastChild.remove()}
+function cleanHex(s){s=s.trim().replace(/^0x/i,'');if(!/^[0-9a-f]+$/i.test(s))throw Error('Ongeldige hexwaarde');return s}
+function fmt(x){return '0x'+x.toString(16)}
+function randomBelow(bound){if(bound<=1n)return 0n;const full=1n<<256n,limit=full-full%bound,b=new Uint8Array(32);for(;;){crypto.getRandomValues(b);let n=0n;for(const v of b)n=(n<<8n)|BigInt(v);if(n<limit)return n%bound}}
+function readConfig(){const pub=$('pubKey').value.trim(),min=BigInt('0x'+cleanHex($('rangeMin').value)),max=BigInt('0x'+cleanHex($('rangeMax').value)),slice=BigInt($('sliceSize').value),threads=Math.max(1,Math.min(16,Number($('threads').value)||1));if(!/^(02|03)[0-9a-f]{64}$/i.test(pub))throw Error('Voer een geldige gecomprimeerde public key in');if(min<1n||max<min)throw Error('Ongeldige range');return{pub,min,max,slice,threads,mode:$('mode').value}}
+function reserve(c){const span=c.max-c.min+1n;let start,len;if(c.mode==='sequential'){if(cursor<c.min||cursor>c.max)cursor=c.min;start=cursor;const remaining=c.max-start+1n;len=c.slice<remaining?c.slice:remaining;cursor=start+len>c.max?c.min:start+len}else{len=c.slice<span?c.slice:span;start=c.min+randomBelow(span-len+1n)}return{start,end:start+len-1n,len}}
+function workerUrl(){if(!blobUrl)blobUrl=URL.createObjectURL(new Blob([$('workerCode').textContent],{type:'application/javascript'}));return blobUrl}
+function terminate(){for(const w of workers)w.terminate();workers=[]}
+function update(){const sec=(performance.now()-startAt)/1000;$('total').textContent=total.toLocaleString('nl-NL');$('speed').textContent=sec>0?Math.round(Number(total)/sec).toLocaleString('nl-NL')+' /s':'0 /s';$('sliceCount').textContent=slices.toLocaleString('nl-NL')}
+function render(){if(!running)return;update();requestAnimationFrame(render)}
+function stop(reason){running=false;session++;terminate();update();$('start').disabled=false;$('stop').disabled=true;$('status').textContent=reason;log(reason,reason.startsWith('MATCH')?'ok':'')}
+function runSlice(c){if(!running)return;current=reserve(c);sliceId++;slices++;done=0;const n=Number(current.len<BigInt(c.threads)?current.len:BigInt(c.threads));active=n;const token=session+':'+sliceId;$('sliceRange').value=fmt(current.start)+' : '+fmt(current.end);log('Slice '+slices+': '+fmt(current.start)+' : '+fmt(current.end)+' ('+current.len+' kandidaten, '+n+' workers)');for(let i=0;i<n;i++){const lo=current.start+current.len*BigInt(i)/BigInt(n),hi=current.start+current.len*BigInt(i+1)/BigInt(n)-1n,w=new Worker(workerUrl());workers.push(w);w.onmessage=({data:d})=>{if(!running||d.token!==token)return;if(d.type==='done'){total+=BigInt(d.count);done++;if(done===active){update();terminate();setTimeout(()=>runSlice(c),0)}}else if(d.type==='found'){total+=BigInt(d.count);stop('MATCH: 0x'+d.key);log('MATCH gevonden: 0x'+d.key,'ok')}else if(d.type==='error'){stop('Fout');log('Worker '+i+' fout: '+d.error,'bad')}};w.onerror=e=>{if(running){stop('Fout');log('Worker '+i+' fout: '+e.message,'bad')}};w.postMessage({type:'scan',token,startHex:lo.toString(16),endHex:hi.toString(16),pubKey:c.pub})}}
+$('start').onclick=()=>{try{const c=readConfig();running=true;session++;total=0n;slices=0;cursor=c.min;startAt=performance.now();$('start').disabled=true;$('stop').disabled=false;$('status').textContent='BSGS actief';log('Start met '+(c.mode==='sequential'?'sequentiële':'willekeurige')+' slices.');requestAnimationFrame(render);runSlice(c)}catch(e){log('Invoerfout: '+e.message,'bad')}};
+$('stop').onclick=()=>stop('Gestopt door gebruiker');
+window.addEventListener('beforeunload',()=>{terminate();if(blobUrl)URL.revokeObjectURL(blobUrl)});
+</script>
+</body></html>
