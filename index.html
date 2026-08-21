@@ -762,6 +762,7 @@
             return rangeMin + (BigInt('0x' + randHex) % maxOffset);
         }
 
+        const LOG_LIMIT = 200;
         function log(msg, type="info") {
             const box = document.getElementById('logBox');
             const d = new Date(); const ts = d.toLocaleTimeString('nl-NL') + '.' + String(d.getMilliseconds()).padStart(3,'0');
@@ -774,6 +775,7 @@
             const el = document.createElement('div');
             el.innerHTML = `<span class="ts">[${ts}]</span> <span style="color:${color}">${msg}</span>`;
             box.appendChild(el);
+            while (box.childElementCount > LOG_LIMIT) box.removeChild(box.firstElementChild);
             box.scrollTop = box.scrollHeight;
         }
         
