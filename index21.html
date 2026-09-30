@@ -24,7 +24,7 @@
 <body>
 <main>
   <h1>Puzzle 71 — Range opvragen</h1>
-  <p class="sub">Deze pagina doet uitsluitend één GET-aanvraag om een nieuwe Puzzle 71-range op te vragen. Er wordt niets gescand en er wordt geen range gemarkeerd.</p>
+  <p class="sub">Deze pagina doet uitsluitend één GET-aanvraag om een nieuwe Puzzle 71-range op te vragen.</p>
 
   <section class="card">
     <label for="token">UserToken</label>
@@ -39,13 +39,12 @@
 
   <section class="card">
     <div id="result">Nog geen range opgevraagd.</div>
-    <p class="note warning"><strong>Let op:</strong> Omdat we een CORS-proxy gebruiken om dit in de browser te laten werken, loopt je verzoek (inclusief token) nu via een externe proxyserver (`corsproxy.io`). Gebruik dit alleen voor snelle tests of schakel over naar een lokaal Python/Node script voor maximale veiligheid.</p>
   </section>
 </main>
 
 <script>
-  // De API URL is aangepast om via een proxy te lopen om CORS-fouten in de browser te voorkomen.
-  const API = 'https://corsproxy.io/?https://api.btcpuzzle.info/puzzle/71/range';
+  // Originele API (Zonder proxy)
+  const API = 'https://api.btcpuzzle.info/puzzle/71/range';
   const $ = id => document.getElementById(id);
 
   $('request').addEventListener('click', async () => {
@@ -84,7 +83,8 @@
 
       $('status').textContent = 'Range ontvangen.';$('result').textContent = JSON.stringify(data, null, 2);
     } catch (error) {
-      $('status').textContent = 'Aanvraag mislukt. (Controleer je token of probeer later opnieuw)';$('result').textContent = String(error.message || error);
+      console.error(error);
+      $('status').textContent = 'Aanvraag mislukt door CORS-beveiliging (zie stappen hieronder).';$('result').textContent = 'Fout: Browser blokkeert de aanvraag. Gebruik een CORS-extensie of controleer console (F12).';
     } finally {
       $('request').disabled = false;
     }
