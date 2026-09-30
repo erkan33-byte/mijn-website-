@@ -39,12 +39,13 @@
 
   <section class="card">
     <div id="result">Nog geen range opgevraagd.</div>
-    <p class="note warning">Gebruik deze HTML niet met je token in een publieke GitHub-repository. Het token blijft alleen in het formuliergeheugen van deze pagina en wordt via de aanvraag naar de API gestuurd.</p>
+    <p class="note warning"><strong>Let op:</strong> Omdat we een CORS-proxy gebruiken om dit in de browser te laten werken, loopt je verzoek (inclusief token) nu via een externe proxyserver (`corsproxy.io`). Gebruik dit alleen voor snelle tests of schakel over naar een lokaal Python/Node script voor maximale veiligheid.</p>
   </section>
 </main>
 
 <script>
-  const API = 'https://api.btcpuzzle.info/puzzle/71/range';
+  // De API URL is aangepast om via een proxy te lopen om CORS-fouten in de browser te voorkomen.
+  const API = 'https://corsproxy.io/?https://api.btcpuzzle.info/puzzle/71/range';
   const $ = id => document.getElementById(id);
 
   $('request').addEventListener('click', async () => {
@@ -61,8 +62,7 @@
     }
 
     $('request').disabled = true;
-    $('status').textContent = 'Range wordt opgevraagd…';
-    $('result').textContent = '';
+    $('status').textContent = 'Range wordt opgevraagd…';$('result').textContent = '';
 
     try {
       const response = await fetch(API, {
@@ -82,11 +82,9 @@
         throw new Error(`HTTP ${response.status}: ${typeof data === 'string' ? data : JSON.stringify(data)}`);
       }
 
-      $('status').textContent = 'Range ontvangen.';
-      $('result').textContent = JSON.stringify(data, null, 2);
+      $('status').textContent = 'Range ontvangen.';$('result').textContent = JSON.stringify(data, null, 2);
     } catch (error) {
-      $('status').textContent = 'Aanvraag mislukt.';
-      $('result').textContent = String(error.message || error);
+      $('status').textContent = 'Aanvraag mislukt. (Controleer je token of probeer later opnieuw)';$('result').textContent = String(error.message || error);
     } finally {
       $('request').disabled = false;
     }
