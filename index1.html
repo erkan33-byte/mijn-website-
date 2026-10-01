@@ -679,14 +679,14 @@
           let t = gid.x;
           let lid_x = lid.x;
           let limit = batch.startKey2.w;
-          let active = (t * NB) < limit;
+          let is_active = (t * NB) < limit;
 
           var pt: JPoint;
           pt.X = array<u32,8>(batch.gx.x, batch.gx.y, batch.gx.z, batch.gx.w, batch.gx2.x, batch.gx2.y, batch.gx2.z, batch.gx2.w);
           pt.Y = array<u32,8>(batch.gy.x, batch.gy.y, batch.gy.z, batch.gy.w, batch.gy2.x, batch.gy2.y, batch.gy2.z, batch.gy2.w);
           pt.Z = u32to8(1u);
           pt.isInf = false;
-          if (active) {
+          if (is_active) {
             let cidx = t * NB + HALF;
             for (var i = 0u; i < 3u; i = i + 1u) {
               let byteVal = (cidx >> (8u * i)) & 0xffu;
@@ -710,7 +710,7 @@
           // Prefixproducten van de noemers x_j - cx.
           var pre: array<array<u32,8>, ${GPU_HALF}>;
           var acc = u32to8(1u);
-          if (active) {
+          if (is_active) {
             for (var j = 1u; j <= HALF; j = j + 1u) {
               pre[j - 1u] = acc;
               var d = submod(loadTX(j), cx);
@@ -720,7 +720,7 @@
           }
           // Inversie 2: één inverse voor het totale product van elke thread.
           let totalInv = treeInvert(lid_x, acc);
-          if (!active) { return; }
+          if (!is_active) { return; }
 
           let base = t * NB;
           tryKey(parityPrefix(cy), cx, base + HALF, limit);
@@ -772,7 +772,7 @@
         function bigIntToLimbsLE(bi) { return bytesToLimbsLE(bigIntTo32Bytes(bi)); }
 
         function buildPrecomputedTable() {
-          // `idx` is de offset binnen één batch en heeft hier maximaal vier bytes.
+          // \`idx\` is de offset binnen één batch en heeft hier maximaal vier bytes.
           // De shader gebruikt dus alleen vensters 0–3: 4 i.p.v. 32 tabellen.
           const WINDOW_COUNT = 4;
           const flat = new Uint32Array(WINDOW_COUNT * 256 * 16); let base = { x: SECP_GX, y: SECP_GY };
@@ -910,7 +910,7 @@
             if(type === 'stop') color = 'var(--danger)';
             
             const el = document.createElement('div');
-            el.innerHTML = `<span class="ts">[${ts}]</span> <span style="color:${color}">${msg}</span>`;
+            el.innerHTML = \`<span class="ts">[\${ts}]</span> <span style="color:\${color}">\${msg}</span>\`;
             box.appendChild(el);
             while (box.childElementCount > LOG_LIMIT) box.removeChild(box.firstElementChild);
             box.scrollTop = box.scrollHeight;
@@ -945,7 +945,7 @@
 
                 gpuDevice = await adapter.requestDevice();
                 const limits = gpuDevice.limits;
-                log(`GPU-limieten: workgroup X=${limits.maxComputeWorkgroupSizeX}, invocations=${limits.maxComputeInvocationsPerWorkgroup}, workgroup-geheugen=${limits.maxComputeWorkgroupStorageSize} bytes.`, 'info');
+                log(\`GPU-limieten: workgroup X=\${limits.maxComputeWorkgroupSizeX}, invocations=\${limits.maxComputeInvocationsPerWorkgroup}, workgroup-geheugen=\${limits.maxComputeWorkgroupStorageSize} bytes.\`, 'info');
                 gpuDevice.addEventListener('uncapturederror', (event) => { log('❌ GPU FOUT: ' + event.error.message, 'warn'); });
                 
                 let useFast = document.getElementById('kernelSel').value === 'fast';
@@ -954,7 +954,7 @@
                     const info = await m.getCompilationInfo();
                     let bad = false;
                     for (const msg of info.messages) {
-                        if (msg.type === 'error') { log(`❌ SHADER FOUT [L${msg.lineNum}]: ${msg.message}`, 'warn'); bad = true; }
+                        if (msg.type === 'error') { log(\`❌ SHADER FOUT [L\${msg.lineNum}]: \${msg.message}\`, 'warn'); bad = true; }
                     }
                     return bad ? null : m;
                 };
@@ -967,7 +967,7 @@
                 FAST_ACTIVE = useFast;
                 BATCH_SIZE = useFast ? GPU_THREADS * GPU_NB : 2097152;
                 document.getElementById('numW').value = BATCH_SIZE;
-                log(`GPU-kernel: ${useFast ? 'snel (affiene groepsoptelling)' : 'oud'}, ${BATCH_SIZE.toLocaleString('nl-NL')} keys per dispatch.`, 'info');
+                log(\`GPU-kernel: \${useFast ? 'snel (affiene groepsoptelling)' : 'oud'}, \${BATCH_SIZE.toLocaleString('nl-NL')} keys per dispatch.\`, 'info');
 
                 gpuPipeline = gpuDevice.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
 
@@ -1097,7 +1097,7 @@
                 document.getElementById('rangeStart').value = "0x" + currentSliceStart.toString(16).padStart(16, '0');
                 document.getElementById('rangeEnd').value = "0x" + currentSliceEnd.toString(16).padStart(16, '0');
                 document.getElementById('slicesVisitedCount').textContent = slicesVisited;
-                log(`🚀 HOP! Nieuwe slice: 0x${currentSliceStart.toString(16)}`, 'hop');
+                log(\`🚀 HOP! Nieuwe slice: 0x\${currentSliceStart.toString(16)}\`, 'hop');
             };
 
             await runSlice();
@@ -1123,7 +1123,7 @@
                     if (!isRunning) break;
 
                     // Reserveer de sleutelrange vóór het dispatchen. In de oorspronkelijke
-                    // versie gebeurde dit pas na `mapAsync`, waardoor meerdere stages met
+                    // versie gebeurde dit pas na mapAsync, waardoor meerdere stages met
                     // hetzelfde beginpunt konden draaien en de teller dubbeltellingen gaf.
                     const batchStartKey = currentKeyVal;
                     const batchStartPoint = currentBatchPoint;
@@ -1132,7 +1132,7 @@
                         currentBatchPoint = ecAdd(batchStartPoint, batchStepPoint);
                     }
                     
-                    // Zero-Allocation: hergebruik preallocatedFullBuf i.p.v. `new Uint32Array`
+                    // Zero-Allocation: hergebruik preallocatedFullBuf i.p.v. new Uint32Array
                     preallocatedFullBuf.set(bigIntToLimbsLE(batchStartKey), 0);
                     // De shader gebruikt de privésleutel zelf niet; reserveer het anders
                     // ongebruikte hoogste startKey-lid als actieve dispatchlengte.
@@ -1174,8 +1174,8 @@
                             
                             document.getElementById('noMatchRow').style.display = 'none';
                             const tbody = document.getElementById('matchTable');
-                            tbody.innerHTML += `<tr><td>P2PKH (Match)</td><td style="color:var(--accent2);">${wifStr}</td><td style="color:var(--success);">0x${privHex}</td></tr>`;
-                            log(`🎯 BINGO! Match gevonden: 0x${privHex}`, 'success');
+                            tbody.innerHTML += \`<tr><td>P2PKH (Match)</td><td style="color:var(--accent2);">\${wifStr}</td><td style="color:var(--success);">0x\${privHex}</td></tr>\`;
+                            log(\`🎯 BINGO! Match gevonden: 0x\${privHex}\`, 'success');
                             
                             document.getElementById('stopBtn').click();
                         }
@@ -1221,350 +1221,18 @@ onmessage=async({data})=>{
   if(data.address!==cachedA){cachedT=b58(data.address);cachedA=data.address}
   let key=BigInt('0x'+data.startHex);const end=BigInt('0x'+data.endHex);let rep=0;
   wr(heap,S,key);heap.set(cachedT,T);view.setUint32(F,0,true);E.init_sniper(S);postMessage({type:'ready',token});
-  while(key<=end){const rem=end-key+1n,count=Number(rem>B?B:rem);
-   if(E.scan_batch(T,count,F)===0){const off=view.getUint32(F,true);
-    if(off<count){postMessage({type:'found',token,key:(key+BigInt(off)).toString(16).padStart(64,'0'),count:rep+off+1});return}
-    throw Error('Ongeldige matchoffset')}
-   key+=BigInt(count);rep+=count;if(rep>=PE){postMessage({type:'progress',token,count:rep});rep=0}}
-  if(rep)postMessage({type:'progress',token,count:rep});postMessage({type:'done',token})
- }catch(e){postMessage({type:'error',token,error:String(e&&e.message||e)})}};
+  while(key<=end){
+   const rem=end-key+1n,count=Number(rem>B?B:rem);
+   if(E.scan_batch(T,count,F)===0){
+    postMessage({type:'match',token,match:key+BigInt(view.getUint32(F,true))});
+    return;
+   }
+   key+=BigInt(count);
+   postMessage({type:'progress',token,scanned:count});
+  }
+  postMessage({type:'done',token});
+ }catch(e){postMessage({type:'error',error:String(e&&e.message||e)})}
+};
 </script>
-<script>
-const WASM_B64="";
-window.__nativeWorkerUrl=URL.createObjectURL(new Blob([document.getElementById("wsrc").textContent],{type:"text/javascript"}));
-async function getModule(){
- if(WASM_B64)return WebAssembly.compile(Uint8Array.from(atob(WASM_B64),x=>x.charCodeAt(0)));
- try{const r=await fetch("native_jacobian.wasm?v="+Date.now());if(!r.ok)throw 0;return await WebAssembly.compile(await r.arrayBuffer())}catch(e){}
- document.getElementById("wasmBox").style.display="grid";document.getElementById("cpuStatus").value="Kies native_jacobian.wasm";
- return new Promise((res,rej)=>{document.getElementById("wasmFile").onchange=async ev=>{try{res(await WebAssembly.compile(await ev.target.files[0].arrayBuffer()))}catch(e){rej(e)}}})}
-</script>
-<script>
-/* Hybrid controller: WebGPU and native WASM scan disjoint active ranges. */
-(() => {
-  const originalStart = document.getElementById('startBtn');
-  const originalStop = document.getElementById('stopBtn');
-  const startBtn = originalStart.cloneNode(true);
-  const stopBtn = originalStop.cloneNode(true);
-  originalStart.replaceWith(startBtn);
-  originalStop.replaceWith(stopBtn);
-
-  let cfg = null, hybridToken = 0, activeLeases = new Map(), cpuWorkers = [], gpuLease = null;
-  let cpuScanned = 0, gpuScanned = 0, cpuCompleted = 0, matchFound = false;
-
-  function h(id) { return document.getElementById(id); }
-  function asBig(value, label) {
-    const text = String(value).trim().replace(/^0x/i, '');
-    if (!/^[0-9a-f]+$/i.test(text)) throw Error(label + ' is geen geldige hexwaarde');
-    return BigInt('0x' + text);
-  }
-  function readConfig() {
-    const min = asBig(h('customStart').value, 'Beginwaarde');
-    const max = asBig(h('customEnd').value, 'Eindwaarde');
-    if (min > max) throw Error('Beginwaarde ligt na eindwaarde');
-    const gpuKeys = BigInt(h('keysLimit').value);
-    const cpuKeys = BigInt(h('cpuKeys').value);
-    if (gpuKeys < 1n || cpuKeys < 1n) throw Error('Slicegroottes moeten positief zijn');
-    return {
-      address: h('btcAddr').value.trim(), min, max, span: max - min + 1n,
-      gpuKeys, cpuKeys,
-      gpuDepth: Math.max(1, Math.min(4, Number(h('gpuPipelineDepth').value) || 2)),
-      cpuCount: Math.max(0, Math.min(64, Number(h('cpuWorkers').value) || 0))
-    };
-  }
-  function secureBelow(bound) {
-    const top = 1n << 256n, cutoff = top - (top % bound), bytes = new Uint8Array(32);
-    for (;;) {
-      crypto.getRandomValues(bytes);
-      let x = 0n;
-      for (const b of bytes) x = (x << 8n) | BigInt(b);
-      if (x < cutoff) return x % bound;
-    }
-  }
-  function overlaps(a, b) { return a.start <= b.end && b.start <= a.end; }
-  const done = new Set(); let dkey = '', dirty = 0;
-  function loadDone() { done.clear(); dkey = `gsmg-hyb:${cfg.address}:${cfg.min}:${cfg.max}:${cfg.cpuKeys}`; try { for (const k of JSON.parse(localStorage.getItem(dkey) || '[]')) done.add(k); } catch (e) {} }
-  function saveDone() { dirty = 0; try { localStorage.setItem(dkey, JSON.stringify([...done])); } catch (e) {} }
-  function markDone(l) { if (!l || l.k === undefined) return; for (let i = 0n; i < l.n; i++) done.add((l.k + i).toString()); saveDone(); }
-  // Vast raster met eenheid U = CPU-leasegrootte. Een GPU-lease is een heel aantal eenheden.
-  // Voltooide eenheden worden nooit opnieuw gekozen; actieve leases overlappen nooit.
-  function reserve(label, requested) {
-    const U = cfg.cpuKeys, slots = (cfg.span + U - 1n) / U;
-    let n = (requested + U - 1n) / U; if (n < 1n) n = 1n; if (n > slots) n = slots;
-    const room = slots - n + 1n;
-    for (let attempt = 0; attempt < 256; attempt++) {
-      const k = secureBelow(room); let bad = false;
-      for (let i = 0n; i < n; i++) if (done.has((k + i).toString())) { bad = true; break; }
-      if (bad) continue;
-      const start = cfg.min + k * U; let end = start + n * U - 1n; if (end > cfg.max) end = cfg.max;
-      const c = { start, end, label, k, n }; let col = false;
-      for (const l of activeLeases.values()) if (overlaps(c, l)) { col = true; break; }
-      if (!col) { activeLeases.set(label, c); return c; }
-    }
-    return null;
-  }
-  function release(label) { activeLeases.delete(label); }
-  function renderLeases() {
-    const gpu = gpuLease ? `GPU 0x${gpuLease.start.toString(16)}:0x${gpuLease.end.toString(16)}` : 'GPU wacht';
-    const cpu = [];
-    for (const [name, lease] of activeLeases) if (name.startsWith('cpu:')) cpu.push(`${name.replace('cpu:','CPU')}:0x${lease.start.toString(16)}:0x${lease.end.toString(16)}`);
-    h('rangeStart').value = gpuLease ? '0x' + gpuLease.start.toString(16) : '';
-    h('rangeEnd').value = gpuLease ? '0x' + gpuLease.end.toString(16) : '';
-    h('cpuStatus').value = cpu.length ? cpu.join(' | ') : 'Geen actieve CPU-range';
-    log(`Hybride leases: ${gpu}; ${cpu.length ? cpu.join(' | ') : 'geen CPU-range'}`, 'hop');
-  }
-  function updateHybridCounters() {
-    keysCheckedGlobal = gpuScanned + cpuScanned;
-    keysCheckedSlice = gpuLease ? Math.min(gpuScanned, Number(gpuLease.end - gpuLease.start + 1n)) : 0;
-  }
-  async function reportMatch(privHex, source) {
-    if (matchFound) return;
-    matchFound = true;
-    const wifStr = await wifCompressed(hexToBytes(privHex));
-    h('noMatchRow').style.display = 'none';
-    h('matchTable').innerHTML += `<tr><td>P2PKH (${source})</td><td style="color:var(--accent2);">${wifStr}</td><td style="color:var(--success);">0x${privHex}</td></tr>`;
-    log(`🎯 BINGO (${source}): 0x${privHex}`, 'success');
-    stopHybrid(`MATCH (${source})`);
-  }
-  function stopHybrid(reason = 'Gestopt') {
-    isRunning = false;
-    hybridToken++;
-    for (const w of cpuWorkers) if (w) w.terminate();
-    cpuWorkers = [];
-    saveDone();
-    activeLeases.clear();
-    gpuLease = null;
-    pipelineStages = [];
-
-    h('startBtn').disabled = false;
-    h('stopBtn').disabled = true;
-    h('statusVal').textContent = reason;
-    h('statusVal').className = 'value';
-    h('cpuStatus').value = reason;
-    updateHybridCounters();
-    h('keysScanned').textContent = keysCheckedGlobal.toLocaleString('nl-NL');
-    const elapsed = (performance.now() - startTime) / 1000;
-    h('speed').textContent = elapsed > 0 ? Math.round(keysCheckedGlobal / elapsed).toLocaleString('nl-NL') + ' /s' : '0 /s';
-    log(reason, 'stop');
-  }
-  function assignCpuLease(id, token) {
-    if (!isRunning || token !== hybridToken) return;
-    const label = 'cpu:' + id;
-    const lease = reserve(label, cfg.cpuKeys);
-    if (!lease) { h('cpuStatus').value = 'CPU wacht: geen vrije niet-overlappende range'; return; }
-    renderLeases();
-    const worker = cpuWorkers[id];
-    if (!worker) { release(label); h('cpuStatus').value = `CPU-worker ${id + 1} ontbreekt`; return; }
-    worker.postMessage({ type:'scan', token, address:cfg.address, startHex:lease.start.toString(16), endHex:lease.end.toString(16), wasmUrl:window.__nativeWasmUrl });
-  }
-
-  function startCpuWorker(id, token) {
-    if (!isRunning || token !== hybridToken) return;
-    const label = 'cpu:' + id;
-    const worker = new Worker(window.__nativeWorkerUrl); worker.postMessage({ type:'init', module:window.__MOD });
-    cpuWorkers[id] = worker;
-    worker.onmessage = ({data}) => {
-      if (!isRunning || token !== hybridToken) return;
-      if (data.type === 'progress') { cpuScanned += Number(data.count); updateHybridCounters(); }
-      else if (data.type === 'done') { markDone(activeLeases.get(label)); release(label); cpuCompleted++; updateHybridCounters(); assignCpuLease(id, token); }
-      else if (data.type === 'found') { cpuScanned += Number(data.count); updateHybridCounters(); reportMatch(data.key, 'native WASM'); }
-      else if (data.type === 'error') {
-        release(label); worker.terminate(); cpuWorkers[id] = null;
-        log(`CPU-worker ${id + 1} fout: ${data.error}`, 'warn'); h('cpuStatus').value = `CPU-worker ${id + 1} fout`;
-      }
-    };
-    worker.onerror = e => {
-      if (!isRunning || token !== hybridToken) return;
-      release(label); worker.terminate(); cpuWorkers[id] = null;
-      log(`CPU-worker ${id + 1} crash: ${e.message}`, 'warn'); h('cpuStatus').value = `CPU-worker ${id + 1} crash`;
-    };
-    assignCpuLease(id, token);
-  }
-  async function setupGpu() {
-    if (!gpuDevice) {
-      const ok = await initWebGPU();
-      if (!ok) return false;
-    }
-    const targetBytes = getTargetHash160Bytes(cfg.address);
-    const target = new Uint32Array(8);
-    for (let i=0;i<5;i++) target[i] = targetBytes[i*4] | (targetBytes[i*4+1]<<8) | (targetBytes[i*4+2]<<16) | (targetBytes[i*4+3]<<24);
-    gpuDevice.queue.writeBuffer(uniformsBuffer, 0, target);
-    if (pipelineStages.length === 0) {
-      zeroRes = new Uint32Array([0,0]);
-      for (let i=0;i<PIPELINE_DEPTH;i++) {
-        const bBuf=gpuDevice.createBuffer({size:96,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-        const rsBuf=gpuDevice.createBuffer({size:8,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST});
-        const rdBuf=gpuDevice.createBuffer({size:8,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
-        const bg=gpuDevice.createBindGroup({layout:gpuPipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:bBuf}},{binding:1,resource:{buffer:tableBuffer}},{binding:2,resource:{buffer:uniformsBuffer}},{binding:3,resource:{buffer:rsBuf}}]});
-        pipelineStages.push({batchBuffer:bBuf,resBuf:rsBuf,readBuf:rdBuf,bindGroup:bg,inFlight:null});
-      }
-    }
-    batchStepPoint = ecScalarMul(BigInt(BATCH_SIZE), {x:SECP_GX,y:SECP_GY});
-    return true;
-  }
-  async function acquireGpuLease() {
-    const lease = reserve('gpu', cfg.gpuKeys);
-    if (!lease) return false;
-    gpuLease = lease;
-    currentSliceStart = lease.start;
-    currentSliceEnd = lease.end + 1n;
-    currentKeyVal = lease.start;
-    currentBatchPoint = ecScalarMul(currentKeyVal, {x:SECP_GX,y:SECP_GY});
-    keysCheckedSlice = 0;
-    slicesVisited++;
-    h('slicesVisitedCount').textContent = slicesVisited;
-    renderLeases();
-    return true;
-  }
-  async function gpuLoop(token) {
-    if (!(await setupGpu()) || !isRunning || token !== hybridToken) return;
-    let stageIndex = 0;
-    if (!(await acquireGpuLease())) { log('Geen vrije GPU-range beschikbaar; CPU-WASM blijft actief.', 'warn'); return; }
-    while (isRunning && token === hybridToken) {
-      if (currentKeyVal >= currentSliceEnd) {
-        for (const stage of pipelineStages) if (stage.inFlight) await stage.inFlight;
-        markDone(gpuLease); release('gpu'); gpuLease = null;
-        if (!(await acquireGpuLease())) break;
-      }
-      const actual = Math.min(BATCH_SIZE, Number(currentSliceEnd-currentKeyVal));
-      const stage = pipelineStages[stageIndex]; stageIndex=(stageIndex+1)%cfg.gpuDepth;
-      if (stage.inFlight) await stage.inFlight;
-      if (!isRunning || token !== hybridToken) break;
-      const batchKey=currentKeyVal, batchPoint=currentBatchPoint;
-      currentKeyVal += BigInt(actual);
-      if (actual===BATCH_SIZE) currentBatchPoint=ecAdd(batchPoint,batchStepPoint);
-      preallocatedFullBuf.set(bigIntToLimbsLE(batchKey),0); preallocatedFullBuf[7]=actual;
-      preallocatedFullBuf.set(bigIntToLimbsLE(batchPoint.x),8); preallocatedFullBuf.set(bigIntToLimbsLE(batchPoint.y),16);
-      gpuDevice.queue.writeBuffer(stage.batchBuffer,0,preallocatedFullBuf); gpuDevice.queue.writeBuffer(stage.resBuf,0,zeroRes.buffer);
-      const enc=gpuDevice.createCommandEncoder(),pass=enc.beginComputePass();
-      pass.setPipeline(gpuPipeline);pass.setBindGroup(0,stage.bindGroup);pass.dispatchWorkgroups(dispatchGroups(actual));pass.end();enc.copyBufferToBuffer(stage.resBuf,0,stage.readBuf,0,8);gpuDevice.queue.submit([enc.finish()]);
-      stage.inFlight=(async()=>{await stage.readBuf.mapAsync(GPUMapMode.READ);const r=new Uint32Array(stage.readBuf.getMappedRange()),hit=r[0]===1,idx=r[1];stage.readBuf.unmap();if(isRunning&&token===hybridToken){gpuScanned+=actual;updateHybridCounters();}if(hit&&!matchFound)await reportMatch((batchKey+BigInt(idx)).toString(16).padStart(64,'0'),'WebGPU');})();
-    }
-  }
-  startBtn.addEventListener('click', async () => {
-    try {
-      if (!validateInputs() || isRunning) return;
-      cfg = readConfig();
-      isRunning=true; matchFound=false; hybridToken++; const token=hybridToken;
-      activeLeases.clear();cpuScanned=0;gpuScanned=0;cpuCompleted=0;slicesVisited=0;keysCheckedGlobal=0;keysCheckedSlice=0;startTime=performance.now();keysLimitGlobalForUi=Number(cfg.gpuKeys);
-      h('limitDisplay').textContent=Number(cfg.gpuKeys).toLocaleString('nl-NL');h('startBtn').disabled=true;h('stopBtn').disabled=false;h('statusVal').textContent='Hybride GPU + WASM start';h('statusVal').className='value running';
-      log(`Hybride start: GPU-leases=${cfg.gpuKeys.toString()}, GPU-pipeline=${cfg.gpuDepth} stage(s), CPU=${cfg.cpuCount} × ${cfg.cpuKeys.toString()} keys.`, 'hop');
-      requestAnimationFrame(updateUI);
-      loadDone();
-      if (cfg.cpuCount) window.__MOD = window.__MOD || await getModule();
-      if (token !== hybridToken) return;
-      for(let i=0;i<cfg.cpuCount;i++) startCpuWorker(i,token);
-      h('cpuStatus').value=cfg.cpuCount?`${cfg.cpuCount} native WASM-worker(s) actief`:'CPU uitgeschakeld';
-      gpuLoop(token);
-    } catch (e) { stopHybrid('Invoerfout'); log('❌ '+e.message,'warn'); }
-  });
-  stopBtn.addEventListener('click', () => stopHybrid('Gestopt door gebruiker.'));
-
-  async function cpuSelfTest() {
-    window.__MOD = window.__MOD || await getModule();
-    const w = new Worker(window.__nativeWorkerUrl); w.postMessage({ type:'init', module:window.__MOD });
-    return new Promise(res => {
-      w.onmessage = ({data:d}) => {
-        if (d.type !== 'selftest') return; w.terminate();
-        if (d.error) { log('CPU-zelftest fout: ' + d.error, 'warn'); return res(false); }
-        let ok = true; for (const [n,g,got,exp] of d.results) { log(`${g?'OK':'FOUT'} CPU ${n}: ${got} (verwacht ${exp})`, g?'success':'warn'); ok = ok && g; }
-        log(ok ? `CPU-zelftest geslaagd (${d.keysPerSec.toLocaleString('nl-NL')} keys/s, 1 thread, korte meting)` : 'CPU-zelftest MISLUKT: gebruik deze WASM niet', ok?'success':'warn'); res(ok);
-      };
-      w.postMessage({ type:'selftest' });
-    });
-  }
-  function makeStages() {
-    if (pipelineStages.length) return;
-    zeroRes = new Uint32Array([0,0]);
-    for (let i=0;i<PIPELINE_DEPTH;i++) {
-      const bBuf=gpuDevice.createBuffer({size:96,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-      const rsBuf=gpuDevice.createBuffer({size:8,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST});
-      const rdBuf=gpuDevice.createBuffer({size:8,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
-      const bg=gpuDevice.createBindGroup({layout:gpuPipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:bBuf}},{binding:1,resource:{buffer:tableBuffer}},{binding:2,resource:{buffer:uniformsBuffer}},{binding:3,resource:{buffer:rsBuf}}]});
-      pipelineStages.push({batchBuffer:bBuf,resBuf:rsBuf,readBuf:rdBuf,bindGroup:bg,inFlight:null});
-    }
-  }
-  async function dispatchOnce(st, startKey, startPoint, count) {
-    preallocatedFullBuf.set(bigIntToLimbsLE(startKey), 0); preallocatedFullBuf[7] = count;
-    preallocatedFullBuf.set(bigIntToLimbsLE(startPoint.x), 8); preallocatedFullBuf.set(bigIntToLimbsLE(startPoint.y), 16);
-    gpuDevice.queue.writeBuffer(st.batchBuffer, 0, preallocatedFullBuf); gpuDevice.queue.writeBuffer(st.resBuf, 0, zeroRes.buffer);
-    const enc = gpuDevice.createCommandEncoder(), pass = enc.beginComputePass();
-    pass.setPipeline(gpuPipeline); pass.setBindGroup(0, st.bindGroup); pass.dispatchWorkgroups(dispatchGroups(count)); pass.end();
-    enc.copyBufferToBuffer(st.resBuf, 0, st.readBuf, 0, 8); gpuDevice.queue.submit([enc.finish()]);
-    await st.readBuf.mapAsync(GPUMapMode.READ);
-    const r = new Uint32Array(st.readBuf.getMappedRange()), out = [r[0], r[1]]; st.readBuf.unmap(); return out;
-  }
-  // Sleutels start+offset met adressen die ik onafhankelijk heb berekend (start = 0x2832ed74f2b5e35ee - 5000).
-  const SELFTEST = {"0": "12DJ5ncExVkESsdi4DK2tJucWNw2JLJiSB", "5000": "13zb1hQbWVsc2S7ZTZnP2G4undNNpdh5so", "5006": "1E9iCsjbh4BHTbqaXmKCLuRdkyb1Zs4Ktc", "5010": "18MVuxXareZXnQcoNtnSWUzFpSYGpMmrRT", "5999": "1FrZSfVp4AV9Kjbr8YDpw5eMBPd6XtWcnd"};
-  async function gpuSelfTest() {
-    if (!gpuDevice && !(await initWebGPU())) { log('GPU-zelftest overgeslagen: geen WebGPU', 'warn'); return false; }
-    makeStages();
-    const start = 0x2832ed74f2b5e35een - 5000n, cnt = 6000, P = ecScalarMul(start, {x:SECP_GX,y:SECP_GY}), st = pipelineStages[0];
-    let all = true;
-    for (const [off, addr] of Object.entries(SELFTEST)) {
-      const tb = getTargetHash160Bytes(addr), t = new Uint32Array(8);
-      for (let i=0;i<5;i++) t[i] = tb[i*4] | (tb[i*4+1]<<8) | (tb[i*4+2]<<16) | (tb[i*4+3]<<24);
-      gpuDevice.queue.writeBuffer(uniformsBuffer, 0, t);
-      const [hit, idx] = await dispatchOnce(st, start, P, cnt);
-      const ok = hit === 1 && idx === Number(off);
-      log(`${ok?'OK':'FOUT'} GPU-zelftest offset ${off}: ${hit===1 ? 'index ' + idx : 'geen match'}`, ok?'success':'warn'); all = all && ok;
-    }
-    log(all ? `GPU-zelftest geslaagd (${FAST_ACTIVE ? 'snelle' : 'oude'} kernel)` : 'GPU-zelftest MISLUKT: kies bij GPU-kernel de oude kernel', all?'success':'warn');
-    return all;
-  }
-  h('selfTestBtn').addEventListener('click', async () => {
-    if (isRunning) { log('Stop eerst de scan voor de zelftest.', 'warn'); return; }
-    h('selfTestBtn').disabled = true; h('startBtn').disabled = true;
-    try { await gpuSelfTest(); } catch (e) { log('Zelftest fout: ' + e.message, 'warn'); }
-    h('selfTestBtn').disabled = false; h('startBtn').disabled = false;
-  });
-  h('cpuWorkers').value = 0;
-  // Benchmark: 10 seconden achter elkaar dispatchen zonder leases of voortgang; meet alleen de GPU.
-  async function gpuBench() {
-    if (isRunning) { log('Stop eerst de scan.', 'warn'); return; }
-    if (!gpuDevice && !(await initWebGPU())) return;
-    if (pipelineStages.length === 0) {
-      zeroRes = new Uint32Array([0,0]);
-      for (let i=0;i<PIPELINE_DEPTH;i++) {
-        const bBuf=gpuDevice.createBuffer({size:96,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-        const rsBuf=gpuDevice.createBuffer({size:8,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST});
-        const rdBuf=gpuDevice.createBuffer({size:8,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
-        const bg=gpuDevice.createBindGroup({layout:gpuPipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:bBuf}},{binding:1,resource:{buffer:tableBuffer}},{binding:2,resource:{buffer:uniformsBuffer}},{binding:3,resource:{buffer:rsBuf}}]});
-        pipelineStages.push({batchBuffer:bBuf,resBuf:rsBuf,readBuf:rdBuf,bindGroup:bg,inFlight:null});
-      }
-    }
-    const depth = Math.max(1, Math.min(PIPELINE_DEPTH, Number(h('gpuPipelineDepth').value) || 2));
-    const tb = getTargetHash160Bytes(h('btcAddr').value.trim()), t = new Uint32Array(8);
-    for (let i=0;i<5;i++) t[i] = tb[i*4] | (tb[i*4+1]<<8) | (tb[i*4+2]<<16) | (tb[i*4+3]<<24);
-    gpuDevice.queue.writeBuffer(uniformsBuffer, 0, t);
-    const G = {x:SECP_GX, y:SECP_GY}, step = ecScalarMul(BigInt(BATCH_SIZE), G);
-    let key = BigInt(1) << 60n, point = ecScalarMul(key, G), total = 0, n = 0, idx = 0;
-    const stages = pipelineStages.slice(0, depth);
-    h('benchBtn').disabled = true; h('startBtn').disabled = true; h('selfTestBtn').disabled = true;
-    log(`GPU-benchmark gestart: 10 s, pipeline ${depth}, ${BATCH_SIZE.toLocaleString('nl-NL')} keys per dispatch.`, 'hop');
-    const t0 = performance.now();
-    try {
-      while (performance.now() - t0 < 10000) {
-        const st = stages[idx++ % depth];
-        if (st.inFlight) await st.inFlight;
-        preallocatedFullBuf.set(bigIntToLimbsLE(key), 0); preallocatedFullBuf[7] = BATCH_SIZE;
-        preallocatedFullBuf.set(bigIntToLimbsLE(point.x), 8); preallocatedFullBuf.set(bigIntToLimbsLE(point.y), 16);
-        gpuDevice.queue.writeBuffer(st.batchBuffer, 0, preallocatedFullBuf); gpuDevice.queue.writeBuffer(st.resBuf, 0, zeroRes.buffer);
-        const enc = gpuDevice.createCommandEncoder(), pass = enc.beginComputePass();
-        pass.setPipeline(gpuPipeline); pass.setBindGroup(0, st.bindGroup); pass.dispatchWorkgroups(dispatchGroups(BATCH_SIZE)); pass.end();
-        enc.copyBufferToBuffer(st.resBuf, 0, st.readBuf, 0, 8); gpuDevice.queue.submit([enc.finish()]);
-        st.inFlight = (async () => { await st.readBuf.mapAsync(GPUMapMode.READ); st.readBuf.unmap(); total += BATCH_SIZE; n++; })();
-        key += BigInt(BATCH_SIZE); point = ecAdd(point, step);
-      }
-      for (const st of stages) if (st.inFlight) await st.inFlight;
-      const sec = (performance.now() - t0) / 1000;
-      log(`GPU-benchmark: ${Math.round(total/sec).toLocaleString('nl-NL')} keys/s (${n} dispatches, gemiddeld ${(sec*1000/n).toFixed(0)} ms per dispatch, pipeline ${depth}).`, 'success');
-    } catch (e) { log('Benchmark fout: ' + e.message, 'warn'); }
-    h('benchBtn').disabled = false; h('startBtn').disabled = false; h('selfTestBtn').disabled = false;
-  }
-  h('benchBtn').addEventListener('click', gpuBench);
-  h('kernelSel').addEventListener('change', () => { if (isRunning) return; gpuDevice = null; gpuPipeline = null; tableBuffer = null; uniformsBuffer = null; pipelineStages = []; log('Kernel gewijzigd; wordt bij de volgende actie opnieuw geladen.', 'info'); });
-})();
-
-</script>
-<!-- Zet native_jacobian.wasm naast deze pagina, of kies het bestand in de pagina, of bak het in met: node embed_wasm.js native_jacobian.wasm hybrid.html --></body>
+</body>
 </html>
