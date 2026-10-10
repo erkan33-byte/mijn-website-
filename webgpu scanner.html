@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="nl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WebGPU Scanner — alleen GPU</title>
+<style>
+:root{--bg:#07090f;--sf:#0d1117;--pn:#111827;--bd:#1f2937;--ac:#00ff99;--a2:#00c3ff;--wr:#f59e0b;--dg:#ef4444;--ok:#10b981;--mu:#6b7280;--tx:#e2e8f0}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Courier New',monospace;background:var(--bg);color:var(--tx);padding:20px 14px 40px}
+.c{max-width:760px;margin:0 auto}h1{font-size:1.2rem;letter-spacing:.15em;color:var(--ac);text-align:center;text-transform:uppercase}
+.badge{display:block;width:max-content;margin:10px auto 18px;border:1px solid var(--ac);color:var(--ac);font-size:.65rem;padding:4px 12px;border-radius:4px}
+.card{background:var(--pn);border:1px solid var(--bd);border-radius:8px;padding:18px;margin-bottom:16px}
+.t{font-size:.72rem;letter-spacing:.15em;text-transform:uppercase;font-weight:bold;border-bottom:1px solid var(--bd);padding-bottom:8px;margin-bottom:14px;color:var(--a2)}
+.f{display:grid;grid-template-columns:200px 1fr;gap:10px;align-items:center;margin-bottom:12px}.f label{font-size:.72rem;color:var(--mu);font-weight:bold}
+input{background:var(--sf);color:var(--ac);border:1px solid #374151;border-radius:4px;padding:8px 10px;font:inherit;font-size:.8rem;width:100%;outline:none}
+input:read-only{border-style:dashed}
+.r{display:flex;gap:10px;margin-top:6px;flex-wrap:wrap}
+.b{flex:1;min-width:120px;padding:11px;font:inherit;font-weight:bold;border:0;border-radius:4px;cursor:pointer;text-transform:uppercase;font-size:.8rem}
+.b:disabled{opacity:.4;cursor:not-allowed}.go{background:var(--ok);color:#000}.st{background:var(--dg);color:#fff}.ts{background:#294056;color:var(--tx)}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.s{background:var(--sf);border:1px solid var(--bd);border-radius:6px;padding:10px 12px}.s .l{font-size:.6rem;letter-spacing:.12em;color:var(--mu);text-transform:uppercase;margin-bottom:5px}.s .v{font-size:1rem;font-weight:bold;color:var(--ac);word-break:break-all}
+.pw{height:6px;background:var(--bd);border-radius:3px;margin-top:14px;overflow:hidden}.pb{height:100%;width:0;background:linear-gradient(90deg,var(--a2),var(--ac))}
+.log{background:#000;color:var(--ac);height:170px;overflow-y:auto;padding:10px 12px;font-size:.72rem;line-height:1.55;border-radius:6px;border:1px solid var(--bd)}.ts2{color:var(--mu);margin-right:6px}
+table{width:100%;border-collapse:collapse;font-size:.72rem;table-layout:fixed}th,td{border:1px solid var(--bd);padding:9px;word-break:break-all;text-align:left}th{color:var(--a2);font-size:.62rem;text-transform:uppercase}
+@media(max-width:620px){.f{grid-template-columns:1fr;gap:5px}}
+</style></head><body><div class="c">
+<h1>WebGPU Scanner</h1><span class="badge" id="badge">INITIALISEREN...</span>
+<div class="card"><div class="t">Configuratie</div>
+<div class="f"><label>Target BTC-adres (P2PKH)</label><input id="addr" value="1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU"></div>
+<div class="f"><label>Beginwaarde (HEX)</label><input id="rmin" value="400000000000000000"></div>
+<div class="f"><label>Eindwaarde (HEX)</label><input id="rmax" value="7fffffffffffffffff"></div>
+<div class="f"><label>Keys per GPU-lease</label><input id="lease" type="number" min="1000" value="10000000"></div>
+<div class="f"><label>GPU pipeline-stages (1-4)</label><input id="depth" type="number" min="1" max="4" value="2"></div>
+<div class="f"><label>Actuele lease</label><input id="cur" readonly></div>
+<div class="r"><button class="b go" id="go">▶ Start</button><button class="b st" id="stop" disabled>■ Stop</button><button class="b ts" id="test">Zelftest</button></div></div>
+<div class="card"><div class="t">Sessie</div><div class="g">
+<div class="s"><div class="l">Status</div><div class="v" id="status">Gestopt</div></div>
+<div class="s"><div class="l">Totaal gescand</div><div class="v" id="total">0</div></div>
+<div class="s"><div class="l">Snelheid</div><div class="v" id="speed">0 /s</div></div>
+<div class="s"><div class="l">Leases bezocht</div><div class="v" id="leases">0</div></div></div>
+<div class="pw"><div class="pb" id="bar"></div></div></div>
+<div class="card"><div class="t">Log</div><div class="log" id="log"></div></div>
+<div class="card"><div class="t">Resultaten</div><table><thead><tr><th style="width:22%">Type</th><th style="width:34%">WIF</th><th>Privésleutel (HEX)</th></tr></thead><tbody id="res"><tr id="none"><td colspan="3" style="text-align:center;color:var(--mu)">Nog geen match.</td></tr></tbody></table></div>
+</div>
+<script>
+const GRP=65, GK=32, WG=64, BATCH=GRP*32256;
+function genField(GK,GRP){
+ const C=n=>Array.from({length:n},(_,i)=>'c'+i).join(',');
+ const carry=(a,b)=>{let t='';for(let k=a;k<b;k++)t+=`c${k+1}+=c${k}>>13u;c${k}&=8191u;\n`;return t};
+ let rep='';for(let i=0;i<2;i++)rep+=`{let h=c20;c20=0u;c0+=h*15632u;c2+=h*1024u;\n${carry(0,20)}}\n`;
+ const ret=`return array<u32,20>(${C(20)});\n}\n`;
+ const fold=(f,t)=>{let s='';for(let k=f;k>=t;k--)s+=`c${k-20}+=c${k}*15632u;c${k-18}+=c${k}*1024u;\n`;return s};
+ const decl=n=>{let t='';for(let k=0;k<n;k++)t+=`var c${k}:u32=0u;`;return t+'\n'};
+ const tail=carry(0,39)+fold(39,22)+'c22=0u;\n'+carry(0,22)+fold(22,20)+'c20=0u;c21=0u;c22=0u;\n'+carry(0,20)+rep+ret;
+ const P=(1n<<256n)-(1n<<32n)-977n,kp=32n*P,K=[];
+ for(let i=0;i<19;i++)K.push(Number((kp>>BigInt(13*i))&8191n));K.push(Number(kp>>247n));
+ K[0]+=8192;for(let i=1;i<19;i++)K[i]+=8191;K[19]-=1;
+ let o=`alias F = array<u32,20>;\nconst KS: array<u32,20> = array<u32,20>(${K.map(x=>x+'u').join(',')});\n`;
+ o+=`fn oneF() -> F { return array<u32,20>(1u${',0u'.repeat(19)}); }\n`;
+ o+='fn mulmod(a: F, b: F) -> F {\n'+decl(40);
+ for(let i=0;i<20;i++)for(let j=0;j<20;j++)o+=`c${i+j}+=a[${i}]*b[${j}];\n`;
+ o+=tail;
+ o+='fn sqrmod(a: F) -> F {\n'+decl(40);
+ for(let i=0;i<20;i++){o+=`c${2*i}+=a[${i}]*a[${i}];\n`;for(let j=i+1;j<20;j++)o+=`c${i+j}+=(a[${i}]<<1u)*a[${j}];\n`}
+ o+=tail;
+ o+='fn addmod(a: F, b: F) -> F {\n';for(let k=0;k<20;k++)o+=`var c${k}:u32=a[${k}]+b[${k}];`;o+='var c20:u32=0u;\n'+carry(0,20)+rep+ret;
+ o+='fn submod(a: F, b: F) -> F {\n';for(let k=0;k<20;k++)o+=`var c${k}:u32=a[${k}]+KS[${k}]-b[${k}];`;o+='var c20:u32=0u;\n'+carry(0,20)+rep+ret;
+ o+='fn fromW(w: array<u32,8>) -> F { return array<u32,20>(';
+ o+=Array.from({length:20},(_,i)=>{const s=(13*i)>>5,f=(13*i)&31;return (f+13<=32||s===7)?`(w[${s}]>>${f}u)&8191u`:`((w[${s}]>>${f}u)|(w[${s+1}]<<${32-f}u))&8191u`}).join(',')+'); }\n';
+ o+='fn packW(a: F) -> array<u32,9> {\n';for(let k=0;k<9;k++)o+=`var w${k}:u32=0u;`;o+='\n';
+ for(let i=0;i<20;i++){const s=(13*i)>>5,f=(13*i)&31;o+=`w${s}|=a[${i}]<<${f}u;\n`;if(f+13>32)o+=`w${s+1}|=a[${i}]>>${32-f}u;\n`}
+ o+='return array<u32,9>(w0,w1,w2,w3,w4,w5,w6,w7,w8);\n}\n';
+ o+=`fn canon(a: F) -> array<u32,8> {
+  let q = packW(a); let t = q[8];
+  var v = array<u32,8>(q[0],q[1],q[2],q[3],q[4],q[5],q[6],q[7]);
+  let x0 = addc(v[0], t * 977u, 0u); v[0] = x0.x; let x1 = addc(v[1], t, x0.y); v[1] = x1.x; var cr = x1.y;
+  for (var i = 2u; i < 8u; i = i + 1u) { let s = addc(v[i], 0u, cr); v[i] = s.x; cr = s.y; }
+  let y0 = addc(v[0], cr * 977u, 0u); v[0] = y0.x; let y1 = addc(v[1], cr, y0.y); v[1] = y1.x; cr = y1.y;
+  for (var i = 2u; i < 8u; i = i + 1u) { let s = addc(v[i], 0u, cr); v[i] = s.x; cr = s.y; }
+  if (cmp8(v, P) >= 0) { let d = sub8(v, P); v = d.v; }
+  return v;
+}
+`;
+ o+=`const GK: u32 = ${GK}u;\nconst GRP: u32 = ${GRP}u;\n`;
+ return o;
+}
+
+function genHash(){
+ const hx=x=>'0x'+(x>>>0).toString(16)+'u',R=(x,n)=>((x>>>n)|(x<<(32-n)))>>>0;
+ const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+ const IV=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+ let o='fn sha256_33(prefix: u32, fX: array<u32,8>) -> array<u32,8> {\n';
+ const w=[];const wl=(i,e)=>{o+=`let w${i}=${e};\n`;w[i]={n:'w'+i}};
+ wl(0,'(prefix<<24u)|(fX[7]>>8u)');for(let i=1;i<8;i++)wl(i,`(fX[${8-i}]<<24u)|(fX[${7-i}]>>8u)`);wl(8,'(fX[0]<<24u)|0x00800000u');
+ for(let i=9;i<15;i++)w[i]={c:0};w[15]={c:264};
+ const s0=c=>(R(c,7)^R(c,18)^(c>>>3))>>>0,s1=c=>(R(c,17)^R(c,19)^(c>>>10))>>>0;
+ for(let i=16;i<64;i++){let cs=0;const p=[];
+  const a=w[i-2],b=w[i-7],c=w[i-15],d=w[i-16];
+  if(a.c!=null)cs+=s1(a.c);else p.push(`(rotr32(${a.n},17u)^rotr32(${a.n},19u)^(${a.n}>>10u))`);
+  if(b.c!=null)cs+=b.c;else p.push(b.n);
+  if(c.c!=null)cs+=s0(c.c);else p.push(`(rotr32(${c.n},7u)^rotr32(${c.n},18u)^(${c.n}>>3u))`);
+  if(d.c!=null)cs+=d.c;else p.push(d.n);
+  cs=cs>>>0;
+  if(!p.length)w[i]={c:cs};else{if(cs)p.push(hx(cs));o+=`let w${i}=${p.join('+')};\n`;w[i]={n:'w'+i}}}
+ let nm='abcdefgh'.split('');
+ o+=nm.map((n,i)=>`var ${n}:u32=${hx(IV[i])};`).join('')+'\nvar px:u32=b^c;\n';
+ for(let i=0;i<64;i++){const[A,B,C,D,E,F,G,H]=nm;
+  const kw=w[i].c!=null?hx((K[i]+w[i].c)>>>0):`${hx(K[i])}+${w[i].n}`;
+  o+=`{let t1=${H}+(rotr32(${E},6u)^rotr32(${E},11u)^rotr32(${E},25u))+(${G}^(${E}&(${F}^${G})))+${kw};\nlet x=${A}^${B};\nlet t2=(rotr32(${A},2u)^rotr32(${A},13u)^rotr32(${A},22u))+(${B}^(x&px));\n${D}=${D}+t1;${H}=t1+t2;px=x;}\n`;
+  nm=[H,A,B,C,D,E,F,G]}
+ o+=`return array<u32,8>(${nm.map((n,i)=>hx(IV[i])+'+'+n).join(',')});\n}\n`;
+ const RL=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8,3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12,1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2,4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13];
+ const RR=[5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12,6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2,15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13,8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14,12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11];
+ const SL=[11,14,15,12,5,8,7,9,11,13,14,15,6,7,9,8,7,6,8,13,11,9,7,15,7,12,15,9,11,7,13,12,11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5,11,12,14,15,14,15,9,8,9,14,5,6,8,6,5,12,9,15,5,11,6,8,13,12,5,12,13,14,11,8,5,6];
+ const SR=[8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6,9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11,9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5,15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8,8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];
+ const KL=[0,0x5a827999,0x6ed9eba1,0x8f1bbcdc,0xa953fd4e],KR=[0x50a28be6,0x5c4dd124,0x6d703ef3,0x7a6d76e9,0];
+ const RI=[0x67452301,0xefcdab89,0x98badcfe,0x10325476,0xc3d2e1f0];
+ const fx=(r,x,y,z)=>[`(${x}^${y}^${z})`,`(${z}^(${x}&(${y}^${z})))`,`((${x}|~${y})^${z})`,`(${y}^(${z}&(${x}^${y})))`,`(${x}^(${y}|~${z}))`][r];
+ const rmd=partial=>{
+  let t=partial?'fn ripemd_h0(H: array<u32,8>) -> u32 {\n':'fn ripemd160_32(H: array<u32,8>) -> array<u32,5> {\n';
+  const X=[];for(let i=0;i<8;i++){t+=`let x${i}=bswap32(H[${i}]);\n`;X[i]={n:'x'+i}}
+  X[8]={c:0x80};for(let i=9;i<14;i++)X[i]={c:0};X[14]={c:256};X[15]={c:0};
+  const line=(p,left,steps)=>{let cur=[0,1,2,3,4].map(i=>p+i);t+=cur.map((n,i)=>`var ${n}:u32=${hx(RI[i])};`).join('')+'\n';
+   for(let j=0;j<steps;j++){const r=j>>4,[A,B,C,D,E]=cur,idx=(left?RL:RR)[j],s=(left?SL:SR)[j],k=(left?KL:KR)[r];
+    const kx=X[idx].c!=null?hx((X[idx].c+k)>>>0):`${X[idx].n}+${hx(k)}`;
+    t+=`${A}=rotl32(${A}+${fx(left?r:4-r,B,C,D)}+${kx},${s}u)+${E};${C}=rotl32(${C},10u);\n`;cur=[E,A,B,C,D]}
+   return cur};
+  const L=line('l',true,partial?79:80),Rr=line('r',false,partial?78:80);
+  if(partial)t+=`return ${hx(RI[1])}+${L[1]}+rotl32(${Rr[1]},10u);\n}\n`;
+  else t+=`return array<u32,5>(${hx(RI[1])}+${L[2]}+${Rr[3]},${hx(RI[2])}+${L[3]}+${Rr[4]},${hx(RI[3])}+${L[4]}+${Rr[0]},${hx(RI[4])}+${L[0]}+${Rr[1]},${hx(RI[0])}+${L[1]}+${Rr[2]});\n}\n`;
+  return t};
+ return o+rmd(false)+rmd(true);
+}
+
+const WGSL=`
+struct TargetHash { h: vec4<u32>, h4: vec4<u32> };
+struct BatchParams { startKey: vec4<u32>, startKey2: vec4<u32>, gx: vec4<u32>, gx2: vec4<u32>, gy: vec4<u32>, gy2: vec4<u32> };
+struct R8 { v: array<u32,8>, c: u32 };
+const P: array<u32,8> = array<u32,8>(0xFFFFFC2Fu,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
+fn addc(a: u32, b: u32, cin: u32) -> vec2<u32> {
+  let s1 = a + b; let c1 = select(0u, 1u, s1 < a);
+  let s2 = s1 + cin; let c2 = select(0u, 1u, s2 < s1);
+  return vec2<u32>(s2, c1 + c2);
+}
+fn subb(a: u32, b: u32, bin: u32) -> vec2<u32> {
+  let d1 = a - b; let b1 = select(0u, 1u, a < b);
+  let d2 = d1 - bin; let b2 = select(0u, 1u, d1 < bin);
+  return vec2<u32>(d2, b1 + b2);
+}
+fn mul32(a: u32, b: u32) -> vec2<u32> {
+  let al = a & 0xFFFFu; let ah = a >> 16u; let bl = b & 0xFFFFu; let bh = b >> 16u;
+  let p0 = al*bl; let p1 = al*bh; let p2 = ah*bl; let p3 = ah*bh;
+  let mid = (p0 >> 16u) + (p1 & 0xFFFFu) + (p2 & 0xFFFFu);
+  return vec2<u32>(a*b, p3 + (p1 >> 16u) + (p2 >> 16u) + (mid >> 16u));
+}
+fn add8(a: array<u32,8>, b: array<u32,8>) -> R8 {
+  var out: array<u32,8>; var carry: u32 = 0u;
+  for (var i = 0u; i < 8u; i = i + 1u) { let r = addc(a[i], b[i], carry); out[i] = r.x; carry = r.y; }
+  var res: R8; res.v = out; res.c = carry; return res;
+}
+fn sub8(a: array<u32,8>, b: array<u32,8>) -> R8 {
+  var out: array<u32,8>; var borrow: u32 = 0u;
+  for (var i = 0u; i < 8u; i = i + 1u) { let r = subb(a[i], b[i], borrow); out[i] = r.x; borrow = r.y; }
+  var res: R8; res.v = out; res.c = borrow; return res;
+}
+fn cmp8(a: array<u32,8>, b: array<u32,8>) -> i32 {
+  for (var ii = 0u; ii < 8u; ii = ii + 1u) { let i = 7u - ii; if (a[i] != b[i]) { return select(-1, 1, a[i] > b[i]); } }
+  return 0;
+}
+${genField(GK,GRP)}
+struct JPoint { X: F, Y: F, Z: F, isInf: bool };
+fn jacMaddAffine(p: JPoint, x2: F, y2: F) -> JPoint {
+  if (p.isInf) { return JPoint(x2, y2, oneF(), false); }
+  let Z1sq = sqrmod(p.Z);
+  let U2 = mulmod(x2, Z1sq);
+  let S2 = mulmod(mulmod(y2, Z1sq), p.Z);
+  let H = submod(U2, p.X);
+  let R = submod(S2, p.Y);
+  let HH = sqrmod(H); let HHH = mulmod(HH, H);
+  let V = mulmod(p.X, HH);
+  let X3 = submod(submod(sqrmod(R), HHH), addmod(V, V));
+  let Y3 = submod(mulmod(R, submod(V, X3)), mulmod(p.Y, HHH));
+  return JPoint(X3, Y3, mulmod(p.Z, H), false);
+}
+fn sqrN(a: F, n: u32) -> F { var r = a; for (var i = 0u; i < n; i = i + 1u) { r = sqrmod(r); } return r; }
+fn modpowP2(base: F) -> F {
+  let x1  = base;
+  let x2  = mulmod(sqrN(x1, 1u), x1);
+  let x3  = mulmod(sqrN(x2, 1u), x1);
+  let x6  = mulmod(sqrN(x3, 3u), x3);
+  let x9  = mulmod(sqrN(x6, 3u), x3);
+  let x11 = mulmod(sqrN(x9, 2u), x2);
+  let x22 = mulmod(sqrN(x11, 11u), x11);
+  let x44 = mulmod(sqrN(x22, 22u), x22);
+  let x88 = mulmod(sqrN(x44, 44u), x44);
+  var r = mulmod(sqrN(x88, 88u), x88);
+  r = mulmod(sqrN(r, 44u), x44);
+  r = mulmod(sqrN(r, 3u), x3);
+  r = mulmod(sqrN(r, 23u), x22);
+  r = mulmod(sqrN(r, 5u), x1);
+  r = mulmod(sqrN(r, 3u), x2);
+  r = sqrN(r, 2u);
+  return mulmod(r, base);
+}
+fn rotr32(x: u32, n: u32) -> u32 { return (x >> n) | (x << (32u - n)); }
+fn rotl32(x: u32, n: u32) -> u32 { return (x << n) | (x >> (32u - n)); }
+fn bswap32(x: u32) -> u32 { return ((x & 0xffu) << 24u) | ((x & 0xff00u) << 8u) | ((x >> 8u) & 0xff00u) | ((x >> 24u) & 0xffu); }
+${genHash()}
+@group(0) @binding(0) var<uniform> batch: BatchParams;
+@group(0) @binding(1) var<storage, read> combTable: array<u32>;
+@group(0) @binding(2) var<uniform> targetData: TargetHash;
+@group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>;
+@group(0) @binding(4) var<storage, read> gTable: array<u32>;
+fn tW(j: u32, off: u32) -> array<u32,8> { var r: array<u32,8>; for (var m = 0u; m < 8u; m = m + 1u) { r[m] = gTable[(j - 1u) * 16u + off + m]; } return r; }
+fn gxj(j: u32) -> F { return fromW(tW(j, 0u)); }
+fn gyj(j: u32) -> F { return fromW(tW(j, 8u)); }
+fn chk(x: F, y: F, idx: u32) {
+  let xw = canon(x); let yw = canon(y);
+  let prefix = select(3u, 2u, (yw[0] & 1u) == 0u);
+  let H = sha256_33(prefix, xw);
+  if (ripemd_h0(H) != targetData.h.x) { return; }
+  let hash = ripemd160_32(H);
+  let d = (hash[0] ^ targetData.h.x) | (hash[1] ^ targetData.h.y) | (hash[2] ^ targetData.h.z) | (hash[3] ^ targetData.h.w) | (hash[4] ^ targetData.h4.x);
+  if (d == 0u) { resultBuffer[0] = 1u; resultBuffer[1] = idx; }
+}
+fn tabW(w: u32, e: u32, off: u32) -> F { var r: array<u32,8>; let b = (w * 2048u + e) * 16u + off; for (var m = 0u; m < 8u; m = m + 1u) { r[m] = combTable[b + m]; } return fromW(r); }
+fn jacAddAA(x1: F, y1: F, x2: F, y2: F) -> JPoint {
+  let H = submod(x2, x1); let R = submod(y2, y1);
+  let HH = sqrmod(H); let HHH = mulmod(HH, H); let V = mulmod(x1, HH);
+  let X3 = submod(submod(sqrmod(R), HHH), addmod(V, V));
+  let Y3 = submod(mulmod(R, submod(V, X3)), mulmod(y1, HHH));
+  return JPoint(X3, Y3, H, false);
+}
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let first = gid.x * GRP; let total = batch.startKey2.w;
+  if (first >= total) { return; }
+  let cidx = first + GK;
+  let lo = cidx & 2047u; let hi = cidx >> 11u;
+  let bx = fromW(array<u32,8>(batch.gx.x,batch.gx.y,batch.gx.z,batch.gx.w,batch.gx2.x,batch.gx2.y,batch.gx2.z,batch.gx2.w));
+  let by = fromW(array<u32,8>(batch.gy.x,batch.gy.y,batch.gy.z,batch.gy.w,batch.gy2.x,batch.gy2.y,batch.gy2.z,batch.gy2.w));
+  var pt: JPoint;
+  if (lo != 0u) {
+    pt = jacAddAA(bx, by, tabW(0u, lo, 0u), tabW(0u, lo, 8u));
+    if (hi != 0u) { pt = jacMaddAffine(pt, tabW(1u, hi, 0u), tabW(1u, hi, 8u)); }
+  } else {
+    pt = jacAddAA(bx, by, tabW(1u, hi, 0u), tabW(1u, hi, 8u));
+  }
+  let X = pt.X; let Y = pt.Y; let Z = pt.Z;
+  let Z2 = sqrmod(Z); let Z3 = mulmod(Z2, Z);
+  var pre: array<F, ${GK}>;
+  var run = oneF();
+  for (var j = 1u; j <= GK; j = j + 1u) {
+    let D = submod(mulmod(gxj(j), Z2), X);
+    run = mulmod(run, mulmod(Z, D)); pre[j - 1u] = run;
+  }
+  var inv = modpowP2(run);
+  for (var jj = 0u; jj < GK; jj = jj + 1u) {
+    let j = GK - jj;
+    let W = mulmod(Z, submod(mulmod(gxj(j), Z2), X));
+    var iw = inv;
+    if (j > 1u) { iw = mulmod(inv, pre[j - 2u]); }
+    inv = mulmod(inv, W);
+    pre[j - 1u] = iw;
+  }
+  let Zi = mulmod(submod(mulmod(gxj(1u), Z2), X), pre[0]);
+  let Zi2 = sqrmod(Zi);
+  let x1 = mulmod(X, Zi2); let y1 = mulmod(Y, mulmod(Zi2, Zi));
+  if (cidx < total) { chk(x1, y1, cidx); }
+  let z0 = submod(oneF(), oneF());
+  for (var j = 1u; j <= GK; j = j + 1u) {
+    let gx = gxj(j); let g3 = mulmod(gyj(j), Z3); let iw = pre[j - 1u];
+    let lp = mulmod(submod(g3, Y), iw);
+    let lm = submod(z0, mulmod(addmod(g3, Y), iw));
+    let xs = addmod(x1, gx);
+    let x3p = submod(sqrmod(lp), xs); let x3m = submod(sqrmod(lm), xs);
+    let y3p = submod(mulmod(lp, submod(x1, x3p)), y1);
+    let y3m = submod(mulmod(lm, submod(x1, x3m)), y1);
+    if (cidx + j < total) { chk(x3p, y3p, cidx + j); }
+    if (cidx - j < total) { chk(x3m, y3m, cidx - j); }
+  }
+}`;
+
+/* ---------- secp256k1 (BigInt) ---------- */
+const $=id=>document.getElementById(id);
+const SP=(1n<<256n)-(1n<<32n)-977n;
+const G={x:0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n,y:0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n};
+const ORDER=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+function modinv(a,m){a=((a%m)+m)%m;let[o,r]=[a,m],[os,s]=[1n,0n];while(r){const q=o/r;[o,r]=[r,o-q*r];[os,s]=[s,os-q*s]}return((os%m)+m)%m}
+function ecDouble(P){if(!P||P.y===0n)return null;const l=(3n*P.x%SP*P.x%SP)*modinv(2n*P.y%SP,SP)%SP;const x=((l*l-2n*P.x)%SP+SP)%SP;return{x,y:((l*(P.x-x)-P.y)%SP+SP)%SP}}
+function ecAdd(P,Q){if(!P)return Q;if(!Q)return P;if(P.x===Q.x){if((P.y+Q.y)%SP===0n)return null;return ecDouble(P)}const l=((Q.y-P.y)%SP+SP)%SP*modinv(Q.x-P.x,SP)%SP;const x=((l*l-P.x-Q.x)%SP+SP)%SP;return{x,y:((l*(P.x-x)-P.y)%SP+SP)%SP}}
+function ecMul(k,B){let r=null,a=B;while(k>0n){if(k&1n)r=ecAdd(r,a);a=ecDouble(a);k>>=1n}return r}
+function limbs(v){const o=new Uint32Array(8);for(let i=0;i<8;i++)o[i]=Number((v>>BigInt(32*i))&0xFFFFFFFFn);return o}
+function hexTo32(h){h=h.replace(/^0x/i,'').padStart(64,'0');const o=new Uint8Array(32);for(let i=0;i<32;i++)o[i]=parseInt(h.substr(i*2,2),16);return o}
+function buildTable(){const T=new Uint32Array(2*2048*16);let base=G;for(let i=0;i<2;i++){let acc=null;for(let e=1;e<2048;e++){acc=ecAdd(acc,base);const o=(i*2048+e)*16;T.set(limbs(acc.x),o);T.set(limbs(acc.y),o+8)}for(let d=0;d<11;d++)base=ecDouble(base)}return T}
+
+/* ---------- adres / WIF ---------- */
+const B58="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+const sha=async b=>new Uint8Array(await crypto.subtle.digest('SHA-256',b));
+async function targetHash(a){
+  let n=0n;for(const c of a){const i=B58.indexOf(c);if(i<0)throw Error('Ongeldig Base58-teken');n=n*58n+BigInt(i)}
+  const hex=n.toString(16).padStart(50,'0');if(hex.length!==50||a[0]!=='1')throw Error('Alleen P2PKH-adressen die met 1 beginnen');
+  const b=new Uint8Array(25);for(let i=0;i<25;i++)b[i]=parseInt(hex.substr(i*2,2),16);
+  const c=(await sha(await sha(b.slice(0,21)))).slice(0,4);
+  for(let i=0;i<4;i++)if(c[i]!==b[21+i])throw Error('Adres-checksum klopt niet (typefout?)');
+  return b.slice(1,21)}
+function b58enc(by){let d=[0];for(const x of by){let c=x;for(let j=0;j<d.length;j++){c+=d[j]*256;d[j]=c%58;c=Math.floor(c/58)}while(c>0){d.push(c%58);c=Math.floor(c/58)}}let s='';for(let i=0;i<by.length&&by[i]===0;i++)s+='1';for(let i=d.length-1;i>=0;i--)s+=B58[d[i]];return s}
+async function wif(p){const d=new Uint8Array(34);d[0]=0x80;d.set(p,1);d[33]=1;const h=await sha(await sha(d));const f=new Uint8Array(38);f.set(d);f.set(h.slice(0,4),34);return b58enc(f)}
+
+/* ---------- UI ---------- */
+function log(m,c='var(--tx)'){const b=$('log'),d=new Date(),e=document.createElement('div');e.innerHTML=`<span class="ts2">[${d.toLocaleTimeString('nl-NL')}]</span><span style="color:${c}">${m}</span>`;b.appendChild(e);while(b.childElementCount>200)b.removeChild(b.firstElementChild);b.scrollTop=b.scrollHeight}
+
+/* ---------- GPU ---------- */
+let dev,pipe,tableBuf,gtBuf,tgtBuf,stages=[],running=false,tok=0,total=0,t0=0,leases=0,curLease=0,leaseLen=1;
+async function initGPU(){
+  if(!navigator.gpu){$('badge').textContent='WebGPU NIET ONDERSTEUND';return false}
+  try{
+    const ad=await navigator.gpu.requestAdapter();if(!ad){log('Geen GPU-adapter','var(--wr)');return false}
+    dev=await ad.requestDevice();
+    dev.addEventListener('uncapturederror',e=>log('GPU FOUT: '+e.error.message,'var(--wr)'));
+    const mod=dev.createShaderModule({code:WGSL});const info=await mod.getCompilationInfo();let bad=false;
+    for(const m of info.messages)if(m.type==='error'){log(`SHADER FOUT [L${m.lineNum}]: ${m.message}`,'var(--wr)');bad=true}
+    if(bad)return false;
+    pipe=dev.createComputePipeline({layout:'auto',compute:{module:mod,entryPoint:'main'}});
+    log('Tabel berekenen...');await new Promise(r=>setTimeout(r,50));
+    const T=buildTable();tableBuf=dev.createBuffer({size:T.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});dev.queue.writeBuffer(tableBuf,0,T);
+    const GT=new Uint32Array(GK*16);{let g=null;for(let j=1;j<=GK;j++){g=ecAdd(g,G);GT.set(limbs(g.x),(j-1)*16);GT.set(limbs(g.y),(j-1)*16+8)}}
+    gtBuf=dev.createBuffer({size:GT.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});dev.queue.writeBuffer(gtBuf,0,GT);
+    tgtBuf=dev.createBuffer({size:64,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+    for(let i=0;i<4;i++){
+      const bb=dev.createBuffer({size:96,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+      const rs=dev.createBuffer({size:8,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST});
+      const rd=dev.createBuffer({size:8,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+      const bg=dev.createBindGroup({layout:pipe.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:bb}},{binding:1,resource:{buffer:tableBuf}},{binding:2,resource:{buffer:tgtBuf}},{binding:3,resource:{buffer:rs}},{binding:4,resource:{buffer:gtBuf}}]});
+      stages.push({bb,rs,rd,bg,p:null});
+    }
+    $('badge').textContent='WEBGPU GEREED';log('WebGPU klaar.','var(--ok)');return true;
+  }catch(e){log('Init-fout: '+e.message,'var(--wr)');console.error(e);return false}
+}
+function stop(why){running=false;tok++;$('go').disabled=false;$('test').disabled=false;$('stop').disabled=true;$('status').textContent=why;log(why,'var(--dg)')}
+function rbelow(b){if(b<=1n)return 0n;const top=1n<<256n,cut=top-top%b,by=new Uint8Array(32);for(;;){crypto.getRandomValues(by);let x=0n;for(const v of by)x=(x<<8n)|BigInt(v);if(x<cut)return x%b}}
+function ui(){if(!running)return;const s=(performance.now()-t0)/1000;
+  $('total').textContent=total.toLocaleString('nl-NL');$('speed').textContent=Math.round(total/Math.max(s,.001)).toLocaleString('nl-NL')+' /s';
+  $('leases').textContent=leases;$('bar').style.width=Math.min(100,curLease/leaseLen*100)+'%';setTimeout(ui,250)}
+async function report(key){
+  const hex=key.toString(16).padStart(64,'0');let w='';try{w=await wif(hexTo32(hex))}catch(e){}
+  try{localStorage.setItem('gpuscan_found',JSON.stringify({key:hex,wif:w,t:Date.now()}))}catch(e){}
+  $('none').style.display='none';$('res').innerHTML+=`<tr><td>P2PKH</td><td style="color:var(--a2)">${w}</td><td style="color:var(--ok)">0x${hex}</td></tr>`;
+  log('MATCH: 0x'+hex,'var(--ok)');stop('MATCH gevonden');
+}
+async function start(){
+  try{
+    const addr=$('addr').value.trim(),min=BigInt('0x'+$('rmin').value.trim().replace(/^0x/i,'')),max=BigInt('0x'+$('rmax').value.trim().replace(/^0x/i,''));
+    if(min<1n||max>=ORDER||min>max)throw Error('Ongeldig bereik');
+    const lim=BigInt($('lease').value),depth=Math.max(1,Math.min(4,Number($('depth').value)||2));
+    const th=await targetHash(addr);
+    if(!dev&&!(await initGPU()))return;
+    const t=new Uint32Array(8);for(let i=0;i<5;i++)t[i]=(th[i*4]|th[i*4+1]<<8|th[i*4+2]<<16|th[i*4+3]<<24)>>>0;
+    dev.queue.writeBuffer(tgtBuf,0,t);
+    running=true;const my=++tok;total=0;leases=0;t0=performance.now();
+    $('go').disabled=true;$('test').disabled=true;$('stop').disabled=false;$('status').textContent='Zoeken...';
+    log(`Start: lease=${lim}, stages=${depth}`);setTimeout(ui,250);
+    const span=max-min+1n,step=ecMul(BigInt(BATCH),G),buf=new Uint32Array(24);let si=0,found=false;
+    while(running&&my===tok&&!found){
+      const len=lim<span?lim:span,start=min+rbelow(span-len+1n),end=start+len;
+      let key=start,pt=ecMul(key,G);leases++;leaseLen=Number(len);curLease=0;
+      $('cur').value='0x'+start.toString(16)+' : 0x'+(end-1n).toString(16);
+      while(running&&my===tok&&key<end&&!found){
+        const n=Number(end-key<BigInt(BATCH)?end-key:BigInt(BATCH)),st=stages[si%depth];si++;
+        if(st.p)await st.p;if(!running||my!==tok)break;
+        const bk=key,bp=pt;key+=BigInt(n);if(n===BATCH)pt=ecAdd(bp,step);
+        buf.fill(0);buf.set(limbs(bk),0);buf[7]=n;buf.set(limbs(bp.x),8);buf.set(limbs(bp.y),16);
+        dev.queue.writeBuffer(st.bb,0,buf);dev.queue.writeBuffer(st.rs,0,new Uint32Array([0,0]));
+        const enc=dev.createCommandEncoder(),pass=enc.beginComputePass();
+        pass.setPipeline(pipe);pass.setBindGroup(0,st.bg);pass.dispatchWorkgroups(Math.ceil(n/(GRP*WG)));pass.end();
+        enc.copyBufferToBuffer(st.rs,0,st.rd,0,8);dev.queue.submit([enc.finish()]);
+        st.p=(async()=>{await st.rd.mapAsync(GPUMapMode.READ);const r=new Uint32Array(st.rd.getMappedRange()),hit=r[0]===1,ix=r[1];st.rd.unmap();
+          if(running&&my===tok){total+=n;curLease+=n}
+          if(hit&&!found){found=true;await report(bk+BigInt(ix))}})();
+      }
+      for(const s of stages)if(s.p)await s.p;
+    }
+    if(running&&my===tok)stop('Klaar');
+  }catch(e){running=false;$('go').disabled=false;$('test').disabled=false;$('stop').disabled=true;$('status').textContent='Fout';log('Fout: '+e.message,'var(--wr)')}
+}
+$('go').onclick=start;$('stop').onclick=()=>stop('Gestopt door gebruiker');
+$('test').onclick=()=>{$('addr').value='16hCBtrXeXZmbX2u6mtUSFZtUgzH4VP5XG';$('rmin').value='400000000000000000';$('rmax').value='400000000000200000';$('lease').value='3000000';$('depth').value='2';log('Zelftest: verwacht 0x40000000000012d687');start()};
+try{const f=JSON.parse(localStorage.getItem('gpuscan_found')||'null');if(f)log('Eerder gevonden sleutel in opslag: 0x'+f.key,'var(--ok)')}catch(e){}
+initGPU();
+</script></body></html>
