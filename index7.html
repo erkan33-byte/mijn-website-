@@ -6,7 +6,6 @@
     <title>BIP39 Seed Phrase Herstel Tool</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
-    <!-- Ethers.js voor BIP39, HD Node derivatie en Wallet validatie -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" integrity="sha512-FDcvy+g7vc5CXKCBrCJqaYA0q6yU42KU2imD80YH29WpECP9/yvF4s1wM8M8a5lO-A5p53kU0/xY02D/E/4kWA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
@@ -29,12 +28,12 @@
                 </div>
                 <div>
                     <h1 class="text-xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">BIP39 Seed Phrase Herstel Tool</h1>
-                    <p class="text-xs text-slate-400">Multi-threaded Ethereum HD Wallet Permutatie Scanner</p>
+                    <p class="text-xs text-slate-400">Asynchrone Ethereum HD Wallet Permutatie Scanner</p>
                 </div>
             </div>
             <div class="flex items-center gap-3 text-xs bg-slate-800/60 px-3 py-1.5 rounded-full border border-slate-700">
                 <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span class="text-slate-300" id="threadCountDisplay">Threads: Geoptimaliseerde Async Batch Engine</span>
+                <span class="text-slate-300" id="threadCountDisplay">Status: Gereed</span>
             </div>
         </div>
     </header>
@@ -66,12 +65,11 @@
                                 class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:outline-none focus:border-indigo-500 transition-colors">
                         </div>
                         <div>
-                            <label class="block text-xs font-medium text-slate-400 mb-1">Batch Snelheid / Snelheid</label>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Batch Snelheid</label>
                             <select id="workerCount" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
-                                <option value="2">2x Batch</option>
-                                <option value="4" selected>4x Batch (Optimaal)</option>
-                                <option value="8">8x Batch</option>
-                                <option value="16">16x Batch</option>
+                                <option value="500">Normaal (500 per batch)</option>
+                                <option value="2000" selected>Turbo (2000 per batch)</option>
+                                <option value="5000">Ultra (5000 per batch)</option>
                             </select>
                         </div>
                     </div>
@@ -88,7 +86,6 @@
                     <span class="text-xs text-slate-500">Bekend of leeg laten voor onbekend</span>
                 </div>
 
-                <!-- 12 Woord Invoervelden -->
                 <div id="seedGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     <!-- Wordt dynamisch gevuld via JavaScript -->
                 </div>
@@ -100,7 +97,7 @@
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
                     Kandidaat Woorden Pool (voor onbekende posities)
                 </label>
-                <p class="text-xs text-slate-400">Woorden uit je kandidaatlijst (fiber, fork, forest, wood, hunter, rib, fresh, sing, song, goat, whistle). Je kunt deze hieronder aanpassen:</p>
+                <p class="text-xs text-slate-400">Woorden uit je kandidaatlijst:</p>
                 <textarea id="candidateWords" rows="3" 
                     class="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm text-indigo-300 font-mono focus:outline-none focus:border-indigo-500 transition-colors custom-scrollbar">fiber, fork, forest, wood, hunter, rib, fresh, sing, song, goat, whistle</textarea>
             </div>
@@ -171,16 +168,15 @@
                     <button onclick="clearLogs()" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">Wis</button>
                 </div>
                 <div id="logOutput" class="flex-1 font-mono text-xs text-slate-300 space-y-1 overflow-y-auto max-h-[350px] custom-scrollbar bg-slate-950/60 p-3 rounded-lg border border-slate-800/80">
-                    <div class="text-slate-500">[Systeem] Gereed. Klik op 'Start Herstel Scan' om de permutaties te berekenen.</div>
+                    <div class="text-slate-500">[Systeem] Gereed. Klik op 'Start Herstel Scan' om te beginnen.</div>
                 </div>
             </div>
 
         </section>
     </main>
 
-    <!-- Hoofd JavaScript Logica met robuuste Async Chunked Scanner (zonder CORS/Blob Worker CDN problemen) -->
+    <!-- Hoofd JavaScript Logica -->
     <script>
-        // Vooringevulde bekende posities
         const initialKnown = {
             0: "dutch",
             4: "fog",
@@ -192,21 +188,13 @@
         let totalScanned = 0;
         let startTime = 0;
         let speedInterval = null;
-        let currentLoopId = 0;
+        let currentScanTimeout = null;
 
         document.addEventListener("DOMContentLoaded", () => {
             buildGrid();
-            detectHardware();
         });
 
-        function detectHardware() {
-            const cores = navigator.hardwareConcurrency || 4;
-            const display = document.getElementById('threadCountDisplay');
-            display.innerText = `Threads: ${cores} Hardware Cores (Async Engine)`;
-            document.getElementById('workerCount').value = Math.min(cores, 16);
-        }
-
-        function buildGrid() {
+            function buildGrid() {
             const gridContainer = document.getElementById('seedGrid');
             gridContainer.innerHTML = '';
 
@@ -243,20 +231,34 @@
             document.getElementById('logOutput').innerHTML = '';
         }
 
-        function getPermutations(arr, k) {
-            if (k === 0) return [[]];
-            if (arr.length === 0) return [];
-            
-            const results = [];
+        // Factorial helper om exact aantal permutaties te berekenen zonder array aan te maken
+        function factorial(n) {
+            let res = 1;
+            for (let i = 2; i <= n; i++) res *= i;
+            return res;
+        }
+
+        function permutationCount(n, k) {
+            let res = 1;
+            for (let i = 0; i < k; i++) {
+                res *= (n - i);
+            }
+            return res;
+        }
+
+        // Generator om permutaties on-the-fly (lazy) te genereren zonder geheugenoverbelasting
+        function* generatePermutations(arr, k) {
+            if (k === 0) {
+                yield [];
+                return;
+            }
             for (let i = 0; i < arr.length; i++) {
                 const current = arr[i];
                 const remaining = arr.slice(0, i).concat(arr.slice(i + 1));
-                const innerPerms = getPermutations(remaining, k - 1);
-                for (let perm of innerPerms) {
-                    results.push([current, ...perm]);
+                for (let perm of generatePermutations(remaining, k - 1)) {
+                    yield [current, ...perm];
                 }
             }
-            return results;
         }
 
         function toggleScan() {
@@ -286,7 +288,7 @@
             log(`Geparseerd: ${candidates.length} kandidaat-woorden voor ${unknownCount} onbekende posities.`, 'info');
 
             if (candidates.length < unknownCount) {
-                log(`Fout: Minstens ${unknownCount} kandidaat-woorden vereist voor de onbekende plekken, maar er zijn er slechts ${candidates.length} opgegeven. Voeg meer woorden toe aan de pool.`, 'error');
+                log(`Fout: Minstens ${unknownCount} kandidaat-woorden vereist, maar er zijn er slechts ${candidates.length} opgegeven.`, 'error');
                 return;
             }
 
@@ -298,51 +300,51 @@
                 return;
             }
 
-            log(`Permutaties genereren voor ${unknownCount} onbekende posities uit ${candidates.length} kandidaten...`, 'warn');
-
-            const permutations = getPermutations(candidates, unknownCount);
-            totalPermutations = permutations.length;
-
+            totalPermutations = permutationCount(candidates.length, unknownCount);
             document.getElementById('statTotal').innerText = totalPermutations.toLocaleString();
-            log(`Totaal gegenereerde permutaties: ${totalPermutations.toLocaleString()}`, 'info');
+            log(`Totaal te scannen permutaties: ${totalPermutations.toLocaleString()}`, 'info');
 
             if (totalPermutations === 0) {
-                log('Geen geldige permutaties gegenereerd. Controleer de invoer.', 'error');
+                log('Geen geldige permutaties berekend.', 'error');
                 return;
             }
 
             isScanning = true;
             totalScanned = 0;
             startTime = Date.now();
-            currentLoopId++;
-            const activeLoopId = currentLoopId;
-
             document.getElementById('startBtnText').innerText = 'Stop Herstel Scan';
             document.getElementById('startBtn').className = 'flex-1 bg-rose-600 hover:bg-rose-500 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2';
             document.getElementById('scanStatusText').innerText = 'Scannen...';
             document.getElementById('resultBanner').classList.add('hidden');
 
             speedInterval = setInterval(updateSpeed, 500);
-            log(`Asynchrone permutatie scan gestart...`, 'info');
+            log(`Scan gestart in asynchrone batches...`, 'info');
 
-            // Asynchrone batchverwerking om de UI responsief te houden
-            runAsyncScan(permutations, fixedGrid, targetAddress.toLowerCase(), derivationPath, activeLoopId);
-        }
+            const permGenerator = generatePermutations(candidates, unknownCount);
+            const batchSize = parseInt(document.getElementById('workerCount').value) || 2000;
+            const target = targetAddress.toLowerCase();
 
-        async function runAsyncScan(permutations, fixedGrid, targetAddress, derivationPath, loopId) {
-            const batchSize = 150;
-            let index = 0;
+            function runBatch() {
+                if (!isScanning) return;
 
-            const processBatch = () => {
-                if (!isScanning || loopId !== currentLoopId) return;
+                let countInBatch = 0;
+                let foundMatch = false;
 
-                const limit = Math.min(index + batchSize, permutations.length);
-                
-                for (let i = index; i < limit; i++) {
-                    const combo = permutations[i];
+                while (countInBatch < batchSize) {
+                    const nextItem = permGenerator.next();
+                    if (nextItem.done) {
+                        isScanning = false;
+                        log('Scan voltooid. Geen overeenkomend adres gevonden in de permutatie-pool.', 'warn');
+                        stopScan();
+                        return;
+                    }
+
+                    const combo = nextItem.value;
+                    totalScanned++;
+                    countInBatch++;
+
                     let comboIdx = 0;
                     const phraseWords = [];
-                    
                     for (let pos = 0; pos < 12; pos++) {
                         if (fixedGrid[pos] !== "") {
                             phraseWords.push(fixedGrid[pos]);
@@ -357,7 +359,8 @@
                     if (ethers.utils.isValidMnemonic(mnemonic)) {
                         try {
                             const wallet = ethers.Wallet.fromMnemonic(mnemonic, derivationPath);
-                            if (wallet.address.toLowerCase() === targetAddress) {
+                            if (wallet.address.toLowerCase() === target) {
+                                foundMatch = true;
                                 onMatchFound(mnemonic, wallet.address);
                                 return;
                             }
@@ -365,21 +368,14 @@
                     }
                 }
 
-                const scannedCount = limit - index;
-                totalScanned += scannedCount;
-                index = limit;
-
                 updateProgress();
 
-                if (index < permutations.length && isScanning) {
-                    setTimeout(processBatch, 0);
-                } else if (isScanning && index >= permutations.length) {
-                    log('Scan voltooid. Geen overeenkomend adres gevonden in de permutatie-pool.', 'warn');
-                    stopScan();
+                if (!foundMatch && isScanning) {
+                    currentScanTimeout = setTimeout(runBatch, 0);
                 }
-            };
+            }
 
-            setTimeout(processBatch, 10);
+            currentScanTimeout = setTimeout(runBatch, 10);
         }
 
         function updateProgress() {
@@ -408,6 +404,7 @@
 
         function stopScan() {
             isScanning = false;
+            clearTimeout(currentScanTimeout);
             clearInterval(speedInterval);
 
             document.getElementById('startBtnText').innerText = 'Start Herstel Scan';
