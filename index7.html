@@ -6,7 +6,7 @@
     <title>BIP39 Seed Phrase Herstel Tool</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" integrity="sha512-FDcvy+g7vc5CXKCBrCJqaYA0q6yU42KU2imD80YH29WpECP9/yvF4s1wM8M8a5lO-A5p53kU0/xY02D/E/4kWA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
         code, pre { font-family: 'Fira Code', monospace; }
@@ -17,7 +17,6 @@
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
 
-    <!-- Koptekst -->
     <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-4">
             <div class="flex items-center space-x-3">
@@ -28,36 +27,31 @@
                 </div>
                 <div>
                     <h1 class="text-xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">BIP39 Seed Phrase Herstel Tool</h1>
-                    <p class="text-xs text-slate-400">Asynchrone Ethereum HD Wallet Permutatie Scanner</p>
+                    <p class="text-xs text-slate-400">Multi-threaded Ethereum HD Wallet Permutatie Scanner</p>
                 </div>
             </div>
             <div class="flex items-center gap-3 text-xs bg-slate-800/60 px-3 py-1.5 rounded-full border border-slate-700">
                 <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span class="text-slate-300" id="threadCountDisplay">Status: Gereed</span>
+                <span class="text-slate-300" id="threadCountDisplay">Threads: detecteren...</span>
             </div>
         </div>
     </header>
 
-    <!-- Hoofdcontainer -->
     <main class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-        <!-- Linker Paneel: Configuratie & Invoer -->
         <section class="lg:col-span-6 space-y-6">
 
-            <!-- Doelinstellingen -->
             <div class="bg-slate-900 rounded-xl p-5 border border-slate-800 shadow-xl">
                 <h2 class="text-sm font-semibold uppercase tracking-wider text-indigo-400 mb-4 flex items-center gap-2">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
                     Doel Configuratie
                 </h2>
-                
                 <div class="space-y-4">
                     <div>
                         <label class="block text-xs font-medium text-slate-400 mb-1">Doel Ethereum Adres</label>
                         <input type="text" id="targetAddress" value="0x9C2F44EFAd0c1E852a09dF9939e6DaF061140CaF" 
                             class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-emerald-400 font-mono focus:outline-none focus:border-indigo-500 transition-colors">
                     </div>
-
                     <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-medium text-slate-400 mb-1">Derivatie Pad</label>
@@ -65,18 +59,19 @@
                                 class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:outline-none focus:border-indigo-500 transition-colors">
                         </div>
                         <div>
-                            <label class="block text-xs font-medium text-slate-400 mb-1">Batch Snelheid</label>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Parallelle Werkthreads</label>
                             <select id="workerCount" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
-                                <option value="500">Normaal (500 per batch)</option>
-                                <option value="2000" selected>Turbo (2000 per batch)</option>
-                                <option value="5000">Ultra (5000 per batch)</option>
+                                <option value="1">1 Thread</option>
+                                <option value="2">2 Threads</option>
+                                <option value="4" selected>4 Threads</option>
+                                <option value="6">6 Threads</option>
+                                <option value="8">8 Threads</option>
                             </select>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Vaste Posities Rooster -->
             <div class="bg-slate-900 rounded-xl p-5 border border-slate-800 shadow-xl space-y-4">
                 <div class="flex items-center justify-between">
                     <h2 class="text-sm font-semibold uppercase tracking-wider text-indigo-400 flex items-center gap-2">
@@ -85,24 +80,19 @@
                     </h2>
                     <span class="text-xs text-slate-500">Bekend of leeg laten voor onbekend</span>
                 </div>
-
-                <div id="seedGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    <!-- Wordt dynamisch gevuld via JavaScript -->
-                </div>
+                <div id="seedGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3"></div>
             </div>
 
-            <!-- Kandidaat Woorden Pool -->
             <div class="bg-slate-900 rounded-xl p-5 border border-slate-800 shadow-xl space-y-3">
                 <label class="block text-sm font-semibold uppercase tracking-wider text-indigo-400 flex items-center gap-2">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
                     Kandidaat Woorden Pool (voor onbekende posities)
                 </label>
-                <p class="text-xs text-slate-400">Woorden uit je kandidaatlijst:</p>
+                <p class="text-xs text-slate-400">Woorden uit je kandidaatlijst. Je kunt deze hieronder aanpassen:</p>
                 <textarea id="candidateWords" rows="3" 
                     class="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm text-indigo-300 font-mono focus:outline-none focus:border-indigo-500 transition-colors custom-scrollbar">fiber, fork, forest, wood, hunter, rib, fresh, sing, song, goat, whistle</textarea>
             </div>
 
-            <!-- Besturingsknop -->
             <div class="flex gap-4">
                 <button id="startBtn" onclick="toggleScan()" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2">
                     <svg id="playIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -112,10 +102,8 @@
 
         </section>
 
-        <!-- Rechter Paneel: Statistieken & Logboeken -->
         <section class="lg:col-span-6 space-y-6 flex flex-col">
 
-            <!-- Statistieken Dashboard -->
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
                     <p class="text-xs text-slate-400 font-medium">Totaal Permutaties</p>
@@ -131,7 +119,6 @@
                 </div>
             </div>
 
-            <!-- Voortgangsbalk -->
             <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl space-y-2">
                 <div class="flex justify-between text-xs text-slate-400">
                     <span>Scan Status</span>
@@ -142,8 +129,7 @@
                 </div>
             </div>
 
-            <!-- Resultaat Banner -->
-            <div id="resultBanner" class="hidden bg-emerald-950/60 border border-emerald-500/50 rounded-xl p-5 shadow-2xl space-y-3 animate-fade-in">
+            <div id="resultBanner" class="hidden bg-emerald-950/60 border border-emerald-500/50 rounded-xl p-5 shadow-2xl space-y-3">
                 <div class="flex items-center gap-2 text-emerald-400 font-bold">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     MATCH GEVONDEN!
@@ -158,7 +144,6 @@
                 </div>
             </div>
 
-            <!-- Console Log Output -->
             <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl flex-1 flex flex-col min-h-[300px]">
                 <div class="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
                     <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
@@ -168,36 +153,104 @@
                     <button onclick="clearLogs()" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">Wis</button>
                 </div>
                 <div id="logOutput" class="flex-1 font-mono text-xs text-slate-300 space-y-1 overflow-y-auto max-h-[350px] custom-scrollbar bg-slate-950/60 p-3 rounded-lg border border-slate-800/80">
-                    <div class="text-slate-500">[Systeem] Gereed. Klik op 'Start Herstel Scan' om te beginnen.</div>
+                    <div class="text-slate-500">[Systeem] Gereed. Klik op 'Start Herstel Scan' om de permutaties te berekenen.</div>
                 </div>
             </div>
 
         </section>
     </main>
 
-    <!-- Hoofd JavaScript Logica -->
-    <script>
-        const initialKnown = {
-            0: "dutch",
-            4: "fog",
-            11: "parrot"
-        };
+    <!-- Worker: doet de zware crypto op een aparte thread -->
+    <script id="worker-code" type="javascript/worker">
+        importScripts('https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js');
 
+        let stopFlag = false;
+
+        self.onmessage = function(e) {
+            const { type, permutations, fixedGrid, unknownIdx, targetAddress, derivationPath } = e.data;
+            if (type === 'STOP') { stopFlag = true; return; }
+
+            const target = targetAddress.toLowerCase();
+            let scanned = 0;
+            let lastReport = Date.now();
+
+            for (let i = 0; i < permutations.length; i++) {
+                if (stopFlag) { self.postMessage({ type: 'STOPPED' }); return; }
+
+                const combo = permutations[i];
+                const phraseWords = new Array(12);
+
+                // Vul vaste posities in
+                for (let p = 0; p < 12; p++) {
+                    if (fixedGrid[p] !== '') phraseWords[p] = fixedGrid[p];
+                }
+                // Vul onbekende posities in
+                for (let k = 0; k < unknownIdx.length; k++) {
+                    phraseWords[unknownIdx[k]] = combo[k];
+                }
+
+                const mnemonic = phraseWords.join(' ');
+
+                // Snelle checksum-check EERST (goedkoop, filtert 93% weg)
+                if (ethers.utils.isValidMnemonic(mnemonic)) {
+                    try {
+                        const wallet = ethers.Wallet.fromMnemonic(mnemonic, derivationPath);
+                        if (wallet.address.toLowerCase() === target) {
+                            self.postMessage({ type: 'FOUND', mnemonic: mnemonic, address: wallet.address });
+                            return;
+                        }
+                    } catch (err) { /* skip ongeldige */ }
+                }
+
+                scanned++;
+                // Stuur elke 250ms een voortgangsbericht
+                if (Date.now() - lastReport > 250) {
+                    self.postMessage({ type: 'PROGRESS', count: scanned });
+                    scanned = 0;
+                    lastReport = Date.now();
+                }
+            }
+
+            if (scanned > 0) self.postMessage({ type: 'PROGRESS', count: scanned });
+            self.postMessage({ type: 'DONE' });
+        };
+    </script>
+
+    <script>
+        // Bekende posities: 1=dutch, 5=fog, 12=parrot (0-based: 0, 4, 11)
+        const initialKnown = { 0: "dutch", 4: "fog", 11: "parrot" };
+
+        let workers = [];
         let isScanning = false;
         let totalPermutations = 0;
         let totalScanned = 0;
         let startTime = 0;
         let speedInterval = null;
-        let currentScanTimeout = null;
+        let foundMatch = false;
+        let activeWorkerCount = 0;
+        let workerUrl = null;
 
         document.addEventListener("DOMContentLoaded", () => {
             buildGrid();
+            detectHardware();
+            if (typeof ethers === 'undefined') {
+                log('WAARSCHUWING: ethers.js kon niet worden geladen van CDN. Controleer je internetverbinding.', 'error');
+            } else {
+                log('ethers.js geladen. Gereed.', 'info');
+            }
         });
+
+        function detectHardware() {
+            const cores = navigator.hardwareConcurrency || 4;
+            document.getElementById('threadCountDisplay').innerText = `Threads: ${cores} cores beschikbaar`;
+            const opts = [1, 2, 4, 6, 8];
+            const best = opts.reduce((a, b) => Math.abs(b - cores) < Math.abs(a - cores) ? b : a);
+            document.getElementById('workerCount').value = best;
+        }
 
         function buildGrid() {
             const gridContainer = document.getElementById('seedGrid');
             gridContainer.innerHTML = '';
-
             for (let i = 0; i < 12; i++) {
                 const val = initialKnown[i] || '';
                 const item = document.createElement('div');
@@ -215,12 +268,10 @@
             const output = document.getElementById('logOutput');
             const entry = document.createElement('div');
             const time = new Date().toLocaleTimeString();
-            
             let colorClass = 'text-slate-300';
             if (type === 'success') colorClass = 'text-emerald-400 font-bold';
             if (type === 'error') colorClass = 'text-rose-400';
             if (type === 'warn') colorClass = 'text-amber-400';
-
             entry.className = colorClass;
             entry.innerHTML = `<span class="text-slate-600">[${time}]</span> ${msg}`;
             output.appendChild(entry);
@@ -231,56 +282,65 @@
             document.getElementById('logOutput').innerHTML = '';
         }
 
-        function permutationCount(n, k) {
-            let res = 1;
-            for (let i = 0; i < k; i++) {
-                res *= (n - i);
-            }
-            return res;
-        }
-
-        function* generatePermutations(arr, k) {
-            if (k === 0) {
-                yield [];
-                return;
-            }
-            for (let i = 0; i < arr.length; i++) {
-                const current = arr[i];
-                const remaining = arr.slice(0, i).concat(arr.slice(i + 1));
-                for (let perm of generatePermutations(remaining, k - 1)) {
-                    yield [current, ...perm];
+        // Lazy permutatie-generator (geen geheugen-explosie)
+        function* permutationsIterator(arr, k) {
+            const n = arr.length;
+            const idx = new Array(k).fill(0);
+            const used = new Array(n).fill(false);
+            function* recurse(depth) {
+                if (depth === k) { yield idx.map(i => arr[i]); return; }
+                for (let i = 0; i < n; i++) {
+                    if (used[i]) continue;
+                    used[i] = true; idx[depth] = i;
+                    yield* recurse(depth + 1);
+                    used[i] = false;
                 }
             }
+            yield* recurse(0);
+        }
+
+        function countPermutations(n, k) {
+            let r = 1;
+            for (let i = 0; i < k; i++) r *= (n - i);
+            return r;
         }
 
         function toggleScan() {
-            if (isScanning) {
-                stopScan();
-            } else {
-                startScan();
-            }
+            if (isScanning) stopScan(false);
+            else startScan();
         }
 
         function startScan() {
+            if (typeof ethers === 'undefined') {
+                log('Kan niet starten: ethers.js niet geladen.', 'error');
+                return;
+            }
+
+            foundMatch = false;
             const fixedGrid = [];
-            let unknownCount = 0;
+            const unknownIdx = [];
 
             for (let i = 0; i < 12; i++) {
                 const val = document.getElementById(`pos-${i}`).value.trim().toLowerCase();
                 fixedGrid.push(val);
-                if (!val) unknownCount++;
+                if (!val) unknownIdx.push(i);
             }
 
             const candidateRaw = document.getElementById('candidateWords').value;
-            const candidates = candidateRaw
-                .split(/[\s,]+/)
-                .map(w => w.trim().toLowerCase())
-                .filter(w => w.length > 0);
+            const candidates = [...new Set(
+                candidateRaw.split(/[\s,]+/).map(w => w.trim().toLowerCase()).filter(w => w.length > 0)
+            )];
 
-            log(`Geparseerd: ${candidates.length} kandidaat-woorden voor ${unknownCount} onbekende posities.`, 'info');
+            const unknownCount = unknownIdx.length;
+            log(`Geparseerd: ${candidates.length} unieke kandidaten voor ${unknownCount} onbekende posities.`, 'info');
+
+            if (unknownCount === 0) {
+                testSingle(fixedGrid);
+                return;
+            }
 
             if (candidates.length < unknownCount) {
-                log(`Fout: Minstens ${unknownCount} kandidaat-woorden vereist, maar er zijn er slechts ${candidates.length} opgegeven.`, 'error');
+                log(`Fout: Minstens ${unknownCount} kandidaten vereist, maar er zijn er ${candidates.length}.`, 'error');
                 return;
             }
 
@@ -292,81 +352,116 @@
                 return;
             }
 
-            totalPermutations = permutationCount(candidates.length, unknownCount);
+            totalPermutations = countPermutations(candidates.length, unknownCount);
             document.getElementById('statTotal').innerText = totalPermutations.toLocaleString();
-            log(`Totaal te scannen permutaties: ${totalPermutations.toLocaleString()}`, 'info');
+            log(`Totaal permutaties: ${totalPermutations.toLocaleString()}`, 'info');
 
-            if (totalPermutations === 0) {
-                log('Geen geldige permutaties berekend.', 'error');
-                return;
+            if (totalPermutations > 50_000_000) {
+                log(`WAARSCHUWING: ${totalPermutations.toLocaleString()} permutaties is extreem veel. Dit kan dagen duren.`, 'warn');
             }
 
             isScanning = true;
             totalScanned = 0;
             startTime = Date.now();
-            document.getElementById('startBtnText').innerText = 'Stop Herstel Scan';
-            document.getElementById('startBtn').className = 'flex-1 bg-rose-600 hover:bg-rose-500 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2';
+            activeWorkerCount = 0;
+            updateButtonState(true);
+
             document.getElementById('scanStatusText').innerText = 'Scannen...';
             document.getElementById('resultBanner').classList.add('hidden');
+            document.getElementById('progressBar').style.width = '0%';
+            document.getElementById('statProgress').innerText = '0,00%';
+            document.getElementById('statSpeed').innerHTML = '0 <span class="text-xs text-slate-500 font-normal">/s</span>';
 
-            speedInterval = setInterval(updateSpeed, 500);
-            log(`Scan gestart... Teller en snelheid worden nu bijgewerkt.`, 'info');
+            const workerCount = Math.min(parseInt(document.getElementById('workerCount').value), totalPermutations);
+            const chunkSize = Math.ceil(totalPermutations / workerCount);
 
-            const permGenerator = generatePermutations(candidates, unknownCount);
-            const batchSize = parseInt(document.getElementById('workerCount').value) || 2000;
-            const target = targetAddress.toLowerCase();
+            const workerCode = document.getElementById('worker-code').textContent;
+            const blob = new Blob([workerCode], { type: 'application/javascript' });
+            workerUrl = URL.createObjectURL(blob);
 
-            function runBatch() {
-                if (!isScanning) return;
+            workers = [];
 
-                let countInBatch = 0;
-                let foundMatch = false;
+            // Verdeel de iterator in stukken per worker
+            const allPerms = permutationsIterator(candidates, unknownCount);
+            const chunks = [];
+            let currentChunk = [];
+            let totalEnumerated = 0;
 
-                while (countInBatch < batchSize) {
-                    const nextItem = permGenerator.next();
-                    if (nextItem.done) {
-                        isScanning = false;
-                        log('Scan voltooid. Geen overeenkomend adres gevonden in de permutatie-pool.', 'warn');
-                        stopScan();
-                        return;
-                    }
-
-                    const combo = nextItem.value;
-                    totalScanned++;
-                    countInBatch++;
-
-                    let comboIdx = 0;
-                    const phraseWords = [];
-                    for (let pos = 0; pos < 12; pos++) {
-                        if (fixedGrid[pos] !== "") {
-                            phraseWords.push(fixedGrid[pos]);
-                        } else {
-                            phraseWords.push(combo[comboIdx]);
-                            comboIdx++;
-                        }
-                    }
-
-                    const mnemonic = phraseWords.join(' ');
-
-                    try {
-                        // Direct via fromMnemonic; als de zin ongeldig is (checksum/woorden), gooit dit automatisch een error
-                        const wallet = ethers.Wallet.fromMnemonic(mnemonic, derivationPath);
-                        if (wallet.address.toLowerCase() === target) {
-                            foundMatch = true;
-                            onMatchFound(mnemonic, wallet.address);
-                            return;
-                        }
-                    } catch (err) {}
-                }
-
-                updateProgress();
-
-                if (!foundMatch && isScanning) {
-                    currentScanTimeout = setTimeout(runBatch, 0);
+            for (const perm of allPerms) {
+                currentChunk.push(perm);
+                totalEnumerated++;
+                if (currentChunk.length >= chunkSize || totalEnumerated >= totalPermutations) {
+                    chunks.push(currentChunk);
+                    currentChunk = [];
                 }
             }
+            if (currentChunk.length > 0) chunks.push(currentChunk);
 
-            currentScanTimeout = setTimeout(runBatch, 10);
+            activeWorkerCount = chunks.length;
+
+            chunks.forEach((chunk, i) => {
+                const worker = new Worker(workerUrl);
+
+                worker.onmessage = function(e) {
+                    const data = e.data;
+                    if (data.type === 'PROGRESS') {
+                        totalScanned += data.count;
+                        updateProgress();
+                    } else if (data.type === 'FOUND') {
+                        if (!foundMatch) {
+                            foundMatch = true;
+                            onMatchFound(data.mnemonic, data.address);
+                        }
+                    } else if (data.type === 'DONE') {
+                        activeWorkerCount--;
+                        if (activeWorkerCount === 0 && isScanning && !foundMatch) {
+                            log('Scan voltooid. Geen overeenkomend adres gevonden.', 'warn');
+                            stopScan(true);
+                        }
+                    } else if (data.type === 'STOPPED') {
+                        activeWorkerCount--;
+                    }
+                };
+
+                worker.onerror = (err) => {
+                    log(`Worker fout: ${err.message}`, 'error');
+                };
+
+                worker.postMessage({
+                    type: 'START',
+                    permutations: chunk,
+                    fixedGrid: fixedGrid,
+                    unknownIdx: unknownIdx,
+                    targetAddress: targetAddress,
+                    derivationPath: derivationPath
+                });
+
+                workers.push(worker);
+            });
+
+            speedInterval = setInterval(updateSpeed, 500);
+            log(`${chunks.length} parallelle Web Worker threads gestart.`, 'info');
+        }
+
+        function testSingle(fixedGrid) {
+            const targetAddress = document.getElementById('targetAddress').value.trim();
+            const derivationPath = document.getElementById('derivationPath').value.trim();
+            const mnemonic = fixedGrid.join(' ');
+
+            if (!ethers.utils.isValidMnemonic(mnemonic)) {
+                log(`Ongeldige mnemonic (checksum faalt): ${mnemonic}`, 'error');
+                return;
+            }
+            try {
+                const wallet = ethers.Wallet.fromMnemonic(mnemonic, derivationPath);
+                if (wallet.address.toLowerCase() === targetAddress.toLowerCase()) {
+                    onMatchFound(mnemonic, wallet.address);
+                } else {
+                    log(`Geen match. Afgeleid adres: ${wallet.address}`, 'warn');
+                }
+            } catch (e) {
+                log(`Fout bij afleiden: ${e.message}`, 'error');
+            }
         }
 
         function updateProgress() {
@@ -384,24 +479,38 @@
         }
 
         function onMatchFound(mnemonic, address) {
-            stopScan();
-            log(`SUCCES! Overeenkomst gevonden! Adres: ${address}`, 'success');
+            log(`SUCCES! Match gevonden! Adres: ${address}`, 'success');
             log(`Seed Phrase: ${mnemonic}`, 'success');
-
             document.getElementById('foundMnemonic').innerText = mnemonic;
             document.getElementById('foundAddress').innerText = address;
             document.getElementById('resultBanner').classList.remove('hidden');
+            stopScan(true);
         }
 
-        function stopScan() {
-            isScanning = false;
-            clearTimeout(currentScanTimeout);
-            clearInterval(speedInterval);
+        function updateButtonState(scanning) {
+            const btn = document.getElementById('startBtn');
+            const txt = document.getElementById('startBtnText');
+            if (scanning) {
+                txt.innerText = 'Stop Herstel Scan';
+                btn.className = 'flex-1 bg-rose-600 hover:bg-rose-500 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2';
+            } else {
+                txt.innerText = 'Start Herstel Scan';
+                btn.className = 'flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2';
+            }
+        }
 
-            document.getElementById('startBtnText').innerText = 'Start Herstel Scan';
-            document.getElementById('startBtn').className = 'flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2';
-            document.getElementById('scanStatusText').innerText = 'Gestopt';
-            log('Scan uitvoering gestopt.', 'info');
+        function stopScan(silent) {
+            if (!isScanning && !silent) return;
+            isScanning = false;
+            workers.forEach(w => { try { w.postMessage({ type: 'STOP' }); w.terminate(); } catch(e){} });
+            workers = [];
+            if (workerUrl) { URL.revokeObjectURL(workerUrl); workerUrl = null; }
+            clearInterval(speedInterval);
+            updateButtonState(false);
+            if (document.getElementById('scanStatusText').innerText === 'Scannen...') {
+                document.getElementById('scanStatusText').innerText = foundMatch ? 'Match gevonden!' : 'Gestopt';
+            }
+            if (!silent) log('Scan gestopt.', 'info');
         }
     </script>
 </body>
