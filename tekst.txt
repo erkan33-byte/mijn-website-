@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BIP39 Seed Phrase Herstel Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Ethers.js voor BIP39, HD Node derivatie en Wallet validatie -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" integrity="sha512-FDcvy+g7vc5CXKCBrCJqaYA0q6yU42KU2imD80YH29WpECP9/yvF4s1wM8M8a5lO-A5p53kU0/xY02D/E/4kWA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        code, pre { font-family: 'Fira Code', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1f2937; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
+
+    <!-- Koptekst -->
+    <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-indigo-600/20 text-indigo-400 rounded-lg border border-indigo-500/30">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">BIP39 Seed Phrase Herstel Tool</h1>
+                    <p class="text-xs text-slate-400">Multi-threaded Ethereum HD Wallet Permutatie Scanner</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3 text-xs bg-slate-800/60 px-3 py-1.5 rounded-full border border-slate-700">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="text-slate-300" id="threadCountDisplay">Threads: Web Workers Ondersteund</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hoofdcontainer -->
+    <main class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Linker Paneel: Configuratie & Invoer -->
+        <section class="lg:col-span-6 space-y-6">
+
+            <!-- Doelinstellingen -->
+            <div class="bg-slate-900 rounded-xl p-5 border border-slate-800 shadow-xl">
+                <h2 class="text-sm font-semibold uppercase tracking-wider text-indigo-400 mb-4 flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    Doel Configuratie
+                </h2>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Doel Ethereum Adres</label>
+                        <input type="text" id="targetAddress" value="0x9C2F44EFAd0c1E852a09dF9939e6DaF061140CaF" 
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-emerald-400 font-mono focus:outline-none focus:border-indigo-500 transition-colors">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Derivatie Pad</label>
+                            <input type="text" id="derivationPath" value="m/44'/60'/0'/0/0" 
+                                class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:outline-none focus:border-indigo-500 transition-colors">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Parallelle Werkthreads</label>
+                            <select id="workerCount" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+                                <option value="2">2 Threads</option>
+                                <option value="4" selected>4 Threads</option>
+                                <option value="8">8 Threads</option>
+                                <option value="16">16 Threads</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vaste Posities Rooster -->
+            <div class="bg-slate-900 rounded-xl p-5 border border-slate-800 shadow-xl space-y-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-sm font-semibold uppercase tracking-wider text-indigo-400 flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        12-Woords Seed Rooster (Positie 1 t/m 12)
+                    </h2>
+                    <span class="text-xs text-slate-500">Bekend of leeg laten voor onbekend</span>
+                </div>
+
+                <!-- 12 Woord Invoervelden -->
+                <div id="seedGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <!-- Wordt dynamisch gevuld via JavaScript -->
+                </div>
+            </div>
+
+            <!-- Kandidaat Woorden Pool -->
+            <div class="bg-slate-900 rounded-xl p-5 border border-slate-800 shadow-xl space-y-3">
+                <label class="block text-sm font-semibold uppercase tracking-wider text-indigo-400 flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                    Kandidaat Woorden Pool (voor onbekende posities)
+                </label>
+                <p class="text-xs text-slate-400">Woorden uit je kandidaatlijst (fiber, fork, forest, wood, hunter, rib, fresh, sing, song, goat, whistle). Je kunt deze hieronder aanpassen:</p>
+                <textarea id="candidateWords" rows="3" 
+                    class="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm text-indigo-300 font-mono focus:outline-none focus:border-indigo-500 transition-colors custom-scrollbar">fiber, fork, forest, wood, hunter, rib, fresh, sing, song, goat, whistle</textarea>
+            </div>
+
+            <!-- Besturingsknop -->
+            <div class="flex gap-4">
+                <button id="startBtn" onclick="toggleScan()" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2">
+                    <svg id="playIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span id="startBtnText">Start Herstel Scan</span>
+                </button>
+            </div>
+
+        </section>
+
+        <!-- Rechter Paneel: Statistieken & Logboeken -->
+        <section class="lg:col-span-6 space-y-6 flex flex-col">
+
+            <!-- Statistieken Dashboard -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
+                    <p class="text-xs text-slate-400 font-medium">Totaal Permutaties</p>
+                    <p id="statTotal" class="text-lg font-bold text-slate-200 mt-1">0</p>
+                </div>
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
+                    <p class="text-xs text-slate-400 font-medium">Getest / Snelheid</p>
+                    <p id="statSpeed" class="text-lg font-bold text-indigo-400 mt-1">0 <span class="text-xs text-slate-500 font-normal">/s</span></p>
+                </div>
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl col-span-2 sm:col-span-1">
+                    <p class="text-xs text-slate-400 font-medium">Voortgang</p>
+                    <p id="statProgress" class="text-lg font-bold text-emerald-400 mt-1">0,00%</p>
+                </div>
+            </div>
+
+            <!-- Voortgangsbalk -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl space-y-2">
+                <div class="flex justify-between text-xs text-slate-400">
+                    <span>Scan Status</span>
+                    <span id="scanStatusText" class="text-slate-300">In afwachting</span>
+                </div>
+                <div class="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden border border-slate-800">
+                    <div id="progressBar" class="bg-indigo-500 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Resultaat Banner -->
+            <div id="resultBanner" class="hidden bg-emerald-950/60 border border-emerald-500/50 rounded-xl p-5 shadow-2xl space-y-3 animate-fade-in">
+                <div class="flex items-center gap-2 text-emerald-400 font-bold">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    MATCH GEVONDEN!
+                </div>
+                <div class="space-y-1">
+                    <p class="text-xs text-slate-400">Gevonden Seed Phrase:</p>
+                    <p id="foundMnemonic" class="text-base font-mono font-bold text-white bg-slate-900/80 p-3 rounded-lg border border-emerald-500/30 select-all"></p>
+                </div>
+                <div class="space-y-1">
+                    <p class="text-xs text-slate-400">Gedefinieerd Adres:</p>
+                    <p id="foundAddress" class="text-xs font-mono text-emerald-300 select-all"></p>
+                </div>
+            </div>
+
+            <!-- Console Log Output -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl flex-1 flex flex-col min-h-[300px]">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        Uitvoer Logs
+                    </span>
+                    <button onclick="clearLogs()" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">Wis</button>
+                </div>
+                <div id="logOutput" class="flex-1 font-mono text-xs text-slate-300 space-y-1 overflow-y-auto max-h-[350px] custom-scrollbar bg-slate-950/60 p-3 rounded-lg border border-slate-800/80">
+                    <div class="text-slate-500">[Systeem] Gereed. Klik op 'Start Herstel Scan' om de permutaties te berekenen.</div>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Inline Web Worker Code -->
+    <script id="worker-code" type="javascript/worker">
+        importScripts('https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js');
+
+        self.onmessage = function(e) {
+            const { taskId, candidatesChunk, fixedGrid, targetAddress, derivationPath } = e.data;
+            const target = targetAddress.toLowerCase();
+            
+            let scanned = 0;
+            const batchSize = 100;
+
+            for (let i = 0; i < candidatesChunk.length; i++) {
+                const combo = candidatesChunk[i];
+                
+                let comboIdx = 0;
+                const phraseWords = [];
+                for (let pos = 0; pos < 12; pos++) {
+                    if (fixedGrid[pos] !== "") {
+                        phraseWords.push(fixedGrid[pos]);
+                    } else {
+                        phraseWords.push(combo[comboIdx]);
+                        comboIdx++;
+                    }
+                }
+
+                const mnemonic = phraseWords.join(' ');
+
+                if (ethers.utils.isValidMnemonic(mnemonic)) {
+                    try {
+                        const wallet = ethers.Wallet.fromMnemonic(mnemonic, derivationPath);
+                        if (wallet.address.toLowerCase() === target) {
+                            self.postMessage({
+                                type: 'FOUND',
+                                mnemonic: mnemonic,
+                                address: wallet.address
+                            });
+                            return;
+                        }
+                    } catch (err) {}
+                }
+
+                scanned++;
+
+                if (scanned % batchSize === 0 || i === candidatesChunk.length - 1) {
+                    self.postMessage({
+                        type: 'PROGRESS',
+                        count: scanned
+                    });
+                    scanned = 0;
+                }
+            }
+
+            self.postMessage({ type: 'DONE' });
+        };
+    </script>
+
+    <!-- Hoofd JavaScript Logica -->
+    <script>
+        // Vooringevulde bekende posities op basis van je screenshot: 1=dutch, 5=fog, 12=parrot
+        const initialKnown = {
+            0: "dutch",
+            4: "fog",
+            11: "parrot"
+        };
+
+        let workers = [];
+        let isScanning = false;
+        let totalPermutations = 0;
+        let totalScanned = 0;
+        let startTime = 0;
+        let speedInterval = null;
+
+        document.addEventListener("DOMContentLoaded", () => {
+            buildGrid();
+            detectHardware();
+        });
+
+        function detectHardware() {
+            const cores = navigator.hardwareConcurrency || 4;
+            const display = document.getElementById('threadCountDisplay');
+            display.innerText = `Threads: ${cores} Hardware Cores`;
+            document.getElementById('workerCount').value = Math.min(cores, 16);
+        }
+
+        function buildGrid() {
+            const gridContainer = document.getElementById('seedGrid');
+            gridContainer.innerHTML = '';
+
+            for (let i = 0; i < 12; i++) {
+                const val = initialKnown[i] || '';
+                const item = document.createElement('div');
+                item.className = 'relative';
+                item.innerHTML = `
+                    <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-0.5">Pos ${i + 1}</label>
+                    <input type="text" id="pos-${i}" value="${val}" placeholder="Onbekend" 
+                        class="w-full bg-slate-950 border ${val ? 'border-indigo-500/60 text-indigo-300' : 'border-slate-800 text-slate-200'} rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-indigo-500 transition-colors">
+                `;
+                gridContainer.appendChild(item);
+            }
+        }
+
+        function log(msg, type = 'info') {
+            const output = document.getElementById('logOutput');
+            const entry = document.createElement('div');
+            const time = new Date().toLocaleTimeString();
+            
+            let colorClass = 'text-slate-300';
+            if (type === 'success') colorClass = 'text-emerald-400 font-bold';
+            if (type === 'error') colorClass = 'text-rose-400';
+            if (type === 'warn') colorClass = 'text-amber-400';
+
+            entry.className = colorClass;
+            entry.innerHTML = `<span class="text-slate-600">[${time}]</span> ${msg}`;
+            output.appendChild(entry);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('logOutput').innerHTML = '';
+        }
+
+        function getPermutations(arr, k) {
+            if (k === 0) return [[]];
+            if (arr.length === 0) return [];
+            
+            const results = [];
+            for (let i = 0; i < arr.length; i++) {
+                const current = arr[i];
+                const remaining = arr.slice(0, i).concat(arr.slice(i + 1));
+                const innerPerms = getPermutations(remaining, k - 1);
+                for (let perm of innerPerms) {
+                    results.push([current, ...perm]);
+                }
+            }
+            return results;
+        }
+
+        function toggleScan() {
+            if (isScanning) {
+                stopScan();
+            } else {
+                startScan();
+            }
+        }
+
+        function startScan() {
+            const fixedGrid = [];
+            let unknownCount = 0;
+
+            for (let i = 0; i < 12; i++) {
+                const val = document.getElementById(`pos-${i}`).value.trim().toLowerCase();
+                fixedGrid.push(val);
+                if (!val) unknownCount++;
+            }
+
+            const candidateRaw = document.getElementById('candidateWords').value;
+            const candidates = candidateRaw
+                .split(/[\s,]+/)
+                .map(w => w.trim().toLowerCase())
+                .filter(w => w.length > 0);
+
+            log(`Geparseerd: ${candidates.length} kandidaat-woorden voor ${unknownCount} onbekende posities.`, 'info');
+
+            if (candidates.length < unknownCount) {
+                log(`Fout: Minstens ${unknownCount} kandidaat-woorden vereist voor de onbekende plekken, maar er zijn er slechts ${candidates.length} opgegeven. Voeg meer woorden toe aan de pool.`, 'error');
+                return;
+            }
+
+            const targetAddress = document.getElementById('targetAddress').value.trim();
+            const derivationPath = document.getElementById('derivationPath').value.trim();
+
+            if (!ethers.utils.isAddress(targetAddress)) {
+                log('Ongeldig Ethereum doeladres formaat.', 'error');
+                return;
+            }
+
+            log(`Permutaties genereren voor ${unknownCount} onbekende posities uit ${candidates.length} kandidaten...`, 'warn');
+
+            const permutations = getPermutations(candidates, unknownCount);
+            totalPermutations = permutations.length;
+
+            document.getElementById('statTotal').innerText = totalPermutations.toLocaleString();
+            log(`Totaal gegenereerde permutaties: ${totalPermutations.toLocaleString()}`, 'info');
+
+            if (totalPermutations === 0) {
+                log('Geen geldige permutaties gegenereerd. Controleer de invoer.', 'error');
+                return;
+            }
+
+            isScanning = true;
+            totalScanned = 0;
+            startTime = Date.now();
+            document.getElementById('startBtnText').innerText = 'Stop Herstel Scan';
+            document.getElementById('startBtn').className = 'flex-1 bg-rose-600 hover:bg-rose-500 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2';
+            document.getElementById('scanStatusText').innerText = 'Scannen...';
+            document.getElementById('resultBanner').classList.add('hidden');
+
+            const workerCount = parseInt(document.getElementById('workerCount').value);
+            const chunkSize = Math.ceil(totalPermutations / workerCount);
+
+            const workerCode = document.getElementById('worker-code').textContent;
+            const blob = new Blob([workerCode], { type: 'application/javascript' });
+            const workerUrl = URL.createObjectURL(blob);
+
+            workers = [];
+
+            for (let i = 0; i < workerCount; i++) {
+                const startIdx = i * chunkSize;
+                const endIdx = Math.min(startIdx + chunkSize, totalPermutations);
+                const chunk = permutations.slice(startIdx, endIdx);
+
+                if (chunk.length === 0) break;
+
+                const worker = new Worker(workerUrl);
+                
+                worker.onmessage = function(e) {
+                    const data = e.data;
+                    if (data.type === 'PROGRESS') {
+                        totalScanned += data.count;
+                        updateProgress();
+                    } else if (data.type === 'FOUND') {
+                        onMatchFound(data.mnemonic, data.address);
+                    } else if (data.type === 'DONE') {
+                        // Worker klaar
+                    }
+                };
+
+                worker.postMessage({
+                    taskId: i,
+                    candidatesChunk: chunk,
+                    fixedGrid: fixedGrid,
+                    targetAddress: targetAddress,
+                    derivationPath: derivationPath
+                });
+
+                workers.push(worker);
+            }
+
+            speedInterval = setInterval(updateSpeed, 500);
+            log(`${workers.length} parallelle Web Worker threads gestart. Scan loopt...`, 'info');
+        }
+
+        function updateProgress() {
+            const pct = Math.min((totalScanned / totalPermutations) * 100, 100).toFixed(2);
+            document.getElementById('progressBar').style.width = `${pct}%`;
+            document.getElementById('statProgress').innerText = `${pct.replace('.', ',')}%`;
+
+            if (totalScanned >= totalPermutations && isScanning) {
+                log('Scan voltooid. Geen overeenkomend adres gevonden in de permutatie-pool.', 'warn');
+                stopScan();
+            }
+        }
+
+        function updateSpeed() {
+            const elapsed = (Date.now() - startTime) / 1000;
+            if (elapsed > 0) {
+                const speed = Math.round(totalScanned / elapsed);
+                document.getElementById('statSpeed').innerHTML = `${speed.toLocaleString()} <span class="text-xs text-slate-500 font-normal">/s</span>`;
+            }
+        }
+
+        function onMatchFound(mnemonic, address) {
+            stopScan();
+            log(`SUCCES! Overeenkomst gevonden! Adres: ${address}`, 'success');
+            log(`Seed Phrase: ${mnemonic}`, 'success');
+
+            document.getElementById('foundMnemonic').innerText = mnemonic;
+            document.getElementById('foundAddress').innerText = address;
+            document.getElementById('resultBanner').classList.remove('hidden');
+        }
+
+        function stopScan() {
+            isScanning = false;
+            workers.forEach(w => w.terminate());
+            workers = [];
+            clearInterval(speedInterval);
+
+            document.getElementById('startBtnText').innerText = 'Start Herstel Scan';
+            document.getElementById('startBtn').className = 'flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2';
+            document.getElementById('scanStatusText').innerText = 'Gestopt';
+            log('Scan uitvoering gestopt.', 'info');
+        }
+    </script>
+</body>
+</html>
