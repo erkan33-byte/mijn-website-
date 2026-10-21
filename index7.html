@@ -160,31 +160,61 @@
         </section>
     </main>
 
-    <!-- Worker: doet de zware crypto op een aparte thread -->
+    <!-- Worker Code -->
     <script id="worker-code" type="javascript/worker">
-        importScripts('https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js');
-
         let stopFlag = false;
 
         self.onmessage = function(e) {
-            const { type, permutations, fixedGrid, unknownIdx, targetAddress, derivationPath } = e.data;
+            const { type, startIndex, endIndex, candidates, fixedGrid, unknownIdx, targetAddress, derivationPath, ethersScriptUrl } = e.data;
             if (type === 'STOP') { stopFlag = true; return; }
 
+            try {
+                if (typeof ethers === 'undefined') {
+                    importScripts(ethersScriptUrl);
+                }
+            } catch (err) {
+                self.postMessage({ type: 'ERROR', message: 'Kan ethers.js niet laden in worker: ' + err.message });
+                return;
+            }
+
+            const k = unknownIdx.length;
+            const n = candidates.length;
             const target = targetAddress.toLowerCase();
             let scanned = 0;
             let lastReport = Date.now();
 
-            for (let i = 0; i < permutations.length; i++) {
+            // Bepaal de p-de permutatie van n kiest k zonder alles in het geheugen te laden
+            function getPermutationAt(index, pool, selectCount) {
+                let available = [...pool];
+                let currentIdx = index;
+                const result = [];
+                for (let i = 0; i < selectCount; i++) {
+                    const remainingP = factoriter(available.length - 1, selectCount - 1 - i);
+                    const selIdx = Math.floor(currentIdx / remainingP);
+                    result.push(available[selIdx]);
+                    available.splice(selIdx, 1);
+                    currentIdx %= remainingP;
+                }
+                return result;
+            }
+
+            function factoriter(n, k) {
+                let res = 1;
+                for (let i = 0; i < k; i++) res *= (n - i);
+                return res;
+            }
+
+            for (let idx = startIndex; idx < endIndex; idx++) {
                 if (stopFlag) { self.postMessage({ type: 'STOPPED' }); return; }
 
-                const combo = permutations[i];
+                const combo = getPermutationAt(idx, candidates, k);
                 const phraseWords = new Array(12);
 
                 for (let p = 0; p < 12; p++) {
                     if (fixedGrid[p] !== '') phraseWords[p] = fixedGrid[p];
                 }
-                for (let k = 0; k < unknownIdx.length; k++) {
-                    phraseWords[unknownIdx[k]] = combo[k];
+                for (let m = 0; m < k; m++) {
+                    phraseWords[unknownIdx[m]] = combo[m];
                 }
 
                 const mnemonic = phraseWords.join(' ');
@@ -196,11 +226,11 @@
                             self.postMessage({ type: 'FOUND', mnemonic: mnemonic, address: wallet.address });
                             return;
                         }
-                    } catch (err) { /* skip ongeldige */ }
+                    } catch (err) {}
                 }
 
                 scanned++;
-                if (Date.now() - lastReport > 250) {
+                if (Date.now() - lastReport > 200) {
                     self.postMessage({ type: 'PROGRESS', count: scanned });
                     scanned = 0;
                     lastReport = Date.now();
@@ -214,6 +244,7 @@
 
     <script>
         const initialKnown = { 0: "dutch", 4: "fog", 11: "parrot" };
+        const ETHERS_CDN_URL = 'https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js';
 
         let workers = [];
         let isScanning = false;
@@ -231,7 +262,7 @@
             if (typeof ethers === 'undefined') {
                 log('WAARSCHUWING: ethers.js kon niet worden geladen van CDN. Controleer je internetverbinding.', 'error');
             } else {
-                log('ethers.js geladen. Gereed.', 'info');
+                log('Systeem gereed. ethers.js succesvol geladen.', 'info');
             }
         });
 
@@ -277,28 +308,6 @@
             document.getElementById('logOutput').innerHTML = '';
         }
 
-        // Veilige niet-recursieve permutatie generator om stack overflows te voorkomen
-        function generatePermutationsArray(arr, k) {
-            const results = [];
-            const n = arr.length;
-            const indices = Array.from({length: n}, (_, i) => i);
-            
-            function permute(current, remainingIndices) {
-                if (current.length === k) {
-                    results.push(current.map(i => arr[i]));
-                    return;
-                }
-                for (let i = 0; i < remainingIndices.length; i++) {
-                    const nextIndices = [...remainingIndices];
-                    const extracted = nextIndices.splice(i, 1)[0];
-                    permute([...current, extracted], nextIndices);
-                }
-            }
-            
-            permute([], indices);
-            return results;
-        }
-
         function countPermutations(n, k) {
             let r = 1;
             for (let i = 0; i < k; i++) r *= (n - i);
@@ -312,7 +321,7 @@
 
         function startScan() {
             if (typeof ethers === 'undefined') {
-                log('Kan niet starten: ethers.js niet geladen.', 'error');
+                log('Kan niet starten: ethers.js is niet geladen.', 'error');
                 return;
             }
 
@@ -340,7 +349,7 @@
             }
 
             if (candidates.length < unknownCount) {
-                log(`Fout: Minstens ${unknownCount} kandidaten vereist, maar er zijn er ${candidates.length}.`, 'error');
+                log(`Fout: Minstens ${unknownCount} kandidaten vereist, maar er zijn er slechts ${candidates.length}.`, 'error');
                 return;
             }
 
@@ -354,16 +363,11 @@
 
             totalPermutations = countPermutations(candidates.length, unknownCount);
             document.getElementById('statTotal').innerText = totalPermutations.toLocaleString();
-            log(`Totaal permutaties: ${totalPermutations.toLocaleString()}`, 'info');
-
-            if (totalPermutations > 50_000_000) {
-                log(`WAARSCHUWING: ${totalPermutations.toLocaleString()} permutaties is extreem veel. Dit kan dagen duren.`, 'warn');
-            }
+            log(`Totaal berekende permutaties: ${totalPermutations.toLocaleString()}`, 'info');
 
             isScanning = true;
             totalScanned = 0;
             startTime = Date.now();
-            activeWorkerCount = 0;
             updateButtonState(true);
 
             document.getElementById('scanStatusText').innerText = 'Scannen...';
@@ -372,68 +376,68 @@
             document.getElementById('statProgress').innerText = '0,00%';
             document.getElementById('statSpeed').innerHTML = '0 <span class="text-xs text-slate-500 font-normal">/s</span>';
 
-            const workerCount = Math.min(parseInt(document.getElementById('workerCount').value), totalPermutations);
-            
-            log('Permutaties genereren in geheugen...', 'info');
-            setTimeout(() => {
-                const allPerms = generatePermutationsArray(candidates, unknownCount);
-                const chunkSize = Math.ceil(allPerms.length / workerCount);
-                const chunks = [];
+            const requestedWorkerCount = parseInt(document.getElementById('workerCount').value);
+            const workerCount = Math.min(requestedWorkerCount, totalPermutations);
+            const chunkSize = Math.ceil(totalPermutations / workerCount);
 
-                for (let i = 0; i < allPerms.length; i += chunkSize) {
-                    chunks.push(allPerms.slice(i, i + chunkSize));
-                }
+            const workerCode = document.getElementById('worker-code').textContent;
+            const blob = new Blob([workerCode], { type: 'application/javascript' });
+            workerUrl = URL.createObjectURL(blob);
 
-                const workerCode = document.getElementById('worker-code').textContent;
-                const blob = new Blob([workerCode], { type: 'application/javascript' });
-                workerUrl = URL.createObjectURL(blob);
+            workers = [];
+            activeWorkerCount = workerCount;
 
-                workers = [];
-                activeWorkerCount = chunks.length;
+            for (let i = 0; i < workerCount; i++) {
+                const startIndex = i * chunkSize;
+                const endIndex = Math.min(startIndex + chunkSize, totalPermutations);
 
-                chunks.forEach((chunk) => {
-                    const worker = new Worker(workerUrl);
+                const worker = new Worker(workerUrl);
 
-                    worker.onmessage = function(e) {
-                        const data = e.data;
-                        if (data.type === 'PROGRESS') {
-                            totalScanned += data.count;
-                            updateProgress();
-                        } else if (data.type === 'FOUND') {
-                            if (!foundMatch) {
-                                foundMatch = true;
-                                onMatchFound(data.mnemonic, data.address);
-                            }
-                        } else if (data.type === 'DONE') {
-                            activeWorkerCount--;
-                            if (activeWorkerCount === 0 && isScanning && !foundMatch) {
-                                log('Scan voltooid. Geen overeenkomend adres gevonden.', 'warn');
-                                stopScan(true);
-                            }
-                        } else if (data.type === 'STOPPED') {
-                            activeWorkerCount--;
+                worker.onmessage = function(e) {
+                    const data = e.data;
+                    if (data.type === 'PROGRESS') {
+                        totalScanned += data.count;
+                        updateProgress();
+                    } else if (data.type === 'FOUND') {
+                        if (!foundMatch) {
+                            foundMatch = true;
+                            onMatchFound(data.mnemonic, data.address);
                         }
-                    };
+                    } else if (data.type === 'DONE') {
+                        activeWorkerCount--;
+                        if (activeWorkerCount === 0 && isScanning && !foundMatch) {
+                            log('Scan voltooid. Geen overeenkomend adres gevonden.', 'warn');
+                            stopScan(true);
+                        }
+                    } else if (data.type === 'ERROR') {
+                        log(`Worker Fout: ${data.message}`, 'error');
+                        stopScan(true);
+                    } else if (data.type === 'STOPPED') {
+                        activeWorkerCount--;
+                    }
+                };
 
-                    worker.onerror = (err) => {
-                        log(`Worker fout: ${err.message}`, 'error');
-                    };
+                worker.onerror = (err) => {
+                    log(`Fout in Worker thread ${i + 1}: ${err.message}`, 'error');
+                };
 
-                    worker.postMessage({
-                        type: 'START',
-                        permutations: chunk,
-                        fixedGrid: fixedGrid,
-                        unknownIdx: unknownIdx,
-                        targetAddress: targetAddress,
-                        derivationPath: derivationPath
-                    });
-
-                    workers.push(worker);
+                worker.postMessage({
+                    type: 'START',
+                    startIndex: startIndex,
+                    endIndex: endIndex,
+                    candidates: candidates,
+                    fixedGrid: fixedGrid,
+                    unknownIdx: unknownIdx,
+                    targetAddress: targetAddress,
+                    derivationPath: derivationPath,
+                    ethersScriptUrl: ETHERS_CDN_URL
                 });
 
-                speedInterval = setInterval(updateSpeed, 500);
-                log(`${chunks.length} parallelle Web Worker threads gestart.`, 'info');
-            }, 50);
+                workers.push(worker);
+            }
+
+            speedInterval = setInterval(updateSpeed, 500);
+            log(`${workerCount} Web Worker threads gestart zonder geheugenbelasting.`, 'info');
         }
 
         function testSingle(fixedGrid) {
