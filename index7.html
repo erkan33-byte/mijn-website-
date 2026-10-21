@@ -180,18 +180,15 @@
                 const combo = permutations[i];
                 const phraseWords = new Array(12);
 
-                // Vul vaste posities in
                 for (let p = 0; p < 12; p++) {
                     if (fixedGrid[p] !== '') phraseWords[p] = fixedGrid[p];
                 }
-                // Vul onbekende posities in
                 for (let k = 0; k < unknownIdx.length; k++) {
                     phraseWords[unknownIdx[k]] = combo[k];
                 }
 
                 const mnemonic = phraseWords.join(' ');
 
-                // Snelle checksum-check EERST (goedkoop, filtert 93% weg)
                 if (ethers.utils.isValidMnemonic(mnemonic)) {
                     try {
                         const wallet = ethers.Wallet.fromMnemonic(mnemonic, derivationPath);
@@ -203,7 +200,6 @@
                 }
 
                 scanned++;
-                // Stuur elke 250ms een voortgangsbericht
                 if (Date.now() - lastReport > 250) {
                     self.postMessage({ type: 'PROGRESS', count: scanned });
                     scanned = 0;
@@ -217,7 +213,6 @@
     </script>
 
     <script>
-        // Bekende posities: 1=dutch, 5=fog, 12=parrot (0-based: 0, 4, 11)
         const initialKnown = { 0: "dutch", 4: "fog", 11: "parrot" };
 
         let workers = [];
@@ -282,21 +277,26 @@
             document.getElementById('logOutput').innerHTML = '';
         }
 
-        // Lazy permutatie-generator (geen geheugen-explosie)
-        function* permutationsIterator(arr, k) {
+        // Veilige niet-recursieve permutatie generator om stack overflows te voorkomen
+        function generatePermutationsArray(arr, k) {
+            const results = [];
             const n = arr.length;
-            const idx = new Array(k).fill(0);
-            const used = new Array(n).fill(false);
-            function* recurse(depth) {
-                if (depth === k) { yield idx.map(i => arr[i]); return; }
-                for (let i = 0; i < n; i++) {
-                    if (used[i]) continue;
-                    used[i] = true; idx[depth] = i;
-                    yield* recurse(depth + 1);
-                    used[i] = false;
+            const indices = Array.from({length: n}, (_, i) => i);
+            
+            function permute(current, remainingIndices) {
+                if (current.length === k) {
+                    results.push(current.map(i => arr[i]));
+                    return;
+                }
+                for (let i = 0; i < remainingIndices.length; i++) {
+                    const nextIndices = [...remainingIndices];
+                    const extracted = nextIndices.splice(i, 1)[0];
+                    permute([...current, extracted], nextIndices);
                 }
             }
-            yield* recurse(0);
+            
+            permute([], indices);
+            return results;
         }
 
         function countPermutations(n, k) {
@@ -373,74 +373,67 @@
             document.getElementById('statSpeed').innerHTML = '0 <span class="text-xs text-slate-500 font-normal">/s</span>';
 
             const workerCount = Math.min(parseInt(document.getElementById('workerCount').value), totalPermutations);
-            const chunkSize = Math.ceil(totalPermutations / workerCount);
+            
+            log('Permutaties genereren in geheugen...', 'info');
+            setTimeout(() => {
+                const allPerms = generatePermutationsArray(candidates, unknownCount);
+                const chunkSize = Math.ceil(allPerms.length / workerCount);
+                const chunks = [];
 
-            const workerCode = document.getElementById('worker-code').textContent;
-            const blob = new Blob([workerCode], { type: 'application/javascript' });
-            workerUrl = URL.createObjectURL(blob);
-
-            workers = [];
-
-            // Verdeel de iterator in stukken per worker
-            const allPerms = permutationsIterator(candidates, unknownCount);
-            const chunks = [];
-            let currentChunk = [];
-            let totalEnumerated = 0;
-
-            for (const perm of allPerms) {
-                currentChunk.push(perm);
-                totalEnumerated++;
-                if (currentChunk.length >= chunkSize || totalEnumerated >= totalPermutations) {
-                    chunks.push(currentChunk);
-                    currentChunk = [];
+                for (let i = 0; i < allPerms.length; i += chunkSize) {
+                    chunks.push(allPerms.slice(i, i + chunkSize));
                 }
-            }
-            if (currentChunk.length > 0) chunks.push(currentChunk);
 
-            activeWorkerCount = chunks.length;
+                const workerCode = document.getElementById('worker-code').textContent;
+                const blob = new Blob([workerCode], { type: 'application/javascript' });
+                workerUrl = URL.createObjectURL(blob);
 
-            chunks.forEach((chunk, i) => {
-                const worker = new Worker(workerUrl);
+                workers = [];
+                activeWorkerCount = chunks.length;
 
-                worker.onmessage = function(e) {
-                    const data = e.data;
-                    if (data.type === 'PROGRESS') {
-                        totalScanned += data.count;
-                        updateProgress();
-                    } else if (data.type === 'FOUND') {
-                        if (!foundMatch) {
-                            foundMatch = true;
-                            onMatchFound(data.mnemonic, data.address);
+                chunks.forEach((chunk) => {
+                    const worker = new Worker(workerUrl);
+
+                    worker.onmessage = function(e) {
+                        const data = e.data;
+                        if (data.type === 'PROGRESS') {
+                            totalScanned += data.count;
+                            updateProgress();
+                        } else if (data.type === 'FOUND') {
+                            if (!foundMatch) {
+                                foundMatch = true;
+                                onMatchFound(data.mnemonic, data.address);
+                            }
+                        } else if (data.type === 'DONE') {
+                            activeWorkerCount--;
+                            if (activeWorkerCount === 0 && isScanning && !foundMatch) {
+                                log('Scan voltooid. Geen overeenkomend adres gevonden.', 'warn');
+                                stopScan(true);
+                            }
+                        } else if (data.type === 'STOPPED') {
+                            activeWorkerCount--;
                         }
-                    } else if (data.type === 'DONE') {
-                        activeWorkerCount--;
-                        if (activeWorkerCount === 0 && isScanning && !foundMatch) {
-                            log('Scan voltooid. Geen overeenkomend adres gevonden.', 'warn');
-                            stopScan(true);
-                        }
-                    } else if (data.type === 'STOPPED') {
-                        activeWorkerCount--;
-                    }
-                };
+                    };
 
-                worker.onerror = (err) => {
-                    log(`Worker fout: ${err.message}`, 'error');
-                };
+                    worker.onerror = (err) => {
+                        log(`Worker fout: ${err.message}`, 'error');
+                    };
 
-                worker.postMessage({
-                    type: 'START',
-                    permutations: chunk,
-                    fixedGrid: fixedGrid,
-                    unknownIdx: unknownIdx,
-                    targetAddress: targetAddress,
-                    derivationPath: derivationPath
+                    worker.postMessage({
+                        type: 'START',
+                        permutations: chunk,
+                        fixedGrid: fixedGrid,
+                        unknownIdx: unknownIdx,
+                        targetAddress: targetAddress,
+                        derivationPath: derivationPath
+                    });
+
+                    workers.push(worker);
                 });
 
-                workers.push(worker);
-            });
-
-            speedInterval = setInterval(updateSpeed, 500);
-            log(`${chunks.length} parallelle Web Worker threads gestart.`, 'info');
+                speedInterval = setInterval(updateSpeed, 500);
+                log(`${chunks.length} parallelle Web Worker threads gestart.`, 'info');
+            }, 50);
         }
 
         function testSingle(fixedGrid) {
