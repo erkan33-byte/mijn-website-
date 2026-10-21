@@ -194,7 +194,7 @@
             buildGrid();
         });
 
-            function buildGrid() {
+        function buildGrid() {
             const gridContainer = document.getElementById('seedGrid');
             gridContainer.innerHTML = '';
 
@@ -231,13 +231,6 @@
             document.getElementById('logOutput').innerHTML = '';
         }
 
-        // Factorial helper om exact aantal permutaties te berekenen zonder array aan te maken
-        function factorial(n) {
-            let res = 1;
-            for (let i = 2; i <= n; i++) res *= i;
-            return res;
-        }
-
         function permutationCount(n, k) {
             let res = 1;
             for (let i = 0; i < k; i++) {
@@ -246,7 +239,6 @@
             return res;
         }
 
-        // Generator om permutaties on-the-fly (lazy) te genereren zonder geheugenoverbelasting
         function* generatePermutations(arr, k) {
             if (k === 0) {
                 yield [];
@@ -318,7 +310,7 @@
             document.getElementById('resultBanner').classList.add('hidden');
 
             speedInterval = setInterval(updateSpeed, 500);
-            log(`Scan gestart in asynchrone batches...`, 'info');
+            log(`Scan gestart... Teller en snelheid worden nu bijgewerkt.`, 'info');
 
             const permGenerator = generatePermutations(candidates, unknownCount);
             const batchSize = parseInt(document.getElementById('workerCount').value) || 2000;
@@ -356,16 +348,15 @@
 
                     const mnemonic = phraseWords.join(' ');
 
-                    if (ethers.utils.isValidMnemonic(mnemonic)) {
-                        try {
-                            const wallet = ethers.Wallet.fromMnemonic(mnemonic, derivationPath);
-                            if (wallet.address.toLowerCase() === target) {
-                                foundMatch = true;
-                                onMatchFound(mnemonic, wallet.address);
-                                return;
-                            }
-                        } catch (err) {}
-                    }
+                    try {
+                        // Direct via fromMnemonic; als de zin ongeldig is (checksum/woorden), gooit dit automatisch een error
+                        const wallet = ethers.Wallet.fromMnemonic(mnemonic, derivationPath);
+                        if (wallet.address.toLowerCase() === target) {
+                            foundMatch = true;
+                            onMatchFound(mnemonic, wallet.address);
+                            return;
+                        }
+                    } catch (err) {}
                 }
 
                 updateProgress();
