@@ -27,7 +27,7 @@
                 </div>
                 <div>
                     <h1 class="text-xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">BIP39 Seed Phrase Herstel Tool</h1>
-                    <p class="text-xs text-slate-400">Multi-threaded Ethereum HD Wallet Permutatie Scanner</p>
+                    <p class="text-xs text-slate-400">Geoptimaliseerde Multi-threaded Ethereum HD Wallet Permutatie Scanner</p>
                 </div>
             </div>
             <div class="flex items-center gap-3 text-xs bg-slate-800/60 px-3 py-1.5 rounded-full border border-slate-700">
@@ -160,7 +160,7 @@
         </section>
     </main>
 
-    <!-- Worker Code -->
+    <!-- Optimized Worker Code -->
     <script id="worker-code" type="javascript/worker">
         let stopFlag = false;
 
@@ -183,37 +183,45 @@
             let scanned = 0;
             let lastReport = Date.now();
 
-            function getPermutationAt(index, pool, selectCount) {
-                let available = [...pool];
-                let currentIdx = index;
-                const result = [];
-                for (let i = 0; i < selectCount; i++) {
-                    const remainingP = factoriter(available.length - 1, selectCount - 1 - i);
-                    const selIdx = Math.floor(currentIdx / remainingP);
-                    result.push(available[selIdx]);
-                    available.splice(selIdx, 1);
-                    currentIdx %= remainingP;
-                }
-                return result;
-            }
-
             function factoriter(n, k) {
                 let res = 1;
                 for (let i = 0; i < k; i++) res *= (n - i);
                 return res;
             }
 
+            // Pre-allocate buffers to prevent Garbage Collection (GC) pressure in loop
+            const indicesBuf = new Array(n);
+            const combo = new Array(k);
+            const phraseWords = new Array(12);
+
+            // Pre-fill fixed positions once
+            for (let p = 0; p < 12; p++) {
+                phraseWords[p] = fixedGrid[p] !== '' ? fixedGrid[p] : '';
+            }
+
+            function getPermutationAt(index) {
+                for (let i = 0; i < n; i++) indicesBuf[i] = i;
+                let currentIdx = index;
+                for (let i = 0; i < k; i++) {
+                    const remainingP = factoriter(n - 1 - i, k - 1 - i);
+                    const selIdx = Math.floor(currentIdx / remainingP);
+                    combo[i] = candidates[indicesBuf[selIdx]];
+                    // Shift indices buffer without expensive array allocation / splice
+                    for (let j = selIdx; j < n - 1 - i; j++) {
+                        indicesBuf[j] = indicesBuf[j + 1];
+                    }
+                    currentIdx %= remainingP;
+                }
+                return combo;
+            }
+
             for (let idx = startIndex; idx < endIndex; idx++) {
                 if (stopFlag) { self.postMessage({ type: 'STOPPED' }); return; }
 
-                const combo = getPermutationAt(idx, candidates, k);
-                const phraseWords = new Array(12);
+                const perm = getPermutationAt(idx);
 
-                for (let p = 0; p < 12; p++) {
-                    if (fixedGrid[p] !== '') phraseWords[p] = fixedGrid[p];
-                }
                 for (let m = 0; m < k; m++) {
-                    phraseWords[unknownIdx[m]] = combo[m];
+                    phraseWords[unknownIdx[m]] = perm[m];
                 }
 
                 const mnemonic = phraseWords.join(' ');
@@ -436,7 +444,7 @@
             }
 
             speedInterval = setInterval(updateSpeed, 500);
-            log(`${workerCount} Web Worker threads gestart zonder geheugenbelasting.`, 'info');
+            log(`${workerCount} geoptimaliseerde Web Worker threads gestart.`, 'info');
         }
 
         function testSingle(fixedGrid) {
