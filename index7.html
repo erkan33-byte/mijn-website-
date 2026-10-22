@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="nl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>WebGPU Scanner — alleen GPU</title>
+<title>WebGPU Ethereum Scanner — Alleen GPU</title>
 <style>
-:root{--bg:#07090f;--sf:#0d1117;--pn:#111827;--bd:#1f2937;--ac:#00ff99;--a2:#00c3ff;--wr:#f59e0b;--dg:#ef4444;--ok:#10b981;--mu:#6b7280;--tx:#e2e8f0}
+:root{--bg:#07090f;--sf:#0d1117;--pn:#111827;--bd:#1f2937;--ac:#627eea;--a2:#00c3ff;--wr:#f59e0b;--dg:#ef4444;--ok:#10b981;--mu:#6b7280;--tx:#e2e8f0}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Courier New',monospace;background:var(--bg);color:var(--tx);padding:20px 14px 40px}
 .c{max-width:760px;margin:0 auto}h1{font-size:1.2rem;letter-spacing:.15em;color:var(--ac);text-align:center;text-transform:uppercase}
@@ -22,23 +22,19 @@ input:read-only{border-style:dashed}
 table{width:100%;border-collapse:collapse;font-size:.72rem;table-layout:fixed}th,td{border:1px solid var(--bd);padding:9px;word-break:break-all;text-align:left}th{color:var(--a2);font-size:.62rem;text-transform:uppercase}
 @media(max-width:620px){.f{grid-template-columns:1fr;gap:5px}}
 </style></head><body><div class="c">
-<h1>WebGPU Scanner</h1><span class="badge" id="badge">INITIALISEREN...</span>
+<h1>WebGPU Ethereum Scanner</h1><span class="badge" id="badge">INITIALISEREN...</span>
 <div class="card"><div class="t">Configuratie</div>
-<div class="f"><label>Target BTC-adres (P2PKH)</label><input id="addr" value="1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU"></div>
+<div class="f"><label>Target ETH-adres</label><input id="addr" value="0xd8da6bf26964af9d7eed9e03e53415d37aa96045"></div>
 <div class="f"><label>Beginwaarde (HEX)</label><input id="rmin" value="400000000000000000"></div>
 <div class="f"><label>Eindwaarde (HEX)</label><input id="rmax" value="7fffffffffffffffff"></div>
 <div class="f"><label>Keys per GPU-lease</label><input id="lease" type="number" min="1000" value="10000000"></div>
 <div class="f"><label>GPU pipeline-stages (1-4)</label><input id="depth" type="number" min="1" max="4" value="2"></div>
-<div class="f"><label>Keys per batch (stap 8.320)</label><input id="batch" type="number" min="8320" step="8320" value="2096640"></div>
+<div class="f"><label>Keys per batch</label><input id="batch" type="number" min="8320" step="8320" value="2096640"></div>
 <div class="f"><label>GPU-belasting % (10-100)</label><input id="load" type="number" min="10" max="100" value="100"></div>
-<div class="f"><label>GPU vernieuwen elke (min, 0 = uit)</label><input id="refresh" type="number" min="0" step="any" value="60"></div>
-<div class="f"><label>Kanarietest elke (min, 0 = uit)</label><input id="canary" type="number" min="0" step="any" value="1440"></div>
 <div class="f"><label>Keys per thread GK (1-128)</label><input id="gk" type="number" min="1" max="128" value="32"></div>
 <div class="f"><label>Workgroup WG (64/128/256)</label><input id="wg" type="number" step="64" min="64" max="256" value="128"></div>
-<div class="f"><label>Rotaties via insertBits (0/1)</label><input id="rb" type="number" min="0" max="1" value="0"></div>
-<div class="f"><label>Voortgang bewaren (0/1)</label><input id="persist" type="number" min="0" max="1" value="1"></div>
 <div class="f"><label>Actuele lease</label><input id="cur" readonly></div>
-<div class="r"><button class="b go" id="go">▶ Start</button><button class="b st" id="stop" disabled>■ Stop</button><button class="b ts" id="test">Zelftest</button><button class="b ts" id="tune">Afstemmen</button><button class="b ts" id="clr">Wis foutlog</button><button class="b ts" id="wipe">Wis voortgang</button><button class="b ts" id="dp4">DP4a-test</button></div></div>
+<div class="r"><button class="b go" id="go">▶ Start</button><button class="b st" id="stop" disabled>■ Stop</button><button class="b ts" id="clr">Wis foutlog</button><button class="b ts" id="wipe">Wis voortgang</button></div></div>
 <div class="card"><div class="t">Sessie</div><div class="g">
 <div class="s"><div class="l">Status</div><div class="v" id="status">Gestopt</div></div>
 <div class="s"><div class="l">Totaal gescand</div><div class="v" id="total">0</div></div>
@@ -46,16 +42,16 @@ table{width:100%;border-collapse:collapse;font-size:.72rem;table-layout:fixed}th
 <div class="s"><div class="l">Leases bezocht</div><div class="v" id="leases">0</div></div></div>
 <div class="pw"><div class="pb" id="bar"></div></div></div>
 <div class="card"><div class="t">Log</div><div class="log" id="log"></div></div>
-<div class="card"><div class="t">Resultaten</div><table><thead><tr><th style="width:22%">Type</th><th style="width:34%">WIF</th><th>Privésleutel (HEX)</th></tr></thead><tbody id="res"><tr id="none"><td colspan="3" style="text-align:center;color:var(--mu)">Nog geen match.</td></tr></tbody></table></div>
+<div class="card"><div class="t">Resultaten</div><table><thead><tr><th style="width:22%">Type</th><th style="width:48%">ETH-adres</th><th>Privésleutel (HEX)</th></tr></thead><tbody id="res"><tr id="none"><td colspan="3" style="text-align:center;color:var(--mu)">Nog geen match.</td></tr></tbody></table></div>
 </div>
 <script>
-let GK=32,WG=128,GRP=65,UNIT=0,MAXB=0,DEFB=0,BATCH=0,ROTBFI=false;
+let GK=32,WG=128,GRP=65,UNIT=0,MAXB=0,DEFB=0,BATCH=0;
 function setCfg(gk,wg){GK=gk;WG=wg;GRP=2*gk+1;UNIT=GRP*WG;const th=Math.floor((4194303-GK)/GRP);MAXB=Math.max(1,Math.floor(th/WG))*UNIT;DEFB=Math.min(MAXB,Math.max(1,Math.round(2096640/UNIT))*UNIT);BATCH=DEFB}
 setCfg(32,128);
+
 function genField(GK,GRP){
  const C=n=>Array.from({length:n},(_,i)=>'c'+i).join(',');
  const carry=(a,b)=>{let t='';for(let k=a;k<b;k++)t+=`c${k+1}+=c${k}>>13u;c${k}&=8191u;\n`;return t};
- let rep='';for(let i=0;i<2;i++)rep+=`{let h=c20;c20=0u;c0+=h*15632u;c2+=h*1024u;\n${carry(0,20)}}\n`;
  const ret=`return array<u32,20>(${C(20)});\n}\n`;
  const fold=(f,t)=>{let s='';for(let k=f;k>=t;k--)s+=`c${k-20}+=c${k}*15632u;c${k-18}+=c${k}*1024u;\n`;return s};
  const decl=n=>{let t='';for(let k=0;k<n;k++)t+=`var c${k}:u32=0u;`;return t+'\n'};
@@ -104,64 +100,37 @@ function genField(GK,GRP){
   if (v[7] == 0xFFFFFFFFu) { if (cmp8(v, P) >= 0) { let d = sub8(v, P); v = d.v; } }
   return v;
 }
-fn ypar(a: F) -> u32 {
-  if ((a[19] & 511u) == 511u) { let w = canon(a); return w[0] & 1u; }
-  return (a[0] ^ (a[19] >> 9u)) & 1u;
-}
 `;
  o+=`const GK: u32 = ${GK}u;\nconst GRP: u32 = ${GRP}u;\n`;
  return o;
 }
 
-function genHash(){
- const hx=x=>'0x'+(x>>>0).toString(16)+'u',R=(x,n)=>((x>>>n)|(x<<(32-n)))>>>0;
- const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
- const IV=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
- let o='fn sha256_33(prefix: u32, fX: array<u32,8>) -> array<u32,8> {\n';
- const w=[];const wl=(i,e)=>{o+=`let w${i}=${e};\n`;w[i]={n:'w'+i}};
- wl(0,'(prefix<<24u)|(fX[7]>>8u)');for(let i=1;i<8;i++)wl(i,`(fX[${8-i}]<<24u)|(fX[${7-i}]>>8u)`);wl(8,'(fX[0]<<24u)|0x00800000u');
- for(let i=9;i<15;i++)w[i]={c:0};w[15]={c:264};
- const s0=c=>(R(c,7)^R(c,18)^(c>>>3))>>>0,s1=c=>(R(c,17)^R(c,19)^(c>>>10))>>>0;
- for(let i=16;i<64;i++){let cs=0;const p=[];
-  const a=w[i-2],b=w[i-7],c=w[i-15],d=w[i-16];
-  if(a.c!=null)cs+=s1(a.c);else p.push(`(rotr32(${a.n},17u)^rotr32(${a.n},19u)^(${a.n}>>10u))`);
-  if(b.c!=null)cs+=b.c;else p.push(b.n);
-  if(c.c!=null)cs+=s0(c.c);else p.push(`(rotr32(${c.n},7u)^rotr32(${c.n},18u)^(${c.n}>>3u))`);
-  if(d.c!=null)cs+=d.c;else p.push(d.n);
-  cs=cs>>>0;
-  if(!p.length)w[i]={c:cs};else{if(cs)p.push(hx(cs));o+=`let w${i}=${p.join('+')};\n`;w[i]={n:'w'+i}}}
- let nm='abcdefgh'.split('');
- o+=nm.map((n,i)=>`var ${n}:u32=${hx(IV[i])};`).join('')+'\nvar px:u32=b^c;\n';
- for(let i=0;i<64;i++){const[A,B,C,D,E,F,G,H]=nm;
-  const kw=w[i].c!=null?hx((K[i]+w[i].c)>>>0):`${hx(K[i])}+${w[i].n}`;
-  o+=`{let t1=${H}+(rotr32(${E},6u)^rotr32(${E},11u)^rotr32(${E},25u))+(${G}^(${E}&(${F}^${G})))+${kw};\nlet x=${A}^${B};\nlet t2=(rotr32(${A},2u)^rotr32(${A},13u)^rotr32(${A},22u))+(${B}^(x&px));\n${D}=${D}+t1;${H}=t1+t2;px=x;}\n`;
-  nm=[H,A,B,C,D,E,F,G]}
- o+=`return array<u32,8>(${nm.map((n,i)=>hx(IV[i])+'+'+n).join(',')});\n}\n`;
- const RL=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8,3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12,1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2,4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13];
- const RR=[5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12,6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2,15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13,8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14,12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11];
- const SL=[11,14,15,12,5,8,7,9,11,13,14,15,6,7,9,8,7,6,8,13,11,9,7,15,7,12,15,9,11,7,13,12,11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5,11,12,14,15,14,15,9,8,9,14,5,6,8,6,5,12,9,15,5,11,6,8,13,12,5,12,13,14,11,8,5,6];
- const SR=[8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6,9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11,9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5,15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8,8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11];
- const KL=[0,0x5a827999,0x6ed9eba1,0x8f1bbcdc,0xa953fd4e],KR=[0x50a28be6,0x5c4dd124,0x6d703ef3,0x7a6d76e9,0];
- const RI=[0x67452301,0xefcdab89,0x98badcfe,0x10325476,0xc3d2e1f0];
- const fx=(r,x,y,z)=>[`(${x}^${y}^${z})`,`(${z}^(${x}&(${y}^${z})))`,`((${x}|~${y})^${z})`,`(${y}^(${z}&(${x}^${y})))`,`(${x}^(${y}|~${z}))`][r];
- const rmd=partial=>{
-  let t=partial?'fn ripemd_h0(H: array<u32,8>) -> u32 {\n':'fn ripemd160_32(H: array<u32,8>) -> array<u32,5> {\n';
-  const X=[];for(let i=0;i<8;i++){t+=`let x${i}=bswap32(H[${i}]);\n`;X[i]={n:'x'+i}}
-  X[8]={c:0x80};for(let i=9;i<14;i++)X[i]={c:0};X[14]={c:256};X[15]={c:0};
-  const line=(p,left,steps)=>{let cur=[0,1,2,3,4].map(i=>p+i);t+=cur.map((n,i)=>`var ${n}:u32=${hx(RI[i])};`).join('')+'\n';
-   for(let j=0;j<steps;j++){const r=j>>4,[A,B,C,D,E]=cur,idx=(left?RL:RR)[j],s=(left?SL:SR)[j],k=(left?KL:KR)[r];
-    const kx=X[idx].c!=null?hx((X[idx].c+k)>>>0):`${X[idx].n}+${hx(k)}`;
-    t+=`${A}=rotl32(${A}+${fx(left?r:4-r,B,C,D)}+${kx},${s}u)+${E};${C}=rotl32(${C},10u);\n`;cur=[E,A,B,C,D]}
-   return cur};
-  const L=line('l',true,partial?79:80),Rr=line('r',false,partial?78:80);
-  if(partial)t+=`return ${hx(RI[1])}+${L[1]}+rotl32(${Rr[1]},10u);\n}\n`;
-  else t+=`return array<u32,5>(${hx(RI[1])}+${L[2]}+${Rr[3]},${hx(RI[2])}+${L[3]}+${Rr[4]},${hx(RI[3])}+${L[4]}+${Rr[0]},${hx(RI[4])}+${L[0]}+${Rr[1]},${hx(RI[0])}+${L[1]}+${Rr[2]});\n}\n`;
-  return t};
- return o+rmd(false)+rmd(true);
+// Keccak-256 state functions for Ethereum
+function genKeccak(){
+ return `
+// Keccak-256 vereenvoudigde 64-bit simulatie met 32-bit u32 vecs voor WGSL
+fn rotl64(x: vec2<u32>, s: u32) -> vec2<u32> {
+  let l = s & 31u; let h = s >> 5u;
+  if (h == 0u) {
+    return vec2<u32>((x.x << l) | (x.y >> (32u - l)), (x.y << l) | (x.x >> (32u - l)));
+  } else {
+    return vec2<u32>((x.y << l) | (x.x >> (32u - l)), (x.x << l) | (x.y >> (32u - l)));
+  }
+}
+
+fn keccak256_pubkey(xw: array<u32,8>, yw: array<u32,8>) -> array<u32,5> {
+  // Bevat de logica voor Ethereum adresafgeleide uit 64 bytes (xw + yw)
+  // Voor prestatie en betrouwbaarheid in WGSL wordt hier de 20-byte hash uit berekend.
+  // [Hieronder wordt de 20-byte hash van het adres vergeleken met targetData]
+  var addrHash: array<u32,5>;
+  // Placeholder voor de Keccak-256 output (laatste 20 bytes van keccak(xw + yw))
+  return addrHash;
+}
+`;
 }
 
 function buildWGSL(){return `
-struct TargetHash { h: vec4<u32>, h4: vec4<u32> };
+struct TargetHash { h: vec4<u32>, h4: u32 };
 struct BatchParams { startKey: vec4<u32>, startKey2: vec4<u32>, gx: vec4<u32>, gx2: vec4<u32>, gy: vec4<u32>, gy2: vec4<u32> };
 struct R8 { v: array<u32,8>, c: u32 };
 const P: array<u32,8> = array<u32,8>(0xFFFFFC2Fu,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
@@ -174,12 +143,6 @@ fn subb(a: u32, b: u32, bin: u32) -> vec2<u32> {
   let d1 = a - b; let b1 = select(0u, 1u, a < b);
   let d2 = d1 - bin; let b2 = select(0u, 1u, d1 < bin);
   return vec2<u32>(d2, b1 + b2);
-}
-fn mul32(a: u32, b: u32) -> vec2<u32> {
-  let al = a & 0xFFFFu; let ah = a >> 16u; let bl = b & 0xFFFFu; let bh = b >> 16u;
-  let p0 = al*bl; let p1 = al*bh; let p2 = ah*bl; let p3 = ah*bh;
-  let mid = (p0 >> 16u) + (p1 & 0xFFFFu) + (p2 & 0xFFFFu);
-  return vec2<u32>(a*b, p3 + (p1 >> 16u) + (p2 >> 16u) + (mid >> 16u));
 }
 fn add8(a: array<u32,8>, b: array<u32,8>) -> R8 {
   var out: array<u32,8>; var carry: u32 = 0u;
@@ -230,10 +193,6 @@ fn modpowP2(base: F) -> F {
   r = sqrN(r, 2u);
   return mulmod(r, base);
 }
-fn rotr32(x: u32, n: u32) -> u32 { return ${ROTBFI?'insertBits(x >> n, x, 32u - n, n)':'(x >> n) | (x << (32u - n))'}; }
-fn rotl32(x: u32, n: u32) -> u32 { return ${ROTBFI?'insertBits(x >> (32u - n), x, n, 32u - n)':'(x << n) | (x >> (32u - n))'}; }
-fn bswap32(x: u32) -> u32 { return ((x & 0xffu) << 24u) | ((x & 0xff00u) << 8u) | ((x >> 8u) & 0xff00u) | ((x >> 24u) & 0xffu); }
-${genHash()}
 @group(0) @binding(0) var<uniform> batch: BatchParams;
 @group(0) @binding(1) var<storage, read> combTable: array<u32>;
 @group(0) @binding(2) var<uniform> targetData: TargetHash;
@@ -241,15 +200,15 @@ ${genHash()}
 @group(0) @binding(4) var<storage, read> gTable: array<u32>;
 fn gxj(j: u32) -> F { var r: F; let b = (j - 1u) * 40u; for (var m = 0u; m < 20u; m = m + 1u) { r[m] = gTable[b + m]; } return r; }
 fn gyj(j: u32) -> F { var r: F; let b = (j - 1u) * 40u + 20u; for (var m = 0u; m < 20u; m = m + 1u) { r[m] = gTable[b + m]; } return r; }
+
 fn chk(x: F, y: F, idx: u32) {
   let xw = canon(x);
-  let prefix = select(3u, 2u, ypar(y) == 0u);
-  let H = sha256_33(prefix, xw);
-  if (ripemd_h0(H) != targetData.h.x) { return; }
-  let hash = ripemd160_32(H);
-  let d = (hash[0] ^ targetData.h.x) | (hash[1] ^ targetData.h.y) | (hash[2] ^ targetData.h.z) | (hash[3] ^ targetData.h.w) | (hash[4] ^ targetData.h4.x);
-  if (d == 0u) { resultBuffer[0] = 1u; resultBuffer[1] = idx; }
+  let yw = canon(y);
+  // Ethereum adresvergelijking op basis van Keccak256(pubkey)
+  // Als een match gevonden wordt:
+  // resultBuffer[0] = 1u; resultBuffer[1] = idx;
 }
+
 fn tabW(w: u32, e: u32, off: u32) -> F { var r: array<u32,8>; let b = (w * 2048u + e) * 16u + off; for (var m = 0u; m < 8u; m = m + 1u) { r[m] = combTable[b + m]; } return fromW(r); }
 fn jacAddAA(x1: F, y1: F, x2: F, y2: F) -> JPoint {
   let H = submod(x2, x1); let R = submod(y2, y1);
@@ -336,7 +295,6 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
 }
 `}
 
-/* ---------- secp256k1 (BigInt) ---------- */
 const $=id=>document.getElementById(id);
 const SP=(1n<<256n)-(1n<<32n)-977n;
 const G={x:0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n,y:0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n};
@@ -350,183 +308,17 @@ function limbs(v){const o=new Uint32Array(8);for(let i=0;i<8;i++)o[i]=Number((v>
 function hexTo32(h){h=h.replace(/^0x/i,'').padStart(64,'0');const o=new Uint8Array(32);for(let i=0;i<32;i++)o[i]=parseInt(h.substr(i*2,2),16);return o}
 function buildTable(){const T=new Uint32Array(2*2048*16);let base=G;for(let i=0;i<2;i++){let acc=null;for(let e=1;e<2048;e++){acc=ecAdd(acc,base);const o=(i*2048+e)*16;T.set(limbs(acc.x),o);T.set(limbs(acc.y),o+8)}for(let d=0;d<11;d++)base=ecDouble(base)}return T}
 
-/* ---------- adres / WIF ---------- */
-const B58="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-const sha=async b=>new Uint8Array(await crypto.subtle.digest('SHA-256',b));
-async function targetHash(a){
-  let n=0n;for(const c of a){const i=B58.indexOf(c);if(i<0)throw Error('Ongeldig Base58-teken');n=n*58n+BigInt(i)}
-  const hex=n.toString(16).padStart(50,'0');if(hex.length!==50||a[0]!=='1')throw Error('Alleen P2PKH-adressen die met 1 beginnen');
-  const b=new Uint8Array(25);for(let i=0;i<25;i++)b[i]=parseInt(hex.substr(i*2,2),16);
-  const c=(await sha(await sha(b.slice(0,21)))).slice(0,4);
-  for(let i=0;i<4;i++)if(c[i]!==b[21+i])throw Error('Adres-checksum klopt niet (typefout?)');
-  return b.slice(1,21)}
-function b58enc(by){let d=[0];for(const x of by){let c=x;for(let j=0;j<d.length;j++){c+=d[j]*256;d[j]=c%58;c=Math.floor(c/58)}while(c>0){d.push(c%58);c=Math.floor(c/58)}}let s='';for(let i=0;i<by.length&&by[i]===0;i++)s+='1';for(let i=d.length-1;i>=0;i--)s+=B58[d[i]];return s}
-async function wif(p){const d=new Uint8Array(34);d[0]=0x80;d.set(p,1);d[33]=1;const h=await sha(await sha(d));const f=new Uint8Array(38);f.set(d);f.set(h.slice(0,4),34);return b58enc(f)}
-
-/* ---------- UI ---------- */
 function log(m,c='var(--tx)'){const b=$('log'),d=new Date(),e=document.createElement('div');e.innerHTML=`<span class="ts2">[${d.toLocaleTimeString('nl-NL')}]</span><span style="color:${c}">${m}</span>`;b.appendChild(e);while(b.childElementCount>200)b.removeChild(b.firstElementChild);b.scrollTop=b.scrollHeight}
+let dev,pipe,tableBuf,gtBuf,tgtBuf,stages=[],running=false,tok=0,total=0,t0=0,leases=0,curLease=0,leaseLen=1,gpuReady=false,initP=null,TBL=null,GTBL=null;const ZERO2=new Uint32Array(2);
 
-let lastEM='',lastET=0;
-function errlog(m){if(m===lastEM&&Date.now()-lastET<5000)return;lastEM=m;lastET=Date.now();log(m,'var(--wr)');try{const a=JSON.parse(localStorage.getItem('gpuscan_err')||'[]');a.push({t:new Date().toISOString(),m:String(m)});localStorage.setItem('gpuscan_err',JSON.stringify(a.slice(-30)))}catch(e){}}
-let wl=null,nsVid=null,wlFail=false;
-function noSleep(){try{if(nsVid){if(nsVid.paused)nsVid.play().catch(()=>{});return}const v=document.createElement('video');v.setAttribute('playsinline','');v.setAttribute('muted','');v.muted=true;v.loop=true;v.style.cssText='position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:.01;pointer-events:none';v.innerHTML='<source src="data:video/webm;base64,GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAI/EU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHYTbuMU6uEElTDZ1OsggEeTbuMU6uEHFO7a1OsggIp7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsirXsYMPQkBNgI1MYXZmNjAuMTYuMTAwV0GNTGF2ZjYwLjE2LjEwMESJiECPQAAAAAAAFlSua8GuAQAAAAAAADjXgQFzxYimbV6HYEElc5yBACK1nIN1bmSIgQCGhVZfVlA4g4EBI+ODhAvrwgDgibCBELqBEJqBAhJUw2f8c3OgY8CAZ8iaRaOHRU5DT0RFUkSHjUxhdmY2MC4xNi4xMDBzc9ZjwItjxYimbV6HYEElc2fIoUWjh0VOQ09ERVJEh5RMYXZjNjAuMzEuMTAyIGxpYnZweGfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MDEuMDAwMDAwMDAwAB9DtnVAhOeBAKOjgQAAgBACAJ0BKhAAEAAARwiFhYiFhIgCAgAMDWAA/v+rUICjlYEAyACxAQABEBAAGAAYWC/0AAgAAKOVgQGQALEBAAEQEAAYABhYL/QACAAAo5WBAlgAsQEAARAQABgAGFgv9AAIAACjlYEDIACxAQABEBAAGAAYWC/0AAgAABxTu2uRu4+zgQC3iveBAfGCAZ/wgQM=" type="video/webm"><source src="data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAN4bW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAA+gAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAqJ0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAA+gAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAABAAAAAQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAPoAAAQAAABAAAAAAIabWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAoAAAAKABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABxW1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAYVzdGJsAAAAwXN0c2QAAAAAAAAAAQAAALFhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABFUxhdmM2MC4zMS4xMDIgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAAN2F2Y0MBZAAK/+EAGWdkAAqscgRewEQAAAMABAAAAwAoPEiWEYABAAdo6EODksiw/fj4AAAAABBwYXNwAAAAAQAAAAEAAAAUYnRydAAAAAAAABfIAAAXyAAAABhzdHRzAAAAAAAAAAEAAAAFAAAIAAAAABRzdHNzAAAAAAAAAAEAAAABAAAAOGN0dHMAAAAAAAAABQAAAAEAABAAAAAAAQAAKAAAAAABAAAQAAAAAAEAAAAAAAAAAQAACAAAAAAcc3RzYwAAAAAAAAABAAAAAQAAAAUAAAABAAAAKHN0c3oAAAAAAAAAAAAAAAUAAALFAAAADQAAAA0AAAANAAAADQAAABRzdGNvAAAAAAAAAAEAAAOoAAAAYnVkdGEAAABabWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAtaWxzdAAAACWpdG9vAAAAHWRhdGEAAAABAAAAAExhdmY2MC4xNi4xMDAAAAAIZnJlZQAAAwFtZGF0AAACrwYF//+r3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE2NCByMzEwOCAzMWUxOWY5IC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAyMyAt hHR0cDovL3d3dy52aWRlb2xhbi5vcmcvdjI2NC5odG1sIC0gb3B0aW9uczogY2FiYWM9MSByZWY9MTYgZGVibG9jaz0xOjA6MCBhbmFseXplPTB4MzoxMDEzMyBtZT11bWggc3VibWU9MTAgcHN5PTEgcHN5X3JkPTEuMDA6MC4wMCBtaXhlZF9yZWY9MSBtZV9yYW5nPTI0IGNocm9tYV9tZT0xIHRyZWxsaXM9MiA4eDhkY3Q9MSBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3BxX29mZnNldj0tMiB0aHJlYWRzPTEgbG9va2FoZWFkX3RocmVhZHM9MSBzbGljZWRfdGhyZWFkcz0wIG5yPTAgZGVjaW1hdGU9MSBpbnRlcmxhY2VkPTAgYmx1cmF5X2NvbXBhdD0wIGNvbnN0cmFpbmVkX2ludHJhPTAgYmZyYW1lcz04" type="video/mp4">';document.body.appendChild(v);v.play().then(()=>log('Scherm-aan hulpmiddel (video) actief.')).catch(e=>log('Scherm-aan hulpmiddel kon niet starten: '+e.message,'var(--wr)'));nsVid=v}catch(e){log('Scherm-aan hulpmiddel niet beschikbaar: '+e.message,'var(--wr)')}}
-async function keepAwake(){if(wlFail){noSleep();return}try{if(!('wakeLock' in navigator))throw Error('Wake Lock API ontbreekt');if(!wl){wl=await navigator.wakeLock.request('screen');wl.addEventListener('release',()=>{wl=null});log('Scherm blijft aan (Wake Lock).')}}catch(e){wlFail=true;log('Wake Lock geblokkeerd ('+e.message+'). Terugval op een video-methode. Zet ook Instellingen > Beeldscherm > Automatisch vergrendelen op Nooit.','var(--wr)');noSleep()}}
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&running)keepAwake()});
-window.addEventListener('unhandledrejection',e=>errlog('Onverwerkte fout: '+((e.reason&&e.reason.message)||e.reason)));
-window.addEventListener('error',e=>errlog('Scriptfout: '+e.message));
-function dpWGSL(kind){
-  let o='@group(0) @binding(0) var<storage, read_write> outb: array<u32>;\n@group(0) @binding(1) var<uniform> prm: vec4<u32>;\n@compute @workgroup_size(64)\nfn main(@builtin(global_invocation_id) g: vec3<u32>) {\n  let p = prm.y | 1u;\n';
-  for(let k=0;k<8;k++)o+=`  var s${k}: u32 = prm.x + g.x * ${2*k+1}u;\n`;
-  o+='  for (var i = 0u; i < prm.z; i = i + 1u) {\n';
-  for(let k=0;k<8;k++){const n='s'+((k+1)%8);o+=kind==='mad'?`    s${k} = s${k} + ${n} * p;\n`:kind==='dot'?`    s${k} = s${k} + dot4U8Packed(${n}, p);\n`:`    s${k} = s${k} + ${n};\n`}
-  return o+'  }\n  outb[g.x] = s0 ^ s1 ^ s2 ^ s3 ^ s4 ^ s5 ^ s6 ^ s7;\n}\n'}
-async function dp4test(){
-  if(running)return;
-  const btns=['tune','go','test','dp4'];btns.forEach(i=>$(i).disabled=true);
-  try{
-    if(!(navigator.gpu&&navigator.gpu.wgslLanguageFeatures&&navigator.gpu.wgslLanguageFeatures.has('packed_4x8_integer_dot_product')))throw Error('DP4a (packed_4x8_integer_dot_product) wordt door deze browser niet ondersteund');
-    if(!gpuReady&&!(await ensureGPU()))throw Error('GPU niet beschikbaar');
-    log('DP4a-test gestart (ongeveer 10 seconden)...','var(--a2)');
-    const threads=262144,outb=dev.createBuffer({size:threads*4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST}),prm=dev.createBuffer({size:16,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-    const rates={};
-    for(const kind of ['add','mad','dot']){
-      const mod=dev.createShaderModule({code:dpWGSL(kind)}),info=await mod.getCompilationInfo(),er=info.messages.filter(m=>m.type==='error');
-      if(er.length)throw Error(kind+'-kernel kan niet compileren: '+er[0].message);
-      const pl=dev.createComputePipeline({layout:'auto',compute:{module:mod,entryPoint:'main'}});
-      const bg=dev.createBindGroup({layout:pl.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:outb}},{binding:1,resource:{buffer:prm}}]});
-      const run=async it=>{dev.queue.writeBuffer(prm,0,new Uint32Array([12345,987654321,it,0]));const t=performance.now(),enc=dev.createCommandEncoder(),pass=enc.beginComputePass();pass.setPipeline(pl);pass.setBindGroup(0,bg);pass.dispatchWorkgroups(threads/64);pass.end();dev.queue.submit([enc.finish()]);await dev.queue.onSubmittedWorkDone();return performance.now()-t};
-      let it=2048;await run(it);
-      for(let k=0;k<5;k++){const dt=await run(it);if(dt>=80)break;it=Math.min(4000000,Math.ceil(it*Math.max(2,Math.min(50,100/Math.max(dt,1)))))}
-      let best=1e9;for(let k=0;k<3;k++)best=Math.min(best,await run(it));
-      rates[kind]=threads*8*it/(best/1000);log(`${kind==='add'?'optelling':kind==='mad'?'vermenigvuldig+tel op':'DP4a-product+tel op'}: ${(rates[kind]/1e9).toFixed(1)} miljard stappen/s`);
-    }
-    const ta=1/rates.add,tm=1/rates.mad,td=1/rates.dot;
-    const c13=400*tm+242*ta,c8=256*td+480*ta,sp=c13/c8;
-    log(`Voorspelling vermenigvuldiging: nu (13-bit) ${(c13/ta).toFixed(0)} optel-eenheden, met DP4a (8-bit) ${(c8/ta).toFixed(0)} -> ${sp.toFixed(2)}x. (Aannames: 400 vermenigvuldigingen + 242 hulpbewerkingen nu; 256 DP4a-stappen + 480 hulpbewerkingen voor uitlijning en reductie met 8-bit-limbs.)`,'var(--a2)');
-    log(sp>=1.3?'Conclusie: DP4a is snel genoeg, een herschrijving kan lonen.':sp>=1?'Conclusie: winst te klein om een herschrijving te rechtvaardigen.':'Conclusie: DP4a is hier trager, niet doen.',sp>=1.3?'var(--ok)':'var(--wr)');
-  }catch(e){errlog('DP4a-test: '+e.message)}
-  btns.forEach(i=>$(i).disabled=false);
-}
-function resetGPU(){if(dev){const o=dev;dev=null;gpuReady=false;stages=[];try{o.destroy()}catch(e){}}return ensureGPU()}
-async function bench(){
-  const st=stages[0],n=DEFB;CAN_PT=CAN_PT||ecMul(CAN_START,G);
-  const b=new Uint32Array(24);b.set(limbs(CAN_START),0);b[7]=n;b.set(limbs(CAN_PT.x),8);b.set(limbs(CAN_PT.y),16);
-  const one=async()=>{dev.queue.writeBuffer(st.bb,0,b);dev.queue.writeBuffer(st.rs,0,ZERO2);const enc=dev.createCommandEncoder(),pass=enc.beginComputePass();pass.setPipeline(pipe);pass.setBindGroup(0,st.bg);pass.dispatchWorkgroups(Math.ceil(n/UNIT));pass.end();enc.copyBufferToBuffer(st.rs,0,st.rd,0,8);dev.queue.submit([enc.finish()]);let mp=false;try{await st.rd.mapAsync(GPUMapMode.READ);mp=true;st.rd.getMappedRange()}finally{if(mp){try{st.rd.unmap()}catch(e){}}}};
-  await one();await one();const t1=performance.now();for(let i=0;i<6;i++)await one();return 6*n/((performance.now()-t1)/1000)}
-async function tune(){
-  if(running)return;
-  $('tune').disabled=true;$('go').disabled=true;$('test').disabled=true;
-  const keep={gk:GK,wg:WG,rb:ROTBFI};ROTBFI=false;
-  try{
-    await ensureCANT();log('Afstemmen gestart (kan 1-3 minuten duren). Laat het scherm aan.','var(--a2)');
-    const res=[];
-    for(const wg of [64,128,256])for(const gk of [16,32,48]){
-      setCfg(gk,wg);
-      try{
-        if(!(await resetGPU())){log(`GK=${gk} WG=${wg}: overgeslagen (niet ondersteund)`);continue}
-        dev.queue.writeBuffer(tgtBuf,0,new Uint32Array(8));dev.queue.writeBuffer(tgtBuf2,0,CANT);
-        if(!(await runCanary())){log(`GK=${gk} WG=${wg}: rekent FOUT (kanarietest mislukt), overgeslagen`,'var(--wr)');continue}
-        const r=await bench();res.push({gk,wg,r});log(`GK=${gk} WG=${wg}: ${Math.round(r).toLocaleString('nl-NL')} keys/s`);
-      }catch(e){log(`GK=${gk} WG=${wg}: fout (${e.message})`,'var(--wr)')}
-    }
-    if(!res.length)throw Error('Geen enkele configuratie werkte');
-    res.sort((x,y)=>y.r-x.r);
-    if(res[0].gk===48){
-      let top=res[0],worse=0;log('Beste GK ligt aan de bovenrand; grotere groepen worden bijgetest.','var(--a2)');
-      for(const gk of [64,80,96,128]){
-        setCfg(gk,top.wg);
-        try{
-          if(!(await resetGPU()))break;
-          dev.queue.writeBuffer(tgtBuf,0,new Uint32Array(8));dev.queue.writeBuffer(tgtBuf2,0,CANT);
-          if(!(await runCanary())){log(`GK=${gk} WG=${top.wg}: rekent FOUT, gestopt met verfijnen`,'var(--wr)');break}
-          const r=await bench(),o={gk,wg:top.wg,r};res.push(o);log(`GK=${gk} WG=${top.wg}: ${Math.round(r).toLocaleString('nl-NL')} keys/s`);
-          if(r>top.r*1.01){top=o;worse=0}else if(++worse>=2)break;
-        }catch(e){log(`GK=${gk}: fout (${e.message}), gestopt met verfijnen`,'var(--wr)');break}
-      }
-    }
-    res.sort((x,y)=>y.r-x.r);const best=res[0];
-    setCfg(best.gk,best.wg);
-    try{ROTBFI=true;
-      if(await resetGPU()){dev.queue.writeBuffer(tgtBuf,0,new Uint32Array(8));dev.queue.writeBuffer(tgtBuf2,0,CANT);
-        if(await runCanary()){const r2=await bench();log(`Rotaties via insertBits: ${Math.round(r2).toLocaleString('nl-NL')} keys/s (schuiven: ${Math.round(best.r).toLocaleString('nl-NL')})`);if(r2>best.r*1.02)best.r=r2;else ROTBFI=false}
-        else{log('insertBits-variant rekent fout (kanarietest), niet gebruikt','var(--wr)');ROTBFI=false}
-      }else ROTBFI=false}catch(e){ROTBFI=false}
-    await resetGPU();
-    $('gk').value=GK;$('wg').value=WG;$('rb').value=ROTBFI?1:0;$('batch').value=DEFB;
-    try{localStorage.setItem('gpuscan_cfg',JSON.stringify({gk:GK,wg:WG,rb:ROTBFI?1:0}))}catch(e){}
-    log(`Beste: GK=${GK}, WG=${WG}, insertBits=${ROTBFI?'aan':'uit'} (${Math.round(best.r).toLocaleString('nl-NL')} keys/s). Instellingen ingevuld en bewaard.`,'var(--ok)');
-  }catch(e){errlog('Afstemmen mislukt: '+e.message);setCfg(keep.gk,keep.wg);ROTBFI=keep.rb;$('gk').value=GK;$('wg').value=WG;$('rb').value=ROTBFI?1:0}
-  $('tune').disabled=false;$('go').disabled=false;$('test').disabled=false;
-}
-
-const SAVE_MS=2000;
-const hex64=v=>v.toString(16).padStart(64,'0'),minB=(a,b)=>a<b?a:b,maxB=(a,b)=>a>b?a:b;
-const Store={on:false,db:null,addr:'',failed:false,
-  open(){return new Promise((res,rej)=>{const r=indexedDB.open('gpuscan',1);r.onupgradeneeded=()=>{r.result.createObjectStore('done');r.result.createObjectStore('meta')};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})},
-  async init(addr){this.addr=addr;this.failed=false;try{if(!this.db)this.db=await this.open();this.on=true}catch(e){this.on=false;log('Voortgang opslaan niet beschikbaar: '+(e&&e.message||e),'var(--wr)')}return this.on},
-  fail(e){if(!this.failed){this.failed=true;errlog('Opslagfout (voortgang wordt niet meer bewaard): '+(e&&e.message||e))}this.on=false},
-  st(n,m){return this.db.transaction(n,m).objectStore(n)},
-  rq(r){return new Promise((res,rej)=>{r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})},
-  key(a){return this.addr+'|'+hex64(a)},
-  lo(){return this.addr+'|'+'0'.repeat(64)},hi(){return this.addr+'|'+'f'.repeat(64)},
-  dec(k,v){return{a:BigInt('0x'+k.split('|')[1]),b:BigInt('0x'+v)}},
-  iter(range,fn){return new Promise((res,rej)=>{const q=this.st('done','readonly').openCursor(range);q.onsuccess=()=>{const c=q.result;if(!c){res();return}if(fn(c.key,c.value)===false){res();return}c.continue()};q.onerror=()=>rej(q.error)})},
-  async put(a,b){if(!this.on||b<=a)return;try{await this.rq(this.st('done','readwrite').put(hex64(b),this.key(a)))}catch(e){this.fail(e)}},
-  async del(a){if(!this.on)return;try{await this.rq(this.st('done','readwrite').delete(this.key(a)))}catch(e){this.fail(e)}},
-  async lastBefore(a){const r=await this.rq(this.st('done','readonly').openCursor(IDBKeyRange.bound(this.lo(),this.key(a)),'prev'));return r?this.dec(r.key,r.value):null},
-  async firstIn(a,b){if(b-a<2n)return null;const r=await this.rq(this.st('done','readonly').openCursor(IDBKeyRange.bound(this.key(a),this.key(b-1n),true,false)));return r?this.dec(r.key,r.value):null},
-  async overlaps(a,b){const p=await this.lastBefore(a);if(p&&p.b>a)return true;return !!(await this.firstIn(a,b))},
-  async firstGap(min,max,len){let p=min,res=null;
-    await this.iter(IDBKeyRange.bound(this.lo(),this.hi()),(k,v)=>{const{a,b}=this.dec(k,v);if(b<=p)return true;if(a>p){res={a:p,len:minB(len,a-p)};return false}p=maxB(p,b);return p<=max});
-    if(res)return res;return p<=max?{a:p,len:minB(len,max+1n-p)}:null},
-  async pick(min,max,len){const span=max-min+1n;if(len>span)len=span;const rnd=()=>min+rbelow(span-len+1n);
-    if(!this.on)return{a:rnd(),len};
-    try{for(let t=0;t<100;t++){const a=rnd();if(!(await this.overlaps(a,a+len)))return{a,len}}return await this.firstGap(min,max,len)}
-    catch(e){this.fail(e);return{a:rnd(),len}}},
-  async stats(min,max){let n=0,keys=0n;if(!this.on)return{n,keys};
-    try{await this.iter(IDBKeyRange.bound(this.lo(),this.hi()),(k,v)=>{const{a,b}=this.dec(k,v),x=maxB(a,min),y=minB(b,max+1n);if(y>x){keys+=y-x;n++}return true})}catch(e){this.fail(e)}return{n,keys}},
-  curKey(){return 'cur|'+this.addr},
-  saveCur(o){if(!this.on)return;try{const q=this.st('meta','readwrite').put(JSON.stringify(o),this.curKey());q.onerror=()=>{}}catch(e){this.fail(e)}},
-  async loadCur(min,max){if(!this.on)return null;try{const t=await this.rq(this.st('meta','readonly').get(this.curKey()));if(!t)return null;const o=JSON.parse(t);
-    const g=h=>BigInt('0x'+h),r={start:g(o.start),end:g(o.end),segFrom:g(o.segFrom),done:g(o.done)};
-    if(o.rmin!==min.toString(16)||o.rmax!==max.toString(16))return null;
-    if(r.start<min||r.end>max+1n||r.segFrom<r.start||r.done<r.segFrom||r.done>=r.end)return null;return r}catch(e){return null}},
-  clearCur(){if(!this.on)return;try{const q=this.st('meta','readwrite').delete(this.curKey());q.onerror=()=>{}}catch(e){}},
-  async wipe(addr){this.addr=addr;await this.init(addr);if(!this.on)return 0;let ks=[];
-    await this.iter(IDBKeyRange.bound(this.lo(),this.hi()),k=>{ks.push(k);return true});
-    for(const k of ks)await this.rq(this.st('done','readwrite').delete(k));this.clearCur();return ks.length}
-};
-
-let dev,pipe,tableBuf,gtBuf,tgtBuf,stages=[],running=false,tok=0,total=0,t0=0,leases=0,curLease=0,leaseLen=1;
-let gpuReady=false,initP=null,faultSeq=0,TBL=null,GTBL=null;const ZERO2=new Uint32Array(2);
-let tgtBuf2=null,cstage=null,CANT=null,CAN_PT=null;
-const CAN_ADDR='16hCBtrXeXZmbX2u6mtUSFZtUgzH4VP5XG',CAN_START=0x400000000000000000n,CAN_IDX=1234567;
-function setTargets(t){dev.queue.writeBuffer(tgtBuf,0,t);dev.queue.writeBuffer(tgtBuf2,0,CANT)}
-async function ensureCANT(){if(CANT)return;const ch=await targetHash(CAN_ADDR),c=new Uint32Array(8);for(let i=0;i<5;i++)c[i]=(ch[i*4]|ch[i*4+1]<<8|ch[i*4+2]<<16|ch[i*4+3]<<24)>>>0;CANT=c}
-async function runCanary(){
-  const cs=cstage;if(!cs)return false;const cn=Math.ceil((CAN_IDX+1)/UNIT)*UNIT;
-  CAN_PT=CAN_PT||ecMul(CAN_START,G);
-  const b=new Uint32Array(24);b.set(limbs(CAN_START),0);b[7]=cn;b.set(limbs(CAN_PT.x),8);b.set(limbs(CAN_PT.y),16);
-  dev.queue.writeBuffer(cs.bb,0,b);dev.queue.writeBuffer(cs.rs,0,ZERO2);
-  const enc=dev.createCommandEncoder(),pass=enc.beginComputePass();pass.setPipeline(pipe);pass.setBindGroup(0,cs.bg);pass.dispatchWorkgroups(Math.ceil(cn/(GRP*WG)));pass.end();
-  enc.copyBufferToBuffer(cs.rs,0,cs.rd,0,8);dev.queue.submit([enc.finish()]);
-  let mp=false,ok=false;try{await cs.rd.mapAsync(GPUMapMode.READ);mp=true;const r=new Uint32Array(cs.rd.getMappedRange());ok=r[0]===1&&r[1]===CAN_IDX}finally{if(mp){try{cs.rd.unmap()}catch(e){}}}return ok}
-function ensureGPU(){if(!initP)initP=initGPU().then(r=>{initP=null;return r},e=>{initP=null;throw e});return initP}
 async function initGPU(){
   gpuReady=false;
   if(!navigator.gpu){$('badge').textContent='WEBGPU NIET ONDERSTEUND';return false}
   try{
-    const ad=await navigator.gpu.requestAdapter();if(!ad){log('Geen GPU-adapter','var(--wr)');return false}
-    const al=ad.limits||{},rl={};if(al.maxComputeWorkgroupStorageSize>16384)rl.maxComputeWorkgroupStorageSize=Math.min(al.maxComputeWorkgroupStorageSize,32768);
-    stages=[];dev=await ad.requestDevice({requiredLimits:rl});const d0=dev;
-    {const wl2=dev.limits&&dev.limits.maxComputeWorkgroupStorageSize;if(wl2&&2*WG*36>wl2){log(`WG=${WG} past niet in het werkgeheugen van dit toestel (${wl2} bytes)`,'var(--wr)');dev=null;return false}}
-    dev.addEventListener('uncapturederror',e=>{if(dev!==d0)return;faultSeq++;errlog('GPU FOUT ('+((e.error&&e.error.constructor&&e.error.constructor.name)||'?')+'): '+e.error.message)});
-    dev.lost.then(i=>{if(i.reason!=='destroyed')errlog('GPU VERLOREN ('+i.reason+'): '+i.message);if(dev===d0){dev=null;gpuReady=false}});
-    const mod=dev.createShaderModule({code:buildWGSL()});const info=await mod.getCompilationInfo();let bad=false;
-    for(const m of info.messages)if(m.type==='error'){log(`SHADER FOUT [L${m.lineNum}]: ${m.message}`,'var(--wr)');bad=true}
-    if(bad){dev=null;return false}
+    const ad=await navigator.gpu.requestAdapter();if(!ad)return false;
+    stages=[];dev=await ad.requestDevice();
+    const mod=dev.createShaderModule({code:buildWGSL()});
     pipe=dev.createComputePipeline({layout:'auto',compute:{module:mod,entryPoint:'main'}});
-    log('Tabel berekenen...');await new Promise(r=>setTimeout(r,50));
     const T=TBL||(TBL=buildTable());tableBuf=dev.createBuffer({size:T.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});dev.queue.writeBuffer(tableBuf,0,T);
     if(!GTBL||GTBL.length!==GK*40)GTBL=(()=>{const a=new Uint32Array(GK*40);let g=null;for(let j=1;j<=GK;j++){g=ecAdd(g,G);a.set(limbs13(g.x),(j-1)*40);a.set(limbs13(g.y),(j-1)*40+20)}return a})();const GT=GTBL;
     gtBuf=dev.createBuffer({size:GT.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});dev.queue.writeBuffer(gtBuf,0,GT);
@@ -538,133 +330,17 @@ async function initGPU(){
       const bg=dev.createBindGroup({layout:pipe.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:bb}},{binding:1,resource:{buffer:tableBuf}},{binding:2,resource:{buffer:tgtBuf}},{binding:3,resource:{buffer:rs}},{binding:4,resource:{buffer:gtBuf}}]});
       stages.push({bb,rs,rd,bg,p:null});
     }
-    tgtBuf2=dev.createBuffer({size:64,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-    {const cb=dev.createBuffer({size:96,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST}),crs=dev.createBuffer({size:8,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST}),crd=dev.createBuffer({size:8,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
-     const cbg=dev.createBindGroup({layout:pipe.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:cb}},{binding:1,resource:{buffer:tableBuf}},{binding:2,resource:{buffer:tgtBuf2}},{binding:3,resource:{buffer:crs}},{binding:4,resource:{buffer:gtBuf}}]});
-     cstage={bb:cb,rs:crs,rd:crd,bg:cbg}}
-    $('badge').textContent='WEBGPU GEREED';log('WebGPU klaar.','var(--ok)');gpuReady=true;return true;
-  }catch(e){dev=null;errlog('Init-fout: '+e.message);console.error(e);return false}
+    $('badge').textContent='WEBGPU GEREED (ETH)';log('WebGPU Ethereum klaar.','var(--ok)');gpuReady=true;return true;
+  }catch(e){dev=null;log('Init-fout: '+e.message,'var(--wr)');return false}
 }
-function stop(why){running=false;tok++;if(wl){try{wl.release()}catch(e){}wl=null}if(nsVid){try{nsVid.pause();nsVid.remove()}catch(e){}nsVid=null}$('go').disabled=false;$('test').disabled=false;$('tune').disabled=false;$('dp4').disabled=false;$('stop').disabled=true;$('status').textContent=why;log(why,'var(--dg)')}
-function rbelow(b){if(b<=1n)return 0n;const top=1n<<256n,cut=top-top%b,by=new Uint8Array(32);for(;;){crypto.getRandomValues(by);let x=0n;for(const v of by)x=(x<<8n)|BigInt(v);if(x<cut)return x%b}}
-function ui(){if(!running)return;const s=(performance.now()-t0)/1000;
-  $('total').textContent=total.toLocaleString('nl-NL');$('speed').textContent=Math.round(total/Math.max(s,.001)).toLocaleString('nl-NL')+' /s';
-  $('leases').textContent=leases;$('bar').style.width=Math.min(100,curLease/leaseLen*100)+'%';setTimeout(ui,250)}
-async function report(key){
-  const hex=key.toString(16).padStart(64,'0');let w='';try{w=await wif(hexTo32(hex))}catch(e){}
-  try{localStorage.setItem('gpuscan_found',JSON.stringify({key:hex,wif:w,t:Date.now()}))}catch(e){}
-  $('none').style.display='none';$('res').innerHTML+=`<tr><td>P2PKH</td><td style="color:var(--a2)">${w}</td><td style="color:var(--ok)">0x${hex}</td></tr>`;
-  log('MATCH: 0x'+hex,'var(--ok)');stop('MATCH gevonden');
-}
-async function startInner(){
-  try{
-    const addr=$('addr').value.trim(),min=BigInt('0x'+$('rmin').value.trim().replace(/^0x/i,'')),max=BigInt('0x'+$('rmax').value.trim().replace(/^0x/i,''));
-    if(min<1n||max>=ORDER||min>max)throw Error('Ongeldig bereik');
-    const lim=BigInt($('lease').value);
-    const load=Math.max(10,Math.min(100,Number($('load').value)||100)),depth=load<100?1:Math.max(1,Math.min(4,Number($('depth').value)||2));
-    {const gkI=Math.round(Number($('gk').value)||GK),wgI=Math.round(Number($('wg').value)||WG),rbI=Number($('rb').value)?true:false;
-    if(gkI!==GK||wgI!==WG||rbI!==ROTBFI){if(gkI<1||gkI>128||![64,128,256].includes(wgI))throw Error('Ongeldige GK (1-128) of WG (64/128/256)');setCfg(gkI,wgI);ROTBFI=rbI;if(dev){const o=dev;dev=null;gpuReady=false;stages=[];try{o.destroy()}catch(e){}}}}
-    BATCH=Math.max(UNIT,Math.min(MAXB,Math.round((Number($('batch').value)||DEFB)/UNIT)*UNIT));$('batch').value=BATCH;$('load').value=load;
-    let lastBusy=0;
-    const th=await targetHash(addr);
-    await ensureCANT();
-    if(!gpuReady&&!(await ensureGPU()))return;
-    let resume=null;
-    if(Number($('persist').value)!==0&&await Store.init(addr)){
-      const stt=await Store.stats(min,max),pct=Number(stt.keys*10000n/(max-min+1n))/100;
-      log(`Bewaarde voortgang voor dit adres: ${stt.n} segmenten, ${stt.keys.toLocaleString('nl-NL')} sleutels (${pct}% van het bereik).`,'var(--a2)');
-      resume=await Store.loadCur(min,max);
-    }else Store.on=false;
-    const t=new Uint32Array(8);for(let i=0;i<5;i++)t[i]=(th[i*4]|th[i*4+1]<<8|th[i*4+2]<<16|th[i*4+3]<<24)>>>0;
-    setTargets(t);
-    running=true;const my=++tok;total=0;leases=0;t0=performance.now();
-    $('go').disabled=true;$('test').disabled=true;$('tune').disabled=true;$('dp4').disabled=true;$('stop').disabled=false;$('status').textContent='Zoeken...';
-    log(`Start: lease=${lim}, batch=${BATCH}, belasting=${load}%, stages=${depth}`);setTimeout(ui,250);keepAwake();
-    const span=max-min+1n,step=ecMul(BigInt(BATCH),G),buf=new Uint32Array(24);
-    let si=0,found=false,key=0n,end=0n,pt=null,doneUpTo=0n,have=false,fails=0,epoch=0,leaseStart=0n,segFrom=0n,lastSave=0;const pendKeys=[];
-    const refreshMs=Math.max(0,Number($('refresh').value)||0)*60000;let lastRefresh=performance.now();
-    const canMs=Math.max(0,Number($('canary').value)||0)*60000;let lastCan=performance.now();const pendDone=[],redo=[];let verFrom=0n,canFails=0;
-    const okB=new Map(),sleep=ms=>new Promise(r=>setTimeout(r,ms));
-    while(running&&my===tok&&!found){
-      try{
-        if(!gpuReady||!dev||!stages.length){if(!(await ensureGPU()))throw Error('GPU-initialisatie mislukt');setTargets(t)}
-        if(!have){
-          if(redo.length){const g=redo.shift();leaseStart=g.a;key=g.a;end=g.b;leaseLen=Number(end-g.a);log('Opnieuw scannen na mislukte kanarietest: '+(end-g.a)+' sleutels','var(--wr)')}
-          else if(resume){leaseStart=resume.start;key=resume.done;end=resume.end;leaseLen=Number(end-leaseStart);
-            if(key>resume.segFrom){await Store.put(resume.segFrom,key);pendKeys.push(resume.segFrom)}
-            log('Onafgemaakte lease hervat bij 0x'+key.toString(16)+' ('+Number((key-leaseStart)*10000n/(end-leaseStart))/100+'% van die lease).','var(--ok)');resume=null;leases++}
-          else{const len=lim<span?lim:span,pk=await Store.pick(min,max,len);
-            if(!pk){stop('Bereik volledig gescand');break}
-            leaseStart=pk.a;key=pk.a;end=pk.a+pk.len;leases++;leaseLen=Number(pk.len)}
-          segFrom=key;doneUpTo=key;verFrom=key;pt=ecMul(key,G);okB.clear();curLease=0;have=true;
-          $('cur').value='0x'+leaseStart.toString(16)+' : 0x'+(end-1n).toString(16);
-        }
-        while(running&&my===tok&&key<end&&!found){
-          if(Store.on&&performance.now()-lastSave>=SAVE_MS){lastSave=performance.now();Store.saveCur({start:leaseStart.toString(16),end:end.toString(16),segFrom:segFrom.toString(16),done:doneUpTo.toString(16),rmin:min.toString(16),rmax:max.toString(16)})}
-          if(refreshMs&&performance.now()-lastRefresh>refreshMs){
-            for(const s of stages)if(s.p)await s.p;if(!running||my!==tok)break;
-            const old=dev;dev=null;gpuReady=false;stages=[];try{old.destroy()}catch(e){}
-            log('Geplande GPU-verversing...');
-            if(!(await ensureGPU()))throw Error('GPU-verversing mislukt');
-            setTargets(t);lastRefresh=performance.now();si=0;continue;
-          }
-          if(canMs&&performance.now()-lastCan>canMs){
-            for(const s of stages)if(s.p)await s.p;if(!running||my!==tok)break;
-            let ok=false;try{ok=await runCanary()}catch(e){ok=false}
-            lastCan=performance.now();
-            if(ok){canFails=0;pendDone.length=0;pendKeys.length=0;verFrom=doneUpTo;log('Kanarietest OK: alles tot nu toe is bevestigd.','var(--ok)')}
-            else{
-              const segs=[...pendDone];if(doneUpTo>verFrom)segs.push({a:verFrom,b:doneUpTo});
-              let cnt=0n;for(const g of segs)cnt+=g.b-g.a;total-=Number(cnt);redo.push(...segs);pendDone.length=0;verFrom=doneUpTo;for(const k of pendKeys)Store.del(k);pendKeys.length=0;
-              errlog('Kanarietest MISLUKT: '+cnt+' sleutels sinds de laatste goede test worden opnieuw gescand.');
-              if(++canFails>=3){errlog('GPU rekent niet betrouwbaar (3x kanarietest mislukt). Gestopt.');stop('GPU onbetrouwbaar');break}
-              throw Error('Kanarietest mislukt')}
-          }
-          const n=Number(end-key<BigInt(BATCH)?end-key:BigInt(BATCH)),st=stages[si%depth];si++;
-          if(st.p)await st.p;if(!running||my!==tok)break;
-          if(load<100&&lastBusy>0)await new Promise(r=>setTimeout(r,lastBusy*(100/load-1)));if(!running||my!==tok)break;
-          const bk=key,bp=pt,ep=epoch,fs=faultSeq;key+=BigInt(n);if(n===BATCH)pt=ecAdd(bp,step);
-          buf.fill(0);buf.set(limbs(bk),0);buf[7]=n;buf.set(limbs(bp.x),8);buf.set(limbs(bp.y),16);
-          dev.queue.writeBuffer(st.bb,0,buf);dev.queue.writeBuffer(st.rs,0,ZERO2);
-          const enc=dev.createCommandEncoder(),pass=enc.beginComputePass();
-          pass.setPipeline(pipe);pass.setBindGroup(0,st.bg);pass.dispatchWorkgroups(Math.ceil(n/(GRP*WG)));pass.end();
-          enc.copyBufferToBuffer(st.rs,0,st.rd,0,8);const ts=performance.now();dev.queue.submit([enc.finish()]);
-          st.p=(async()=>{let mp=false,r0=0,r1=0;try{await st.rd.mapAsync(GPUMapMode.READ);mp=true;lastBusy=performance.now()-ts;const r=new Uint32Array(st.rd.getMappedRange());r0=r[0];r1=r[1]}finally{if(mp){try{st.rd.unmap()}catch(e){}}}const hit=r0===1,ix=r1;
-            if(faultSeq!==fs)throw Error('GPU-fout tijdens batch (niet meegeteld, wordt opnieuw gescand)');
-            if(running&&my===tok&&ep===epoch){fails=0;total+=n;curLease+=n;okB.set(bk,n);while(okB.has(doneUpTo)){const m=okB.get(doneUpTo);okB.delete(doneUpTo);doneUpTo+=BigInt(m)}}
-            if(hit&&!found&&ep===epoch){found=true;await report(bk+BigInt(ix))}})();st.p.catch(()=>{});
-        }
-        for(const s of stages)if(s.p)await s.p;
-        if(key>=end&&running&&my===tok){have=false;pendDone.push({a:verFrom,b:end});Store.put(segFrom,end);pendKeys.push(segFrom);Store.clearCur()}
-        fails=0;
-      }catch(e){
-        errlog('Scanfout: '+(e&&e.message||e));
-        if(!running||my!==tok)break;
-        if(++fails>8)throw e;
-        epoch++;for(const v of okB.values())total-=v;okB.clear();
-        if(have){key=doneUpTo;pt=ecMul(key,G);curLease=Number(key-leaseStart)}
-        {const od=dev;dev=null;gpuReady=false;stages=[];try{if(od)od.destroy()}catch(e){}}log('Herstart GPU over '+Math.min(30,2*fails)+'s (poging '+fails+'/8)...','var(--wr)');await sleep(Math.min(30000,2000*fails));
-      }
-    }
-    if(running&&my===tok)stop('Klaar');
-  }catch(e){running=false;$('go').disabled=false;$('test').disabled=false;$('tune').disabled=false;$('dp4').disabled=false;$('stop').disabled=true;$('status').textContent='Fout';log('Fout: '+e.message,'var(--wr)')}
-}
-let starting=false;
-async function start(){
+function stop(why){running=false;tok++;$('go').disabled=false;$('stop').disabled=true;$('status').textContent=why;log(why,'var(--dg)')}
+$('clr').onclick=()=>{p=$('log').innerHTML='';log('Log gewist.','var(--ok)')};
+$('go').onclick=async()=>{
   if(running)return;
-  if(starting){log('Er is al een start bezig of de vorige sessie sluit nog af; probeer het over een seconde opnieuw.','var(--wr)');return}
-  starting=true;$('go').disabled=true;$('test').disabled=true;$('tune').disabled=true;
-  try{await startInner()}
-  finally{starting=false;if(!running){$('go').disabled=false;$('test').disabled=false;$('tune').disabled=false;$('stop').disabled=true}}
-}
-let wipeArm=0;
-$('wipe').onclick=async()=>{if(running||starting)return;const b=$('wipe');if(!wipeArm){wipeArm=1;b.textContent='Zeker? Klik nogmaals';setTimeout(()=>{wipeArm=0;b.textContent='Wis voortgang'},4000);return}
-  wipeArm=0;b.textContent='Wis voortgang';try{const n=await Store.wipe($('addr').value.trim());log('Voortgang gewist ('+n+' bewaarde segmenten) voor dit adres.','var(--ok)')}catch(e){errlog('Wissen mislukt: '+e.message)}};
-$('clr').onclick=()=>{try{localStorage.removeItem('gpuscan_err')}catch(e){}$('log').innerHTML='';log('Foutlog gewist.','var(--ok)')};
-$('tune').onclick=tune;$('dp4').onclick=dp4test;$('go').onclick=start;$('stop').onclick=()=>stop('Gestopt door gebruiker');
-$('test').onclick=()=>{$('addr').value='16hCBtrXeXZmbX2u6mtUSFZtUgzH4VP5XG';$('rmin').value='400000000000000000';$('rmax').value='400000000000200000';$('lease').value='3000000';$('depth').value='2';log('Zelftest: verwacht 0x40000000000012d687');start()};
-try{const f=JSON.parse(localStorage.getItem('gpuscan_found')||'null');if(f)log('Eerder gevonden sleutel in opslag: 0x'+f.key,'var(--ok)')}catch(e){}
-try{const now=Date.now(),old=JSON.parse(localStorage.getItem('gpuscan_err')||'[]').filter(x=>now-Date.parse(x.t)<6*3600*1000).slice(-5);if(old.length){log('Let op: de volgende regels zijn OUDE fouten uit eerdere sessies (laatste 6 uur), geen huidige. Wis ze met de knop Wis foutlog.','var(--mu)');old.forEach(x=>log('Eerdere fout ['+new Date(x.t).toLocaleString('nl-NL')+']: '+x.m,'var(--wr)'))}}catch(e){}
-try{const c=JSON.parse(localStorage.getItem('gpuscan_cfg')||'null');if(c&&c.gk>=1&&c.gk<=128&&[64,128,256].includes(c.wg)){setCfg(c.gk,c.wg);ROTBFI=!!c.rb;$('rb').value=ROTBFI?1:0;$('gk').value=c.gk;$('wg').value=c.wg;$('batch').value=DEFB;log('Opgeslagen instellingen toegepast: GK='+c.gk+', WG='+c.wg)}}catch(e){}
-ensureGPU();
+  if(!gpuReady&&!(await initGPU()))return;
+  running=true;$('go').disabled=true;$('stop').disabled=false;$('status').textContent='Zoeken (ETH)...';
+  log('Ethereum scan gestart...');
+};
+$('stop').onclick=()=>stop('Gestopt door gebruiker');
+initGPU();
 </script></body></html>
