@@ -1,346 +1,487 @@
 <!DOCTYPE html>
-<html lang="nl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>WebGPU Ethereum Scanner — Alleen GPU</title>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BIP39 12-Woorden Seed Scanner</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 <style>
-:root{--bg:#07090f;--sf:#0d1117;--pn:#111827;--bd:#1f2937;--ac:#627eea;--a2:#00c3ff;--wr:#f59e0b;--dg:#ef4444;--ok:#10b981;--mu:#6b7280;--tx:#e2e8f0}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Courier New',monospace;background:var(--bg);color:var(--tx);padding:20px 14px 40px}
-.c{max-width:760px;margin:0 auto}h1{font-size:1.2rem;letter-spacing:.15em;color:var(--ac);text-align:center;text-transform:uppercase}
-.badge{display:block;width:max-content;margin:10px auto 18px;border:1px solid var(--ac);color:var(--ac);font-size:.65rem;padding:4px 12px;border-radius:4px}
-.card{background:var(--pn);border:1px solid var(--bd);border-radius:8px;padding:18px;margin-bottom:16px}
-.t{font-size:.72rem;letter-spacing:.15em;text-transform:uppercase;font-weight:bold;border-bottom:1px solid var(--bd);padding-bottom:8px;margin-bottom:14px;color:var(--a2)}
-.f{display:grid;grid-template-columns:200px 1fr;gap:10px;align-items:center;margin-bottom:12px}.f label{font-size:.72rem;color:var(--mu);font-weight:bold}
-input{background:var(--sf);color:var(--ac);border:1px solid #374151;border-radius:4px;padding:8px 10px;font:inherit;font-size:.8rem;width:100%;outline:none}
-input:read-only{border-style:dashed}
-.r{display:flex;gap:10px;margin-top:6px;flex-wrap:wrap}
-.b{flex:1;min-width:120px;padding:11px;font:inherit;font-weight:bold;border:0;border-radius:4px;cursor:pointer;text-transform:uppercase;font-size:.8rem}
-.b:disabled{opacity:.4;cursor:not-allowed}.go{background:var(--ok);color:#000}.st{background:var(--dg);color:#fff}.ts{background:#294056;color:var(--tx)}
-.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-.s{background:var(--sf);border:1px solid var(--bd);border-radius:6px;padding:10px 12px}.s .l{font-size:.6rem;letter-spacing:.12em;color:var(--mu);text-transform:uppercase;margin-bottom:5px}.s .v{font-size:1rem;font-weight:bold;color:var(--ac);word-break:break-all}
-.pw{height:6px;background:var(--bd);border-radius:3px;margin-top:14px;overflow:hidden}.pb{height:100%;width:0;background:linear-gradient(90deg,var(--a2),var(--ac))}
-.log{background:#000;color:var(--ac);height:170px;overflow-y:auto;padding:10px 12px;font-size:.72rem;line-height:1.55;border-radius:6px;border:1px solid var(--bd)}.ts2{color:var(--mu);margin-right:6px}
-table{width:100%;border-collapse:collapse;font-size:.72rem;table-layout:fixed}th,td{border:1px solid var(--bd);padding:9px;word-break:break-all;text-align:left}th{color:var(--a2);font-size:.62rem;text-transform:uppercase}
-@media(max-width:620px){.f{grid-template-columns:1fr;gap:5px}}
-</style></head><body><div class="c">
-<h1>WebGPU Ethereum Scanner</h1><span class="badge" id="badge">INITIALISEREN...</span>
-<div class="card"><div class="t">Configuratie</div>
-<div class="f"><label>Target ETH-adres</label><input id="addr" value="0xd8da6bf26964af9d7eed9e03e53415d37aa96045"></div>
-<div class="f"><label>Beginwaarde (HEX)</label><input id="rmin" value="400000000000000000"></div>
-<div class="f"><label>Eindwaarde (HEX)</label><input id="rmax" value="7fffffffffffffffff"></div>
-<div class="f"><label>Keys per GPU-lease</label><input id="lease" type="number" min="1000" value="10000000"></div>
-<div class="f"><label>GPU pipeline-stages (1-4)</label><input id="depth" type="number" min="1" max="4" value="2"></div>
-<div class="f"><label>Keys per batch</label><input id="batch" type="number" min="8320" step="8320" value="2096640"></div>
-<div class="f"><label>GPU-belasting % (10-100)</label><input id="load" type="number" min="10" max="100" value="100"></div>
-<div class="f"><label>Keys per thread GK (1-128)</label><input id="gk" type="number" min="1" max="128" value="32"></div>
-<div class="f"><label>Workgroup WG (64/128/256)</label><input id="wg" type="number" step="64" min="64" max="256" value="128"></div>
-<div class="f"><label>Actuele lease</label><input id="cur" readonly></div>
-<div class="r"><button class="b go" id="go">▶ Start</button><button class="b st" id="stop" disabled>■ Stop</button><button class="b ts" id="clr">Wis foutlog</button><button class="b ts" id="wipe">Wis voortgang</button></div></div>
-<div class="card"><div class="t">Sessie</div><div class="g">
-<div class="s"><div class="l">Status</div><div class="v" id="status">Gestopt</div></div>
-<div class="s"><div class="l">Totaal gescand</div><div class="v" id="total">0</div></div>
-<div class="s"><div class="l">Snelheid</div><div class="v" id="speed">0 /s</div></div>
-<div class="s"><div class="l">Leases bezocht</div><div class="v" id="leases">0</div></div></div>
-<div class="pw"><div class="pb" id="bar"></div></div></div>
-<div class="card"><div class="t">Log</div><div class="log" id="log"></div></div>
-<div class="card"><div class="t">Resultaten</div><table><thead><tr><th style="width:22%">Type</th><th style="width:48%">ETH-adres</th><th>Privésleutel (HEX)</th></tr></thead><tbody id="res"><tr id="none"><td colspan="3" style="text-align:center;color:var(--mu)">Nog geen match.</td></tr></tbody></table></div>
-</div>
-<script>
-let GK=32,WG=128,GRP=65,UNIT=0,MAXB=0,DEFB=0,BATCH=0;
-function setCfg(gk,wg){GK=gk;WG=wg;GRP=2*gk+1;UNIT=GRP*WG;const th=Math.floor((4194303-GK)/GRP);MAXB=Math.max(1,Math.floor(th/WG))*UNIT;DEFB=Math.min(MAXB,Math.max(1,Math.round(2096640/UNIT))*UNIT);BATCH=DEFB}
-setCfg(32,128);
+  body { font-family: 'Inter', system-ui, sans-serif; }
+  code, pre, .mono { font-family: 'Fira Code', ui-monospace, monospace; }
+  .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: #1f2937; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+</style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
 
-function genField(GK,GRP){
- const C=n=>Array.from({length:n},(_,i)=>'c'+i).join(',');
- const carry=(a,b)=>{let t='';for(let k=a;k<b;k++)t+=`c${k+1}+=c${k}>>13u;c${k}&=8191u;\n`;return t};
- const ret=`return array<u32,20>(${C(20)});\n}\n`;
- const fold=(f,t)=>{let s='';for(let k=f;k>=t;k--)s+=`c${k-20}+=c${k}*15632u;c${k-18}+=c${k}*1024u;\n`;return s};
- const decl=n=>{let t='';for(let k=0;k<n;k++)t+=`var c${k}:u32=0u;`;return t+'\n'};
- const rip='if(c5>8191u){\n'+carry(5,20)+'if(c20!=0u){let h2=c20;c20=0u;c0+=h2*15632u;c2+=h2*1024u;\n'+carry(0,5)+'}\n}\n';
- const tail=carry(20,39)+'c40=c39>>13u;c39&=8191u;\n'+fold(40,22)+'c22=0u;\nc21+=c20>>13u;c20&=8191u;c22=c21>>13u;c21&=8191u;\n'+fold(22,20)+'c20=0u;c21=0u;c22=0u;\n'+carry(0,20)+'let h=c20;c20=0u;c0+=h*15632u;c2+=h*1024u;\n'+carry(0,5)+rip+ret;
- const ntail=carry(0,20)+'if(c20!=0u){\nlet h=c20;c20=0u;c0+=h*15632u;c2+=h*1024u;\n'+carry(0,5)+rip+'}\n'+ret;
- const P=(1n<<256n)-(1n<<32n)-977n,kp=32n*P,K=[];
- for(let i=0;i<19;i++)K.push(Number((kp>>BigInt(13*i))&8191n));K.push(Number(kp>>247n));
- K[0]+=8192;for(let i=1;i<19;i++)K[i]+=8191;K[19]-=1;
- let o=`alias F = array<u32,20>;\nconst KS: array<u32,20> = array<u32,20>(${K.map(x=>x+'u').join(',')});\n`;
- o+=`fn oneF() -> F { return array<u32,20>(1u${',0u'.repeat(19)}); }\n`;
- o+='fn mulmod(a: F, b: F) -> F {\n'+decl(41);
- for(let i=0;i<20;i++)for(let j=0;j<20;j++)o+=`c${i+j}+=a[${i}]*b[${j}];\n`;
- o+=tail;
- o+='fn sqrmod(a: F) -> F {\n'+decl(41);
- for(let i=0;i<20;i++){o+=`c${2*i}+=a[${i}]*a[${i}];\n`;for(let j=i+1;j<20;j++)o+=`c${i+j}+=(a[${i}]<<1u)*a[${j}];\n`}
- o+=tail;
- o+='fn mulsub(a: F, b: F, s: F) -> F {\n'+decl(41);
- for(let i=0;i<20;i++)for(let j=0;j<20;j++)o+=`c${i+j}+=a[${i}]*b[${j}];\n`;
- for(let k=0;k<20;k++)o+=`c${k}+=KS[${k}]-s[${k}];\n`;
- o+=tail;
- o+='fn sqrsub(a: F, s: F) -> F {\n'+decl(41);
- for(let i=0;i<20;i++){o+=`c${2*i}+=a[${i}]*a[${i}];\n`;for(let j=i+1;j<20;j++)o+=`c${i+j}+=(a[${i}]<<1u)*a[${j}];\n`}
- for(let k=0;k<20;k++)o+=`c${k}+=KS[${k}]-s[${k}];\n`;
- o+=tail;
- o+='fn addmod(a: F, b: F) -> F {\n';for(let k=0;k<20;k++)o+=`var c${k}:u32=a[${k}]+b[${k}];`;o+='var c20:u32=0u;\n'+ntail;
- o+='fn submod(a: F, b: F) -> F {\n';for(let k=0;k<20;k++)o+=`var c${k}:u32=a[${k}]+KS[${k}]-b[${k}];`;o+='var c20:u32=0u;\n'+ntail;
- o+='fn fromW(w: array<u32,8>) -> F { return array<u32,20>(';
- o+=Array.from({length:20},(_,i)=>{const s=(13*i)>>5,f=(13*i)&31;return (f+13<=32||s===7)?`(w[${s}]>>${f}u)&8191u`:`((w[${s}]>>${f}u)|(w[${s+1}]<<${32-f}u))&8191u`}).join(',')+'); }\n';
- o+='fn fromW9(w: array<u32,9>) -> F { return array<u32,20>(';
- o+=Array.from({length:20},(_,i)=>{const s=(13*i)>>5,f=(13*i)&31;return (f+13<=32)?`(w[${s}]>>${f}u)&8191u`:`((w[${s}]>>${f}u)|(w[${s+1}]<<${32-f}u))&8191u`}).join(',')+'); }\n';
- o+='fn packW(a: F) -> array<u32,9> {\n';for(let k=0;k<9;k++)o+=`var w${k}:u32=0u;`;o+='\n';
- for(let i=0;i<20;i++){const s=(13*i)>>5,f=(13*i)&31;o+=`w${s}|=a[${i}]<<${f}u;\n`;if(f+13>32)o+=`w${s+1}|=a[${i}]>>${32-f}u;\n`}
- o+='return array<u32,9>(w0,w1,w2,w3,w4,w5,w6,w7,w8);\n}\n';
- o+=`fn canon(a: F) -> array<u32,8> {
-  let q = packW(a); let t = q[8];
-  var v = array<u32,8>(q[0],q[1],q[2],q[3],q[4],q[5],q[6],q[7]);
-  let x0 = addc(v[0], t * 977u, 0u); v[0] = x0.x; let x1 = addc(v[1], t, x0.y); v[1] = x1.x; var cr = x1.y;
-  if (cr != 0u) {
-    for (var i = 2u; i < 8u; i = i + 1u) { let s = addc(v[i], 0u, cr); v[i] = s.x; cr = s.y; }
-    if (cr != 0u) {
-      let y0 = addc(v[0], cr * 977u, 0u); v[0] = y0.x; let y1 = addc(v[1], cr, y0.y); v[1] = y1.x; cr = y1.y;
-      if (cr != 0u) { for (var i = 2u; i < 8u; i = i + 1u) { let s = addc(v[i], 0u, cr); v[i] = s.x; cr = s.y; } }
+<header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
+  <div class="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center space-x-3">
+      <div class="p-2 bg-indigo-600/20 text-indigo-400 rounded-lg border border-indigo-500/30">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">BIP39 12-Woorden Seed Scanner</h1>
+        <p class="text-xs text-slate-400">Ethereum HD Wallet · permutatie-herstel · multi-threaded</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3 text-xs bg-slate-800/60 px-3 py-1.5 rounded-full border border-slate-700">
+      <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+      <span class="text-slate-300" id="threadCountDisplay">Threads: detecteren...</span>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+  <section class="lg:col-span-6 space-y-6">
+
+    <div class="bg-slate-900 rounded-xl p-5 border border-slate-800 shadow-xl">
+      <h2 class="text-sm font-semibold uppercase tracking-wider text-indigo-400 mb-4 flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        Doel Configuratie
+      </h2>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Doel Ethereum Adres</label>
+          <input type="text" id="targetAddress" value="0x9C2F44EFAd0c1E852a09dF9939e6DaF061140CaF"
+            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-emerald-400 mono focus:outline-none focus:border-indigo-500">
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Derivatie Pad</label>
+            <input type="text" id="derivationPath" value="m/44'/60'/0'/0/0"
+              class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 mono focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Parallelle Threads</label>
+            <select id="workerCount" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+              <option value="1">1 Thread</option>
+              <option value="2">2 Threads</option>
+              <option value="4" selected>4 Threads</option>
+              <option value="6">6 Thread views</option>
+              <option value="8">8 Threads</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 rounded-xl p-5 border border-slate-800 shadow-xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-indigo-400 flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor"Box="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          12-Woorden Rooster
+        </h2>
+        <span class="text-xs text-slate-500">Bekend of leeg laten = onbekend</span>
+      </div>
+      <div id="seedGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3"></div>
+    </div>
+
+    <div class="bg-slate-900 rounded-xl p-5 border border-slate-800 shadow-xl space-y-3">
+      <label class="block text-sm font-semibold uppercase tracking-wider text-indigo-400 flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+        Kandidaat Woorden (voor onbekende posities)
+      </label>
+      <p class="text-xs text-slate-400">Plak hier je woordenlijst, gescheiden door komma's, spaties of nieuwe regels.</p>
+      <textarea id="candidateWords" rows="4"
+        class="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm text-indigo-300 mono focus:outline-none focus:border-indigo-500 custom-scrollbar">fiber, fork, forest, wood, hunter, rib, roast, dinner, fresh, round, cattle, living, sing, song, goat, whistle, power, profit, cable, fan, screen, noise, coin, update, setup, system, block, chain, miner, board, chip, heat, cool, error, status, speed</textarea>
+    </div>
+
+    <div class="flex gap-4">
+      <button id="startBtn" onclick="toggleScan()" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2">
+        <svg id="playIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span id="startBtnText">Start Herstel Scan</span>
+      </button>
+    </div>
+
+  </section>
+
+  <section class="lg:col-span-6 space-y-6 flex flex-col">
+
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
+        <p class="text-xs text-slate-400 font-medium">Totaal Permutaties</p>
+        <p id="statTotal" class="text-lg font-bold text-slate-200 mt-1">0</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
+        <p class="text-xs text-slate-400 font-medium">Getest / Snelheid</p>
+        <p id="statSpeed" class="text-lg font-bold text-indigo-400 mt-1">0 <span class="text-xs text-slate-500 font-normal">/s</span></p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl col-span-2 sm:col-span-1">
+        <p class="text-xs text-slate-400 font-medium">Voortgang</p>
+        <p id="statProgress" class="text-lg font-bold text-emerald-400 mt-1">0,00%</p>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl space-y-2">
+      <div class="flex justify-between text-xs text-slate-400">
+        <span>Scan Status</span>
+        <span id="scanStatusText" class="text-slate-300">In afwachting</span>
+      </div>
+      <div class="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden border border-slate-800">
+        <div id="progressBar" class="bg-indigo-500 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+      </div>
+    </div>
+
+    <div id="resultBanner" class="hidden bg-emerald-950/60 border border-emerald-500/50 rounded-xl p-5 shadow-2xl space-y-3">
+      <div class="flex items-center gap-2 text-emerald-400 font-bold">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        MATCH GEVONDEN!
+      </div>
+      <div class="space-y-1">
+        <p class="text-xs text-slate-400">Gevonden Seed Phrase:</p>
+        <p id="foundMnemonic" class="text-base mono font-bold text-white bg-slate-900/80 p-3 rounded-lg border border-emerald-500/30 select-all"></p>
+      </div>
+      <div class="space-y-1">
+        <p class="text-xs text-slate-400">Afgeleid Adres:</p>
+        <p id="foundAddress" class="text-xs mono text-emerald-300 select-all"></p>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl flex-1 flex flex-col min-h-[300px]">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
+        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          Uitvoer Logs
+        </span>
+        <button onclick="clearLogs()" class="text-xs text-slate-500 hover:text-slate-300">Wis</button>
+      </div>
+      <div id="logOutput" class="flex-1 mono text-xs text-slate-300 space-y-1 overflow-y-auto max-h-[350px] custom-scrollbar bg-slate-950/60 p-3 rounded-lg border border-slate-800/80">
+        <div class="text-slate-500">[Systeem] Gereed.</div>
+      </div>
+    </div>
+
+  </section>
+</main>
+
+<!-- ============ WORKER ============ -->
+<script id="worker-code" type="javascript/worker">
+let stopFlag = false;
+
+self.onmessage = function(e) {
+  const d = e.data;
+  if (d.type === 'STOP') { stopFlag = true; return; }
+  if (d.type !== 'START') return;
+
+  try {
+    if (typeof ethers === 'undefined') importScripts(d.ethersScriptUrl);
+  } catch (err) {
+    self.postMessage({ type: 'ERROR', message: 'ethers.js laden mislukt: ' + err.message });
+    return;
+  }
+
+  const { startIndex, endIndex, candidates, fixedGrid, unknownIdx, targetAddress, derivationPath } = d;
+  const k = unknownIdx.length;
+  const target = targetAddress.toLowerCase();
+  let scanned = 0;
+  let lastReport = Date.now();
+
+  function fact(n, k) {
+    let r = 1;
+    for (let i = 0; i < k; i++) r *= (n - i);
+    return r;
+  }
+  function permAt(index, pool, count) {
+    const avail = [...pool];
+    let idx = index, out = [];
+    for (let i = 0; i < count; i++) {
+      const p = fact(avail.length - 1, count - 1 - i);
+      const s = Math.floor(idx / p);
+      out.push(avail[s]);
+      avail.splice(s, 1);
+      idx %= p;
+    }
+    return out;
+  }
+
+  for (let i = startIndex; i < endIndex; i++) {
+    if (stopFlag) { self.postMessage({ type: 'STOPPED' }); return; }
+
+    const combo = permAt(i, candidates, k);
+    const words = new Array(12);
+    for (let p = 0; p < 12; p++) if (fixedGrid[p] !== '') words[p] = fixedGrid[p];
+    for (let m = 0; m < k; m++) words[unknownIdx[m]] = combo[m];
+
+    const mnemonic = words.join(' ');
+
+    if (ethers.utils.isValidMnemonic(mnemonic)) {
+      try {
+        const w = ethers.Wallet.fromMnemonic(mnemonic, derivationPath);
+        if (w.address.toLowerCase() === target) {
+          self.postMessage({ type: 'FOUND', mnemonic, address: w.address });
+          return;
+        }
+      } catch (err) {}
+    }
+
+    scanned++;
+    if (Date.now() - lastReport > 200) {
+      self.postMessage({ type: 'PROGRESS', count: scanned });
+      scanned = 0;
+      lastReport = Date.now();
     }
   }
-  if (v[7] == 0xFFFFFFFFu) { if (cmp8(v, P) >= 0) { let d = sub8(v, P); v = d.v; } }
-  return v;
-}
-`;
- o+=`const GK: u32 = ${GK}u;\nconst GRP: u32 = ${GRP}u;\n`;
- return o;
-}
-
-// Keccak-256 state functions for Ethereum
-function genKeccak(){
- return `
-// Keccak-256 vereenvoudigde 64-bit simulatie met 32-bit u32 vecs voor WGSL
-fn rotl64(x: vec2<u32>, s: u32) -> vec2<u32> {
-  let l = s & 31u; let h = s >> 5u;
-  if (h == 0u) {
-    return vec2<u32>((x.x << l) | (x.y >> (32u - l)), (x.y << l) | (x.x >> (32u - l)));
-  } else {
-    return vec2<u32>((x.y << l) | (x.x >> (32u - l)), (x.x << l) | (x.y >> (32u - l)));
-  }
-}
-
-fn keccak256_pubkey(xw: array<u32,8>, yw: array<u32,8>) -> array<u32,5> {
-  // Bevat de logica voor Ethereum adresafgeleide uit 64 bytes (xw + yw)
-  // Voor prestatie en betrouwbaarheid in WGSL wordt hier de 20-byte hash uit berekend.
-  // [Hieronder wordt de 20-byte hash van het adres vergeleken met targetData]
-  var addrHash: array<u32,5>;
-  // Placeholder voor de Keccak-256 output (laatste 20 bytes van keccak(xw + yw))
-  return addrHash;
-}
-`;
-}
-
-function buildWGSL(){return `
-struct TargetHash { h: vec4<u32>, h4: u32 };
-struct BatchParams { startKey: vec4<u32>, startKey2: vec4<u32>, gx: vec4<u32>, gx2: vec4<u32>, gy: vec4<u32>, gy2: vec4<u32> };
-struct R8 { v: array<u32,8>, c: u32 };
-const P: array<u32,8> = array<u32,8>(0xFFFFFC2Fu,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
-fn addc(a: u32, b: u32, cin: u32) -> vec2<u32> {
-  let s1 = a + b; let c1 = select(0u, 1u, s1 < a);
-  let s2 = s1 + cin; let c2 = select(0u, 1u, s2 < s1);
-  return vec2<u32>(s2, c1 + c2);
-}
-fn subb(a: u32, b: u32, bin: u32) -> vec2<u32> {
-  let d1 = a - b; let b1 = select(0u, 1u, a < b);
-  let d2 = d1 - bin; let b2 = select(0u, 1u, d1 < bin);
-  return vec2<u32>(d2, b1 + b2);
-}
-fn add8(a: array<u32,8>, b: array<u32,8>) -> R8 {
-  var out: array<u32,8>; var carry: u32 = 0u;
-  for (var i = 0u; i < 8u; i = i + 1u) { let r = addc(a[i], b[i], carry); out[i] = r.x; carry = r.y; }
-  var res: R8; res.v = out; res.c = carry; return res;
-}
-fn sub8(a: array<u32,8>, b: array<u32,8>) -> R8 {
-  var out: array<u32,8>; var borrow: u32 = 0u;
-  for (var i = 0u; i < 8u; i = i + 1u) { let r = subb(a[i], b[i], borrow); out[i] = r.x; borrow = r.y; }
-  var res: R8; res.v = out; res.c = borrow; return res;
-}
-fn cmp8(a: array<u32,8>, b: array<u32,8>) -> i32 {
-  for (var ii = 0u; ii < 8u; ii = ii + 1u) { let i = 7u - ii; if (a[i] != b[i]) { return select(-1, 1, a[i] > b[i]); } }
-  return 0;
-}
-${genField(GK,GRP)}
-struct JPoint { X: F, Y: F, Z: F, isInf: bool };
-fn jacMaddAffine(p: JPoint, x2: F, y2: F) -> JPoint {
-  if (p.isInf) { return JPoint(x2, y2, oneF(), false); }
-  let Z1sq = sqrmod(p.Z);
-  let U2 = mulmod(x2, Z1sq);
-  let S2 = mulmod(mulmod(y2, Z1sq), p.Z);
-  let H = submod(U2, p.X);
-  let R = submod(S2, p.Y);
-  let HH = sqrmod(H); let HHH = mulmod(HH, H);
-  let V = mulmod(p.X, HH);
-  let X3 = submod(submod(sqrmod(R), HHH), addmod(V, V));
-  let Y3 = submod(mulmod(R, submod(V, X3)), mulmod(p.Y, HHH));
-  return JPoint(X3, Y3, mulmod(p.Z, H), false);
-}
-fn sqrN(a: F, n: u32) -> F { var r = a; for (var i = 0u; i < n; i = i + 1u) { r = sqrmod(r); } return r; }
-fn modpowP2(base: F) -> F {
-  let x1  = base;
-  let x2  = mulmod(sqrN(x1, 1u), x1);
-  let x3  = mulmod(sqrN(x2, 1u), x1);
-  let x6  = mulmod(sqrN(x3, 3u), x3);
-  let x9  = mulmod(sqrN(x6, 3u), x3);
-  let x11 = mulmod(sqrN(x9, 2u), x2);
-  let x22 = mulmod(sqrN(x11, 11u), x11);
-  let x44 = mulmod(sqrN(x22, 22u), x22);
-  let x88 = mulmod(sqrN(x44, 44u), x44);
-  var r = mulmod(sqrN(x88, 88u), x88);
-  r = mulmod(sqrN(r, 44u), x44);
-  r = mulmod(sqrN(r, 3u), x3);
-  r = mulmod(sqrN(r, 23u), x22);
-  r = mulmod(sqrN(r, 5u), x1);
-  r = mulmod(sqrN(r, 3u), x2);
-  r = sqrN(r, 2u);
-  return mulmod(r, base);
-}
-@group(0) @binding(0) var<uniform> batch: BatchParams;
-@group(0) @binding(1) var<storage, read> combTable: array<u32>;
-@group(0) @binding(2) var<uniform> targetData: TargetHash;
-@group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>;
-@group(0) @binding(4) var<storage, read> gTable: array<u32>;
-fn gxj(j: u32) -> F { var r: F; let b = (j - 1u) * 40u; for (var m = 0u; m < 20u; m = m + 1u) { r[m] = gTable[b + m]; } return r; }
-fn gyj(j: u32) -> F { var r: F; let b = (j - 1u) * 40u + 20u; for (var m = 0u; m < 20u; m = m + 1u) { r[m] = gTable[b + m]; } return r; }
-
-fn chk(x: F, y: F, idx: u32) {
-  let xw = canon(x);
-  let yw = canon(y);
-  // Ethereum adresvergelijking op basis van Keccak256(pubkey)
-  // Als een match gevonden wordt:
-  // resultBuffer[0] = 1u; resultBuffer[1] = idx;
-}
-
-fn tabW(w: u32, e: u32, off: u32) -> F { var r: array<u32,8>; let b = (w * 2048u + e) * 16u + off; for (var m = 0u; m < 8u; m = m + 1u) { r[m] = combTable[b + m]; } return fromW(r); }
-fn jacAddAA(x1: F, y1: F, x2: F, y2: F) -> JPoint {
-  let H = submod(x2, x1); let R = submod(y2, y1);
-  let HH = sqrmod(H); let HHH = mulmod(HH, H); let V = mulmod(x1, HH);
-  let X3 = submod(submod(sqrmod(R), HHH), addmod(V, V));
-  let Y3 = submod(mulmod(R, submod(V, X3)), mulmod(y1, HHH));
-  return JPoint(X3, Y3, H, false);
-}
-var<workgroup> tree: array<array<u32,9>, ${2*WG}>;
-fn ld(i: u32) -> F { return fromW9(tree[i]); }
-fn stw(i: u32, v: F) { tree[i] = packW(v); }
-fn treeInv(lid: u32) {
-  workgroupBarrier();
-  for (var width = ${WG/2}u; width > 0u; width = width / 2u) {
-    if (lid < width) { let n = width + lid; stw(n, mulmod(ld(n * 2u), ld(n * 2u + 1u))); }
-    workgroupBarrier();
-  }
-  if (lid == 0u) { stw(1u, modpowP2(ld(1u))); }
-  workgroupBarrier();
-  for (var width = 1u; width < ${WG}u; width = width * 2u) {
-    if (lid < width) {
-      let n = width + lid; let pi = ld(n); let lp = ld(n * 2u); let rp = ld(n * 2u + 1u);
-      stw(n * 2u, mulmod(pi, rp)); stw(n * 2u + 1u, mulmod(pi, lp));
-    }
-    workgroupBarrier();
-  }
-}
-@compute @workgroup_size(${WG})
-fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation_id) lid3: vec3<u32>) {
-  let lid = lid3.x;
-  let first = gid.x * GRP; let total = batch.startKey2.w;
-  let isAct = first < total;
-  let cidx = first + GK;
-  var X: F; var Y: F; var Z: F = oneF();
-  if (isAct) {
-    let lo = cidx & 2047u; let hi = cidx >> 11u;
-    let bx = fromW(array<u32,8>(batch.gx.x,batch.gx.y,batch.gx.z,batch.gx.w,batch.gx2.x,batch.gx2.y,batch.gx2.z,batch.gx2.w));
-    let by = fromW(array<u32,8>(batch.gy.x,batch.gy.y,batch.gy.z,batch.gy.w,batch.gy2.x,batch.gy2.y,batch.gy2.z,batch.gy2.w));
-    var pt: JPoint;
-    if (lo != 0u) {
-      pt = jacAddAA(bx, by, tabW(0u, lo, 0u), tabW(0u, lo, 8u));
-      if (hi != 0u) { pt = jacMaddAffine(pt, tabW(1u, hi, 0u), tabW(1u, hi, 8u)); }
-    } else {
-      pt = jacAddAA(bx, by, tabW(1u, hi, 0u), tabW(1u, hi, 8u));
-    }
-    X = pt.X; Y = pt.Y; Z = pt.Z;
-  }
-  stw(${WG}u + lid, Z);
-  treeInv(lid);
-  var x1: F; var y1: F;
-  var pre: array<array<u32,9>, ${GK}>;
-  var run = oneF();
-  if (isAct) {
-    let zi = ld(${WG}u + lid);
-    let zi2 = sqrmod(zi);
-    x1 = mulmod(X, zi2); y1 = mulmod(Y, mulmod(zi2, zi));
-    for (var j = 1u; j <= GK; j = j + 1u) {
-      run = mulmod(run, submod(gxj(j), x1)); pre[j - 1u] = packW(run);
-    }
-  }
-  stw(${WG}u + lid, run);
-  treeInv(lid);
-  if (!isAct) { return; }
-  var inv = ld(${WG}u + lid);
-  for (var jj = 0u; jj < GK; jj = jj + 1u) {
-    let j = GK - jj;
-    var iw = inv;
-    if (j > 1u) { iw = mulmod(inv, fromW9(pre[j - 2u])); }
-    inv = mulmod(inv, submod(gxj(j), x1));
-    pre[j - 1u] = packW(iw);
-  }
-  if (cidx < total) { chk(x1, y1, cidx); }
-  for (var j = 1u; j <= GK; j = j + 1u) {
-    let gx = gxj(j); let gy = gyj(j); let iw = fromW9(pre[j - 1u]);
-    let lp = mulmod(submod(gy, y1), iw);
-    let lq = mulmod(addmod(gy, y1), iw);
-    let xs = addmod(x1, gx);
-    let x3p = sqrsub(lp, xs); let x3m = sqrsub(lq, xs);
-    let y3p = mulsub(lp, submod(x1, x3p), y1);
-    let y3m = mulsub(lq, submod(x3m, x1), y1);
-    if (cidx + j < total) { chk(x3p, y3p, cidx + j); }
-    if (cidx - j < total) { chk(x3m, y3m, cidx - j); }
-  }
-}
-`}
-
-const $=id=>document.getElementById(id);
-const SP=(1n<<256n)-(1n<<32n)-977n;
-const G={x:0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n,y:0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n};
-const ORDER=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
-function modinv(a,m){a=((a%m)+m)%m;let[o,r]=[a,m],[os,s]=[1n,0n];while(r){const q=o/r;[o,r]=[r,o-q*r];[os,s]=[s,os-q*s]}return((os%m)+m)%m}
-function ecDouble(P){if(!P||P.y===0n)return null;const l=(3n*P.x%SP*P.x%SP)*modinv(2n*P.y%SP,SP)%SP;const x=((l*l-2n*P.x)%SP+SP)%SP;return{x,y:((l*(P.x-x)-P.y)%SP+SP)%SP}}
-function ecAdd(P,Q){if(!P)return Q;if(!Q)return P;if(P.x===Q.x){if((P.y+Q.y)%SP===0n)return null;return ecDouble(P)}const l=((Q.y-P.y)%SP+SP)%SP*modinv(Q.x-P.x,SP)%SP;const x=((l*l-P.x-Q.x)%SP+SP)%SP;return{x,y:((l*(P.x-x)-P.y)%SP+SP)%SP}}
-function ecMul(k,B){let r=null,a=B;while(k>0n){if(k&1n)r=ecAdd(r,a);a=ecDouble(a);k>>=1n}return r}
-function limbs13(v){const o=new Uint32Array(20);for(let i=0;i<20;i++)o[i]=Number((v>>BigInt(13*i))&8191n);return o}
-function limbs(v){const o=new Uint32Array(8);for(let i=0;i<8;i++)o[i]=Number((v>>BigInt(32*i))&0xFFFFFFFFn);return o}
-function hexTo32(h){h=h.replace(/^0x/i,'').padStart(64,'0');const o=new Uint8Array(32);for(let i=0;i<32;i++)o[i]=parseInt(h.substr(i*2,2),16);return o}
-function buildTable(){const T=new Uint32Array(2*2048*16);let base=G;for(let i=0;i<2;i++){let acc=null;for(let e=1;e<2048;e++){acc=ecAdd(acc,base);const o=(i*2048+e)*16;T.set(limbs(acc.x),o);T.set(limbs(acc.y),o+8)}for(let d=0;d<11;d++)base=ecDouble(base)}return T}
-
-function log(m,c='var(--tx)'){const b=$('log'),d=new Date(),e=document.createElement('div');e.innerHTML=`<span class="ts2">[${d.toLocaleTimeString('nl-NL')}]</span><span style="color:${c}">${m}</span>`;b.appendChild(e);while(b.childElementCount>200)b.removeChild(b.firstElementChild);b.scrollTop=b.scrollHeight}
-let dev,pipe,tableBuf,gtBuf,tgtBuf,stages=[],running=false,tok=0,total=0,t0=0,leases=0,curLease=0,leaseLen=1,gpuReady=false,initP=null,TBL=null,GTBL=null;const ZERO2=new Uint32Array(2);
-
-async function initGPU(){
-  gpuReady=false;
-  if(!navigator.gpu){$('badge').textContent='WEBGPU NIET ONDERSTEUND';return false}
-  try{
-    const ad=await navigator.gpu.requestAdapter();if(!ad)return false;
-    stages=[];dev=await ad.requestDevice();
-    const mod=dev.createShaderModule({code:buildWGSL()});
-    pipe=dev.createComputePipeline({layout:'auto',compute:{module:mod,entryPoint:'main'}});
-    const T=TBL||(TBL=buildTable());tableBuf=dev.createBuffer({size:T.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});dev.queue.writeBuffer(tableBuf,0,T);
-    if(!GTBL||GTBL.length!==GK*40)GTBL=(()=>{const a=new Uint32Array(GK*40);let g=null;for(let j=1;j<=GK;j++){g=ecAdd(g,G);a.set(limbs13(g.x),(j-1)*40);a.set(limbs13(g.y),(j-1)*40+20)}return a})();const GT=GTBL;
-    gtBuf=dev.createBuffer({size:GT.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});dev.queue.writeBuffer(gtBuf,0,GT);
-    tgtBuf=dev.createBuffer({size:64,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-    for(let i=0;i<4;i++){
-      const bb=dev.createBuffer({size:96,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-      const rs=dev.createBuffer({size:8,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST});
-      const rd=dev.createBuffer({size:8,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
-      const bg=dev.createBindGroup({layout:pipe.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:bb}},{binding:1,resource:{buffer:tableBuf}},{binding:2,resource:{buffer:tgtBuf}},{binding:3,resource:{buffer:rs}},{binding:4,resource:{buffer:gtBuf}}]});
-      stages.push({bb,rs,rd,bg,p:null});
-    }
-    $('badge').textContent='WEBGPU GEREED (ETH)';log('WebGPU Ethereum klaar.','var(--ok)');gpuReady=true;return true;
-  }catch(e){dev=null;log('Init-fout: '+e.message,'var(--wr)');return false}
-}
-function stop(why){running=false;tok++;$('go').disabled=false;$('stop').disabled=true;$('status').textContent=why;log(why,'var(--dg)')}
-$('clr').onclick=()=>{p=$('log').innerHTML='';log('Log gewist.','var(--ok)')};
-$('go').onclick=async()=>{
-  if(running)return;
-  if(!gpuReady&&!(await initGPU()))return;
-  running=true;$('go').disabled=true;$('stop').disabled=false;$('status').textContent='Zoeken (ETH)...';
-  log('Ethereum scan gestart...');
+  if (scanned > 0) self.postMessage({ type: 'PROGRESS', count: scanned });
+  self.postMessage({ type: 'DONE' });
 };
-$('stop').onclick=()=>stop('Gestopt door gebruiker');
-initGPU();
-</script></body></html>
+</script>
+
+<!-- ============ MAIN ============ -->
+<script>
+const initialKnown = { 0: "", 4: "", 11: "" }; // pas aan indien nodig
+const ETHERS_CDN_URL = 'https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js';
+
+let workers = [];
+let isScanning = false;
+let totalPermutations = 0;
+let totalScanned = 0;
+let startTime = 0;
+let speedInterval = null;
+let foundMatch = false;
+let activeWorkerCount = 0;
+let workerUrl = null;
+
+document.addEventListener("DOMContentLoaded", () => {
+  buildGrid();
+  detectHardware();
+  if (typeof ethers === 'undefined') {
+    log('WAARSCHUWING: ethers.js niet geladen — controleer internet.', 'error');
+  } else {
+    log('ethers.js geladen. Klaar om te scannen.', 'info');
+  }
+});
+
+function detectHardware() {
+  const cores = navigator.hardwareConcurrency || 4;
+  document.getElementById('threadCountDisplay').innerText = `Threads: ${cores} cores`;
+  const opts = [1, 2, 4, 6, 8];
+  const best = opts.reduce((a, b) => Math.abs(b - cores) < Math.abs(a - cores) ? b : a);
+  document.getElementById('workerCount').value = best;
+}
+
+function buildGrid() {
+  const g = document.getElementById('seedGrid');
+  g.innerHTML = '';
+  for (let i = 0; i < 12; i++) {
+    const val = initialKnown[i] || '';
+    const div = document.createElement('div');
+    div.className = 'relative';
+    div.innerHTML = `
+      <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-0.5">Pos ${i + 1}</label>
+      <input type="text" id="pos-${i}" value="${val}" placeholder="Onbekend"
+        class="w-full bg-slate-950 border ${val ? 'border-indigo-500/60 text-indigo-300' : 'border-slate-800 text-slate-200'} rounded-lg px-2.5 py-1.5 text-xs mono focus:outline-none focus:border-indigo-500">
+    `;
+    g.appendChild(div);
+  }
+}
+
+function log(msg, type = 'info') {
+  const out = document.getElementById('logOutput');
+  const e = document.createElement('div');
+  const t = new Date().toLocaleTimeString();
+  let c = 'text-slate-300';
+  if (type === 'success') c = 'text-emerald-400 font-bold';
+  if (type === 'error') c = 'text-rose-400';
+  if (type === 'warn') c = 'text-amber-400';
+  e.className = c;
+  e.innerHTML = `<span class="text-slate-600">[${t}]</span> ${msg}`;
+  out.appendChild(e);
+  out.scrollTop = out.scrollHeight;
+}
+
+function clearLogs() { document.getElementById('logOutput').innerHTML = ''; }
+
+function countPermutations(n, k) {
+  let r = 1;
+  for (let i = 0; i < k; i++) r *= (n - i);
+  return r;
+}
+
+function toggleScan() {
+  if (isScanning) stopScan(false);
+  else startScan();
+}
+
+function startScan() {
+  if (typeof ethers === 'undefined') {
+    log('Kan niet starten: ethers.js niet geladen.', 'error');
+    return;
+  }
+  foundMatch = false;
+  const fixedGrid = [];
+  const unknownIdx = [];
+  for (let i = 0; i < 12; i++) {
+    const v = document.getElementById(`pos-${i}`).value.trim().toLowerCase();
+    fixedGrid.push(v);
+    if (!v) unknownIdx.push(i);
+  }
+
+  const raw = document.getElementById('candidateWords').value;
+  const candidates = [...new Set(raw.split(/[\s,]+/).map(w => w.trim().toLowerCase()).filter(Boolean))];
+
+  const unknownCount = unknownIdx.length;
+  log(`Kandidaten: ${candidates.length} uniek · onbekende posities: ${unknownCount}.`, 'info');
+
+  const targetAddress = document.getElementById('targetAddress').value.trim();
+  const derivationPath = document.getElementById('derivationPath').value.trim();
+
+  if (unknownCount === 0) {
+    testSingle(fixedGrid);
+    return;
+  }
+  if (candidates.length < unknownCount) {
+    log(`Minimaal ${unknownCount} kandidaten nodig, maar slechts ${candidates.length} gevonden.`, 'error');
+    return;
+  }
+  if (!ethers.utils.isAddress(targetAddress)) {
+    log('Ongeldig Ethereum doeladres.', 'error');
+    return;
+  }
+
+  totalPermutations = countPermutations(candidates.length, unknownCount);
+  document.getElementById('statTotal').innerText = totalPermutations.toLocaleString();
+  log(`Totaal permutaties: ${totalPermutations.toLocaleString()}`, 'info');
+
+  isScanning = true;
+  totalScanned = 0;
+  startTime = Date.now();
+  updateButtonState(true);
+
+  document.getElementById('scanStatusText').innerText = 'Scannen...';
+  document.getElementById('resultBanner').classList.add('hidden');
+  document.getElementById('progressBar').style.width = '0%';
+  document.getElementById('statProgress').innerText = '0,00%';
+  document.getElementById('statSpeed').innerHTML = '0 <span class="text-xs text-slate-500 font-normal">/s</span>';
+
+  const req = parseInt(document.getElementById('workerCount').value);
+  const wc = Math.min(req, totalPermutations);
+  const chunk = Math.ceil(totalPermutations / wc);
+
+  const code = document.getElementById('worker-code').textContent;
+  const blob = new Blob([code], { type: 'application/javascript' });
+  workerUrl = URL.createObjectURL(blob);
+
+  workers = [];
+  activeWorkerCount = wc;
+
+  for (let i = 0; i < wc; i++) {
+    const start = i * chunk;
+    const end = Math.min(start + chunk, totalPermutations);
+    const w = new Worker(workerUrl);
+
+    w.onmessage = (e) => {
+      const d = e.data;
+      if (d.type === 'PROGRESS') {
+        totalScanned += d.count;
+        updateProgress();
+      } else if (d.type === 'FOUND') {
+        if (!foundMatch) {
+          foundMatch = true;
+          onMatchFound(d.mnemonic, d.address);
+        }
+      } else if (d.type === 'DONE') {
+        activeWorkerCount--;
+        if (activeWorkerCount === 0 && isScanning && !foundMatch) {
+          log('Scan voltooid. Geen match.', 'warn');
+          stopScan(true);
+        }
+      } else if (d.type === 'ERROR') {
+        log('Worker fout: ' + d.message, 'error');
+        stopScan(true);
+      } else if (d.type === 'STOPPED') {
+        activeWorkerCount--;
+      }
+    };
+    w.onerror = (err) => log(`Worker ${i + 1} fout: ${err.message}`, 'error');
+
+    w.postMessage({
+      type: 'START',
+      startIndex: start,
+      endIndex: end,
+      candidates,
+      fixedGrid,
+      unknownIdx,
+      targetAddress,
+      derivationPath,
+      ethersScriptUrl: ETHERS_CDN_URL
+    });
+    workers.push(w);
+  }
+
+  speedInterval = setInterval(updateSpeed, 500);
+  log(`${wc} Web Workers gestart.`, 'info');
+}
+
+function testSingle(fixedGrid) {
+  const target = document.getElementById('targetAddress').value.trim();
+  const path = document.getElementById('derivationPath').value.trim();
+  const mnemonic = fixedGrid.join(' ');
+  if (!ethers.utils.isValidMnemonic(mnemonic)) {
+    log(`Ongeldige mnemonic (checksum faalt): ${mnemonic}`, 'error');
+    return;
+  }
+  try {
+    const w = ethers.Wallet.fromMnemonic(mnemonic, path);
+    if (w.address.toLowerCase() === target.toLowerCase()) onMatchFound(mnemonic, w.address);
+    else log(`Geen match. Adres: ${w.address}`, 'warn');
+  } catch (e) {
+    log(`Fout bij afleiden: ${e.message}`, 'error');
+  }
+}
+
+function updateProgress() {
+  const pct = Math.min((totalScanned / totalPermutations) * 100, 100).toFixed(2);
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('statProgress').innerText = pct.replace('.', ',') + '%';
+}
+
+function updateSpeed() {
+  const el = (Date.now() - startTime) / 1000;
+  if (el > 0) {
+    const s = Math.round(totalScanned / el);
+    document.getElementById('statSpeed').innerHTML = `${s.toLocaleString()} <span class="text-xs text-slate-500 font-normal">/s</span>`;
+  }
+}
+
+function onMatchFound(mnemonic, address) {
+  log(`SUCCES! Match gevonden: ${address}`, 'success');
+  log(`Seed: ${mnemonic}`, 'success');
+  document.getElementById('foundMnemonic').innerText = mnemonic;
+  document.getElementById('foundAddress').innerText = address;
+  document.getElementById('resultBanner').classList.remove('hidden');
+  stopScan(true);
+}
+
+function updateButtonState(scanning) {
+  const b = document.getElementById('startBtn');
+  const t = document.getElementById('startBtnText');
+  if (scanning) {
+    t.innerText = 'Stop Herstel Scan';
+    b.className = 'flex-1 bg-rose-600 hover:bg-rose-500 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2';
+  } else {
+    t.innerText = 'Start Herstel Scan';
+    b.className = 'flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2';
+  }
+}
+
+function stopScan(silent) {
+  if (!isScanning && !silent) return;
+  isScanning = false;
+  workers.forEach(w => { try { w.postMessage({ type: 'STOP' }); w.terminate(); } catch(e){} });
+  workers = [];
+  if (workerUrl) { URL.revokeObjectURL(workerUrl); workerUrl = null; }
+  clearInterval(speedInterval);
+  updateButtonState(false);
+  if (document.getElementById('scanStatusText').innerText === 'Scannen...') {
+    document.getElementById('scanStatusText').innerText = foundMatch ? 'Match gevonden!' : 'Gestopt';
+  }
+  if (!silent) log('Scan gestopt.', 'info');
+}
+</script>
+</body>
+</html>
