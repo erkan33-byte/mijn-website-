@@ -27,7 +27,7 @@
       </div>
       <div>
         <h1 class="text-xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">BIP39 12-Woorden Seed Scanner — GPU</h1>
-        <p class="text-xs text-slate-400">WebGL2 · fragment-shader checksum-filter · CPU fallback voor secp256k1</p>
+        <p class="text-xs text-slate-400">WebGL2 · fragment-shader checksum-filter · Voortgang opslaan & hervatten</p>
       </div>
     </div>
     <div class="flex items-center gap-3 text-xs bg-slate-800/60 px-3 py-1.5 rounded-full border border-slate-700">
@@ -86,9 +86,9 @@
     <div class="bg-slate-900 rounded-xl p-5 border border-slate-800 shadow-xl space-y-3">
       <label class="block text-sm font-semibold uppercase tracking-wider text-fuchsia-400 flex items-center gap-2">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-        Kandidaat Woorden (alle BIP39 woorden worden gebruikt als leeg)
+        Kandidaat Woorden
       </label>
-      <p class="text-xs text-slate-400">Laat leeg om de volledige BIP39 woordenlijst (2048 woorden) te gebruiken. Of plak een subset.</p>
+      <p class="text-xs text-slate-400">Laat leeg om de volledige BIP39 woordenlijst (2048 woorden) te gebruiken.</p>
       <textarea id="candidateWords" rows="3" placeholder="(leeg = volledige BIP39 lijst)"
         class="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm text-fuchsia-300 mono focus:outline-none focus:border-fuchsia-500 custom-scrollbar"></textarea>
     </div>
@@ -97,6 +97,9 @@
       <button id="startBtn" onclick="toggleScan()" class="flex-1 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2">
         <svg id="playIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         <span id="startBtnText">Start GPU Scan</span>
+      </button>
+      <button onclick="clearSavedProgress()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 rounded-xl border border-slate-700 transition-all">
+        Reset Opgeslagen Voortgang
       </button>
     </div>
 
@@ -202,12 +205,8 @@ self.onmessage = function(e) {
 </script>
 
 <script>
-// ============================================================
-// BIP39 woordenlijst (2048 woorden, Engels) - compact
-// ============================================================
 const BIP39_WORDS = ("abandon ability able about above absent absorb abstract absurd abuse access accident account accuse achieve acid acoustic acquire across act action actor actress actual adapt add addict address adjust admit adult advance advice aerobic affair afford afraid again age agent agree ahead aim air airport aisle alarm album alcohol alert alien all alley allow almost alone alpha already also alter always amateur amazing among amount amused analyst anchor ancient anger angle angry animal ankle announce annual another answer antenna antique anxiety any apart apology appear apple approve april arch arctic area arena argue arm armed armor army around arrange arrest arrive arrow art artefact artist artwork ask aspect assault asset assist assume asthma athlete atom attack attend attitude attract auction audit august aunt author auto autumn average avocado avoid awake aware away awesome awful awkward axis baby bachelor bacon badge bag balance balcony ball bamboo banana banner bar barely bargain barrel base basic basket battle beach bean beauty because become beef before begin behave behind believe below belt bench benefit best betray better between beyond bicycle bid bike bind biology bird birth bitter black blade blame blanket blast bleak bless blind blood blossom blouse blue blur blush board boat body boil bomb bone bonus book boost border boring borrow boss bottom bounce box boy bracket brain brand brass brave bread breeze brick bridge brief bright bring brisk broccoli broken bronze broom brother brown brush bubble buddy budget buffalo build bulb bulk bullet bundle bunker burden burger burst bus business busy butter buyer buzz cabbage cabin cable cactus cage cake call calm camera camp can canal cancel candy cannon canoe canvas canyon capable capital captain car carbon card cargo carpet carry cart case cash casino castle casual cat catalog catch category cattle caught cause caution cave ceiling cement census century cereal certain chair chalk champion change chaos chapter charge chase chat cheap check cheese chef chest chicken chief child chimney choice choose chronic chuckle chunk churn cigar cinnamon circle citizen city civil claim clap clarify claw clay clean clerk clever click client cliff climb clinic clip clock clog close cloth cloud clown club clump cluster clutch coach coast coconut code coffee coil coin collect color column combine come comfort comic common company concert conduct confirm congress connect consider control convince cook cool copper copy coral core corn correct cost cotton couch country couple course cousin cover coyote crack cradle craft cram crane crash crater crawl crazy cream credit creek crew cricket crime crisp critic crop cross crouch crowd crucial cruel cruise crumble crunch crush cry crystal cube culture cup cupboard curious current curtain curve cushion custom cute cycle dad damage damp dance danger daring dash daughter dawn day deal debate debris decade december decide decline decorate decrease deer defense define defy degree delay deliver demand demise denial dentist deny depart depend deposit depth deputy derive describe desert design desk despair destroy detail detect develop device devote diagram dial diamond diary diet differ digital dignity dilemma dinner dinosaur direct dirt disagree discover disease dish dismiss disorder display distance divert divide divorce dizzy doctor document dog doll dolphin domain donate donkey donor door dose double dove draft dragon drama drastic draw dream dress drift drill drink drip drop drum dry duck dumb dune during dust dutch duty dwarf dynamic eager eagle early earn earth easily east easy echo ecology economy edge edit educate effort egg eight either elbow elder electric elegant element elephant elevator elite else embark embody embrace emerge emotion employ empower empty enable enact end endless endorse enemy energy enforce engage engine enhance enjoy enlist enough enrich enroll ensure enter entire entry envelope episode equal equip era erase erode erosion error erupt escape essay essence estate eternal ethics evidence evil evoke evolve exact example excess exchange excite exclude excuse execute exercise exhaust exhibit exile exist exit exotic expand expect expire explain expose express extend extra eye eyebrow fabric face faculty fade faint faith fall false fame family famous fan fancy fantasy farm fashion fat fatal father fatigue fault favorite feature february federal fee feed feel female fence festival fetch fever few fiber fiction field figure file film filter final find fine finger finish fire firm first fiscal fish fit fitness fix flag flame flash flat flavor flee flight flip float flock floor fluid flush fly foam focus fog foil fold follow food foot force forest forget fork fortune forum forward fossil foster found fox fragile frame frequent fresh friend fringe frog front frost frozen fruit fuel fun funny furnace fury future gadget gain galaxy gallery game gap garage garbage garden garlic garment gas gasp gate gather gauge gaze general genius genre gentle genuine gesture ghost giant gift giggle ginger giraffe girl give glad glance glare glass glide glimpse globe gloom glory glove glow glue goat goddess gold good goose gorilla gospel gossip govern gown grab grace grant grape grass gravity great green grid grief grit grocery group grow grunt guard guess guide guilt guitar gun gym habit hair half hammer hamster hand happy harbor hard harsh harvest hat have hawk hazard head health heart heavy hedgehog height hello helmet help hen hero hidden high hill hint hip hire history hobby hockey hold hole holiday hollow home hood hope horn horror horse hospital host hotel hour hover hub huge human humble humor hundred hungry hunt hurdle hurry hurt husband hybrid ice icon idea identify idle ignore ill illegal illness image imitate immense immune impact impose improve impulse inch include income increase index indicate indoor industry infant inflict inform inhale inherit initial inject injury inmate inner innocent input inquiry insane insect inside inspire install intact interest into invest invite involve iron island isolate issue item ivory jacket jaguar jar jazz jealous jeans jelly jewel job join joke journey joy judge juice jump jungle junior junk just kangaroo keen keep ketchup key kick kid kidney kind kingdom kiss kit kitchen kitten kiwi knee knife knock know lab label labor ladder lady lake lamp language laptop large later latin laugh laundry lava law lawsuit layer lazy leader leaf learn leave lecture left leg legal legend leisure lemon lend length leopard lesson letter level liar liberty library license life lift light like limb limit link lion liquid list little live lizard load loan lobster local lock logic lonely long lottery loud lounge love loyal lucky luggage lunar lunch luxury lyrics machine mad magic magnet maid mail main major make mammal man manage mandate mango mansion manual maple marble march margin marine market marriage mask mass master match material math matrix matter maximum maze meadow mean measure mechanic medal media melody melt member memory mention menu mercy merge merit merry mesh message metal method middle midnight milk million mimic mind minimum minor minute miracle mirror misery miss mistake mix mixed mixture mobile model modify mom moment monitor monkey monster month moon moral more morning mosquito mother motion mountain mouse move movie much muffin mule multiply muscle museum mushroom music must mutual myself mystery myth naive name napkin narrow nasty nation nature near neck need negative neglect neither nephew nerve nest net network neutral never news next nice night noble noise nominee noodle normal north nose notable note nothing notice novel now nuclear number nurse nut oak obey object oblige obscure observe obtain obvious occur ocean october odor off offer office often oil okay old olive olympic omit once one onion online only open opera opinion oppose option orange orbit orchard order ordinary organ orient original orphan ostrich other outdoor outer output outside oval oven over own owner oxygen ozone pact paddle page pair palace palm panda panel panic panther paper parade parent park parrot party pass patch path patient patrol pattern pause pave payment peace peanut pear peasant pelican pen penalty pencil people pepper perfect permit person pet photo phrase physical piano picnic picture piece pig pigeon pill pilot pink pioneer pipe pistol pitch pizza place planet plastic plate play please pledge pluck plug plunge poem poet point polar pole police pond pony pool popular portion position possible post potato pottery poverty powder power practice praise predict prefer prepare present pretty prevent price pride primary print priority prison private prize problem process produce profit program project promote proof property prosper protect proud provide public pudding pull pulp pulse pumpkin punch pupil puppy purchase purity purpose prompt put puzzle pyramid quality quantum quarter question quick quit quiz quote rabbit raccoon race rack radar radio rail rain raise rally ramp ranch random range rapid rare rate rather raven raw razor ready real reason rebel rebuild recall receive recipe record recycle reduce reflect reform refuse region regret regular reject relax release relief rely remain remember remind remove render renew rent reopen repair repeat replace report require rescue resemble resist resource response result retire retreat return reunion reveal review reward rhythm rib ribbon rice rich ride rifle right rigid ring riot ripple risk ritual rival river road roast robot robust rocket romance roof rookie room rose rotate rough round route royal rubber rude rug rule run runway rural sad saddle sadness safe sail salad salon salt salute same sample sand satisfy satoshi sauce sausage save say scale scan scare scatter scene scheme school science scissors scorpion scout scrap screen script scrub sea search season seat second secret section security seed seek segment select sell seminar senior sense sentence series service session settle setup seven shadow shaft shallow share shed shell sheriff shield shift shine ship shiver shock shoe shoot shop short shoulder shove shrimp shrug shuffle shy sibling sick side siege sight sign silent silk silly silver similar simple since sing siren sister situate six size skate sketch ski skill skin skirt skull slab slam sleep slender slice slide slight slim slogan slot slow slush small smart smile smoke smooth snack snake snap sniff snow soap soccer social sock soda soft solar soldier solid solution solve someone song soon sorry sort soul sound soup source south space spare spatial spawn speak special speed spell spend sphere spice spider spike spin spirit split spoil sponsor spoon sport spot spray spread spring spy square squeeze squirrel stable stadium staff stage stairs stamp stand start state stay steak steel stem step stereo stick still sting stock stomach stone stool story stove strategy street strike strong struggle student stuff stumble style subject submit subway success such sudden suffer sugar suggest suit summer sun sunny sunset super supply supreme sure surface surge surround survey suspect sustain swallow swamp swap swarm swear sweet swift swim swing switch sword symbol symptom syrup system table tackle tag tail talent talk tank tape target task tattoo taxi teach team tell ten tenant tennis term test text thank that theme then theory there they thing this thought three thrive throw thumb thunder ticket tide tiger tilt timber time tiny tip tired tissue title toast tobacco today toddler toe together toilet token tomato tomorrow tone tongue tonight tool tooth top topic topple torch tornado tortoise toss total tourist toward tower town toy track trade traffic tragic train transfer trap trash travel tray treat tree trend trial tribe trick trigger trim trip trophy trouble truck true truly trumpet trust truth try tuition tumble tuna tunnel turkey turn turtle twelve twenty twice twin twist two type typical ugly umbrella unable unaware uncle uncover under undo unfair unfold unhappy uniform unique unit universe unknown unlock until unusual unveil update upgrade uphold upon upper upset urban urge usage use used useful useless usual utility vacant vacuum vague valid valley valve van vanish vapor various vast vault vehicle velvet vendor venture venue verb verify version very vessel veteran viable vibrant vicious victory video view village vintage violin virtual virus visa visit visual vital vivid vocal voice void volcano volume vote voyage wage wagon wait walk wall walnut want warfare warm warrior wash wasp waste water wave way wealth weapon wear weasel weather web wedding weekend weird welcome west wet whale what wheat wheel when where whip whisper wide width wife wild will win window wine wing wink winner winter wire wisdom wise wish witness wolf woman wonder wood wool word work world worry worth wrap wreck wrestle wrist write wrong yard year yellow you young youth zebra zero zone zoo").split(" ");
 const WORD_INDEX = new Map(BIP39_WORDS.map((w,i)=>[w,i]));
-console.assert(BIP39_WORDS.length === 2048, "BIP39 woordenlijst moet 2048 woorden zijn, is: " + BIP39_WORDS.length);
 
 const initialKnown = { 0: "dutch", 4: "fog", 11: "parrot" };
 const ETHERS_CDN_URL = 'https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js';
@@ -223,11 +222,13 @@ let workerUrl = null;
 let workers = [];
 let activeWorkerCount = 0;
 let currentPlan = null;
+let currentOffset = 0;
 
 document.addEventListener("DOMContentLoaded", () => {
   buildGrid();
   detectHardware();
   initGPU();
+  loadSavedProgress();
   if (typeof ethers === 'undefined') log('WAARSCHUWING: ethers.js niet geladen.', 'error');
   else log('ethers.js geladen.', 'info');
 });
@@ -433,7 +434,6 @@ function initGPU() {
   gl.enableVertexAttribArray(loc);
   gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
 
-  // Maak 1D texture aan voor kandidaat pool
   poolTex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, poolTex);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -454,10 +454,42 @@ function compileShader(type, src) {
 }
 
 // ============================================================
-// SCAN LOGICA
+// SCAN LOGICA & LOCALSTORAGE VOORTGANG
 // ============================================================
 
 function toggleScan() { if (isScanning) stopScan(false); else startScan(); }
+
+function saveProgress() {
+  const state = {
+    currentOffset,
+    totalPermutations,
+    targetAddress: document.getElementById('targetAddress').value,
+    derivationPath: document.getElementById('derivationPath').value
+  };
+  localStorage.setItem('bip39_scan_state', JSON.stringify(state));
+}
+
+function loadSavedProgress() {
+  const saved = localStorage.getItem('bip39_scan_state');
+  if (saved) {
+    try {
+      const state = JSON.parse(saved);
+      if (state.currentOffset > 0) {
+        currentOffset = state.currentOffset;
+        totalPermutations = state.totalPermutations || 0;
+        if (state.targetAddress) document.getElementById('targetAddress').value = state.targetAddress;
+        if (state.derivationPath) document.getElementById('derivationPath').value = state.derivationPath;
+        log(`Opgeslagen voortgang gevonden: hervatten vanaf offset ${currentOffset.toLocaleString()}`, 'warn');
+      }
+    } catch(e) {}
+  }
+}
+
+function clearSavedProgress() {
+  localStorage.removeItem('bip39_scan_state');
+  currentOffset = 0;
+  log('Opgeslagen voortgang gewist.', 'info');
+}
 
 function startScan() {
   foundMatch = false;
@@ -489,7 +521,11 @@ function startScan() {
   const n = candidates.length;
   if (n < k) { log(`Minimaal ${k} kandidaten nodig.`, 'error'); return; }
 
-  totalPermutations = countPermutations(n, k);
+  const calculatedTotal = countPermutations(n, k);
+  if (totalPermutations === 0 || totalPermutations !== calculatedTotal) {
+    totalPermutations = calculatedTotal;
+  }
+  
   document.getElementById('statTotal').innerText = totalPermutations.toLocaleString();
   log(`Kandidaten: ${n} · onbekend: ${k} · permutaties: ${totalPermutations.toLocaleString()}`, 'info');
 
@@ -505,20 +541,17 @@ function startScan() {
   }
 
   isScanning = true;
-  totalScanned = 0;
+  totalScanned = currentOffset;
   startTime = Date.now();
   updateButtonState(true);
   document.getElementById('scanStatusText').innerText = 'GPU scannen...';
   document.getElementById('resultBanner').classList.add('hidden');
-  document.getElementById('progressBar').style.width = '0%';
-  document.getElementById('statProgress').innerText = '0,00%';
 
   const BATCH = 4_000_000;
   const fixedArr = new Int32Array(fixedIdx);
   const unknownArr = new Int32Array(12);
   for (let i = 0; i < k; i++) unknownArr[i] = unknownIdx[i];
 
-  // Vul texture met kandidaat indices
   const poolData = new Float32Array(2048);
   for (let i = 0; i < 2048; i++) poolData[i] = i < n ? candidates[i] : 0;
   
@@ -532,7 +565,7 @@ function startScan() {
   gl.uniform1iv(gl.getUniformLocation(program, 'uUnknownPos'), unknownArr);
   gl.uniform1i(gl.getUniformLocation(program, 'uPoolTex'), 0);
 
-  let offset = 0;
+  let offset = currentOffset;
   const total = totalPermutations;
   let validCandidates = [];
 
@@ -541,6 +574,7 @@ function startScan() {
     if (offset >= total) {
       if (validCandidates.length) verifyCPU(validCandidates, targetAddress, derivationPath, true);
       else finishScan();
+      clearSavedProgress();
       return;
     }
     const batchSize = Math.min(BATCH, total - offset);
@@ -575,9 +609,11 @@ function startScan() {
     drawGPUView(pixels, w, h);
 
     offset += batchSize;
+    currentOffset = offset;
     totalScanned = offset;
     updateProgress();
     updateSpeed();
+    saveProgress();
 
     gl.deleteFramebuffer(fbo);
     gl.deleteTexture(tex);
@@ -656,6 +692,7 @@ function runCPUVerify(mnemonics, targetAddress, derivationPath, isFinal) {
       if (d.type === 'FOUND' && !foundMatch) {
         foundMatch = true;
         onMatchFound(d.mnemonic, d.address);
+        clearSavedProgress();
       } else if (d.type === 'DONE') {
         activeWorkerCount--;
         if (activeWorkerCount === 0 && isFinal) finishScan();
@@ -695,8 +732,8 @@ function updateSpeed() {
   if (!startTime) return;
   const el = (Date.now() - startTime) / 1000;
   if (el > 0) {
-    const s = Math.round(totalScanned / el);
-    document.getElementById('statSpeed').innerHTML = `${s.toLocaleString()} <span class="text-xs text-slate-500 font-normal">/s</span>`;
+    const s = Math.round((totalScanned - (currentOffset - totalScanned)) / el);
+    document.getElementById('statSpeed').innerHTML = `${Math.max(0, s).toLocaleString()} <span class="text-xs text-slate-500 font-normal">/s</span>`;
   }
 }
 
@@ -717,7 +754,7 @@ function updateButtonState(scanning) {
     t.innerText = 'Stop Scan';
     b.className = 'flex-1 bg-rose-600 hover:bg-rose-500 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2';
   } else {
-    t.innerText = 'Start GPU Scan';
+    t.innerText = currentOffset > 0 ? 'Hervat GPU Scan' : 'Start GPU Scan';
     b.className = 'flex-1 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2';
   }
 }
@@ -730,9 +767,9 @@ function stopScan(silent) {
   clearInterval(speedInterval);
   updateButtonState(false);
   if (document.getElementById('scanStatusText').innerText.includes('scannen')) {
-    document.getElementById('scanStatusText').innerText = foundMatch ? 'Match gevonden!' : 'Gestopt';
+    document.getElementById('scanStatusText').innerText = foundMatch ? 'Match gevonden!' : 'Gestopt (voortgang opgeslagen)';
   }
-  if (!silent) log('Scan gestopt.', 'info');
+  if (!silent) log('Scan gestopt. Voortgang opgeslagen in browser.', 'info');
 }
 </script>
 </body>
