@@ -1,1037 +1,562 @@
 <!DOCTYPE html>
-<html lang="nl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebGPU 256-lane — gemeten throughput</title>
-    <style>
-        :root {
-            --bg: #07090f; --surface: #0d1117; --panel: #111827;
-            --border: #1f2937; --accent: #00ff99; --accent2: #00c3ff;
-            --warn: #f59e0b; --danger: #ef4444; --success: #10b981;
-            --dim: #374151; --muted: #6b7280; --text: #e2e8f0;
+<html lang="nl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WebGPU Public Key Finder — alleen GPU</title>
+<style>
+:root{--bg:#07090f;--sf:#0d1117;--pn:#111827;--bd:#1f2937;--ac:#00ff99;--a2:#00c3ff;--wr:#f59e0b;--dg:#ef4444;--ok:#10b981;--mu:#6b7280;--tx:#e2e8f0}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Courier New',monospace;background:var(--bg);color:var(--tx);padding:20px 14px 40px}
+.c{max-width:760px;margin:0 auto}h1{font-size:1.2rem;letter-spacing:.15em;color:var(--ac);text-align:center;text-transform:uppercase}
+.badge{display:block;width:max-content;margin:10px auto 18px;border:1px solid var(--ac);color:var(--ac);font-size:.65rem;padding:4px 12px;border-radius:4px}
+.card{background:var(--pn);border:1px solid var(--bd);border-radius:8px;padding:18px;margin-bottom:16px}
+.t{font-size:.72rem;letter-spacing:.15em;text-transform:uppercase;font-weight:bold;border-bottom:1px solid var(--bd);padding-bottom:8px;margin-bottom:14px;color:var(--a2)}
+.f{display:grid;grid-template-columns:200px 1fr;gap:10px;align-items:center;margin-bottom:12px}.f label{font-size:.72rem;color:var(--mu);font-weight:bold}
+input{background:var(--sf);color:var(--ac);border:1px solid #374151;border-radius:4px;padding:8px 10px;font:inherit;font-size:.8rem;width:100%;outline:none}
+input:read-only{border-style:dashed}
+.r{display:flex;gap:10px;margin-top:6px;flex-wrap:wrap}
+.b{flex:1;min-width:120px;padding:11px;font:inherit;font-weight:bold;border:0;border-radius:4px;cursor:pointer;text-transform:uppercase;font-size:.8rem}
+.b:disabled{opacity:.4;cursor:not-allowed}.go{background:var(--ok);color:#000}.st{background:var(--dg);color:#fff}.ts{background:#294056;color:var(--tx)}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.s{background:var(--sf);border:1px solid var(--bd);border-radius:6px;padding:10px 12px}.s .l{font-size:.6rem;letter-spacing:.12em;color:var(--mu);text-transform:uppercase;margin-bottom:5px}.s .v{font-size:1rem;font-weight:bold;color:var(--ac);word-break:break-all}
+.pw{height:6px;background:var(--bd);border-radius:3px;margin-top:14px;overflow:hidden}.pb{height:100%;width:0;background:linear-gradient(90deg,var(--a2),var(--ac))}
+.log{background:#000;color:var(--ac);height:170px;overflow-y:auto;padding:10px 12px;font-size:.72rem;line-height:1.55;border-radius:6px;border:1px solid var(--bd)}.ts2{color:var(--mu);margin-right:6px}
+table{width:100%;border-collapse:collapse;font-size:.72rem;table-layout:fixed}th,td{border:1px solid var(--bd);padding:9px;word-break:break-all;text-align:left}th{color:var(--a2);font-size:.62rem;text-transform:uppercase}
+@media(max-width:620px){.f{grid-template-columns:1fr;gap:5px}}
+</style></head><body><div class="c">
+<h1>WebGPU Public Key Finder</h1><span class="badge" id="badge">INITIALISEREN...</span>
+<div class="card"><div class="t">Configuratie</div>
+<div class="f"><label>Target Public Key (HEX)</label><input id="addr" value="0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"></div>
+<div class="f"><label>Beginwaarde (HEX)</label><input id="rmin" value="100000000000000000"></div>
+<div class="f"><label>Eindwaarde (HEX)</label><input id="rmax" value="7fffffffffffffffff"></div>
+<div class="f"><label>Keys per GPU-lease</label><input id="lease" type="number" min="1000" value="10000000"></div>
+<div class="f"><label>GPU pipeline-stages (1-4)</label><input id="depth" type="number" min="1" max="4" value="2"></div>
+<div class="f"><label>Keys per batch (stap 8.320)</label><input id="batch" type="number" min="8320" step="8320" value="2096640"></div>
+<div class="f"><label>GPU-belasting % (10-100)</label><input id="load" type="number" min="10" max="100" value="100"></div>
+<div class="f"><label>GPU vernieuwen elke (min, 0 = uit)</label><input id="refresh" type="number" min="0" step="any" value="60"></div>
+<div class="f"><label>Kanarietest elke (min, 0 = uit)</label><input id="canary" type="number" min="0" step="any" value="1440"></div>
+<div class="f"><label>Keys per thread GK (1-128)</label><input id="gk" type="number" min="1" max="128" value="32"></div>
+<div class="f"><label>Workgroup WG (64/128/256)</label><input id="wg" type="number" step="64" min="64" max="256" value="128"></div>
+<div class="f"><label>Rotaties via insertBits (0/1)</label><input id="rb" type="number" min="0" max="1" value="0"></div>
+<div class="f"><label>Tabellen als vec4 lezen (0/1)</label><input id="tv" type="number" min="0" max="1" value="0"></div>
+<div class="f"><label>Tussenwaarden niet inpakken (0/1)</label><input id="pr" type="number" min="0" max="1" value="0"></div>
+<div class="f"><label>Voortgang bewaren (0/1)</label><input id="persist" type="number" min="0" max="1" value="1"></div>
+<div class="f"><label>Actuele lease</label><input id="cur" readonly></div>
+<div class="r"><button class="b go" id="go">▶ Start</button><button class="b st" id="stop" disabled>■ Stop</button><button class="b ts" id="test">Zelftest</button><button class="b ts" id="tune">Afstemmen</button><button class="b ts" id="clr">Wis foutlog</button><button class="b ts" id="wipe">Wis voortgang</button><button class="b ts" id="dp4">DP4a-test</button></div></div>
+<div class="card"><div class="t">Sessie</div><div class="g">
+<div class="s"><div class="l">Status</div><div class="v" id="status">Gestopt</div></div>
+<div class="s"><div class="l">Totaal gescand</div><div class="v" id="total">0</div></div>
+<div class="s"><div class="l">Snelheid</div><div class="v" id="speed">0 /s</div></div>
+<div class="s"><div class="l">Leases bezocht</div><div class="v" id="leases">0</div></div></div>
+<div class="pw"><div class="pb" id="bar"></div></div></div>
+<div class="card"><div class="t">Log</div><div class="log" id="log"></div></div>
+<div class="card"><div class="t">Resultaten</div><table><thead><tr><th style="width:22%">Type</th><th style="width:34%">Publieke Sleutel (HEX)</th><th>Privésleutel (HEX)</th></tr></thead><tbody id="res"><tr id="none"><td colspan="3" style="text-align:center;color:var(--mu)">Nog geen match.</td></tr></tbody></table></div>
+</div>
+<script>
+let GK=32,WG=128,GRP=65,UNIT=0,MAXB=0,DEFB=0,BATCH=0,ROTBFI=false,TBLVEC=false,PRERAW=false;
+function setCfg(gk,wg){GK=gk;WG=wg;GRP=2*gk+1;UNIT=GRP*WG;const th=Math.floor((4194303-GK)/GRP);MAXB=Math.max(1,Math.floor(th/WG))*UNIT;DEFB=Math.min(MAXB,Math.max(1,Math.round(2096640/UNIT))*UNIT);BATCH=DEFB}
+setCfg(32,128);
+function genField(GK,GRP){
+ const C=n=>Array.from({length:n},(_,i)=>'c'+i).join(',');
+ const carry=(a,b)=>{let t='';for(let k=a;k<b;k++)t+=`c${k+1}+=c${k}>>13u;c${k}&=8191u;\n`;return t};
+ let rep='';for(let i=0;i<2;i++)rep+=`{let h=c20;c20=0u;c0+=h*15632u;c2+=h*1024u;\n${carry(0,20)}}\n`;
+ const ret=`return array<u32,20>(${C(20)});\n}\n`;
+ const fold=(f,t)=>{let s='';for(let k=f;k>=t;k--)s+=`c${k-20}+=c${k}*15632u;c${k-18}+=c${k}*1024u;\n`;return s};
+ const decl=n=>{let t='';for(let k=0;k<n;k++)t+=`var c${k}:u32=0u;`;return t+'\n'};
+ const rip='if(c5>8191u){\n'+carry(5,20)+'if(c20!=0u){let h2=c20;c20=0u;c0+=h2*15632u;c2+=h2*1024u;\n'+carry(0,5)+'}\n}\n';
+ const tail=carry(20,39)+'c40=c39>>13u;c39&=8191u;\n'+fold(40,22)+'c22=0u;\nc21+=c20>>13u;c20&=8191u;c22=c21>>13u;c21&=8191u;\n'+fold(22,20)+'c20=0u;c21=0u;c22=0u;\n'+carry(0,20)+'let h=c20;c20=0u;let hl=h&8191u;let hh=h>>13u;c0+=hl*15632u;c1+=hh*15632u;c2+=hl*1024u;c3+=hh*1024u;\n'+carry(0,5)+rip+ret;
+ const ntail=carry(0,20)+'if(c20!=0u){\nlet h=c20;c20=0u;c0+=h*15632u;c2+=h*1024u;\n'+carry(0,5)+rip+'}\n'+ret;
+ const P=(1n<<256n)-(1n<<32n)-977n,kp=32n*P,K=[];
+ for(let i=0;i<19;i++)K.push(Number((kp>>BigInt(13*i))&8191n));K.push(Number(kp>>247n));
+ K[0]+=8192;for(let i=1;i<19;i++)K[i]+=8191;K[19]-=1;
+ let o=`alias F = array<u32,20>;\nconst KS: array<u32,20> = array<u32,20>(${K.map(x=>x+'u').join(',')});\nconst KS2: array<u32,20> = array<u32,20>(${K.map(x=>2*x+'u').join(',')});\n`;
+ o+=`fn oneF() -> F { return array<u32,20>(1u${',0u'.repeat(19)}); }\n`;
+ o+='fn mulmod(a: F, b: F) -> F {\n'+decl(41);
+ for(let i=0;i<20;i++)for(let j=0;j<20;j++)o+=`c${i+j}+=a[${i}]*b[${j}];\n`;
+ o+=tail;
+ o+='fn sqrmod(a: F) -> F {\n'+decl(41);
+ for(let i=0;i<20;i++){o+=`c${2*i}+=a[${i}]*a[${i}];\n`;for(let j=i+1;j<20;j++)o+=`c${i+j}+=(a[${i}]<<1u)*a[${j}];\n`}
+ o+=tail;
+ o+='fn mulsub(a: F, b: F, s: F) -> F {\n'+decl(41);
+ for(let i=0;i<20;i++)for(let j=0;j<20;j++)o+=`c${i+j}+=a[${i}]*b[${j}];\n`;
+ for(let k=0;k<20;k++)o+=`c${k}+=KS[${k}]-s[${k}];\n`;
+ o+=tail;
+ o+='fn sqrsub(a: F, s: F) -> F {\n'+decl(41);
+ for(let i=0;i<20;i++){o+=`c${2*i}+=a[${i}]*a[${i}];\n`;for(let j=i+1;j<20;j++)o+=`c${i+j}+=(a[${i}]<<1u)*a[${j}];\n`}
+ for(let k=0;k<20;k++)o+=`c${k}+=KS[${k}]-s[${k}];\n`;
+ o+=tail;
+ o+='fn sqrsub2(a: F, s1: F, s2: F) -> F {\n'+decl(41);
+ for(let i=0;i<20;i++){o+=`c${2*i}+=a[${i}]*a[${i}];\n`;for(let j=i+1;j<20;j++)o+=`c${i+j}+=(a[${i}]<<1u)*a[${j}];\n`}
+ for(let k=0;k<20;k++)o+=`c${k}+=KS2[${k}]-s1[${k}]-s2[${k}];\n`;
+ o+=tail;
+ o+='fn lsub(a: F, b: F) -> F { return array<u32,20>('+Array.from({length:20},(_,k)=>`a[${k}]+KS[${k}]-b[${k}]`).join(',')+'); }\n';
+ o+='fn ladd(a: F, b: F) -> F { return array<u32,20>('+Array.from({length:20},(_,k)=>`a[${k}]+b[${k}]`).join(',')+'); }\n';
+ o+='fn addmod(a: F, b: F) -> F {\n';for(let k=0;k<20;k++)o+=`var c${k}:u32=a[${k}]+b[${k}];`;o+='var c20:u32=0u;\n'+ntail;
+ o+='fn submod(a: F, b: F) -> F {\n';for(let k=0;k<20;k++)o+=`var c${k}:u32=a[${k}]+KS[${k}]-b[${k}];`;o+='var c20:u32=0u;\n'+ntail;
+ o+='fn fromW(w: array<u32,8>) -> F { return array<u32,20>(';
+ o+=Array.from({length:20},(_,i)=>{const s=(13*i)>>5,f=(13*i)&31;return (f+13<=32||s===7)?`(w[${s}]>>${f}u)&8191u`:`((w[${s}]>>${f}u)|(w[${s+1}]<<${32-f}u))&8191u`}).join(',')+'); }\n';
+ o+='fn fromW9(w: array<u32,9>) -> F { return array<u32,20>(';
+ o+=Array.from({length:20},(_,i)=>{const s=(13*i)>>5,f=(13*i)&31;return (f+13<=32)?`(w[${s}]>>${f}u)&8191u`:`((w[${s}]>>${f}u)|(w[${s+1}]<<${32-f}u))&8191u`}).join(',')+'); }\n';
+ o+='fn packW(a: F) -> array<u32,9> {\n';for(let k=0;k<9;k++)o+=`var w${k}:u32=0u;`;o+='\n';
+ for(let i=0;i<20;i++){const s=(13*i)>>5,f=(13*i)&31;o+=`w${s}|=a[${i}]<<${f}u;\n`;if(f+13>32)o+=`w${s+1}|=a[${i}]>>${32-f}u;\n`}
+ o+='return array<u32,9>(w0,w1,w2,w3,w4,w5,w6,w7,w8);\n}\n';
+ o+=`fn canon(a: F) -> array<u32,8> {
+  let q = packW(a); let t = q[8];
+  var v = array<u32,8>(q[0],q[1],q[2],q[3],q[4],q[5],q[6],q[7]);
+  let x0 = addc(v[0], t * 977u, 0u); v[0] = x0.x; let x1 = addc(v[1], t, x0.y); v[1] = x1.x; var cr = x1.y;
+  if (cr != 0u) {
+    for (var i = 2u; i < 8u; i = i + 1u) { let s = addc(v[i], 0u, cr); v[i] = s.x; cr = s.y; }
+    if (cr != 0u) {
+      let y0 = addc(v[0], cr * 977u, 0u); v[0] = y0.x; let y1 = addc(v[1], cr, y0.y); v[1] = y1.x; cr = y1.y;
+      if (cr != 0u) { for (var i = 2u; i < 8u; i = i + 1u) { let s = addc(v[i], 0u, cr); v[i] = s.x; cr = s.y; } }
+    }
+  }
+  if (v[7] == 0xFFFFFFFFu) { if (cmp8(v, P) >= 0) { let d = sub8(v, P); v = d.v; } }
+  return v;
+}
+fn ypar(a: F) -> u32 {
+  if ((a[19] & 511u) == 511u) { let w = canon(a); return w[0] & 1u; }
+  return (a[0] ^ (a[19] >> 9u)) & 1u;
+}
+`;
+ o+=`const GK: u32 = ${GK}u;\nconst GRP: u32 = ${GRP}u;\n`;
+ return o;
+}
+
+function buildWGSL(){const PS=x=>PRERAW?x:`packW(${x})`,PL=x=>PRERAW?x:`fromW9(${x})`,PTY=PRERAW?'F':'array<u32,9>';
+ const V4=(n,i)=>'v'+n+'.'+'xyzw'[i];const W20=Array.from({length:20},(_,k)=>V4(k>>2,k&3)).join(',');const W8=Array.from({length:8},(_,k)=>V4(k>>2,k&3)).join(',');
+ const LD=(arr,b,cnt)=>Array.from({length:cnt},(_,n)=>`let v${n} = ${arr}[${b} + ${n}u];`).join(' ');
+ return `
+struct TargetKey { 
+  x: array<u32, 8>, 
+  y: array<u32, 8>, 
+  flags: vec4<u32> // x.x = checkY (1 if checking full uncompressed or specific Y), x.y = targetYParity
+};
+struct BatchParams { startKey: vec4<u32>, startKey2: vec4<u32>, gx: vec4<u32>, gx2: vec4<u32>, gy: vec4<u32>, gy2: vec4<u32> };
+struct R8 { v: array<u32,8>, c: u32 };
+const P: array<u32,8> = array<u32,8>(0xFFFFFC2Fu,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
+fn addc(a: u32, b: u32, cin: u32) -> vec2<u32> {
+  let s1 = a + b; let c1 = select(0u, 1u, s1 < a);
+  let s2 = s1 + cin; let c2 = select(0u, 1u, s2 < s1);
+  return vec2<u32>(s2, c1 + c2);
+}
+fn subb(a: u32, b: u32, bin: u32) -> vec2<u32> {
+  let d1 = a - b; let b1 = select(0u, 1u, a < b);
+  let d2 = d1 - bin; let b2 = select(0u, 1u, d1 < bin);
+  return vec2<u32>(d2, b1 + b2);
+}
+fn cmp8(a: array<u32,8>, b: array<u32,8>) -> i32 {
+  for (var ii = 0u; ii < 8u; ii = ii + 1u) { let i = 7u - ii; if (a[i] != b[i]) { return select(-1, 1, a[i] > b[i]); } }
+  return 0;
+}
+${genField(GK,GRP)}
+struct JPoint { X: F, Y: F, Z: F, isInf: bool };
+fn jacMaddAffine(p: JPoint, x2: F, y2: F) -> JPoint {
+  if (p.isInf) { return JPoint(x2, y2, oneF(), false); }
+  let Z1sq = sqrmod(p.Z);
+  let U2 = mulmod(x2, Z1sq);
+  let S2 = mulmod(mulmod(y2, Z1sq), p.Z);
+  let H = submod(U2, p.X);
+  let R = submod(S2, p.Y);
+  let HH = sqrmod(H); let HHH = mulmod(HH, H);
+  let V = mulmod(p.X, HH);
+  let X3 = submod(submod(sqrmod(R), HHH), addmod(V, V));
+  let Y3 = submod(mulmod(R, submod(V, X3)), mulmod(p.Y, HHH));
+  return JPoint(X3, Y3, mulmod(p.Z, H), false);
+}
+fn sqrN(a: F, n: u32) -> F { var r = a; for (var i = 0u; i < n; i = i + 1u) { r = sqrmod(r); } return r; }
+fn modpowP2(base: F) -> F {
+  let x1  = base;
+  let x2  = mulmod(sqrN(x1, 1u), x1);
+  let x3  = mulmod(sqrN(x2, 1u), x1);
+  let x6  = mulmod(sqrN(x3, 3u), x3);
+  let x9  = mulmod(sqrN(x6, 3u), x3);
+  let x11 = mulmod(sqrN(x9, 2u), x2);
+  let x22 = mulmod(sqrN(x11, 11u), x11);
+  let x44 = mulmod(sqrN(x22, 22u), x22);
+  let x88 = mulmod(sqrN(x44, 44u), x44);
+  var r = mulmod(sqrN(x88, 88u), x88);
+  r = mulmod(sqrN(r, 44u), x44);
+  r = mulmod(sqrN(r, 3u), x3);
+  r = mulmod(sqrN(r, 23u), x22);
+  r = mulmod(sqrN(r, 5u), x1);
+  r = mulmod(sqrN(r, 3u), x2);
+  r = sqrN(r, 2u);
+  return mulmod(r, base);
+}
+fn rotr32(x: u32, n: u32) -> u32 { return ${ROTBFI?'insertBits(x >> n, x, 32u - n, n)':'(x >> n) | (x << (32u - n))'}; }
+fn rotl32(x: u32, n: u32) -> u32 { return ${ROTBFI?'insertBits(x >> (32u - n), x, n, 32u - n)':'(x << n) | (x >> (32u - n))'}; }
+@group(0) @binding(0) var<uniform> batch: BatchParams;
+@group(0) @binding(1) var<storage, read> combTable: ${TBLVEC?'array<vec4<u32>>':'array<u32>'};
+@group(0) @binding(2) var<uniform> targetData: TargetKey;
+@group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>;
+@group(0) @binding(4) var<storage, read> gTable: ${TBLVEC?'array<vec4<u32>>':'array<u32>'};
+${TBLVEC?`fn gxj(j: u32) -> F { let b = (j - 1u) * 10u; ${LD('gTable','b',5)} return array<u32,20>(${W20}); }
+fn gyj(j: u32) -> F { let b = (j - 1u) * 10u + 5u; ${LD('gTable','b',5)} return array<u32,20>(${W20}); }`:`fn gxj(j: u32) -> F { var r: F; let b = (j - 1u) * 40u; for (var m = 0u; m < 20u; m = m + 1u) { r[m] = gTable[b + m]; } return r; }
+fn gyj(j: u32) -> F { var r: F; let b = (j - 1u) * 40u + 20u; for (var m = 0u; m < 20u; m = m + 1u) { r[m] = gTable[b + m]; } return r; }`}
+fn chk(x: F, y: F, idx: u32) {
+  let xw = canon(x);
+  var match = true;
+  for (var i = 0u; i < 8u; i = i + 1u) {
+    if (xw[i] != targetData.x[i]) { match = false; }
+  }
+  if (targetData.flags.x != 0u) {
+    if (targetData.flags.y != 0u) {
+      let yw = canon(y);
+      for (var i = 0u; i < 8u; i = i + 1u) {
+        if (yw[i] != targetData.y[i]) { match = false; }
+      }
+    } else {
+      if (ypar(y) != targetData.flags.y) { match = false; }
+    }
+  }
+  if (match) { resultBuffer[0] = 1u; resultBuffer[1] = idx; }
+}
+${TBLVEC?`fn tabW(w: u32, e: u32, off: u32) -> F { let b = (w * 2048u + e) * 4u + off / 4u; ${LD('combTable','b',2)} return fromW(array<u32,8>(${W8})); }`:`fn tabW(w: u32, e: u32, off: u32) -> F { var r: array<u32,8>; let b = (w * 2048u + e) * 16u + off; for (var m = 0u; m < 8u; m = m + 1u) { r[m] = combTable[b + m]; } return fromW(r); }`}
+fn jacAddAA(x1: F, y1: F, x2: F, y2: F) -> JPoint {
+  let H = submod(x2, x1); let R = submod(y2, y1);
+  let HH = sqrmod(H); let HHH = mulmod(HH, H); let V = mulmod(x1, HH);
+  let X3 = submod(submod(sqrmod(R), HHH), addmod(V, V));
+  let Y3 = submod(mulmod(R, submod(V, X3)), mulmod(y1, HHH));
+  return JPoint(X3, Y3, H, false);
+}
+var<workgroup> tree: array<array<u32,9>, ${2*WG}>;
+fn ld(i: u32) -> F { return fromW9(tree[i]); }
+fn stw(i: u32, v: F) { tree[i] = packW(v); }
+fn treeInv(lid: u32) {
+  workgroupBarrier();
+  for (var width = ${WG/2}u; width > 0u; width = width / 2u) {
+    if (lid < width) { let n = width + lid; stw(n, mulmod(ld(n * 2u), ld(n * 2u + 1u))); }
+    workgroupBarrier();
+  }
+  if (lid == 0u) { stw(1u, modpowP2(ld(1u))); }
+  workgroupBarrier();
+  for (var width = 1u; width < ${WG}u; width = width * 2u) {
+    if (lid < width) {
+      let n = width + lid; let pi = ld(n); let lp = ld(n * 2u); let rp = ld(n * 2u + 1u);
+      stw(n * 2u, mulmod(pi, rp)); stw(n * 2u + 1u, mulmod(pi, lp));
+    }
+    workgroupBarrier();
+  }
+}
+@compute @workgroup_size(${WG})
+fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation_id) lid3: vec3<u32>) {
+  let lid = lid3.x;
+  let first = gid.x * GRP; let total = batch.startKey2.w;
+  let isAct = first < total;
+  let cidx = first + GK;
+  var X: F; var Y: F; var Z: F = oneF();
+  if (isAct) {
+    let lo = cidx & 2047u; let hi = cidx >> 11u;
+    let bx = fromW(array<u32,8>(batch.gx.x,batch.gx.y,batch.gx.z,batch.gx.w,batch.gx2.x,batch.gx2.y,batch.gx2.z,batch.gx2.w));
+    let by = fromW(array<u32,8>(batch.gy.x,batch.gy.y,batch.gy.z,batch.gy.w,batch.gy2.x,batch.gy2.y,batch.gy2.z,batch.gy2.w));
+    var pt: JPoint;
+    if (lo != 0u) {
+      pt = jacAddAA(bx, by, tabW(0u, lo, 0u), tabW(0u, lo, 8u));
+      if (hi != 0u) { pt = jacMaddAffine(pt, tabW(1u, hi, 0u), tabW(1u, hi, 8u)); }
+    } else {
+      pt = jacAddAA(bx, by, tabW(1u, hi, 0u), tabW(1u, hi, 8u));
+    }
+    X = pt.X; Y = pt.Y; Z = pt.Z;
+  }
+  stw(${WG}u + lid, Z);
+  treeInv(lid);
+  var x1: F; var y1: F;
+  var pre: array<${PTY}, ${GK}>;
+  var run = oneF();
+  if (isAct) {
+    let zi = ld(${WG}u + lid);
+    let zi2 = sqrmod(zi);
+    x1 = mulmod(X, zi2); y1 = mulmod(Y, mulmod(zi2, zi));
+    for (var j = 1u; j <= GK; j = j + 1u) {
+      run = mulmod(run, lsub(gxj(j), x1)); pre[j - 1u] = ${PS('run')};
+    }
+  }
+  stw(${WG}u + lid, run);
+  treeInv(lid);
+  if (!isAct) { return; }
+  var inv = ld(${WG}u + lid);
+  for (var jj = 0u; jj < GK; jj = jj + 1u) {
+    let j = GK - jj;
+    var iw = inv;
+    if (j > 1u) { iw = mulmod(inv, ${PL('pre[j - 2u]')}); }
+    inv = mulmod(inv, lsub(gxj(j), x1));
+    pre[j - 1u] = ${PS('iw')};
+  }
+  if (cidx < total) { chk(x1, y1, cidx); }
+  for (var j = 1u; j <= GK; j = j + 1u) {
+    let gx = gxj(j); let gy = gyj(j); let iw = ${PL('pre[j - 1u]')};
+    let lp = mulmod(lsub(gy, y1), iw);
+    let lq = mulmod(ladd(gy, y1), iw);
+    let x3p = sqrsub2(lp, x1, gx); let x3m = sqrsub2(lq, x1, gx);
+    let y3p = mulsub(lp, lsub(x1, x3p), y1);
+    let y3m = mulsub(lq, lsub(x3m, x1), y1);
+    if (cidx + j < total) { chk(x3p, y3p, cidx + j); }
+    if (cidx - j < total) { chk(x3m, y3m, cidx - j); }
+  }
+}
+`}
+
+/* ---------- secp256k1 (BigInt) ---------- */
+const $=id=>document.getElementById(id);
+const SP=(1n<<256n)-(1n<<32n)-977n;
+const G={x:0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n,y:0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n};
+const ORDER=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+function modinv(a,m){a=((a%m)+m)%m;let[o,r]=[a,m],[os,s]=[1n,0n];while(r){const q=o/r;[o,r]=[r,o-q*r];[os,s]=[s,os-q*s]}return((os%m)+m)%m}
+function ecDouble(P){if(!P||P.y===0n)return null;const l=(3n*P.x%SP*P.x%SP)*modinv(2n*P.y%SP,SP)%SP;const x=((l*l-2n*P.x)%SP+SP)%SP;return{x,y:((l*(P.x-x)-P.y)%SP+SP)%SP}}
+function ecAdd(P,Q){if(!P)return Q;if(!Q)return P;if(P.x===Q.x){if((P.y+Q.y)%SP===0n)return null;return ecDouble(P)}const l=((Q.y-P.y)%SP+SP)%SP*modinv(Q.x-P.x,SP)%SP;const x=((l*l-P.x-Q.x)%SP+SP)%SP;return{x,y:((l*(P.x-x)-P.y)%SP+SP)%SP}}
+function ecMul(k,B){let r=null,a=B;while(k>0n){if(k&1n)r=ecAdd(r,a);a=ecDouble(a);k>>=1n}return r}
+function limbs13(v){const o=new Uint32Array(20);for(let i=0;i<20;i++)o[i]=Number((v>>BigInt(13*i))&8191n);return o}
+function limbs(v){const o=new Uint32Array(8);for(let i=0;i<8;i++)o[i]=Number((v>>BigInt(32*i))&0xFFFFFFFFn);return o}
+function hexTo32(h){h=h.replace(/^0x/i,'').padStart(64,'0');const o=new Uint8Array(32);for(let i=0;i<32;i++)o[i]=parseInt(h.substr(i*2,2),16);return o}
+function buildTable(){const T=new Uint32Array(2*2048*16);let base=G;for(let i=0;i<2;i++){let acc=null;for(let e=1;e<2048;e++){acc=ecAdd(acc,base);const o=(i*2048+e)*16;T.set(limbs(acc.x),o);T.set(limbs(acc.y),o+8)}for(let d=0;d<11;d++)base=ecDouble(base)}return T}
+
+/* ---------- Public Key Parsing ---------- */
+function parsePublicKey(hexStr){
+  hexStr=hexStr.trim().replace(/^0x/i,'');
+  if(hexStr.length===66){
+    const prefix=hexStr.substr(0,2);
+    const xHex=hexStr.substr(2,64);
+    const xArr=limbs(BigInt('0x'+xHex));
+    const yParity=prefix==='03'?1:0;
+    return {x:xArr,y:new Uint32Array(8),flags:new Uint32Array([1,yParity,0,0])};
+  }else if(hexStr.length===130){
+    const xHex=hexStr.substr(2,64);
+    const yHex=hexStr.substr(66,64);
+    const xArr=limbs(BigInt('0x'+xHex));
+    const yArr=limbs(BigInt('0x'+yHex));
+    return {x:xArr,y:yArr,flags:new Uint32Array([1,2,0,0])};
+  }
+  throw Error('Ongeldige public key hex (moet 66 of 130 tekens zijn)');
+}
+
+function hexToBytes(h){h=h.replace(/^0x/i,'');const b=new Uint8Array(h.length/2);for(let i=0;i<b.length;i++)b[i]=parseInt(h.substr(i*2,2),16);return b}
+function bytesToHex(b){return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('')}
+
+/* ---------- UI ---------- */
+function log(m,c='var(--tx)'){const b=$('log'),d=new Date(),e=document.createElement('div');e.innerHTML=`<span class="ts2">[${d.toLocaleTimeString('nl-NL')}]</span><span style="color:${c}">${m}</span>`;b.appendChild(e);while(b.childElementCount>200)b.removeChild(b.firstElementChild);b.scrollTop=b.scrollHeight}
+
+let lastEM='',lastET=0;
+function errlog(m){if(m===lastEM&&Date.now()-lastET<5000)return;lastEM=m;lastET=Date.now();log(m,'var(--wr)');try{const a=JSON.parse(localStorage.getItem('gpuscan_err')||'[]');a.push({t:new Date().toISOString(),m:String(m)});localStorage.setItem('gpuscan_err',JSON.stringify(a.slice(-30)))}catch(e){}}
+let wl=null,nsVid=null,wlFail=false;
+function noSleep(){try{if(nsVid){if(nsVid.paused)nsVid.play().catch(()=>{});return}const v=document.createElement('video');v.setAttribute('playsinline','');v.setAttribute('muted','');v.muted=true;v.loop=true;v.style.cssText='position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:.01;pointer-events:none';v.innerHTML='<source src="data:video/webm;base64,GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAI/EU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHYTbuMU6uEElTDZ1OsggEeTbuMU6uEHFO7a1OsggIp7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsirXsYMPQkBNgI1MYXZmNjAuMTYuMTAwV0GNTGF2ZjYwLjE2LjEwMESJiECPQAAAAAAAFlSua8GuAQAAAAAAADjXgQFzxYimbV6HYEElc5yBACK1nIN1bmSIgQCGhVZfVlA4g4EBI+ODhAvrwgDgibCBELqBEJqBAhJUw2f8c3OgY8CAZ8iaRaOHRU5DT0RFUkSHjUxhdmY2MC4xNi4xMDBzc9ZjwItjxYimbV6HYEElc2fIoUWjh0VOQ09ERVJEh5RMYXZjNjAuMzEuMTAyIGxpYnZweGfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MDEuMDAwMDAwMDAwAB9DtnVAhOeBAKOjgQAAgBACAJ0BKhAAEAAARwiFhYiFhIgCAgAMDWAA/v+rUICjlYEAyACxAQABEBAAGAAYWC/0AAgAAKOVgQGQALEBAAEQEAAYABhYL/QACAAAo5WBAlgAsQEAARAQABgAGFgv9AAIAACjlYEDIACxAQABEBAAGAAYWC/0AAgAABxTu2uRu4+zgQC3iveBAfGCAZ/wgQM=" type="video/webm"><source src="data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAN4bW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAA+gAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAqJ0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAA+gAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAABAAAAAQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAPoAAAQAAABAAAAAAIabWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAoAAAAKABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABxW1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAYVzdGJsAAAAwXN0c2QAAAAAAAAAAQAAALFhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABFUxhdmM2MC4zMS4xMDIgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAAN2F2Y0MBZAAK/+EAGWdkAAqscgRewEQAAAMABAAAAwAoPEiWEYABAAdo6EODksiw/fj4AAAAABBwYXNwAAAAAQAAAAEAAAAUYnRydAAAAAAAABfIAAAXyAAAABhzdHRzAAAAAAAAAAEAAAAFAAAIAAAAABRzdHNzAAAAAAAAAAEAAAABAAAAOGN0dHMAAAAAAAAABQAAAAEAABAAAAAAAQAAKAAAAAABAAAQAAAAAAEAAAAAAAAAAQAACAAAAAAcc3RzYwAAAAAAAAABAAAAAQAAAAUAAAABAAAAKHN0c3oAAAAAAAAAAAAAAAUAAALFAAAADQAAAA0AAAANAAAADQAAABRzdGNvAAAAAAAAAAEAAAOoAAAAYnVkdGEAAABabWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAtaWxzdAAAACWpdG9vAAAAHWRhdGEAAAABAAAAAExhdmY2MC4xNi4xMDAAAAAIZnJlZQAAAwFtZGF0AAACrwYF//+r3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE2NCByMzEwOCAzMWUxOWY5IC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAyMyAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTEgcmVmPTE2IGRlYmxvY2s9MTowOjAgYW5hbHlzZT0weDM6MHgxMzMgbWU9dW1oIHN1Ym1lPTEwIHBzeT0xIHBzeV9yZD0xLjAwOjAuMDAgbWl4ZWRfcmVmPTEgbWVfcmFuZ2U9MjQgY2hyb21hX21lPTEgdHJlbGxpcz0yIDh4OGRjdD0xIGNxbT0wIGRlYWR6b25lPTIxLDExIGZhc3RfcHNraXA9MSBjaHJvbWFfcXBfb2Zmc2V0PS0yIHRocmVhZHM9MSBsb29rYWhlYWRfdGhyZWFkcz0xIHNsaWNlZF90aHJlYWRzPTAgbnI9MCBkZWNpbWF0ZT0xIGludGVybGFjZWQ9MCBibHVyYXlfY29tcGF0PTAgY29uc3RyYWluZWRfaW50cmE9MCBiZnJhbWVzPTggYl9weXJhbWlkPTIgYl9hZGFwdD0yIGJfYmlhcz0wIGRpcmVjdD0zIHdlaWdodGI9MSBvcGVuX2dvcD0wIHdlaWdodHA9MiBrZXlpbnQ9MjUwIGtleWludF9taW49NSBzY2VuZWN1dD00MCBpbnRyYV9yZWZyZXNoPTAgcmNfbG9va2FoZWFkPTYwIHjjPWNyZiBtYnRyZWU9MSBjcmY9NDAuMCBxY29tcD0wLjYwIHFwbWluPTAgcXBtYXg9NjkgcXBzdGVwPTQgaXBfcmF0aW89MS40MCBhcT0xOjEuMDAAgAAAAA5liIEAAl/+3iPAph5JgQAAAAlBmgiNiH//nIAAAAAJQZ4QRxBD/+CBAAAACQGeGCaIf//igAAAAAkBnhhtSH//4oE=" type="video/mp4">';document.body.appendChild(v);v.play().then(()=>log('Scherm-aan hulpmiddel (video) actief.')).catch(e=>log('Scherm-aan hulpmiddel kon niet starten: '+e.message,'var(--wr)'));nsVid=v}catch(e){log('Scherm-aan hulpmiddel niet beschikbaar: '+e.message,'var(--wr)')}}
+async function keepAwake(){if(wlFail){noSleep();return}try{if(!('wakeLock' in navigator))throw Error('Wake Lock API ontbreekt');if(!wl){wl=await navigator.wakeLock.request('screen');wl.addEventListener('release',()=>{wl=null});log('Scherm blijft aan (Wake Lock).')}}catch(e){wlFail=true;log('Wake Lock geblokkeerd ('+e.message+'). Terugval op een video-methode. Zet ook Instellingen > Beeldscherm > Automatisch vergrendelen op Nooit.','var(--wr)');noSleep()}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&running)keepAwake()});
+window.addEventListener('unhandledrejection',e=>errlog('Onverwerkte fout: '+((e.reason&&e.reason.message)||e.reason)));
+window.addEventListener('error',e=>errlog('Scriptfout: '+e.message));
+function resetGPU(){if(dev){const o=dev;dev=null;gpuReady=false;stages=[];try{o.destroy()}catch(e){}}return ensureGPU()}
+async function bench(){
+  const st=stages[0],n=DEFB;CAN_PT=CAN_PT||ecMul(CAN_START,G);
+  const b=new Uint32Array(24);b.set(limbs(CAN_START),0);b[7]=n;b.set(limbs(CAN_PT.x),8);b.set(limbs(CAN_PT.y),16);
+  const one=async()=>{dev.queue.writeBuffer(st.bb,0,b);dev.queue.writeBuffer(st.rs,0,ZERO2);const enc=dev.createCommandEncoder(),pass=enc.beginComputePass();pass.setPipeline(pipe);pass.setBindGroup(0,st.bg);pass.dispatchWorkgroups(Math.ceil(n/UNIT));pass.end();enc.copyBufferToBuffer(st.rs,0,st.rd,0,8);dev.queue.submit([enc.finish()]);let mp=false;try{await st.rd.mapAsync(GPUMapMode.READ);mp=true;st.rd.getMappedRange()}finally{if(mp){try{st.rd.unmap()}catch(e){}}}};
+  await one();await one();const t1=performance.now();for(let i=0;i<6;i++)await one();return 6*n/((performance.now()-t1)/1000)}
+async function tune(){
+  if(running)return;
+  $('tune').disabled=true;$('go').disabled=true;$('test').disabled=true;
+  const keep={gk:GK,wg:WG,rb:ROTBFI,tv:TBLVEC,pr:PRERAW};ROTBFI=false;TBLVEC=false;PRERAW=false;
+  try{
+    await ensureCANT();log('Afstemmen gestart (kan 1-3 minuten duren). Laat het scherm aan.','var(--a2)');
+    const res=[];
+    for(const wg of [64,128,256])for(const gk of [16,32,48]){
+      setCfg(gk,wg);
+      try{
+        if(!(await resetGPU())){log(`GK=${gk} WG=${wg}: overgeslagen (niet ondersteund)`);continue}
+        const pk=parsePublicKey($('addr').value);
+        const tgtData=new Uint32Array(20);
+        for(let i=0;i<8;i++)tgtData[i]=pk.x[i];
+        for(let i=0;i<8;i++)tgtData[8+i]=pk.y[i];
+        tgtData[16]=pk.flags[0];tgtData[17]=pk.flags[1];
+        dev.queue.writeBuffer(tgtBuf,0,tgtData);dev.queue.writeBuffer(tgtBuf2,0,CANT);
+        if(!(await runCanary())){log(`GK=${gk} WG=${wg}: rekent FOUT (kanarietest mislukt), overgeslagen`,'var(--wr)');continue}
+        const r=await bench();res.push({gk,wg,r});log(`GK=${gk} WG=${wg}: ${Math.round(r).toLocaleString('nl-NL')} keys/s`);
+      }catch(e){log(`GK=${gk} WG=${wg}: fout (${e.message})`,'var(--wr)')}
+    }
+    if(!res.length)throw Error('Geen enkele configuratie werkte');
+    res.sort((x,y)=>y.r-x.r);const best=res[0];
+    setCfg(best.gk,best.wg);
+    await resetGPU();
+    $('gk').value=GK;$('wg').value=WG;$('batch').value=DEFB;
+    log(`Beste: GK=${GK}, WG=${WG} (${Math.round(best.r).toLocaleString('nl-NL')} keys/s). Instellingen bewaard.`,'var(--ok)');
+  }catch(e){errlog('Afstemmen mislukt: '+e.message);setCfg(keep.gk,keep.wg);ROTBFI=keep.rb;TBLVEC=keep.tv;PRERAW=keep.pr}
+  $('tune').disabled=false;$('go').disabled=false;$('test').disabled=false;
+}
+/* ---------- voortgang opslaan (IndexedDB) ---------- */
+const SAVE_MS=2000;
+const hex64=v=>v.toString(16).padStart(64,'0'),minB=(a,b)=>a<b?a:b,maxB=(a,b)=>a>b?a:b;
+const Store={on:false,db:null,addr:'',failed:false,
+  open(){return new Promise((res,rej)=>{const r=indexedDB.open('gpuscan_pk',1);r.onupgradeneeded=()=>{r.result.createObjectStore('done');r.result.createObjectStore('meta')};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})},
+  async init(addr){this.addr=addr;this.failed=false;try{if(!this.db)this.db=await this.open();this.on=true}catch(e){this.on=false;}return this.on},
+  fail(e){this.on=false},
+  st(n,m){return this.db.transaction(n,m).objectStore(n)},
+  rq(r){return new Promise((res,rej)=>{r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})},
+  key(a){return this.addr+'|'+hex64(a)},
+  lo(){return this.addr+'|'+'0'.repeat(64)},hi(){return this.addr+'|'+'f'.repeat(64)},
+  dec(k,v){return{a:BigInt('0x'+k.split('|')[1]),b:BigInt('0x'+v)}},
+  iter(range,fn){return new Promise((res,rej)=>{const q=this.st('done','readonly').openCursor(range);q.onsuccess=()=>{const c=q.result;if(!c){res();return}if(fn(c.key,c.value)===false){res();return}c.continue()};q.onerror=()=>rej(q.error)})},
+  async put(a,b){if(!this.on||b<=a)return;try{await this.rq(this.st('done','readwrite').put(hex64(b),this.key(a)))}catch(e){this.fail(e)}},
+  async del(a){if(!this.on)return;try{await this.rq(this.st('done','readwrite').delete(this.key(a)))}catch(e){this.fail(e)}},
+  async lastBefore(a){const r=await this.rq(this.st('done','readonly').openCursor(IDBKeyRange.bound(this.lo(),this.key(a)),'prev'));return r?this.dec(r.key,r.value):null},
+  async firstIn(a,b){if(b-a<2n)return null;const r=await this.rq(this.st('done','readonly').openCursor(IDBKeyRange.bound(this.key(a),this.key(b-1n),true,false)));return r?this.dec(r.key,r.value):null},
+  async overlaps(a,b){const p=await this.lastBefore(a);if(p&&p.b>a)return true;return !!(await this.firstIn(a,b))},
+  async firstGap(min,max,len){let p=min,res=null;
+    await this.iter(IDBKeyRange.bound(this.lo(),this.hi()),(k,v)=>{const{a,b}=this.dec(k,v);if(b<=p)return true;if(a>p){res={a:p,len:minB(len,a-p)};return false}p=maxB(p,b);return p<=max});
+    if(res)return res;return p<=max?{a:p,len:minB(len,max+1n-p)}:null},
+  async pick(min,max,len){const span=max-min+1n;if(len>span)len=span;const rnd=()=>min+rbelow(span-len+1n);
+    if(!this.on)return{a:rnd(),len};
+    try{for(let t=0;t<100;t++){const a=rnd();if(!(await this.overlaps(a,a+len)))return{a,len}}return await this.firstGap(min,max,len)}
+    catch(e){this.fail(e);return{a:rnd(),len}}},
+  async stats(min,max){let n=0,keys=0n;if(!this.on)return{n,keys};
+    try{await this.iter(IDBKeyRange.bound(this.lo(),this.hi()),(k,v)=>{const{a,b}=this.dec(k,v),x=maxB(a,min),y=minB(b,max+1n);if(y>x){keys+=y-x;n++}return true})}catch(e){this.fail(e)}return{n,keys}},
+  curKey(){return 'cur|'+this.addr},
+  saveCur(o){if(!this.on)return;try{this.st('meta','readwrite').put(JSON.stringify(o),this.curKey())}catch(e){}},
+  async loadCur(min,max){if(!this.on)return null;try{const t=await this.rq(this.st('meta','readonly').get(this.curKey()));if(!t)return null;const o=JSON.parse(t);
+    const g=h=>BigInt('0x'+h),r={start:g(o.start),end:g(o.end),segFrom:g(o.segFrom),done:g(o.done)};
+    if(r.start<min||r.end>max+1n)return null;return r}catch(e){return null}},
+  clearCur(){if(!this.on)return;try{this.st('meta','readwrite').delete(this.curKey())}catch(e){}},
+  async wipe(addr){this.addr=addr;await this.init(addr);if(!this.on)return 0;let ks=[];
+    await this.iter(IDBKeyRange.bound(this.lo(),this.hi()),k=>{ks.push(k);return true});
+    for(const k of ks)await this.rq(this.st('done','readwrite').delete(k));this.clearCur();return ks.length}
+};
+/* ---------- GPU ---------- */
+let dev,pipe,tableBuf,gtBuf,tgtBuf,stages=[],running=false,tok=0,total=0,t0=0,leases=0,curLease=0,leaseLen=1;
+let gpuReady=false,initP=null,faultSeq=0,TBL=null,GTBL=null;const ZERO2=new Uint32Array(2);
+let tgtBuf2=null,cstage=null,CANT=null,CAN_PT=null;
+const CAN_PK='0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',CAN_START=0x400000000000000000n,CAN_IDX=1234567;
+function setTargets(t){dev.queue.writeBuffer(tgtBuf,0,t);dev.queue.writeBuffer(tgtBuf2,0,CANT)}
+async function ensureCANT(){
+  if(CANT)return;const pk=parsePublicKey(CAN_PK);
+  const c=new Uint32Array(20);
+  for(let i=0;i<8;i++)c[i]=pk.x[i];
+  for(let i=0;i<8;i++)c[8+i]=pk.y[i];
+  c[16]=pk.flags[0];c[17]=pk.flags[1];
+  CANT=c;
+}
+async function runCanary(){
+  const cs=cstage;if(!cs)return false;const cn=Math.ceil((CAN_IDX+1)/UNIT)*UNIT;
+  CAN_PT=CAN_PT||ecMul(CAN_START,G);
+  const b=new Uint32Array(24);b.set(limbs(CAN_START),0);b[7]=cn;b.set(limbs(CAN_PT.x),8);b.set(limbs(CAN_PT.y),16);
+  dev.queue.writeBuffer(cs.bb,0,b);dev.queue.writeBuffer(cs.rs,0,ZERO2);
+  const enc=dev.createCommandEncoder(),pass=enc.beginComputePass();pass.setPipeline(pipe);pass.setBindGroup(0,cs.bg);pass.dispatchWorkgroups(Math.ceil(cn/(GRP*WG)));pass.end();
+  enc.copyBufferToBuffer(cs.rs,0,cs.rd,0,8);dev.queue.submit([enc.finish()]);
+  let mp=false,ok=false;try{await cs.rd.mapAsync(GPUMapMode.READ);mp=true;const r=new Uint32Array(cs.rd.getMappedRange());ok=r[0]===1&&r[1]===CAN_IDX}finally{if(mp){try{cs.rd.unmap()}catch(e){}}}return ok}
+function ensureGPU(){if(!initP)initP=initGPU().then(r=>{initP=null;return r},e=>{initP=null;throw e});return initP}
+async function initGPU(){
+  gpuReady=false;
+  if(!navigator.gpu){$('badge').textContent='WebGPU NIET ONDERSTEUND';return false}
+  try{
+    const ad=await navigator.gpu.requestAdapter();if(!ad)return false;
+    const al=ad.limits||{},rl={};if(al.maxComputeWorkgroupStorageSize>16384)rl.maxComputeWorkgroupStorageSize=Math.min(al.maxComputeWorkgroupStorageSize,32768);
+    stages=[];dev=await ad.requestDevice({requiredLimits:rl});const d0=dev;
+    dev.addEventListener('uncapturederror',e=>{if(dev!==d0)return;faultSeq++;errlog('GPU FOUT: '+e.error.message)});
+    dev.lost.then(i=>{if(dev===d0){dev=null;gpuReady=false}});
+    const mod=dev.createShaderModule({code:buildWGSL()});
+    pipe=dev.createComputePipeline({layout:'auto',compute:{module:mod,entryPoint:'main'}});
+    const T=TBL||(TBL=buildTable());tableBuf=dev.createBuffer({size:T.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});dev.queue.writeBuffer(tableBuf,0,T);
+    if(!GTBL||GTBL.length!==GK*40)GTBL=(()=>{const a=new Uint32Array(GK*40);let g=null;for(let j=1;j<=GK;j++){g=ecAdd(g,G);a.set(limbs13(g.x),(j-1)*40);a.set(limbs13(g.y),(j-1)*40+20)}return a})();const GT=GTBL;
+    gtBuf=dev.createBuffer({size:GT.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});dev.queue.writeBuffer(gtBuf,0,GT);
+    tgtBuf=dev.createBuffer({size:80,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+    for(let i=0;i<4;i++){
+      const bb=dev.createBuffer({size:96,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+      const rs=dev.createBuffer({size:8,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST});
+      const rd=dev.createBuffer({size:8,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+      const bg=dev.createBindGroup({layout:pipe.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:bb}},{binding:1,resource:{buffer:tableBuf}},{binding:2,resource:{buffer:tgtBuf}},{binding:3,resource:{buffer:rs}},{binding:4,resource:{buffer:gtBuf}}]});
+      stages.push({bb,rs,rd,bg,p:null});
+    }
+    tgtBuf2=dev.createBuffer({size:80,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+    {const cb=dev.createBuffer({size:96,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST}),crs=dev.createBuffer({size:8,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST}),crd=dev.createBuffer({size:8,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+     const cbg=dev.createBindGroup({layout:pipe.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:cb}},{binding:1,resource:{buffer:tableBuf}},{binding:2,resource:{buffer:tgtBuf2}},{binding:3,resource:{buffer:crs}},{binding:4,resource:{buffer:gtBuf}}]});
+     cstage={bb:cb,rs:crs,rd:crd,bg:cbg}}
+    $('badge').textContent='WEBGPU GEREED';gpuReady=true;return true;
+  }catch(e){dev=null;errlog('Init-fout: '+e.message);return false}
+}
+function stop(why){running=false;tok++;if(wl){try{wl.release()}catch(e){}wl=null}$('go').disabled=false;$('test').disabled=false;$('tune').disabled=false;$('dp4').disabled=false;$('stop').disabled=true;$('status').textContent=why;log(why,'var(--dg)')}
+function rbelow(b){if(b<=1n)return 0n;const top=1n<<256n,cut=top-top%b,by=new Uint8Array(32);for(;;){crypto.getRandomValues(by);let x=0n;for(const v of by)x=(x<<8n)|BigInt(v);if(x<cut)return x%b}}
+function ui(){if(!running)return;const s=(performance.now()-t0)/1000;
+  $('total').textContent=total.toLocaleString('nl-NL');$('speed').textContent=Math.round(total/Math.max(s,.001)).toLocaleString('nl-NL')+' /s';
+  $('leases').textContent=leases;$('bar').style.width=Math.min(100,curLease/leaseLen*100)+'%';setTimeout(ui,250)}
+async function report(key){
+  const hex=key.toString(16).padStart(64,'0');
+  const pt=ecMul(key,G);
+  const pkHex='02'+pt.x.toString(16).padStart(64,'0');
+  $('none').style.display='none';$('res').innerHTML+=`<tr><td>Public Key</td><td style="color:var(--a2)">${pkHex}</td><td style="color:var(--ok)">0x${hex}</td></tr>`;
+  log('MATCH GEVONDEN: Privéleutel 0x'+hex,'var(--ok)');stop('MATCH gevonden');
+}
+async function startInner(){
+  try{
+    const addr=$('addr').value.trim(),min=BigInt('0x'+$('rmin').value.trim().replace(/^0x/i,'')),max=BigInt('0x'+$('rmax').value.trim().replace(/^0x/i,''));
+    if(min<1n||max>=ORDER||min>max)throw Error('Ongeldig bereik');
+    const lim=BigInt($('lease').value);
+    const load=Math.max(10,Math.min(100,Number($('load').value)||100)),depth=load<100?1:Math.max(1,Math.min(4,Number($('depth').value)||2));
+    BATCH=Math.max(UNIT,Math.min(MAXB,Math.round((Number($('batch').value)||DEFB)/UNIT)*UNIT));$('batch').value=BATCH;$('load').value=load;
+    
+    const pk=parsePublicKey(addr);
+    await ensureCANT();
+    if(!gpuReady&&!(await ensureGPU()))return;
+    let resume=null;
+    if(Number($('persist').value)!==0&&await Store.init(addr)){
+      resume=await Store.loadCur(min,max);
+    }else Store.on=false;
+    
+    const tgtData=new Uint32Array(20);
+    for(let i=0;i<8;i++)tgtData[i]=pk.x[i];
+    for(let i=0;i<8;i++)tgtData[8+i]=pk.y[i];
+    tgtData[16]=pk.flags[0];tgtData[17]=pk.flags[1];
+    setTargets(tgtData);
+
+    running=true;const my=++tok;total=0;leases=0;t0=performance.now();
+    $('go').disabled=true;$('test').disabled=true;$('tune').disabled=true;$('dp4').disabled=true;$('stop').disabled=false;$('status').textContent='Zoeken...';
+    log(`Start Public Key Finder: batch=${BATCH}`);setTimeout(ui,250);
+    const span=max-min+1n,step=ecMul(BigInt(BATCH),G),buf=new Uint32Array(24);
+    let si=0,found=false,key=0n,end=0n,pt=null,doneUpTo=0n,have=false,fails=0,epoch=0,leaseStart=0n,segFrom=0n,lastSave=0;const pendKeys=[];
+    const okB=new Map();
+    while(running&&my===tok&&!found){
+      try{
+        if(!gpuReady||!dev||!stages.length){if(!(await ensureGPU()))throw Error('GPU-initialisatie mislukt');setTargets(tgtData)}
+        if(!have){
+          if(resume){leaseStart=resume.start;key=resume.done;end=resume.end;leaseLen=Number(end-leaseStart);resume=null;leases++}
+          else{const len=lim<span?lim:span,pk_range=await Store.pick(min,max,len);
+            if(!pk_range){stop('Bereik volledig gescand');break}
+            leaseStart=pk_range.a;key=pk_range.a;end=pk_range.a+pk_range.len;leases++;leaseLen=Number(pk_range.len)}
+          segFrom=key;doneUpTo=key;pt=ecMul(key,G);okB.clear();curLease=0;have=true;
+          $('cur').value='0x'+leaseStart.toString(16)+' : 0x'+(end-1n).toString(16);
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: 'Courier New', monospace;
-            background: var(--bg); color: var(--text);
-            min-height: 100vh; padding: 24px 16px 48px;
-            overflow-x: hidden;
+        while(running&&my===tok&&key<end&&!found){
+          if(Store.on&&performance.now()-lastSave>=SAVE_MS){lastSave=performance.now();Store.saveCur({start:leaseStart.toString(16),end:end.toString(16),segFrom:segFrom.toString(16),done:doneUpTo.toString(16)})}
+          const n=Number(end-key<BigInt(BATCH)?end-key:BigInt(BATCH)),st=stages[si%depth];si++;
+          if(st.p)await st.p;if(!running||my!==tok)break;
+          const bk=key,bp=pt,ep=epoch,fs=faultSeq;key+=BigInt(n);if(n===BATCH)pt=ecAdd(bp,step);
+          buf.fill(0);buf.set(limbs(bk),0);buf[7]=n;buf.set(limbs(bp.x),8);buf.set(limbs(bp.y),16);
+          dev.queue.writeBuffer(st.bb,0,buf);dev.queue.writeBuffer(st.rs,0,ZERO2);
+          const enc=dev.createCommandEncoder(),pass=enc.beginComputePass();
+          pass.setPipeline(pipe);pass.setBindGroup(0,st.bg);pass.dispatchWorkgroups(Math.ceil(n/(GRP*WG)));pass.end();
+          enc.copyBufferToBuffer(st.rs,0,st.rd,0,8);const ts=performance.now();dev.queue.submit([enc.finish()]);
+          st.p=(async()=>{let mp=false,r0=0,r1=0;try{await st.rd.mapAsync(GPUMapMode.READ);mp=true;const r=new Uint32Array(st.rd.getMappedRange());r0=r[0];r1=r[1]}finally{if(mp){try{st.rd.unmap()}catch(e){}}}const hit=r0===1,ix=r1;
+            if(faultSeq!==fs)throw Error('GPU-fout');
+            if(running&&my===tok&&ep===epoch){fails=0;total+=n;curLease+=n;okB.set(bk,n);while(okB.has(doneUpTo)){const m=okB.get(doneUpTo);okB.delete(doneUpTo);doneUpTo+=BigInt(m)}}
+            if(hit&&!found&&ep===epoch){found=true;await report(bk+BigInt(ix))}})();st.p.catch(()=>{});
         }
-        body::before {
-            content: ''; position: fixed; inset: 0;
-            background: repeating-linear-gradient(transparent 0px, transparent 3px,
-                rgba(0,255,153,.015) 3px, rgba(0,255,153,.015) 4px);
-            pointer-events: none; z-index: 999;
-        }
-        .container { max-width: 820px; margin: 0 auto; position: relative; z-index: 1; }
-        
-        /* Header */
-        .header { text-align: center; margin-bottom: 28px; }
-        .header h1 { font-size: clamp(1.2rem, 4vw, 1.6rem); letter-spacing: .2em; color: var(--accent);
-            text-shadow: 0 0 18px rgba(0,255,153,0.4); text-transform: uppercase; }
-        .header .sub { font-size: .75rem; color: var(--muted); letter-spacing: .12em; margin-top: 6px; }
-        .badge { display: inline-block; background: linear-gradient(90deg,#1a2a1a,#0d2010);
-            border: 1px solid var(--accent); color: var(--accent); font-size: .65rem;
-            letter-spacing: .15em; padding: 4px 12px; border-radius: 4px; margin-top: 12px;
-            transition: all 0.3s ease; }
-            
-        /* Cards */
-        .card, .chance-card {
-            background: var(--panel); border: 1px solid var(--border);
-            border-radius: 8px; padding: 24px; margin-bottom: 20px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-        }
-        .chance-card {
-            background: linear-gradient(135deg, #0a0f1a 0%, #0d1520 100%);
-            border-color: #1a3a5c; position: relative; overflow: hidden;
-        }
-        .card-title, .chance-title {
-            font-size: .75rem; letter-spacing: .18em; text-transform: uppercase; font-weight: bold;
-            border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 20px;
-        }
-        .chance-title { color: var(--accent2); border-color: #1a3a5c; }
-        
-        /* Forms & Fields */
-        .field { display: grid; grid-template-columns: 220px 1fr; align-items: center; gap: 12px; margin-bottom: 14px; }
-        .field label { font-size: .75rem; color: var(--muted); letter-spacing: .06em; font-weight: bold;}
-        .field input, select {
-            background: var(--surface); color: var(--accent); border: 1px solid var(--dim);
-            border-radius: 4px; padding: 8px 12px; font-family: inherit; font-size: .8rem; outline: none; width: 100%;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
-        .field input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,255,153,.15); }
-        .field input:read-only, input:disabled { background: rgba(13, 17, 23, 0.5); border-style: dashed; cursor: not-allowed; }
-        .divider { border: none; border-top: 1px dashed var(--dim); margin: 20px 0; }
-        
-        /* Buttons */
-        .btn-row { display: flex; gap: 12px; margin-top: 8px; }
-        .btn {
-            flex: 1; padding: 12px 20px; font-family: inherit; font-size: .85rem; font-weight: bold;
-            letter-spacing: .1em; cursor: pointer; border: none; border-radius: 4px; transition: all .2s;
-            text-transform: uppercase;
-        }
-        .btn:active:not(:disabled) { transform: scale(.97); }
-        .btn:disabled { opacity: .4; cursor: not-allowed; filter: grayscale(1); }
-        .btn-start { background: var(--success); color: #000; box-shadow: 0 0 10px rgba(16, 185, 129, 0.2); }
-        .btn-start:hover:not(:disabled) { background: #12d494; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
-        .btn-stop { background: var(--danger); color: #fff; }
-        .btn-stop:hover:not(:disabled) { background: #f87171; }
-        
-        /* Stats */
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-        .stat-cell { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 12px 16px; }
-        .stat-cell .label { font-size: .65rem; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; }
-        .stat-cell .value { font-size: 1.1rem; font-weight: bold; color: var(--accent); }
-        
-        #statusVal { color: var(--danger); }
-        #statusVal.running { 
-            color: var(--success); 
-            animation: pulse 1.5s infinite;
-        }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
-        
-        /* Progress */
-        .progress-wrap { height: 6px; background: var(--border); border-radius: 3px; margin-top: 18px; overflow: hidden; }
-        .progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width 0.1s linear; }
-        
-        /* Chance Gauge */
-        .chance-main { display: flex; align-items: center; gap: 24px; margin-bottom: 20px; }
-        .chance-gauge { position: relative; width: 110px; height: 110px; flex-shrink: 0; }
-        .chance-gauge svg { width: 100%; height: 100%; }
-        .gauge-bg { fill: none; stroke: #1a2a3a; stroke-width: 8; }
-        .gauge-fill { fill: none; stroke: var(--accent2); stroke-width: 8; stroke-linecap: round;
-            transition: stroke-dashoffset 0.1s linear; transform: rotate(-90deg); transform-origin: 50% 50%; }
-        .gauge-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
-            justify-content: center; font-size: .65rem; color: var(--muted); text-align: center; line-height: 1.3; }
-        .gauge-label span { font-size: 1.1rem; color: var(--accent2); font-weight: bold; margin-bottom: 2px;}
-        .chance-info { flex: 1; }
-        .chance-info .big-number { font-size: 1.3rem; color: var(--accent2); font-weight: bold; letter-spacing: .05em; margin-bottom: 6px; }
-        .chance-info .label-small { font-size: .65rem; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 12px; }
-        .chance-info .kans-uitleg { font-size: .75rem; color: var(--text); line-height: 1.6; }
-        
-        .kans-progress { margin-top: 16px; }
-        .kans-progress .kp-label { display: flex; justify-content: space-between; font-size: .65rem; color: var(--muted); margin-bottom: 8px; text-transform: uppercase;}
-        .kans-track { height: 16px; background: #0a1520; border: 1px solid #1a3a5c; border-radius: 4px; overflow: hidden; position: relative; }
-        .kans-fill { height: 100%; background: linear-gradient(90deg, #003366, var(--accent2)); transition: width 0.1s linear; }
-        .kans-pct-label { font-size: .65rem; color: var(--muted); text-align: right; margin-top: 6px; }
-        
-        /* Log & Tables */
-        .log { background: #000; color: var(--accent); height: 180px; overflow-y: auto;
-            padding: 12px 16px; font-size: .75rem; line-height: 1.6; border-radius: 6px; border: 1px solid var(--border); scroll-behavior: smooth; }
-        .log .ts { color: var(--muted); margin-right: 8px; }
-        
-        .result-table { width: 100%; border-collapse: collapse; font-size: .75rem; table-layout: fixed; }
-        .result-table th { background: var(--surface); color: var(--accent2); letter-spacing: .1em; font-size: .65rem;
-            text-transform: uppercase; padding: 12px; border: 1px solid var(--border); text-align: left; }
-        .result-table td { border: 1px solid var(--border); padding: 12px; color: var(--text); word-break: break-all; }
-        
-        .footer { text-align: center; font-size: .65rem; color: var(--muted); letter-spacing: .1em; margin-top: 32px; }
-        
-        /* Scrollbar */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: var(--surface); border-radius: 4px;}
-        ::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
-
-        @media (max-width: 650px) {
-            .field { grid-template-columns: 1fr; gap: 6px; margin-bottom: 16px; }
-            .chance-main { flex-direction: column; text-align: center; gap: 16px; }
-            .btn-row { flex-direction: column; }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>📫 Random Slice Sniper</h1>
-            <div class="sub">256-lane productboom — 3-stage pipeline — gemeten throughput</div>
-            <span class="badge" id="gpuBadge">⚙️ INITIALISEREN...</span>
-        </div>
-        
-        <div class="card">
-            <div class="card-title">⚙ Actieve Plakje Configuratie</div>
-            <div class="field">
-                <label>Target BTC Adres</label>
-                <input id="btcAddr" value="1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU" type="text" placeholder="1...">
-            </div>
-            <div class="field">
-                <label>Scan methode</label>
-                <select id="scanMethod">
-                    <option value="linear" selected>📏 WebGPU O(1) Add Pipelined</option>
-                </select>
-            </div>
-            <div class="field">
-                <label>Keys per Plakje</label>
-                <input id="keysLimit" value="10000000" type="number" min="1000" step="1000000">
-            </div>
-            <hr class="divider">
-            <div class="field">
-                <label>Beginwaarde (HEX)</label>
-                <input id="customStart" value="400000000000000000" type="text" style="color: var(--accent2);" placeholder="Bijv. 400000000000000000">
-            </div>
-            <div class="field">
-                <label>Eindwaarde (HEX)</label>
-                <input id="customEnd" value="7fffffffffffffffff" type="text" style="color: var(--accent2);" placeholder="Bijv. 7fffffffffffffffff">
-            </div>
-            <hr class="divider">
-            <div class="field"><label>GPU Batch Size</label><input id="numW" value="2097152" type="number" disabled title="Bepaald door WebGPU"></div>
-            <div class="field"><label>Actueel Plakje Start</label><input id="rangeStart" value="" type="text" style="color: var(--muted);" readonly></div>
-            <div class="field"><label>Actueel Plakje Eind</label><input id="rangeEnd" value="" type="text" style="color: var(--muted);" readonly></div>
-            
-            <div class="btn-row">
-                <button class="btn btn-start" id="startBtn">▶ Start Ultra-Hop Scan</button>
-                <button class="btn btn-stop" id="stopBtn" disabled>■ Stop</button>
-            </div>
-        </div>
-        
-        <div class="chance-card">
-            <div class="chance-title">🎲 Voortgang in Huidig Plakje</div>
-            <div class="chance-main">
-                <div class="chance-gauge">
-                    <svg viewBox="0 0 100 100">
-                        <circle class="gauge-bg" cx="50" cy="50" r="38"/>
-                        <circle class="gauge-fill" cx="50" cy="50" r="38" id="gaugeFill" stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
-                    </svg>
-                    <div class="gauge-label"><span id="gaugePct">0.0%</span>gedekt</div>
-                </div>
-                <div class="chance-info">
-                    <div class="big-number" id="chanceScientific">0.00%</div>
-                    <div class="label-small">van de ingestelde target limiet bereikt</div>
-                    <div class="kans-uitleg" id="chanceUitleg">Wacht op configuratie en opstart...</div>
-                </div>
-            </div>
-            <div class="kans-progress">
-                <div class="kp-label"><span>Dekkingsgraad tot Volgende Hop</span><span id="coveragePct">0.00%</span></div>
-                <div class="kans-track"><div class="kans-fill" id="kansBar" style="width:0%"></div></div>
-                <div class="kans-pct-label"><span id="currentSliceKeys">0</span> / <span id="limitDisplay">0</span> keys in dit plakje</div>
-            </div>
-        </div>
-        
-        <div class="card">
-            <div class="card-title">📊 Sessie Statistieken</div>
-            <div class="stats-grid">
-                <div class="stat-cell"><div class="label">Status</div><div class="value" id="statusVal">Gestopt</div></div>
-                <div class="stat-cell"><div class="label">Totaal Gescand</div><div class="value" id="keysScanned">0</div></div>
-                <div class="stat-cell"><div class="label">Snelheid</div><div class="value" id="speed">0 /s</div></div>
-                <div class="stat-cell"><div class="label">Plakjes bezocht</div><div class="value" id="slicesVisitedCount">0</div></div>
-            </div>
-            <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
-        </div>
-        
-        <div class="card"><div class="card-title">📋 Activiteitenlog</div><div class="log" id="logBox"></div></div>
-        
-        <div class="card">
-            <div class="card-title">🎯 Resultaten</div>
-            <table class="result-table">
-                <thead><tr><th style="width: 25%">Type</th><th style="width: 35%">WIF</th><th style="width: 40%">Privésleutel (HEX)</th></tr></thead>
-                <tbody id="matchTable"><tr class="empty-row" id="noMatchRow"><td colspan="3" style="text-align: center; color: var(--muted);">Nog geen match gevonden...</td></tr></tbody>
-            </table>
-        </div>
-        
-        <div class="footer">Random Slice Sniper · WEBGPU ULTRA TURBO ENGINE ⚡</div>
-    </div>
-
-    <script>
-        const WGSL_SOURCE = `
-        struct TargetHash { h: vec4<u32>, h4: vec4<u32> };
-        struct BatchParams { 
-            startKey: vec4<u32>, startKey2: vec4<u32>,
-            gx: vec4<u32>, gx2: vec4<u32>,
-            gy: vec4<u32>, gy2: vec4<u32>
-        };
-
-        struct R8  { v: array<u32,8>,  c: u32 };
-        const P: array<u32,8> = array<u32,8>(0xFFFFFC2Fu,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
-        const P_MINUS_2: array<u32,8> = array<u32,8>(0xFFFFFC2Du,0xFFFFFFFEu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu,0xFFFFFFFFu);
-
-        fn addc(a: u32, b: u32, cin: u32) -> vec2<u32> {
-          let s1 = a + b; let c1 = select(0u, 1u, s1 < a);
-          let s2 = s1 + cin; let c2 = select(0u, 1u, s2 < s1);
-          return vec2<u32>(s2, c1 + c2);
-        }
-        fn subb(a: u32, b: u32, bin: u32) -> vec2<u32> {
-          let d1 = a - b; let b1 = select(0u, 1u, a < b);
-          let d2 = d1 - bin; let b2 = select(0u, 1u, d1 < bin);
-          return vec2<u32>(d2, b1 + b2);
-        }
-        fn mul32(a: u32, b: u32) -> vec2<u32> {
-          let alo = a & 0xFFFFu; let ahi = a >> 16u;
-          let blo = b & 0xFFFFu; let bhi = b >> 16u;
-          let lolo = alo * blo; let lohi = alo * bhi; let hilo = ahi * blo; let hihi = ahi * bhi;
-          let mr = addc(lohi, hilo, 0u);
-          let lr = addc(lolo, mr.x << 16u, 0u);
-          let hi = hihi + (mr.x >> 16u) + (mr.y << 16u) + lr.y;
-          return vec2<u32>(lr.x, hi);
-        }
-        fn add8(a: array<u32,8>, b: array<u32,8>) -> R8 {
-          var out: array<u32,8>; var carry: u32 = 0u;
-          for (var i = 0u; i < 8u; i = i + 1u) { let r = addc(a[i], b[i], carry); out[i] = r.x; carry = r.y; }
-          var res: R8; res.v = out; res.c = carry; return res;
-        }
-        fn sub8(a: array<u32,8>, b: array<u32,8>) -> R8 {
-          var out: array<u32,8>; var borrow: u32 = 0u;
-          for (var i = 0u; i < 8u; i = i + 1u) { let r = subb(a[i], b[i], borrow); out[i] = r.x; borrow = r.y; }
-          var res: R8; res.v = out; res.c = borrow; return res;
-        }
-        fn cmp8(a: array<u32,8>, b: array<u32,8>) -> i32 {
-          for (var ii = 0u; ii < 8u; ii = ii + 1u) {
-            let i = 7u - ii; if (a[i] != b[i]) { return select(-1, 1, a[i] > b[i]); }
-          }
-          return 0;
-        }
-        fn isZero8(a: array<u32,8>) -> bool {
-          for (var i = 0u; i < 8u; i = i + 1u) { if (a[i] != 0u) { return false; } }
-          return true;
-        }
-        fn mulRaw(a: array<u32,8>, b: array<u32,8>) -> array<u32,16> {
-          var res: array<u32,16>; for (var i = 0u; i < 16u; i = i + 1u) { res[i] = 0u; }
-          for (var i = 0u; i < 8u; i = i + 1u) {
-            var carry: u32 = 0u;
-            for (var j = 0u; j < 8u; j = j + 1u) {
-              let m = mul32(a[i], b[j]); let s = addc(res[i+j], m.x, carry);
-              res[i+j] = s.x; carry = m.y + s.y;
-            }
-            var k = i + 8u; var cc = carry;
-            loop {
-              if (cc == 0u) { break; }
-              let s = addc(res[k], cc, 0u); res[k] = s.x; cc = s.y; k = k + 1u;
-            }
-          }
-          return res;
-        }
-        fn mulSmall8(a: array<u32,8>, m: u32) -> array<u32,9> {
-          var out: array<u32,9>; for (var i=0u;i<9u;i=i+1u){ out[i]=0u; }
-          var carry: u32 = 0u;
-          for (var i = 0u; i < 8u; i = i + 1u) {
-            let pr = mul32(a[i], m); let s = addc(out[i], pr.x, carry);
-            out[i] = s.x; carry = pr.y + s.y;
-          }
-          out[8] = carry; return out;
-        }
-        fn addScalarAt(acc: ptr<function, array<u32,8>>, pos: u32, value: u32) {
-          var carry = value; var i = pos;
-          loop {
-            if (carry == 0u || i >= 8u) { break; }
-            let s = addc((*acc)[i], carry, 0u); (*acc)[i] = s.x; carry = s.y; i = i + 1u;
-          }
-        }
-        fn reduceModP(r: array<u32,16>) -> array<u32,8> {
-          var lo: array<u32,9>; for (var i=0u;i<8u;i=i+1u){ lo[i]=r[i]; } lo[8]=0u;
-          var hi: array<u32,8>; for (var i=0u;i<8u;i=i+1u){ hi[i]=r[8u+i]; }
-          var hiShifted: array<u32,9>; hiShifted[0]=0u;
-          for (var i=0u;i<8u;i=i+1u){ hiShifted[i+1u]=hi[i]; }
-          let hi977 = mulSmall8(hi, 977u);
-          var sum1: array<u32,9>; var carry: u32 = 0u;
-          for (var i=0u;i<9u;i=i+1u){ let s=addc(lo[i], hiShifted[i], carry); sum1[i]=s.x; carry=s.y; }
-          let carry1 = carry;
-          var sum2: array<u32,9>; carry = 0u;
-          for (var i=0u;i<9u;i=i+1u){ let s=addc(sum1[i], hi977[i], carry); sum2[i]=s.x; carry=s.y; }
-          let carry2 = carry;
-          let extra = carry1 + carry2;
-          var acc: array<u32,8>; for (var i=0u;i<8u;i=i+1u){ acc[i]=sum2[i]; }
-          let hi2 = sum2[8];
-          let hi2_977 = mul32(hi2, 977u);
-          addScalarAt(&acc, 0u, hi2_977.x); addScalarAt(&acc, 1u, hi2_977.y);
-          addScalarAt(&acc, 1u, hi2); addScalarAt(&acc, 2u, extra); addScalarAt(&acc, 1u, extra * 977u);
-          for (var iter=0u; iter<6u; iter=iter+1u) {
-            if (cmp8(acc, P) >= 0) { let s = sub8(acc, P); acc = s.v; } else { break; }
-          }
-          return acc;
-        }
-        fn mulmod(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> { return reduceModP(mulRaw(a, b)); }
-        fn addmod(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> {
-          let s = add8(a, b); if (s.c == 1u || cmp8(s.v, P) >= 0) { let d = sub8(s.v, P); return d.v; } return s.v;
-        }
-        fn submod(a: array<u32,8>, b: array<u32,8>) -> array<u32,8> {
-          if (cmp8(a, b) >= 0) { let d = sub8(a, b); return d.v; }
-          else { let t = sub8(b, a); let d = sub8(P, t.v); return d.v; }
-        }
-        fn u32to8(x: u32) -> array<u32,8> { var out: array<u32,8>; out[0]=x; for (var i=1u;i<8u;i=i+1u){ out[i]=0u; } return out; }
-        fn modpowP2(base: array<u32,8>) -> array<u32,8> {
-          var result = u32to8(1u); var b = base;
-          for (var i = 0u; i < 256u; i = i + 1u) {
-            let limbIdx = i / 32u; let bitIdx = i % 32u;
-            if (((P_MINUS_2[limbIdx] >> bitIdx) & 1u) == 1u) { result = mulmod(result, b); }
-            b = mulmod(b, b);
-          }
-          return result;
-        }
-
-        struct JPoint { X: array<u32,8>, Y: array<u32,8>, Z: array<u32,8>, isInf: bool };
-        fn jacDouble(p: JPoint) -> JPoint {
-          let Ysq = mulmod(p.Y, p.Y);
-          let S = mulmod(u32to8(4u), mulmod(p.X, Ysq));
-          let M = mulmod(u32to8(3u), mulmod(p.X, p.X));
-          let twoS = addmod(S, S);
-          let X3 = submod(mulmod(M, M), twoS);
-          let Y3 = submod(mulmod(M, submod(S, X3)), mulmod(u32to8(8u), mulmod(Ysq, Ysq)));
-          let Z3 = mulmod(u32to8(2u), mulmod(p.Y, p.Z));
-          var out: JPoint; out.X = X3; out.Y = Y3; out.Z = Z3; out.isInf = isZero8(Z3); return out;
-        }
-        fn jacMaddAffine(p: JPoint, x2: array<u32,8>, y2: array<u32,8>) -> JPoint {
-          if (p.isInf) { var out: JPoint; out.X = x2; out.Y = y2; out.Z = u32to8(1u); out.isInf = false; return out; }
-          let Z1sq = mulmod(p.Z, p.Z);
-          let U2 = mulmod(x2, Z1sq);
-          let S2 = mulmod(mulmod(y2, Z1sq), p.Z);
-          let H = submod(U2, p.X);
-          let R = submod(S2, p.Y);
-          if (isZero8(H)) { if (isZero8(R)) { return jacDouble(p); } else { var out: JPoint; out.isInf = true; return out; } }
-          let HH = mulmod(H, H); let HHH = mulmod(HH, H);
-          let V = mulmod(p.X, HH);
-          let X3 = submod(submod(mulmod(R, R), HHH), addmod(V, V));
-          let Y3 = submod(mulmod(R, submod(V, X3)), mulmod(p.Y, HHH));
-          let Z3 = mulmod(p.Z, H);
-          var out: JPoint; out.X = X3; out.Y = Y3; out.Z = Z3; out.isInf = isZero8(Z3); return out;
-        }
-
-        fn rotr32(x: u32, n: u32) -> u32 { return (x >> n) | (x << (32u - n)); }
-        fn rotl32(x: u32, n: u32) -> u32 { return (x << n) | (x >> (32u - n)); }
-        fn bswap32(x: u32) -> u32 { return ((x & 0xffu) << 24u) | ((x & 0xff00u) << 8u) | ((x >> 8u) & 0xff00u) | ((x >> 24u) & 0xffu); }
-        
-        const SHA_K: array<u32,64> = array<u32,64>(
-          0x428a2f98u,0x71374491u,0xb5c0fbcfu,0xe9b5dba5u,0x3956c25bu,0x59f111f1u,0x923f82a4u,0xab1c5ed5u,
-          0xd807aa98u,0x12835b01u,0x243185beu,0x550c7dc3u,0x72be5d74u,0x80deb1feu,0x9bdc06a7u,0xc19bf174u,
-          0xe49b69c1u,0xefbe4786u,0x0fc19dc6u,0x240ca1ccu,0x2de92c6fu,0x4a7484aau,0x5cb0a9dcu,0x76f988dau,
-          0x983e5152u,0xa831c66du,0xb00327c8u,0xbf597fc7u,0xc6e00bf3u,0xd5a79147u,0x06ca6351u,0x14292967u,
-          0x27b70a85u,0x2e1b2138u,0x4d2c6dfcu,0x53380d13u,0x650a7354u,0x766a0abbu,0x81c2c92eu,0x92722c85u,
-          0xa2bfe8a1u,0xa81a664bu,0xc24b8b70u,0xc76c51a3u,0xd192e819u,0xd6990624u,0xf40e3585u,0x106aa070u,
-          0x19a4c116u,0x1e376c08u,0x2748774cu,0x34b0bcb5u,0x391c0cb3u,0x4ed8aa4au,0x5b9cca4fu,0x682e6ff3u,
-          0x748f82eeu,0x78a5636fu,0x84c87814u,0x8cc70208u,0x90befffau,0xa4506cebu,0xbef9a3f7u,0xc67178f2u
-        );
-        
-        // Register-geoptimaliseerd: SHA-256 heeft slechts 16 eerdere woorden nodig.
-        // De ringbuffer vervangt de 64-woorden schedule-array per GPU-lane.
-        fn sha256_33(prefix: u32, finalX: array<u32,8>) -> array<u32,8> {
-          var W: array<u32,16>;
-          W[0] = (prefix << 24u) | (finalX[7] >> 8u);
-          W[1] = (finalX[7] << 24u) | (finalX[6] >> 8u);
-          W[2] = (finalX[6] << 24u) | (finalX[5] >> 8u);
-          W[3] = (finalX[5] << 24u) | (finalX[4] >> 8u);
-          W[4] = (finalX[4] << 24u) | (finalX[3] >> 8u);
-          W[5] = (finalX[3] << 24u) | (finalX[2] >> 8u);
-          W[6] = (finalX[2] << 24u) | (finalX[1] >> 8u);
-          W[7] = (finalX[1] << 24u) | (finalX[0] >> 8u);
-          W[8] = (finalX[0] << 24u) | 0x00800000u;
-          W[9] = 0u; W[10] = 0u; W[11] = 0u; W[12] = 0u; W[13] = 0u; W[14] = 0u;
-          W[15] = 264u;
-
-          // De initiële hashwoorden worden direct als scalars gehouden.
-          var a = 0x6a09e667u; var bb = 0xbb67ae85u; var c = 0x3c6ef372u; var d = 0xa54ff53au;
-          var e = 0x510e527fu; var f = 0x9b05688cu; var g = 0x1f83d9abu; var h = 0x5be0cd19u;
-          for (var i = 0u; i < 64u; i = i + 1u) {
-            var w: u32;
-            if (i < 16u) {
-              w = W[i];
-            } else {
-              let slot = i & 15u;
-              let w15 = W[(i - 15u) & 15u];
-              let w2 = W[(i - 2u) & 15u];
-              let s0 = rotr32(w15, 7u) ^ rotr32(w15, 18u) ^ (w15 >> 3u);
-              let s1 = rotr32(w2, 17u) ^ rotr32(w2, 19u) ^ (w2 >> 10u);
-              w = W[slot] + s0 + W[(i - 7u) & 15u] + s1;
-              W[slot] = w;
-            }
-            let S1 = rotr32(e,6u) ^ rotr32(e,11u) ^ rotr32(e,25u);
-            let ch = (e & f) ^ ((~e) & g);
-            let t1 = h + S1 + ch + SHA_K[i] + w;
-            let S0 = rotr32(a,2u) ^ rotr32(a,13u) ^ rotr32(a,22u);
-            let maj = (a & bb) ^ (a & c) ^ (bb & c);
-            let t2 = S0 + maj;
-            h=g; g=f; f=e; e=d+t1; d=c; c=bb; bb=a; a=t1+t2;
-          }
-          return array<u32,8>(
-            0x6a09e667u + a, 0xbb67ae85u + bb, 0x3c6ef372u + c, 0xa54ff53au + d,
-            0x510e527fu + e, 0x9b05688cu + f, 0x1f83d9abu + g, 0x5be0cd19u + h
-          );
-        }
-        const RMD_ZL: array<u32,80> = array<u32,80>(0u,1u,2u,3u,4u,5u,6u,7u,8u,9u,10u,11u,12u,13u,14u,15u,7u,4u,13u,1u,10u,6u,15u,3u,12u,0u,9u,5u,2u,14u,11u,8u,3u,10u,14u,4u,9u,15u,8u,1u,2u,7u,0u,6u,13u,11u,5u,12u,1u,9u,11u,10u,0u,8u,12u,4u,13u,3u,7u,15u,14u,5u,6u,2u,4u,0u,5u,9u,7u,12u,2u,10u,14u,1u,3u,8u,11u,6u,15u,13u);
-        const RMD_ZR: array<u32,80> = array<u32,80>(5u,14u,7u,0u,9u,2u,11u,4u,13u,6u,15u,8u,1u,10u,3u,12u,6u,11u,3u,7u,0u,13u,5u,10u,14u,15u,8u,12u,4u,9u,1u,2u,15u,5u,1u,3u,7u,14u,6u,9u,11u,8u,12u,2u,10u,0u,4u,13u,8u,6u,4u,1u,3u,11u,15u,0u,5u,12u,2u,13u,9u,7u,10u,14u,12u,15u,10u,4u,1u,5u,8u,7u,6u,2u,13u,14u,0u,3u,9u,11u);
-        const RMD_SL: array<u32,80> = array<u32,80>(11u,14u,15u,12u,5u,8u,7u,9u,11u,13u,14u,15u,6u,7u,9u,8u,7u,6u,8u,13u,11u,9u,7u,15u,7u,12u,15u,9u,11u,7u,13u,12u,11u,13u,6u,7u,14u,9u,13u,15u,14u,8u,13u,6u,5u,12u,7u,5u,11u,12u,14u,15u,14u,15u,9u,8u,9u,14u,5u,6u,8u,6u,5u,12u,9u,15u,5u,11u,6u,8u,13u,12u,5u,12u,13u,14u,11u,8u,5u,6u);
-        const RMD_SR: array<u32,80> = array<u32,80>(8u,9u,9u,11u,13u,15u,15u,5u,7u,7u,8u,11u,14u,14u,12u,6u,9u,13u,15u,7u,12u,8u,9u,11u,7u,7u,12u,7u,6u,15u,13u,11u,9u,7u,15u,11u,8u,6u,6u,14u,12u,13u,5u,14u,13u,13u,7u,5u,15u,5u,8u,11u,14u,14u,6u,14u,6u,9u,12u,9u,12u,5u,15u,8u,8u,5u,12u,9u,12u,5u,14u,6u,8u,13u,6u,5u,15u,13u,11u,11u);
-        const RMD_HL: array<u32,5> = array<u32,5>(0x00000000u,0x5a827999u,0x6ed9eba1u,0x8f1bbcdcu,0xa953fd4eu);
-        const RMD_HR: array<u32,5> = array<u32,5>(0x50a28be6u,0x5c4dd124u,0x6d703ef3u,0x7a6d76e9u,0x00000000u);
-
-        fn rmdF(j: u32, x: u32, y: u32, z: u32) -> u32 {
-          if (j < 16u) { return x ^ y ^ z; }
-          if (j < 32u) { return (x & y) | ((~x) & z); }
-          if (j < 48u) { return (x | (~y)) ^ z; }
-          if (j < 64u) { return (x & z) | (y & (~z)); }
-          return x ^ (y | (~z));
-        }
-        fn ripemd160_32(H: array<u32,8>) -> array<u32,5> {
-          var X: array<u32,16>; for (var i = 0u; i < 16u; i = i + 1u) { X[i] = 0u; }
-          for (var i = 0u; i < 8u; i = i + 1u) { X[i] = bswap32(H[i]); }
-          X[8] = 0x80u; X[14] = 256u;
-
-          var h0 = 0x67452301u; var h1 = 0xefcdab89u; var h2 = 0x98badcfeu; var h3 = 0x10325476u; var h4 = 0xc3d2e1f0u;
-          var al = h0; var bl = h1; var cl = h2; var dl = h3; var el = h4;
-          var ar = h0; var br = h1; var cr = h2; var dr = h3; var er = h4;
-
-          for (var j = 0u; j < 80u; j = j + 1u) {
-            let roundL = j / 16u;
-            let roundR = j / 16u;
-            let tl = al + rmdF(j, bl, cl, dl) + X[RMD_ZL[j]] + RMD_HL[roundL];
-            let rotL = rotl32(tl, RMD_SL[j]) + el;
-            al = el; el = dl; dl = rotl32(cl, 10u); cl = bl; bl = rotL;
-
-            let tr = ar + rmdF(79u - j, br, cr, dr) + X[RMD_ZR[j]] + RMD_HR[roundR];
-            let rotR = rotl32(tr, RMD_SR[j]) + er;
-            ar = er; er = dr; dr = rotl32(cr, 10u); cr = br; br = rotR;
-          }
-
-          let t = h1 + cl + dr;
-          return array<u32,5>(t, h2 + dl + er, h3 + el + ar, h4 + al + br, h0 + bl + cr);
-        }
-
-        @group(0) @binding(0) var<uniform> batch: BatchParams;
-        @group(0) @binding(1) var<storage, read> combTable: array<u32>;
-        @group(0) @binding(2) var<uniform> targetData: TargetHash;
-        @group(0) @binding(3) var<storage, read_write> resultBuffer: array<u32>;
-
-        // 1-based binaire boom: knopen 1..511, bladeren 256..511.
-        // 512 × 8 × 4 = 16384 bytes; exact de Apple-limiet, zonder andere workgroup-variabelen.
-        var<workgroup> product_tree: array<array<u32,8>, 512>;
-
-        @compute @workgroup_size(256)
-        fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
-          let idx = gid.x;
-          let lid_x = lid.x;
-          // De laatste workgroup kan gedeeltelijk gevuld zijn. Inactieve lanes krijgen
-          // de neutrale Z-waarde 1, maar doorlopen beide barriers wel uniform.
-          let is_active_lane = idx < batch.startKey2.w;
-
-          var pt: JPoint;
-          pt.X = array<u32,8>(batch.gx.x, batch.gx.y, batch.gx.z, batch.gx.w,
-                               batch.gx2.x, batch.gx2.y, batch.gx2.z, batch.gx2.w);
-          pt.Y = array<u32,8>(batch.gy.x, batch.gy.y, batch.gy.z, batch.gy.w,
-                               batch.gy2.x, batch.gy2.y, batch.gy2.z, batch.gy2.w);
-          pt.Z = u32to8(1u);
-          pt.isInf = false;
-
-          if (is_active_lane) {
-            for (var i = 0u; i < 4u; i = i + 1u) {
-              let shift = 8u * i;
-              let byteVal = (idx >> shift) & 0xffu;
-              if (byteVal != 0u) {
-                let base_idx = (i * 256u + byteVal) * 16u;
-                var tx: array<u32,8>; var ty: array<u32,8>;
-                for (var m = 0u; m < 8u; m = m + 1u) {
-                  tx[m] = combTable[base_idx + m];
-                  ty[m] = combTable[base_idx + 8u + m];
-                }
-                pt = jacMaddAffine(pt, tx, ty);
-              }
-            }
-          } else {
-            pt.X = u32to8(0u);
-            pt.Y = u32to8(1u);
-            pt.Z = u32to8(1u);
-          }
-
-          // Parallelle Montgomery-productboom voor 128 Z-waarden.
-          // Inactieve lanes voeren Z=1 in, maar passeren de barriers uniform.
-          product_tree[256u + lid_x] = pt.Z;
-          workgroupBarrier();
-
-          // Upsweep: elke laag produceert de producten voor de bovenliggende knopen.
-          for (var width = 128u; width > 0u; width = width / 2u) {
-            if (lid_x < width) {
-              let node = width + lid_x;
-              product_tree[node] = mulmod(product_tree[node * 2u], product_tree[node * 2u + 1u]);
-            }
-            workgroupBarrier();
-          }
-
-          // Eén inverse voor het volledige product.
-          if (lid_x == 0u) { product_tree[1u] = modpowP2(product_tree[1u]); }
-          workgroupBarrier();
-
-          // Downsweep: verspreid de inverse van elk subproduct parallel naar de bladeren.
-          for (var width = 1u; width < 256u; width = width * 2u) {
-            if (lid_x < width) {
-              let node = width + lid_x;
-              let parent_inv = product_tree[node];
-              let left_product = product_tree[node * 2u];
-              let right_product = product_tree[node * 2u + 1u];
-              product_tree[node * 2u] = mulmod(parent_inv, right_product);
-              product_tree[node * 2u + 1u] = mulmod(parent_inv, left_product);
-            }
-            workgroupBarrier();
-          }
-
-          if (!is_active_lane) { return; }
-          let Zinv = product_tree[256u + lid_x];
-
-          let Zinv2 = mulmod(Zinv, Zinv);
-          let Zinv3 = mulmod(Zinv2, Zinv);
-          
-          let finalX = mulmod(pt.X, Zinv2);
-          let finalY = mulmod(pt.Y, Zinv3);
-
-          let prefix = select(3u, 2u, (finalY[0] & 1u) == 0u);
-          let H = sha256_33(prefix, finalX);
-          let hash = ripemd160_32(H);
-
-          var isMatch = true;
-          if (hash[0] != targetData.h.x) { isMatch = false; }
-          if (hash[1] != targetData.h.y) { isMatch = false; }
-          if (hash[2] != targetData.h.z) { isMatch = false; }
-          if (hash[3] != targetData.h.w) { isMatch = false; }
-          if (hash[4] != targetData.h4.x) { isMatch = false; }
-
-          if (isMatch) {
-            resultBuffer[0] = 1u;
-            resultBuffer[1] = idx;
-          }
-        }
-        `;
-
-        const SECP_P = (1n << 256n) - (1n << 32n) - 977n;
-        const SECP_GX = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
-        const SECP_GY = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199c47d08ffb10d4b8n;
-
-        function bigIntTo32Bytes(v) { return hexToBytes(v.toString(16).padStart(64, '0')); }
-        function hexToBytes(hex) {
-          const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
-          const paddedHex = cleanHex.length % 2 !== 0 ? '0' + cleanHex : cleanHex;
-          const out = new Uint8Array(32);
-          const startIdx = 32 - (paddedHex.length / 2);
-          for (let i = 0; i < paddedHex.length / 2; i++) {
-              out[startIdx + i] = parseInt(paddedHex.substr(i*2, 2), 16);
-          }
-          return out;
-        }
-        function bytesToLimbsLE(bytes32) {
-          const limbs = new Uint32Array(8);
-          for (let i = 0; i < 8; i++) {
-            const off = 28 - 4*i; limbs[i] = ((bytes32[off]<<24) | (bytes32[off+1]<<16) | (bytes32[off+2]<<8) | (bytes32[off+3])) >>> 0;
-          }
-          return limbs;
-        }
-        function bigIntToLimbsLE(bi) { return bytesToLimbsLE(bigIntTo32Bytes(bi)); }
-
-        function buildPrecomputedTable() {
-          // `idx` is de offset binnen één batch en heeft hier maximaal vier bytes.
-          // De shader gebruikt dus alleen vensters 0–3: 4 i.p.v. 32 tabellen.
-          const WINDOW_COUNT = 4;
-          const flat = new Uint32Array(WINDOW_COUNT * 256 * 16); let base = { x: SECP_GX, y: SECP_GY };
-          for (let i = 0; i < WINDOW_COUNT; i++) {
-            let acc = null;
-            for (let j = 1; j < 256; j++) {
-              acc = ecAdd(acc, base);
-              const off = (i * 256 + j) * 16;
-              flat.set(bytesToLimbsLE(bigIntTo32Bytes(acc.x)), off); flat.set(bytesToLimbsLE(bigIntTo32Bytes(acc.y)), off + 8);
-            }
-            for (let d = 0; d < 8; d++) base = ecDouble(base);
-          }
-          return flat;
-        }
-        
-        function ecDouble(P) {
-          if (P === null || P.y === 0n) return null;
-          const lam = ((3n * P.x % SECP_P) * P.x % SECP_P) * modinv((2n * P.y) % SECP_P, SECP_P) % SECP_P;
-          const x3 = (((lam * lam) % SECP_P) - 2n * P.x % SECP_P + 2n * SECP_P) % SECP_P;
-          const y3 = ((lam * ((P.x - x3 + SECP_P) % SECP_P)) % SECP_P - P.y + SECP_P) % SECP_P;
-          return { x: x3, y: y3 };
-        }
-        function ecAdd(P, Q) {
-          if (P === null) return Q; if (Q === null) return P;
-          if (P.x === Q.x) { if ((P.y + Q.y) % SECP_P === 0n) return null; return ecDouble(P); }
-          const lam = (((Q.y - P.y + SECP_P) % SECP_P) * modinv((Q.x - P.x + SECP_P) % SECP_P, SECP_P)) % SECP_P;
-          const x3 = (((lam * lam) % SECP_P) - P.x - Q.x + 3n * SECP_P) % SECP_P;
-          const y3 = ((lam * ((P.x - x3 + SECP_P) % SECP_P)) % SECP_P - P.y + SECP_P) % SECP_P;
-          return { x: x3, y: y3 };
-        }
-        function modinv(a, m) {
-          a = ((a % m) + m) % m; let [oldR, r] = [a, m], [oldS, s] = [1n, 0n];
-          while (r !== 0n) { const q = oldR / r; [oldR, r] = [r, oldR - q * r]; [oldS, s] = [s, oldS - q * s]; }
-          return ((oldS % m) + m) % m;
-        }
-        function ecScalarMul(k, base) {
-          let r = null, addend = base;
-          while (k > 0n) { if (k & 1n) r = ecAdd(r, addend); addend = ecDouble(addend); k >>= 1n; }
-          return r;
-        }
-
-        const B58ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-        function getTargetHash160Bytes(address) {
-          let digits = [0];
-          for (let i = 0; i < address.length; i++) {
-            let p = B58ALPHABET.indexOf(address[i]); if (p < 0) continue; let carry = p;
-            for (let j = 0; j < digits.length; j++) { carry += digits[j] * 58; digits[j] = carry & 0xff; carry = carry >> 8; }
-            while (carry > 0) { digits.push(carry & 0xff); carry = carry >> 8; }
-          }
-          for (let i = 0; i < address.length && address[i] === '1'; i++) digits.push(0);
-          digits.reverse(); 
-          if(digits.length < 21) throw new Error("Ongeldig Bitcoin adres formaat (te kort).");
-          return new Uint8Array(digits).slice(1, 21);
-        }
-
-        async function sha256_browser(msg) {
-          const hashBuffer = await crypto.subtle.digest('SHA-256', msg);
-          return new Uint8Array(hashBuffer);
-        }
-
-        function base58encode(bytes) {
-          let digits = [0];
-          for (let i = 0; i < bytes.length; i++) {
-            let carry = bytes[i];
-            for (let j = 0; j < digits.length; j++) { 
-                carry += digits[j] * 256; digits[j] = carry % 58; carry = Math.floor(carry / 58); 
-            }
-            while (carry > 0) { digits.push(carry % 58); carry = Math.floor(carry / 58); }
-          }
-          let str = ""; for (let i = 0; i < bytes.length && bytes[i] === 0; i++) str += "1";
-          for (let i = digits.length - 1; i >= 0; i--) str += B58ALPHABET[digits[i]];
-          return str;
-        }
-
-        async function wifCompressed(priv32) {
-          const payload = new Uint8Array(33);
-          payload.set(priv32, 0); payload[32] = 0x01;
-          const data = new Uint8Array(34); data[0] = 0x80; data.set(payload, 1);
-          const h1 = await sha256_browser(data);
-          const h2 = await sha256_browser(h1);
-          const full = new Uint8Array(38);
-          full.set(data); full.set(h2.slice(0, 4), 34);
-          return base58encode(full);
-        }
-
-        let gpuDevice = null, gpuPipeline = null, tableBuffer = null, uniformsBuffer = null;
-        let isRunning = false, keysCheckedGlobal = 0, slicesVisited = 0, keysCheckedSlice = 0;
-        let currentSliceStart = 0n, currentSliceEnd = 0n, currentKeyVal = 0n;
-        let startTime = 0;
-        let runId = 0, meterLastTime = 0, meterLastKeys = 0;
-        
-        const BATCH_SIZE = 2097152;
-        // Twee stages dekken de readback-latentie af, zonder de iPhone-GPU te verzadigen.
-        const PIPELINE_DEPTH = 3;
-        let pipelineStages = [];
-        let zeroRes;
-        
-        // Gedeclareerd voor Zero-Allocation (geen object-creatie in de render/compute loop)
-        let preallocatedFullBuf = new Uint32Array(24);
-        let currentBatchPoint = null;
-        let batchStepPoint = null;
-
-        function getRandomSliceStart(limitStr) {
-            const cleanStart = document.getElementById('customStart').value.trim().replace('0x', '');
-            const cleanEnd = document.getElementById('customEnd').value.trim().replace('0x', '');
-            
-            let rangeMin = cleanStart ? BigInt('0x' + cleanStart) : 0x10000000n;
-            let rangeMax = cleanEnd ? BigInt('0x' + cleanEnd) : 0x1fffffffn;
-            
-            const limit = BigInt(limitStr);
-            const totalSpan = rangeMax - rangeMin + 1n;
-            
-            if (totalSpan <= limit) return rangeMin;
-            
-            const maxOffset = totalSpan - limit;
-            const randBytes = new Uint8Array(16);
-            window.crypto.getRandomValues(randBytes);
-            
-            let randHex = '';
-            for (let i = 0; i < 16; i++) randHex += randBytes[i].toString(16).padStart(2, '0');
-            
-            return rangeMin + (BigInt('0x' + randHex) % maxOffset);
-        }
-
-        function log(msg, type="info") {
-            const box = document.getElementById('logBox');
-            const d = new Date(); const ts = d.toLocaleTimeString('nl-NL') + '.' + String(d.getMilliseconds()).padStart(3,'0');
-            let color = 'var(--text)';
-            if(type === 'warn') color = 'var(--warn)';
-            if(type === 'success') color = 'var(--success)';
-            if(type === 'hop') color = 'var(--accent2)';
-            if(type === 'stop') color = 'var(--danger)';
-            
-            const el = document.createElement('div');
-            el.innerHTML = `<span class="ts">[${ts}]</span> <span style="color:${color}">${msg}</span>`;
-            box.appendChild(el);
-            box.scrollTop = box.scrollHeight;
-        }
-        
-        const btcRegex = /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/;
-        const hexRegex = /^(0x)?[0-9a-fA-F]+$/;
-
-        function validateInputs() {
-            const btcAddr = document.getElementById('btcAddr').value.trim();
-            const customStart = document.getElementById('customStart').value.trim();
-            const customEnd = document.getElementById('customEnd').value.trim();
-            
-            if(!btcRegex.test(btcAddr)) {
-                log('❌ Ongeldig Bitcoin adres formaat. Gebruik een P2PKH adres beginnend met 1.', 'warn');
-                return false;
-            }
-            if(customStart && !hexRegex.test(customStart)) {
-                log('❌ Beginwaarde bevat ongeldige HEX karakters.', 'warn'); return false;
-            }
-            if(customEnd && !hexRegex.test(customEnd)) {
-                log('❌ Eindwaarde bevat ongeldige HEX karakters.', 'warn'); return false;
-            }
-            return true;
-        }
-
-        async function initWebGPU() {
-            if (!navigator.gpu) { document.getElementById('gpuBadge').textContent = 'WebGPU NIET ONDERSTEUND'; return false; }
-            try {
-                const adapter = await navigator.gpu.requestAdapter();
-                if (!adapter) { log('❌ Geen GPU adapter gevonden.', 'warn'); return false; }
-
-                gpuDevice = await adapter.requestDevice();
-                const limits = gpuDevice.limits;
-                log(`GPU-limieten: workgroup X=${limits.maxComputeWorkgroupSizeX}, invocations=${limits.maxComputeInvocationsPerWorkgroup}, workgroup-geheugen=${limits.maxComputeWorkgroupStorageSize} bytes.`, 'info');
-                gpuDevice.addEventListener('uncapturederror', (event) => { log('❌ GPU FOUT: ' + event.error.message, 'warn'); });
-                
-                const module = gpuDevice.createShaderModule({ code: WGSL_SOURCE });
-                const compilationInfo = await module.getCompilationInfo();
-                let hasErr = false;
-                for (const msg of compilationInfo.messages) {
-                    if (msg.type === 'error') { log(`❌ SHADER FOUT [L${msg.lineNum}]: ${msg.message}`, 'warn'); hasErr = true; }
-                }
-                if (hasErr) return false;
-
-                gpuPipeline = gpuDevice.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
-
-                log("Precomputing Jacobian ECDSA Tabel...", "info");
-                await new Promise(r => setTimeout(r, 100)); 
-                
-                const table = buildPrecomputedTable();
-                tableBuffer = gpuDevice.createBuffer({ size: table.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-                gpuDevice.queue.writeBuffer(tableBuffer, 0, table);
-                
-                uniformsBuffer = gpuDevice.createBuffer({ size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-
-                document.getElementById('gpuBadge').textContent = '🚀 WEBGPU ULTRA GEREED';
-                document.getElementById('gpuBadge').style.borderColor = 'var(--success)';
-                document.getElementById('gpuBadge').style.color = 'var(--success)';
-                log("WebGPU Backend Succesvol Geladen & Klaar.", "success");
-                return true;
-            } catch (e) {
-                log('❌ Fout bij WebGPU init: ' + e.message, 'warn');
-                console.error(e);
-                return false;
-            }
-        }
-
-        let lastUiUpdate = 0;
-        let keysLimitGlobalForUi = 0;
-        
-        function updateUI(timestamp) {
-            if(!isRunning) return;
-            
-            if(timestamp - lastUiUpdate > 1000) {
-                const now = performance.now();
-                const elapsed = Math.max((now - meterLastTime) / 1000, 0.001);
-                const rate = Math.round((keysCheckedGlobal - meterLastKeys) / elapsed);
-                meterLastTime = now;
-                meterLastKeys = keysCheckedGlobal;
-                
-                document.getElementById('keysScanned').textContent = keysCheckedGlobal.toLocaleString('nl-NL');
-                document.getElementById('speed').textContent = rate.toLocaleString('nl-NL') + " /s";
-                document.getElementById('currentSliceKeys').textContent = keysCheckedSlice.toLocaleString('nl-NL');
-                
-                if(keysLimitGlobalForUi > 0) {
-                    let slicePct = (keysCheckedSlice / keysLimitGlobalForUi) * 100;
-                    slicePct = Math.min(slicePct, 100);
-                    
-                    document.getElementById('progressBar').style.width = slicePct + "%";
-                    document.getElementById('kansBar').style.width = slicePct + "%";
-                    document.getElementById('gaugePct').textContent = slicePct.toFixed(1) + "%";
-                    document.getElementById('coveragePct').textContent = slicePct.toFixed(4) + "%";
-                    
-                    const offset = 238.76 - (238.76 * (slicePct / 100));
-                    document.getElementById('gaugeFill').style.strokeDashoffset = offset;
-                    document.getElementById('chanceScientific').textContent = slicePct.toFixed(2) + "%";
-                }
-                lastUiUpdate = timestamp;
-            }
-            requestAnimationFrame(updateUI);
-        }
-
-        document.getElementById('startBtn').addEventListener('click', async () => {
-            if(!validateInputs()) return;
-            if (!gpuDevice) { const ok = await initWebGPU(); if (!ok) return; }
-
-            let matchAlGevonden = false;
-            const targetAddress = document.getElementById('btcAddr').value.trim();
-            
-            let targetHashBytes;
-            try { targetHashBytes = getTargetHash160Bytes(targetAddress); } 
-            catch (e) { log(e.message, 'warn'); return; }
-            
-            const targetHashU32 = new Uint32Array(8);
-            for (let i = 0; i < 5; i++) {
-                targetHashU32[i] = (targetHashBytes[i*4]) | (targetHashBytes[i*4+1] << 8) | (targetHashBytes[i*4+2] << 16) | (targetHashBytes[i*4+3] << 24);
-            }
-            gpuDevice.queue.writeBuffer(uniformsBuffer, 0, targetHashU32);
-
-            if (pipelineStages.length === 0) {
-                zeroRes = new Uint32Array([0, 0]);
-                for (let i = 0; i < PIPELINE_DEPTH; i++) {
-                    let bBuf = gpuDevice.createBuffer({ size: 96, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-                    let rsBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
-                    let rdBuf = gpuDevice.createBuffer({ size: 8, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
-
-                    let bg = gpuDevice.createBindGroup({
-                        layout: gpuPipeline.getBindGroupLayout(0),
-                        entries: [
-                            { binding: 0, resource: { buffer: bBuf } },
-                            { binding: 1, resource: { buffer: tableBuffer } },
-                            { binding: 2, resource: { buffer: uniformsBuffer } },
-                            { binding: 3, resource: { buffer: rsBuf } }
-                        ]
-                    });
-                    pipelineStages.push({ batchBuffer: bBuf, resBuf: rsBuf, readBuf: rdBuf, bindGroup: bg, inFlight: null });
-                }
-            }
-
-            runId++;
-            keysCheckedGlobal = 0;
-            keysCheckedSlice = 0;
-            slicesVisited = 0;
-            lastUiUpdate = 0;
-            meterLastTime = performance.now();
-            meterLastKeys = 0;
-            isRunning = true;
-            document.getElementById('startBtn').disabled = true;
-            document.getElementById('stopBtn').disabled = false;
-            
-            const statusEl = document.getElementById('statusVal');
-            statusEl.textContent = "Zoeken...";
-            statusEl.className = "value running";
-            
-            let limitStr = document.getElementById('keysLimit').value;
-            let keysLimit = BigInt(limitStr);
-            keysLimitGlobalForUi = Number(keysLimit);
-            document.getElementById('limitDisplay').textContent = keysLimitGlobalForUi.toLocaleString('nl-NL');
-
-            // Bereken eenmalig het stap-punt voor O(1) ecAdd optelling
-            batchStepPoint = ecScalarMul(BigInt(BATCH_SIZE), { x: SECP_GX, y: SECP_GY });
-
-            const runSlice = async () => {
-                currentSliceStart = getRandomSliceStart(limitStr);
-                currentSliceEnd = currentSliceStart + keysLimit;
-                
-                const cleanEnd = document.getElementById('customEnd').value.trim().replace('0x', '');
-                if (cleanEnd) {
-                    let absoluteMax = BigInt('0x' + cleanEnd);
-                    if (currentSliceEnd > absoluteMax + 1n) currentSliceEnd = absoluteMax + 1n;
-                }
-
-                currentKeyVal = currentSliceStart;
-                keysCheckedSlice = 0;
-                slicesVisited++;
-                
-                // O(1) Optimalisatie: bereken het startpunt voor dit plakje één keer via dure scalar mul
-                currentBatchPoint = ecScalarMul(currentKeyVal, { x: SECP_GX, y: SECP_GY });
-                
-                document.getElementById('rangeStart').value = "0x" + currentSliceStart.toString(16).padStart(16, '0');
-                document.getElementById('rangeEnd').value = "0x" + currentSliceEnd.toString(16).padStart(16, '0');
-                document.getElementById('slicesVisitedCount').textContent = slicesVisited;
-                log(`🚀 HOP! Nieuwe slice: 0x${currentSliceStart.toString(16)}`, 'hop');
-            };
-
-            await runSlice();
-            startTime = performance.now();
-            let stageIndex = 0;
-            
-            requestAnimationFrame(updateUI);
-
-            async function startComputeLoop() {
-                while (isRunning) {
-                    if (currentKeyVal >= currentSliceEnd) {
-                        for (let i = 0; i < PIPELINE_DEPTH; i++) {
-                            if (pipelineStages[i].inFlight) await pipelineStages[i].inFlight;
-                        }
-                        await runSlice();
-                    }
-
-                    const actualBatchCount = Math.min(BATCH_SIZE, Number(currentSliceEnd - currentKeyVal));
-                    const stage = pipelineStages[stageIndex];
-                    stageIndex = (stageIndex + 1) % PIPELINE_DEPTH;
-
-                    if (stage.inFlight) await stage.inFlight;
-                    if (!isRunning) break;
-
-                    // Reserveer de sleutelrange vóór het dispatchen. In de oorspronkelijke
-                    // versie gebeurde dit pas na `mapAsync`, waardoor meerdere stages met
-                    // hetzelfde beginpunt konden draaien en de teller dubbeltellingen gaf.
-                    const batchStartKey = currentKeyVal;
-                    const batchStartPoint = currentBatchPoint;
-                    currentKeyVal += BigInt(actualBatchCount);
-                    if (actualBatchCount === BATCH_SIZE) {
-                        currentBatchPoint = ecAdd(batchStartPoint, batchStepPoint);
-                    }
-                    
-                    // Zero-Allocation: hergebruik preallocatedFullBuf i.p.v. `new Uint32Array`
-                    preallocatedFullBuf.set(bigIntToLimbsLE(batchStartKey), 0);
-                    // De shader gebruikt de privésleutel zelf niet; reserveer het anders
-                    // ongebruikte hoogste startKey-lid als actieve dispatchlengte.
-                    preallocatedFullBuf[7] = actualBatchCount;
-                    preallocatedFullBuf.set(bigIntToLimbsLE(batchStartPoint.x), 8);
-                    preallocatedFullBuf.set(bigIntToLimbsLE(batchStartPoint.y), 16);
-
-                    gpuDevice.queue.writeBuffer(stage.batchBuffer, 0, preallocatedFullBuf);
-                    gpuDevice.queue.writeBuffer(stage.resBuf, 0, zeroRes.buffer);
-
-                    const encoder = gpuDevice.createCommandEncoder();
-                    const pass = encoder.beginComputePass();
-                    pass.setPipeline(gpuPipeline);
-                    pass.setBindGroup(0, stage.bindGroup);
-                    pass.dispatchWorkgroups(Math.ceil(actualBatchCount / 256));
-                    pass.end();
-                    
-                    encoder.copyBufferToBuffer(stage.resBuf, 0, stage.readBuf, 0, 8);
-                    gpuDevice.queue.submit([encoder.finish()]);
-
-                    const submittedRunId = runId;
-                    stage.inFlight = (async () => {
-                        await stage.readBuf.mapAsync(GPUMapMode.READ);
-                        // Lees rechtstreeks uit de mapped range; een kopie is hier niet nodig.
-                        const gpuResult = new Uint32Array(stage.readBuf.getMappedRange());
-                        const isMatch = gpuResult[0] === 1;
-                        const matchIdx = gpuResult[1];
-                        stage.readBuf.unmap();
-                        
-                        if(isRunning && submittedRunId === runId) {
-                            keysCheckedSlice += actualBatchCount;
-                            keysCheckedGlobal += actualBatchCount;
-                        }
-
-                        if (isMatch && submittedRunId === runId && !matchAlGevonden) {
-                            matchAlGevonden = true;
-                            const foundPrivInt = batchStartKey + BigInt(matchIdx);
-                            const privHex = foundPrivInt.toString(16).padStart(64, '0');
-                            const wifStr = await wifCompressed(hexToBytes(privHex));
-                            
-                            document.getElementById('noMatchRow').style.display = 'none';
-                            const tbody = document.getElementById('matchTable');
-                            tbody.innerHTML += `<tr><td>P2PKH (Match)</td><td style="color:var(--accent2);">${wifStr}</td><td style="color:var(--success);">0x${privHex}</td></tr>`;
-                            log(`🎯 BINGO! Match gevonden: 0x${privHex}`, 'success');
-                            
-                            document.getElementById('stopBtn').click();
-                        }
-                    })();
-                }
-            }
-            startComputeLoop();
-        });
-
-        document.getElementById('stopBtn').addEventListener('click', () => {
-            runId++;
-            isRunning = false;
-            document.getElementById('startBtn').disabled = false;
-            document.getElementById('stopBtn').disabled = true;
-            
-            const statusEl = document.getElementById('statusVal');
-            statusEl.textContent = "Gestopt";
-            statusEl.className = "value";
-            log("Sessie gestopt door gebruiker.", "stop");
-        });
-        
-        initWebGPU();
-    </script>
-</body>
-</html>
+        for(const s of stages)if(s.p)await s.p;
+        if(key>=end&&running&&my===tok){have=false;await Store.put(segFrom,end);Store.clearCur()}
+        fails=0;
+      }catch(e){
+        errlog('Scanfout: '+e.message);
+        if(!running||my!==tok)break;
+        if(++fails>8)throw e;
+        epoch++;for(const v of okB.values())total-=v;okB.clear();
+        if(have){key=doneUpTime=doneUpTo;pt=ecMul(key,G);curLease=Number(key-leaseStart)}
+        await new Promise(r=>setTimeout(r,2000));
+      }
+    }
+    if(running&&my===tok)stop('Klaar');
+  }catch(e){running=false;$('go').disabled=false;$('stop').disabled=true;$('status').textContent='Fout';log('Fout: '+e.message,'var(--wr)')}
+}
+let starting=false;
+async function start(){
+  if(running||starting)return;
+  starting=true;$('go').disabled=true;
+  try{await startInner()}finally{starting=false;if(!running)$('go').disabled=false}
+}
+$('wipe').onclick=async()=>{if(running)return;try{const n=await Store.wipe($('addr').value.trim());log('Voortgang gewist ('+n+')','var(--ok)')}catch(e){}};
+$('clr').onclick=()=>{localStorage.removeItem('gpuscan_err');$('log').innerHTML='';log('Log gewist','var(--ok)')};
+$('tune').onclick=tune;$('go').onclick=start;$('stop').onclick=()=>stop('Gestopt');
+$('test').onclick=()=>{$('addr').value='0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';$('rmin').value='1';$('rmax').value='2000000';$('lease').value='1000000';start()};
+ensureGPU();
+</script></body></html>
