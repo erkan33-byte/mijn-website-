@@ -24,7 +24,7 @@ table{width:100%;border-collapse:collapse;font-size:.72rem;table-layout:fixed}th
 </style></head><body><div class="c">
 <h1>WebGPU BSGS Scanner</h1><span class="badge" id="badge">KLAAR VOOR START</span>
 <div class="card"><div class="t">Configuratie</div>
-<div class="f"><label>Target public key (comp/uncomp)</label><input id="pubkey" value="03afdda497369e219a2c1c369954a930e4d3740968e5e4352475bcffce3140dae5"></div>
+<div class="f"><label>Target public key (uncompressed)</label><input id="pubkey" value="04afdda497369e219a2c1c369954a930e4d3740968e5e4352475bcffce3140dae55ef677a7008d2a7f5b69a81526a35dfd3c4a175c3848577f19959ceded988ce3"></div>
 <div class="f"><label>Minimum (hex, inclusief)</label><input id="rangeMin" value="1000000000000000000000000000000000000"></div>
 <div class="f"><label>Maximum (hex, inclusief)</label><input id="rangeMax" value="1ffffffffffffffffffffffffffffffffffff"></div>
 <div class="f"><label>Baby-stappen m (tabelgrootte)</label><input id="babym" type="number" min="16" max="2097152" value="1048576"></div>
@@ -63,6 +63,7 @@ function genField(GK,GRP){
  const fold=(f,t)=>{let s='';for(let k=f;k>=t;k--)s+=`c${k-20}+=c${k}*15632u;c${k-18}+=c${k}*1024u;\n`;return s};
  const decl=n=>{let t='';for(let k=0;k<n;k++)t+=`var c${k}:u32=0u;`;return t+'\n'};
  const rip='if(c5>8191u){\n'+carry(5,20)+'if(c20!=0u){let h2=c20;c20=0u;c0+=h2*15632u;c2+=h2*1024u;\n'+carry(0,5)+'}\n}\n';
+ /* goedkopere reductie: alleen de hoge kolommen carryen, vouwen met kolomsommen < 2^31, een volledige carry-ronde, en een korte carry met zeldzame doorloop */
  const tail=carry(20,39)+'c40=c39>>13u;c39&=8191u;\n'+fold(40,22)+'c22=0u;\nc21+=c20>>13u;c20&=8191u;c22=c21>>13u;c21&=8191u;\n'+fold(22,20)+'c20=0u;c21=0u;c22=0u;\n'+carry(0,20)+'let h=c20;c20=0u;let hl=h&8191u;let hh=h>>13u;c0+=hl*15632u;c1+=hh*15632u;c2+=hl*1024u;c3+=hh*1024u;\n'+carry(0,5)+rip+ret;
  const ntail=carry(0,20)+'if(c20!=0u){\nlet h=c20;c20=0u;c0+=h*15632u;c2+=h*1024u;\n'+carry(0,5)+rip+'}\n'+ret;
  const P=(1n<<256n)-(1n<<32n)-977n,kp=32n*P,K=[];
@@ -76,7 +77,7 @@ function genField(GK,GRP){
  o+='fn sqrmod(a: F) -> F {\n'+decl(41);
  for(let i=0;i<20;i++){o+=`c${2*i}+=a[${i}]*a[${i}];\n`;for(let j=i+1;j<20;j++)o+=`c${i+j}+=(a[${i}]<<1u)*a[${j}];\n`}
  o+=tail;
- o+='fn mulsub(a: F, b: F, s: F) -> F {\n'+decl(41);        
+ o+='fn mulsub(a: F, b: F, s: F) -> F {\n'+decl(41);        /* a*b - s : de aftrekking gaat in de kolomsommen (+KS-s), geen aparte carry-ronde */
  for(let i=0;i<20;i++)for(let j=0;j<20;j++)o+=`c${i+j}+=a[${i}]*b[${j}];\n`;
  for(let k=0;k<20;k++)o+=`c${k}+=KS[${k}]-s[${k}];\n`;
  o+=tail;
@@ -84,11 +85,11 @@ function genField(GK,GRP){
  for(let i=0;i<20;i++){o+=`c${2*i}+=a[${i}]*a[${i}];\n`;for(let j=i+1;j<20;j++)o+=`c${i+j}+=(a[${i}]<<1u)*a[${j}];\n`}
  for(let k=0;k<20;k++)o+=`c${k}+=KS[${k}]-s[${k}];\n`;
  o+=tail;
- o+='fn sqrsub2(a: F, s1: F, s2: F) -> F {\n'+decl(41);     
+ o+='fn sqrsub2(a: F, s1: F, s2: F) -> F {\n'+decl(41);     /* a^2 - s1 - s2, beide aftrekkingen in de kolomsommen */
  for(let i=0;i<20;i++){o+=`c${2*i}+=a[${i}]*a[${i}];\n`;for(let j=i+1;j<20;j++)o+=`c${i+j}+=(a[${i}]<<1u)*a[${j}];\n`}
  for(let k=0;k<20;k++)o+=`c${k}+=KS2[${k}]-s1[${k}]-s2[${k}];\n`;
  o+=tail;
- o+='fn lsub(a: F, b: F) -> F { return array<u32,20>('+Array.from({length:20},(_,k)=>`a[${k}]+KS[${k}]-b[${k}]`).join(',')+'); }\n';   
+ o+='fn lsub(a: F, b: F) -> F { return array<u32,20>('+Array.from({length:20},(_,k)=>`a[${k}]+KS[${k}]-b[${k}]`).join(',')+'); }\n';   /* lui: limbs tot ~2^14.6, alleen als ENE factor van mulmod/mulsub */
  o+='fn ladd(a: F, b: F) -> F { return array<u32,20>('+Array.from({length:20},(_,k)=>`a[${k}]+b[${k}]`).join(',')+'); }\n';
  o+='fn addmod(a: F, b: F) -> F {\n';for(let k=0;k<20;k++)o+=`var c${k}:u32=a[${k}]+b[${k}];`;o+='var c20:u32=0u;\n'+ntail;
  o+='fn submod(a: F, b: F) -> F {\n';for(let k=0;k<20;k++)o+=`var c${k}:u32=a[${k}]+KS[${k}]-b[${k}];`;o+='var c20:u32=0u;\n'+ntail;
@@ -114,6 +115,7 @@ function genField(GK,GRP){
   return v;
 }
 fn ypar(a: F) -> u32 {
+  /* pariteit van a modulo p: p is oneven, dus bit0 XOR (aantal keer p eraf). Zonder zeldzame randgevallen is dat aantal gelijk aan t = bits 256..259 */
   if ((a[19] & 511u) == 511u) { let w = canon(a); return w[0] & 1u; }
   return (a[0] ^ (a[19] >> 9u)) & 1u;
 }
@@ -121,6 +123,7 @@ fn ypar(a: F) -> u32 {
  o+=`const GK: u32 = ${GK}u;\nconst GRP: u32 = ${GRP}u;\n`;
  return o;
 }
+
 
 function genInvSG(){
  const W=14,L=19,IT=43,MK=16383,Pn=(1n<<256n)-(1n<<32n)-977n;
@@ -142,6 +145,7 @@ function genInvSG(){
  for(let i=0;i<L;i++)dec('e'+i,'i32',I(i===0?1:0));
  dec('zeta','i32',I(-1));
  o.push(`for (var it = 0u; it < ${IT}u; it = it + 1u) {`);
+ /* 14 divsteps op de onderste bits van f en g, zonder vertakkingen */
  dec('fu','u32',bc('u32',V('f0')));dec('gu','u32',bc('u32',V('g0')));
  dec('uu','u32',U(1));dec('vv','u32',U(0));dec('qq','u32',U(0));dec('rr','u32',U(1));dec('zt','i32',V('zeta'));
  for(let s=0;s<W;s++){
@@ -155,6 +159,7 @@ function genInvSG(){
  }
  as('zeta',V('zt'));
  const ut=lt('ut',bc('i32',V('uu'))),vt=lt('vt',bc('i32',V('vv'))),qt=lt('qt',bc('i32',V('qq'))),rt=lt('rt',bc('i32',V('rr')));
+ /* (d,e) := t*(d,e)/2^14 modulo p, met een veelvoud van p erbij zodat de onderste 14 bits wegvallen */
  const sd=lt('sd',shr(V('d'+(L-1)),31)),se=lt('se',shr(V('e'+(L-1)),31));
  dec('md','i32',add(and(ut,sd),and(vt,se)));dec('me','i32',add(and(qt,sd),and(rt,se)));
  dec('cd','i32',add(mul(ut,V('d0')),mul(vt,V('e0'))));dec('ce','i32',add(mul(qt,V('d0')),mul(rt,V('e0'))));
@@ -170,6 +175,7 @@ function genInvSG(){
   as('e'+(i-1),and(V('ce'),I(MK)));as('ce',shr(V('ce'),14));
  }
  as('d'+(L-1),V('cd'));as('e'+(L-1),V('ce'));
+ /* (f,g) := t*(f,g)/2^14 */
  dec('cf','i32',add(mul(ut,V('f0')),mul(vt,V('g0'))));dec('cg','i32',add(mul(qt,V('f0')),mul(rt,V('g0'))));
  o.push('//@lowzero cf');o.push('//@lowzero cg');
  as('cf',shr(V('cf'),14));as('cg',shr(V('cg'),14));
@@ -181,9 +187,10 @@ function genInvSG(){
  }
  as('f'+(L-1),V('cf'));as('g'+(L-1),V('cg'));
  o.push('}');
+ /* afronden: d in [0,p) brengen (twee voorwaardelijke optellingen van p), tekenomkering als f negatief is */
  for(let rep=0;rep<2;rep++){
   const m=lt('nm'+rep,shr(V('d'+(L-1)),31));dec('nc'+rep,'i32',I(0));
-  for(let i=0;i<L-1;i++){const t=lt(`nt${rep}_${i}`,add(add(V('d'+i),and(I(PL[i]),m)),V('nc'+rep)));as('d'+i,and(t,I(MK));as('nc'+rep,shr(t,14))}
+  for(let i=0;i<L-1;i++){const t=lt(`nt${rep}_${i}`,add(add(V('d'+i),and(I(PL[i]),m)),V('nc'+rep)));as('d'+i,and(t,I(MK)));as('nc'+rep,shr(t,14))}
   as('d'+(L-1),add(add(V('d'+(L-1)),and(I(PL[L-1]),m)),V('nc'+rep)));
  }
  const fm=lt('fm',shr(V('f'+(L-1)),31));dec('br','i32',I(0));
@@ -322,7 +329,7 @@ fn jacAddAA(x1: F, y1: F, x2: F, y2: F) -> JPoint {
 var<workgroup> tree: array<array<u32,9>, ${2*WG}>;
 fn ld(i: u32) -> F { return fromW9(tree[i]); }
 fn stw(i: u32, v: F) { tree[i] = packW(v); }
-fn treeInv(lid: u32) {          
+fn treeInv(lid: u32) {          /* inverteert alle ${WG} bladwaarden (tree[${WG}+lid]) met één inversie */
   workgroupBarrier();
   for (var width = ${WG/2}u; width > 0u; width = width / 2u) {
     if (lid < width) { let n = width + lid; stw(n, mulmod(ld(n * 2u), ld(n * 2u + 1u))); }
@@ -358,6 +365,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
     }
     X = pt.X; Y = pt.Y; Z = pt.Z;
   }
+  // ronde 1: één inversie voor alle Z's van de workgroup -> het middelpunt van elke thread wordt affien
   stw(${WG}u + lid, Z);
   treeInv(lid);
   var x1: F; var y1: F;
@@ -371,6 +379,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
       run = mulmod(run, lsub(gxj(j), x1)); pre[j - 1u] = packW(run);
     }
   }
+  // ronde 2: één inversie voor de producten van alle dx-ketens
   stw(${WG}u + lid, run);
   treeInv(lid);
   if (!isAct) { return; }
@@ -405,7 +414,7 @@ function buildTable(){const T=new Uint32Array(2*2048*16);let base=G;for(let i=0;
 
 function neg(P){return P?{x:P.x,y:(SP-P.y)%SP}:null}
 function modpow(b,e,m){let r=1n;b%=m;while(e>0n){if(e&1n)r=r*b%m;b=b*b%m;e>>=1n}return r}
-function decompress(hex){const pre=parseInt(hex.slice(0,2),16),x=BigInt('0x'+hex.slice(2));const y2=(x*x%SP*x+7n)%SP;let y=modpow(y2,(SP+1n)/4n,SP);if(y*y%SP!==y2)throw Error('Public key ligt niet op de curve');if((y&1n)!==BigInt(pre&1))y=SP-y;return{x,y}}
+function parseUncompressed(hex){const x=BigInt('0x'+hex.slice(2,66)),y=BigInt('0x'+hex.slice(66,130));if(x>=SP||y>=SP||(y*y%SP)!==(x*x%SP*x+7n)%SP)throw Error('Ongecomprimeerde public key ligt niet op de curve');return{x,y}}
 function combFor(D){const T=new Uint32Array(2*2048*16);let base=D;for(let i=0;i<2;i++){let acc=null;for(let e=1;e<2048;e++){acc=ecAdd(acc,base);const o=(i*2048+e)*16;T.set(limbs(acc.x),o);T.set(limbs(acc.y),o+8)}for(let d=0;d<11;d++)base=ecDouble(base)}return T}
 function gtFor(D,gk){const a=new Uint32Array(gk*40);let g=null;for(let j=1;j<=gk;j++){g=ecAdd(g,D);a.set(limbs13(g.x),(j-1)*40);a.set(limbs13(g.y),(j-1)*40+20)}return a}
 function hslot(x0,x1,mask){return((x0^Math.imul(x1,0x9E3779B1))>>>0)&mask}
@@ -431,12 +440,12 @@ function log(m,c='var(--tx)'){const b=$('log'),d=new Date(),e=document.createEle
 
 function errlog(m){log(m,'var(--wr)');try{const a=JSON.parse(localStorage.getItem('gpuscan_err')||'[]');a.push({t:new Date().toISOString(),m:String(m)});localStorage.setItem('gpuscan_err',JSON.stringify(a.slice(-30)))}catch(e){}}
 let wl=null,nsVid=null,wlFail=false;
-function noSleep(){try{if(nsVid){if(nsVid.paused)nsVid.play().catch(()=>{});return}const v=document.createElement('video');v.setAttribute('playsinline','');v.setAttribute('muted','');v.muted=true;v.loop=true;v.style.cssText='position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:.01;pointer-events:none';v.innerHTML='<source src="data:video/webm;base64,GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAI/EU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHYTbuMU6uEElTDZ1OsggEeTbuMU6uEHFO7a1OsggIp7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsirXsYMPQkBNgI1MYXZmNjAuMTYuMTAwV0GNTGF2ZjYwLjE2LjEwMESJiECPQAAAAAAAFlSua8GuAQAAAAAAADjXgQFzxYimbV6HYEElc5yBACK1nIN1bmSIgQCGhVZfVlA4g4EBI+ODhAvrwgDgibCBELqBEJqBAhJUw2f8c3OgY8CAZ8iaRaOHRU5DT0RFUkSHjUxhdmY2MC4xNi4xMDBzc9ZjwItjxYimbV6HYEElc2fIoUWjh0VOQ09ERVJEh5RMYXZjNjAuMzEuMTAyIGxpYnZweGfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MDEuMDAwMDAwMDAwAB9DtnVAhOeBAKOjgQAAgBACAJ0BKhAAEAAARwiFhYiFhIgCAgAMDWAA/v+rUICjlYEAyACxAQABEBAAGAAYWC/0AAgAAKOVgQGQALEBAAEQEAAYABhYL/QACAAAo5WBAlgAsQEAARAQABgAGFgv9AAIAACjlYEDIACxAQABEBAAGAAYWC/0AAgAABxTu2uRu4+zgQC3iveBAfGCAZ/wgQM=" type="video/webm"><source src="data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAN4bW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAA+gAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAqJ0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAA+gAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAABAAAAAQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAPoAAAQAAABAAAAAAIabWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAoAAAAKABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABxW1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAYVzdGJsAAAAwXN0c2QAAAAAAAAAAQAAALFhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABFUxhdmM2MC4zMS4xMDIgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAAN2F2Y0MBZAAK/+EAGWdkAAqscgRewEQAAAMABAAAAwAoPEiWEYABAAdo6EODksiw/fj4AAAAABBwYXNwAAAAAQAAAAEAAAAUYnRydAAAAAAAABfIAAAXyAAAABhzdHRzAAAAAAAAAAEAAAAFAAAIAAAAABRzdHNzAAAAAAAAAAEAAAABAAAAOGN0dHMAAAAAAAAABQAAAAEAABAAAAAAAQAAKAAAAAABAAAQAAAAAAEAAAAAAAAAAQAACAAAAAAcc3RzYwAAAAAAAAABAAAAAQAAAAUAAAABAAAAKHN0c3oAAAAAAAAAAAAAAAUAAALFAAAADQAAAA0AAAANAAAADQAAABRzdGNvAAAAAAAAAAEAAAOoAAAAYnVkdGEAAABabWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAtaWxzdAAAACWpdG9vAAAAHWRhdGEAAAABAAAAAExhdmY2MC4xNi4xMDAAAAAIZnJlZQAAAwFtZGF0AAACrwYF//+r3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE2NCByMzEwOCAzMWUxOWY5IC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAyMyAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTEgcmVmPTE2IGRlYmxvY2s9MTowOjAgYW5hbHlzZT0weDM6MHgxMzMgbWU9dW1oIHN1Ym1lPTEwIHBzeT0xIHBzeV9yZD0xLjAwOjAuMDAgbWl4ZWRfcmVmPTEgbWVfcmFuZ2U9MjQgY2hyb21hX21lPTEgdHJlbGxpcz0yIDh4OGRjdD0xIGNxbT0wIGRlYWR6b25lPTIxLDExIGZhc3RfcHNraXA9MSBjaHJvbWFfcXBfb2Zmc2V0PS0yIHRocmVhZHM9MSBsb29rYWhlYhdfdGhyZWFkcz0xIHNsaWNlZF90aHJlYWRzPTAgbnI9MCBkZWNpbWF0ZT0xIGludGVybGFjZWQ9MCBibHVyYXlfY29tcGF0PTAgY29uc3RyYWluZWRfaW50cmE9MCBiZnJhbWVzPTggYl9weXJhbWlkPTIgYl9hZGFwdD0yIGJfYmlhcz0wIGRpcmVjdD0zIHdlaWdodGI9MSBvcGVuX2dvcD0wIHdlaWdodHA9MiBrZXlpbnQ9MjUwIGtleWludF9taW49NSBzY2VuZWN1dD00MCBpbnRyYV9yZWZyZXNoPTAgcmNfbG9va2FoZWFkPTYwIHj9PWNyZiBtYnRyZWU9MSBjcmY9NDAuMCBxY29tcD0wLjYwIHFwbWluPTAgcXBtYXg9NjkgcXBzdGVwPTQgaXBfcmF0aW89MS40MCBhcT0xOjEuMDAAgAAAAA5liIEAAl/+3iPAph5JgQAAAAlBmgiNiH//nIAAAAAJQZ4QRxBD/+CBAAAACQGeGCaIf//igAAAAAkBnhhtSH//4oE=" type="video/mp4">';document.body.appendChild(v);v.play().then(()=>log('Scherm-aan hulpmiddel (video) actief.')).catch(e=>log('Scherm-aan hulpmiddel kon niet starten: '+e.message,'var(--wr)'));nsVid=v}catch(e){log('Scherm-aan hulpmiddel niet beschikbaar: '+e.message,'var(--wr)')}}
+function noSleep(){try{if(nsVid){if(nsVid.paused)nsVid.play().catch(()=>{});return}const v=document.createElement('video');v.setAttribute('playsinline','');v.setAttribute('muted','');v.muted=true;v.loop=true;v.style.cssText='position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:.01;pointer-events:none';v.innerHTML='<source src="data:video/webm;base64,GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAI/EU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHYTbuMU6uEElTDZ1OsggEeTbuMU6uEHFO7a1OsggIp7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsirXsYMPQkBNgI1MYXZmNjAuMTYuMTAwV0GNTGF2ZjYwLjE2LjEwMESJiECPQAAAAAAAFlSua8GuAQAAAAAAADjXgQFzxYimbV6HYEElc5yBACK1nIN1bmSIgQCGhVZfVlA4g4EBI+ODhAvrwgDgibCBELqBEJqBAhJUw2f8c3OgY8CAZ8iaRaOHRU5DT0RFUkSHjUxhdmY2MC4xNi4xMDBzc9ZjwItjxYimbV6HYEElc2fIoUWjh0VOQ09ERVJEh5RMYXZjNjAuMzEuMTAyIGxpYnZweGfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MDEuMDAwMDAwMDAwAB9DtnVAhOeBAKOjgQAAgBACAJ0BKhAAEAAARwiFhYiFhIgCAgAMDWAA/v+rUICjlYEAyACxAQABEBAAGAAYWC/0AAgAAKOVgQGQALEBAAEQEAAYABhYL/QACAAAo5WBAlgAsQEAARAQABgAGFgv9AAIAACjlYEDIACxAQABEBAAGAAYWC/0AAgAABxTu2uRu4+zgQC3iveBAfGCAZ/wgQM=" type="video/webm"><source src="data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAN4bW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAA+gAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAqJ0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAA+gAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAABAAAAAQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAPoAAAQAAABAAAAAAIabWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAoAAAAKABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABxW1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAYVzdGJsAAAAwXN0c2QAAAAAAAAAAQAAALFhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABFUxhdmM2MC4zMS4xMDIgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAAN2F2Y0MBZAAK/+EAGWdkAAqscgRewEQAAAMABAAAAwAoPEiWEYABAAdo6EODksiw/fj4AAAAABBwYXNwAAAAAQAAAAEAAAAUYnRydAAAAAAAABfIAAAXyAAAABhzdHRzAAAAAAAAAAEAAAAFAAAIAAAAABRzdHNzAAAAAAAAAAEAAAABAAAAOGN0dHMAAAAAAAAABQAAAAEAABAAAAAAAQAAKAAAAAABAAAQAAAAAAEAAAAAAAAAAQAACAAAAAAcc3RzYwAAAAAAAAABAAAAAQAAAAUAAAABAAAAKHN0c3oAAAAAAAAAAAAAAAUAAALFAAAADQAAAA0AAAANAAAADQAAABRzdGNvAAAAAAAAAAEAAAOoAAAAYnVkdGEAAABabWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAtaWxzdAAAACWpdG9vAAAAHWRhdGEAAAABAAAAAExhdmY2MC4xNi4xMDAAAAAIZnJlZQAAAwFtZGF0AAACrwYF//+r3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE2NCByMzEwOCAzMWUxOWY5IC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAyMyAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTEgcmVmPTE2IGRlYmxvY2s9MTowOjAgYW5hbHlzZT0weDM6MHgxMzMgbWU9dW1oIHN1Ym1lPTEwIHBzeT0xIHBzeV9yZD0xLjAwOjAuMDAgbWl4ZWRfcmVmPTEgbWVfcmFuZ2U9MjQgY2hyb21hX21lPTEgdHJlbGxpcz0yIDh4OGRjdD0xIGNxbT0wIGRlYWR6b25lPTIxLDExIGZhc3RfcHNraXA9MSBjaHJvbWFfcXBfb2Zmc2V0PS0yIHRocmVhZHM9MSBsb29rYWhlYWRfdGhyZWFkcz0xIHNsaWNlZF90aHJlYWRzPTAgbnI9MCBkZWNpbWF0ZT0xIGludGVybGFjZWQ9MCBibHVyYXlfY29tcGF0PTAgY29uc3RyYWluZWRfaW50cmE9MCBiZnJhbWVzPTggYl9weXJhbWlkPTIgYl9hZGFwdD0yIGJfYmlhcz0wIGRpcmVjdD0zIHdlaWdodGI9MSBvcGVuX2dvcD0wIHdlaWdodHA9MiBrZXlpbnQ9MjUwIGtleWludF9taW49NSBzY2VuZWN1dD00MCBpbnRyYV9yZWZyZXNoPTAgcmNfbG9va2FoZWFkPTYwIHJjPWNyZiBtYnRyZWU9MSBjcmY9NDAuMCBxY29tcD0wLjYwIHFwbWluPTAgcXBtYXg9NjkgcXBzdGVwPTQgaXBfcmF0aW89MS40MCBhcT0xOjEuMDAAgAAAAA5liIEAAl/+3iPAph5JgQAAAAlBmgiNiH//nIAAAAAJQZ4QRxBD/+CBAAAACQGeGCaIf//igAAAAAkBnhhtSH//4oE=" type="video/mp4">';document.body.appendChild(v);v.play().then(()=>log('Scherm-aan hulpmiddel (video) actief.')).catch(e=>log('Scherm-aan hulpmiddel kon niet starten: '+e.message,'var(--wr)'));nsVid=v}catch(e){log('Scherm-aan hulpmiddel niet beschikbaar: '+e.message,'var(--wr)')}}
 async function keepAwake(){if(wlFail){noSleep();return}try{if(!('wakeLock' in navigator))throw Error('Wake Lock API ontbreekt');if(!wl){wl=await navigator.wakeLock.request('screen');wl.addEventListener('release',()=>{wl=null});log('Scherm blijft aan (Wake Lock).')}}catch(e){wlFail=true;log('Wake Lock geblokkeerd ('+e.message+'). Terugval op een video-methode. Zet ook Instellingen > Beeldscherm > Automatisch vergrendelen op Nooit.','var(--wr)');noSleep()}}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&running)keepAwake()});
 window.addEventListener('unhandledrejection',e=>errlog('Onverwerkte fout: '+((e.reason&&e.reason.message)||e.reason)));
 window.addEventListener('error',e=>errlog('Scriptfout: '+e.message));
-function dpWGSL(kind){          
+function dpWGSL(kind){          /* microbenchmark: 8 onderling afhankelijke ketens, zodat niets wegoptimaliseert */
   let o='@group(0) @binding(0) var<storage, read_write> outb: array<u32>;\n@group(0) @binding(1) var<uniform> prm: vec4<u32>;\n@compute @workgroup_size(64)\nfn main(@builtin(global_invocation_id) g: vec3<u32>) {\n  let p = prm.y | 1u;\n';
   for(let k=0;k<8;k++)o+=`  var s${k}: u32 = prm.x + g.x * ${2*k+1}u;\n`;
   o+='  for (var i = 0u; i < prm.z; i = i + 1u) {\n';
@@ -504,10 +513,10 @@ async function report(k){
   try{localStorage.setItem('gpubsgs_found',JSON.stringify({key:hex,wif:w,t:Date.now()}))}catch(e){}
   $('none').style.display='none';$('res').innerHTML+=`<tr><td>BSGS</td><td style="color:var(--a2)">${w}</td><td style="color:var(--ok)">0x${hex}</td></tr>`;
   log('MATCH: 0x'+hex,'var(--ok)');stop('MATCH gevonden')}
-const CAN_K=1234567n,CAN_M=4096,CAN_G=512;   
+const CAN_K=1234567n,CAN_M=4096,CAN_G=512;   /* kanarietest: kleine, vaste BSGS-opgave met bekend antwoord (CAN_K ligt binnen m*g=2.097.152) */
 let canQ=null,canCombG=null;
 function ensureCan(){if(!canQ)canQ=ecMul(CAN_K,G)}
-async function canaryRun(){          
+async function canaryRun(){          /* bouwt eenmalig de kleine tabellen en GPU-pipeline, zoekt CAN_K, geeft keys/s en correctheid terug */
   ensureCan();
   const m=CAN_M,g=CAN_G,N=BigInt(m)*BigInt(g),A=1n,M=ecMul(BigInt(m),G),negM=neg(M);
   await setupGPU(m);
@@ -520,7 +529,7 @@ async function canaryRun(){
   const bg=dev.createBindGroup({layout:pipeG.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:bb}},{binding:1,resource:{buffer:cD}},{binding:2,resource:{buffer:tblBuf}},{binding:3,resource:{buffer:rs}},{binding:4,resource:{buffer:gD}}]});
   const Qp=ecAdd(canQ,neg(ecMul(A-1n,G)));
   const one=async()=>{dev.queue.writeBuffer(bb,0,paramBuf(Qp,g));dev.queue.writeBuffer(rs,0,ZERO4);const enc=dev.createCommandEncoder(),pass=enc.beginComputePass();pass.setPipeline(pipeG);pass.setBindGroup(0,bg);pass.dispatchWorkgroups(Math.ceil(g/UNIT));pass.end();enc.copyBufferToBuffer(rs,0,rd,0,16);dev.queue.submit([enc.finish()]);await rd.mapAsync(GPUMapMode.READ);const r=new Uint32Array(rd.getMappedRange().slice(0));rd.unmap();return r};
-  const r0=await one();   
+  const r0=await one();   /* opwarmen + correctheid: moet de bekende sleutel vinden */
   const k=r0[0]===1?verifyHit(canQ,A-1n,r0[1],r0[2],m):null;
   const ok=k===CAN_K;
   const gm=g*m;let best=0;for(let b=0;b<3;b++){const t1=performance.now();for(let i=0;i<6;i++)await one();const dt=Math.max(1,performance.now()-t1);best=Math.max(best,6*gm/(dt/1000))}
@@ -564,30 +573,14 @@ let uiT=0;function ui(){if(!running)return;clearTimeout(uiT);const s=Math.max(.0
   $('total').textContent=total.toLocaleString('nl-NL');$('speed').textContent=Math.round(Number(total)/s).toLocaleString('nl-NL')+' /s';$('leases').textContent=leases;
   $('frac').textContent=sci(Number(total)/Number(spanAll));uiT=setTimeout(ui,300)}
 function parseCfg(){
-  const pub=$('pubkey').value.trim().replace(/^0x/i,'');
-  if(!/^(02|03)[0-9a-fA-F]{64}$|^04[0-9a-fA-F]{128}$/.test(pub)) {
-      throw Error('Public key moet gecomprimeerd zijn (02/03 + 64 hex) of ongecomprimeerd (04 + 128 hex)');
-  }
+  const pub=$('pubkey').value.trim().replace(/^0x/i,'');if(!/^04[0-9a-fA-F]{128}$/.test(pub))throw Error('Public key moet ongecomprimeerd zijn (04 + 128 hextekens)');
   const hx=s=>{const h=s.trim().replace(/^0x/i,'');if(!/^[0-9a-fA-F]+$/.test(h))throw Error('Ongeldige hexwaarde');return BigInt('0x'+h)};
   const min=hx($('rangeMin').value),max=hx($('rangeMax').value);if(min<1n||max>=ORDER||min>max)throw Error('Ongeldig bereik');
   const m=Math.round(Number($('babym').value)),g=Math.round(Number($('giants').value));
   if(!(m>=16&&m<=2097152))throw Error('m moet tussen 16 en 2.097.152 liggen');if(!(g>=1&&g<=1e9))throw Error('g moet tussen 1 en 1.000.000.000 liggen');
   const gk=Math.round(Number($('gk').value)||GK),wg=Math.round(Number($('wg').value)||WG);if(gk<1||gk>128||![64,128,256].includes(wg))throw Error('Ongeldige GK (1-128) of WG (64/128/256)');
   const tv=Number($('tv').value)?true:false,iv=Number($('iv').value)?true:false,sq=Number($('sq').value)?true:false;
-  
-  let Q;
-  if(pub.startsWith('04')){
-      const x = BigInt('0x' + pub.slice(2, 66));
-      const y = BigInt('0x' + pub.slice(66, 130));
-      const y2 = (x * x % SP * x + 7n) % SP;
-      if((y * y) % SP !== y2) throw Error('Public key ligt niet op de curve');
-      Q = { x, y };
-  } else {
-      Q = decompress(pub);
-  }
-
-  return{pub,min,max,m,g,gk,wg,tv,iv,sq,Q}
-}
+  return{pub,min,max,m,g,gk,wg,tv,iv,sq,Q:parseUncompressed(pub)}}
 async function start(testMode){
   if(running)return;
   try{
@@ -629,7 +622,7 @@ async function start(testMode){
             const n=Math.min(BATCH,c.g-done);
             dev.queue.writeBuffer(bb,0,paramBuf(pt,n));dev.queue.writeBuffer(rs,0,ZERO4);
             const enc=dev.createCommandEncoder(),pass=enc.beginComputePass();pass.setPipeline(pipeG);pass.setBindGroup(0,bg);pass.dispatchWorkgroups(Math.ceil(n/UNIT));pass.end();enc.copyBufferToBuffer(rs,0,rd,0,16);dev.queue.submit([enc.finish()]);
-            const nextPt=(n===BATCH&&done+n<c.g)?ecAdd(pt,stepPt):null;       
+            const nextPt=(n===BATCH&&done+n<c.g)?ecAdd(pt,stepPt):null;       /* CPU-werk terwijl de GPU rekent */
             await rd.mapAsync(GPUMapMode.READ);const r=new Uint32Array(rd.getMappedRange().slice(0));rd.unmap();
             if(faultSeq!==fs0)throw Error('GPU-fout tijdens batch (slice wordt opnieuw gescand)');
             if(r[0]===1){const k=verifyHit(c.Q,A-1n,done+r[1],r[2],c.m);if(k){await report(k);return}log('Onechte treffer genegeerd (64-bit x-overeenkomst zonder sleutel).','var(--wr)')}
@@ -643,7 +636,7 @@ async function start(testMode){
         if(!running||my!==tok)return;
         if(++attempt>8)throw e;
         dev=null;log(`Herstart over ${Math.min(30,2*attempt)}s (poging ${attempt}/8)...`,'var(--wr)');await new Promise(r=>setTimeout(r,Math.min(30000,2000*attempt)));
-        have=false;redo=A!==null;     
+        have=false;redo=A!==null;     /* de huidige slice wordt opnieuw gescand */
       }
     }
   }catch(e){running=false;$('go').disabled=false;$('test').disabled=false;$('stop').disabled=true;$('status').textContent='Fout';log('Fout: '+e.message,'var(--wr)')}
@@ -653,7 +646,7 @@ $('go').onclick=()=>start(false);$('stop').onclick=()=>stop('Gestopt door gebrui
 $('babym').oninput();
 $('test').onclick=()=>{
   const m=65536,g=4096,min=1n<<40n,k=min+123456789n,Q=ecMul(k,G);
-  $('pubkey').value=(Q.y&1n?'03':'02')+Q.x.toString(16).padStart(64,'0');$('rangeMin').value=min.toString(16);$('rangeMax').value=(min+(1n<<30n)-1n).toString(16);
+  $('pubkey').value='04'+Q.x.toString(16).padStart(64,'0')+Q.y.toString(16).padStart(64,'0');$('rangeMin').value=min.toString(16);$('rangeMax').value=(min+(1n<<30n)-1n).toString(16);
   $('babym').value=m;$('giants').value=g;$('babym').oninput();
   log('Zelftest: verwacht 0x'+k.toString(16).padStart(64,'0'));start(true)};
 try{const f=JSON.parse(localStorage.getItem('gpubsgs_found')||'null');if(f)log('Eerder gevonden sleutel in opslag: 0x'+f.key,'var(--ok)')}catch(e){}
